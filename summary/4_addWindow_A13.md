@@ -1,4 +1,7 @@
-# Android 13 (API 33) `addWindow` 全链路源码级深度解剖与架构演进
+# AAOS13 `addWindow` 全链路分析
+
+
+***
 
 **⚠️ 核心勘误预警 (A13 架构差异)**：
 在传统认知中，存在“`AppWindowToken`”以及“SurfaceFlinger 层的 `BufferQueue` 初始化”等概念。在 Android 13 中必须纠正：
@@ -8,31 +11,43 @@
 
 ***
 
-## 宏观视角：跨进程数据拓扑与生命周期对齐
+## 1. 跨进程窗口身份：`IWindow`、`token` 与生命周期绑定
 
-在深入流程之前，必须厘清 App、WMS、SF 三个进程间是如何标定和管理同一个“窗口”的。
+在深入 `addWindow` 流程之前，必须先钉死三个问题：App 侧到底拿什么代表“这个窗口”、WMS 拿什么确认“它属于谁”、以及当进程死亡时系统如何自动回收它。
 
-### 1. 唯一标识与生命周期防伪凭证
+在 Android 13 中，这三件事分别主要落在 `IWindow`、`WindowManager.LayoutParams.token` 与 Binder death notification 上。
 
-App 进程和 `system_server` 进程分属不同内存空间。它们必须依靠一个“防伪唯一凭证”来互相识别同一个窗口，以防止越权修改或内存泄漏。
+### 1.1 身份标识
 
-- **凭证实体**：这个唯一凭证是 **`IWindow.Stub`** **的 Binder 代理对象**。
-- **App 端**：`ViewRootImpl` 内部创建 `W` 类（继承自 `IWindow.Stub`），其内存地址是唯一的。
-- **WMS 端**：在 `Session.addToDisplayAsUser` 收到 `IWindow window` 参数后，通过 `window.asBinder()` 提取底层 Binder 节点。WMS 维护了一个全局映射表 `mWindowMap<IBinder, WindowState>`。
-- **生命周期对齐机制**：依靠 Binder 的 **DeathRecipient（死亡讣告）**。当 App 进程 Crash，WMS 会收到 `binderDied` 回调，触发清理 `WindowState`。
+LayoutParams.token：Activity 的身份证明
 
-### 2. IPC 角色分工：IWindowSession 与 IWindow
+更精确地说，`IWindow` 并不是标识某个普通 `View`，而是标识 **一个** **`ViewRootImpl`** **暴露给 WMS 的窗口客户端端点**。在 App 侧它的具体实现是 `ViewRootImpl.W extends IWindow.Stub`；每次 `WindowManagerGlobal.addView()` 创建一个新的 `ViewRootImpl`，都会连带创建一个新的 `W`。因此，`IWindow` 基本可以近似理解为“一个窗口在 App 进程里的 Binder 身份”，它通常与 WMS 中的一个 `WindowState` 一一对应，而不是与某个 `View` 一一对应；`DecorView` 及其子 `View` 只是这个 `IWindow` 所承载的那棵 View 树。
 
-`/home/liang/Project/MyProject/Summary/summary/4_addWindow_A13.md#L28-31`
+与之相对，`token` 则是用来证明这个窗口“从属于谁”（如属于哪个 `Activity`）。没有合法的 `token`，App 无法随意添加窗口（防止流氓弹窗）。
+
+- **合法性校验**：在 A13 中，`token` 是一个 `IBinder`，对应用主窗口时通常对应于 WMS 中的 `ActivityRecord.Token`。`WindowManagerService.addWindow()` 并不是直接查 `ActivityRecord`，而是先调用 `displayContent.getWindowToken(attrs.token)` 统一查找 `WindowToken`；只有当 `rootType` 落入应用窗口区间时，才继续执行 `token.asActivityRecord()`。这样设计的根因是：`WindowToken` 是所有窗口家族的公共父语义，既能承载 `Activity` 窗口，也能承载 `IME`、`Wallpaper`、`StatusBar` 等非应用窗口；先做 `WindowToken` 级别的通用校验和挂树，再按窗口类型下钻到 `ActivityRecord`，可以把“窗口归属校验”与“Activity 生命周期绑定”拆开，避免把所有窗口都硬编码成 `Activity` 模型。校验失败最终会在 App 侧体现为 `BadTokenException`。
+- **多窗口/PIP 场景**：在分屏或画中画时，`token` 的稳定性表示“归属关系没变”——这个窗口仍然属于同一个 `ActivityRecord`；变化的是 `ActivityRecord` 在 `WindowContainer` 树中的父节点。WMS 会把同一个 `ActivityRecord` / `Task` 重新挂到新的 `TaskDisplayArea`、`Task` 或 pinned 容器下，`WindowState.mToken` 仍指向原有 token，已有 `SurfaceControl` 也尽量沿用，只通过 `reparent`、层级重排、bounds/configuration 更新来完成迁移。因此，对 App 来说更常见的体感不是“窗口对象被重建”，而是收到 `resized`、`moved`、配置变更甚至一次 `relayout`；是否进一步触发 `Activity` 重建，取决于配置变化是否被应用声明自行处理，而不是 `token` 本身是否变化。
+
+换句话说，**WMS 校验** **`token`** **时，先问“它是不是系统里已经登记过的合法窗口家族成员”，再问“如果它是应用主窗口，那它是不是某个合法的** **`ActivityRecord`”**。这是一种两段式校验。第一段用 `displayContent.getWindowToken(attrs.token)` 做“广义身份识别”，因为系统里不只有 `Activity` 窗口；第二段只在应用窗口类型下才做 `token.asActivityRecord()`，把它收紧到“这个窗口确实挂在某个 Activity 下面”。因此，它本质上是在同时解决两个问题：**窗口类型是否合法**，以及 **窗口归属是否合法**。
+
+**多窗口 / PiP 改变的是窗口在 WMS 树中的“挂载位置”，不是窗口的“身份证”**。这里的“身份证”就是 `token`，它继续指向同一个 `ActivityRecord`；而“挂载位置”指的是这个 `ActivityRecord` 当前位于哪个 `Task`、哪个 `TaskDisplayArea`、是不是进入 pinned stack。也就是说，系统不是把旧窗口销毁后重新造一个新窗口，而是把已有那套 `WindowContainer` / `SurfaceControl` 层级搬到新的容器关系里。
+
+**对 App 而言，最常见的不是身份变化，而是几何与配置变化**。例如进入分屏后，窗口 bounds 变小；进入 PiP 后，任务被挪入 pinned 容器，Layer 层级、裁剪区域、输入焦点策略都会变化。于是 App 往往感知到的是 `IWindow.resized()`、`ViewRootImpl` 触发 `relayoutWindow()`、`performTraversals()` 重新测量布局，或者收到 `onConfigurationChanged()`；但这并不等价于“token 变了”。
+
+再进一步看，A13 这里体现的是 `WindowContainer` 架构的价值：**把“身份”与“树位置”解耦**。`ActivityRecord` 既是应用窗口簇的归属实体，又是 `WindowToken` 的一种具体实现；它可以在 `RootWindowContainer` 之下被重新组织到不同父节点，而 `WindowState.mToken` 继续稳定地指向它。这种设计让分屏、自由窗口、PiP、任务嵌入这类场景可以优先走“重挂树 + relayout + transaction”路径，而不是“销毁窗口 + 重建窗口”路径，代价更低，也更不容易打断首帧、输入通道和 Surface 层级状态。
+
+### 1.2 IPC 角色分工：IWindowSession 与 IWindow
+
 `IWindowSession` 和 `IWindow` 是一对 IPC 接口。一个是 App 呼叫 WMS 的通道（上行），另一个是 WMS 呼叫 App 的通道（下行）。
 
 **关于“上下行”术语的详细定义**：
 在 Android 窗口管理机制中，所谓的“上行”与“下行”是相对于系统架构层级而言的。
 
-- **上行 (Uplink)**：数据流和调用链由低权限的 Client 端（App 进程）发起，流向高权限的 Server 端（`system_server` 进程中的 WMS）。例如 App 请求创建窗口、请求重新布局。对应 Binder 通信的 Client $\rightarrow$ Server。
+- **上行 (Uplink)**：数据流和调用链由低权限的 Client 端（App 进程）发起，流向高权限的 Server 端（`system_server` 进程中的 WMS）。例如 App 请求创建窗口、请求重新布局。对应 Binder 通信的 Client $\rightarrow$  Server。
 - **下行 (Downlink)**：数据流和调用链由 Server 端（WMS）发起，回调通知 Client 端（App 进程）。例如 WMS 统筹全局后发现窗口尺寸需要改变，主动通知 App。此时 WMS 作为 Binder Client，App 作为 Binder Server。
 - **`IWindowSession`** **(Session)**：每个 App **进程**全局只有一个（复用）。负责所有上行主动请求：`addWindow`、`relayout`、`removeWindow`。
 - **`IWindow.Stub`** **(W)**：每个 `ViewRootImpl`（即每个**窗口**）有一个实例。作为回调句柄注册在 WMS 中。负责接收 WMS 的下行通知：`resized`（窗口尺寸变化）、`windowFocusChanged`（焦点变化）。
+- **生命周期对齐机制**：依靠 Binder 的 **DeathRecipient（死亡讣告）**。WMS 会对 `client.asBinder()`（也就是 `ViewRootImpl.W` 这个 `IWindow` Binder）执行 `linkToDeath`。一旦承载该 Binder 的 App 进程 Crash 或被杀，Binder driver 会向 `system_server` 触发 `binderDied()`；WMS 随后把该 `WindowState` 标记为 client dead，并走移除流程，释放输入通道、从 `mWindowMap` / `WindowToken` / `DisplayContent` 脱链、销毁 `SurfaceControl`，最终避免“App 已死但窗口残留”的悬挂状态。这里对齐的不是 Java `View` 对象生命周期，而是 **远端 Binder 端点存活性** 与 **WMS 中** **`WindowState`** **生命周期** 的对齐。
 
 **时序流转示意**：
 
@@ -50,106 +65,9 @@ sequenceDiagram
     WMS->>App: [下行] W.windowFocusChanged() (焦点转移通知)
 ```
 
-```mermaid
-sequenceDiagram
-    participant App as ViewRootImpl (App)
-    participant Session as Session (WMS)
-    participant WS as WindowState (WMS)
-
-    App->>Session: relayout() [上行 IPC]
-    Session->>WS: process request
-    WS->>App: W.resized() [下行 IPC]
-```
-
-### 3. LayoutParams.token：Activity 的身份证明
-
-如果说 `IWindow` 标识了一个具体的 View 树，那么 `token` 就是用来证明这个窗口“从属于谁”（如属于哪个 Activity）。没有合法的 `token`，App 无法随意添加窗口（防止流氓弹窗）。
-
-- **合法性校验**：在 A13 中，`token` 是一个 `IBinder`，通常对应于 WMS 中的 `ActivityRecord.Token`。WMS 在 `addWindow` 时并不是直接查 `ActivityRecord`，而是先调用 `displayContent.getWindowToken(attrs.token)` 查找 `WindowToken`；只有当 `rootType` 落入应用窗口区间时，才继续执行 `token.asActivityRecord()`。校验失败最终会在 App 侧体现为 `BadTokenException`。
-- **多窗口/PIP 场景**：在分屏或画中画时，`token` 不变，但对应的 `ActivityRecord` 会被 WMS 动态挂载到不同的 `TaskDisplayArea` 或 `Task` 节点下，从而实现不销毁窗口的无缝层级迁移。
+<br />
 
 ### 4. 两张手绘图的 Mermaid 总结版
-
-下面两张 Mermaid 图，将你手绘里的“对象拓扑关系”和“addWindow 到 BLAST 上屏的全链路时序”合并为可维护版本。
-
-**图一：跨进程对象拓扑总览**
-
-```mermaid
-%%{init: {
-  "themeVariables": {
-    "fontSize": "20px"
-  },
-  "flowchart": {
-    "nodeSpacing": 45,
-    "rankSpacing": 60
-  }
-}}%%
-flowchart LR
-    subgraph App["App Process"]
-        WMG["WindowManagerGlobal"]
-        VRI["ViewRootImpl"]
-        W["W : IWindow.Stub"]
-        LP["LayoutParams\ntype / flags / token"]
-        SessionProxy["IWindowSession Proxy"]
-        OutSC["outSurfaceControl\nmSurfaceControl"]
-        BBQ["BLASTBufferQueue"]
-        AppSurface["Surface"]
-        BBQChildSC["BLAST child SurfaceControl"]
-    end
-
-    subgraph SS["system_server"]
-        Session["Session"]
-        WMS["WindowManagerService"]
-        DC["DisplayContent"]
-        Policy["WindowManagerPolicy\nPhoneWindowManager"]
-        DP["DisplayPolicy"]
-        WT["WindowToken"]
-        AR["ActivityRecord\n(WindowToken subclass)"]
-        WS["WindowState"]
-        WSA["WindowStateAnimator"]
-        Map["mWindowMap\nIBinder -> WindowState"]
-        IMS["InputManagerService"]
-        RootSC["Root SurfaceControl"]
-    end
-
-    subgraph SF["SurfaceFlinger"]
-        RootLayer["Root window layer"]
-        BBQChildLayer["BLAST child layer\nBufferStateLayer"]
-        HWC["HardwareComposer"]
-    end
-
-    WMG --> VRI
-    VRI --> W
-    VRI --> LP
-    VRI --> SessionProxy
-
-    SessionProxy --> Session
-    Session --> WMS
-    W -. "client.asBinder()" .-> Map
-    Map -. "lookup / insert" .-> WS
-    LP -. "attrs.token" .-> WMS
-
-    WMS --> DC
-    DC --> DP
-    WMS --> Policy
-    WMS --> WT
-    WT -. "应用窗口时 token.asActivityRecord()" .-> AR
-    WT --> WS
-    AR --> WS
-    WS --> WSA
-    WMS --> IMS
-
-    WSA -. "createSurfaceLocked()" .-> RootSC
-    RootSC --> RootLayer
-    RootSC -. "parcel copy" .-> OutSC
-    OutSC --> BBQ
-    BBQ --> AppSurface
-    BBQ --> BBQChildSC
-    BBQChildSC -. "queueBuffer / Transaction" .-> BBQChildLayer
-    BBQChildLayer -. "reparent under root" .-> RootLayer
-    RootLayer --> HWC
-    BBQChildLayer --> HWC
-```
 
 **图二：A13 addWindow 阶段时序图**
 
@@ -1040,28 +958,4 @@ graph TD
 5. **【BLAST 1:N 映射关系观察】**：打开任意普通 App，执行 `adb shell dumpsys SurfaceFlinger | grep -A 10 "BufferStateLayer"`。找到名称形如 `SurfaceView[包名]...#0` 的空壳图层，并确认其子节点（`Children`）中包含名称带有 `BLAST` 后缀的真正渲染图层。
 
 <br />
-
-<br />
-
-<br />
-
-measureHierarchy 在 relayoutWindow 之前执行，是 Android 的预测性测量机制，它提前计算视图树的期望尺寸以向 WMS 申请合理的窗口内存，从而避免因 WRAP\_CONTENT 或复杂布局导致的重复 IPC 调用和显存浪费，实现内存分配与布局计算的高效平衡。
-
-<br />
-
-Android 显示系统的本质可以从“时钟驱动 + 分层调度 + 硬件执行”三个维度来理解。系统最底层是物理显示设备（Display Panel），它以固定刷新率（如 60Hz / 120Hz）持续产生垂直同步信号（VSync）。这个信号本质是一个周期性的硬件中断，代表屏幕完成一帧扫描并即将开始下一帧刷新。从“是否每时每刻都在运作”的角度看，VSync 在硬件层是持续存在的，只要屏幕没有关闭，它就以固定频率稳定输出；但 Android 并不会简单地“每个 VSync 都触发一次 UI 渲染”，而是对这个信号进行抽象、重建和按需分发。
-
-硬件产生的 VSync 信号首先通过显示驱动（DRM/KMS）转化为内核中断，再由硬件抽象层中的 Hardware Composer（HWC）接收并上报给 SurfaceFlinger。这里有一个非常关键的设计点：系统并不会直接把硬件 VSync 原样传递给应用层，而是由 SurfaceFlinger 内部的调度组件（早期为 DispSync，后演进为 Scheduler + VSyncDispatch）基于这些离散的硬件时间戳建立一个“稳定的软件时钟模型”。这样做的原因是硬件 VSync 在现实中可能存在抖动、延迟甚至丢失，如果直接使用会导致渲染节奏不稳定。因此，SurfaceFlinger 实际上是把“硬件时钟”转化成“可预测的软件节拍源”，再从这个统一时钟中派生出多个逻辑上的 VSync 事件。
-
-在这个基础上，Android 将 VSync 拆分成两个关键分支：VSync-App 和 VSync-SF。它们来源相同，但并不是同一时间触发，而是通过一个称为 phase offset（相位偏移）的机制人为错开。VSync-App 用于驱动应用侧的 UI 生产流程，通过 Choreographer 分发到主线程，最终触发 doFrame 回调，并进入 ViewRootImpl.performTraversals()，执行整棵 View 树的 measure、layout 和 draw；而 VSync-SF 则用于驱动 SurfaceFlinger 的合成流程，即在合适的时间点收集最新的 buffer 并提交给显示硬件。如果这两个信号在同一时间触发，会导致 SurfaceFlinger 在合成时拿不到应用刚刚绘制完成的新 buffer，从而产生掉帧或重复帧的问题。因此，系统通过 phase offset 让 VSync-App 提前发生，使应用有足够时间完成绘制，而 VSync-SF 稍后发生，用于消费最新结果，从而形成一个“生产（App）→ 缓冲（BufferQueue）→ 消费（SurfaceFlinger）”的流水线模型。
-
-phase offset 的具体数值并不是固定写死的，而是由 SurfaceFlinger 的 Scheduler 决定，并且在现代 Android（11 及以后）中可以根据设备刷新率、负载情况以及性能反馈动态调整。其目标是让应用绘制完成的时间点尽可能贴近 SurfaceFlinger 合成的起点，从而最大化利用每一帧时间窗口，减少延迟并避免 jank。从系统设计角度看，这实际上是一种典型的“单时钟源 + 多相位分发”的调度策略，使多个消费者（App、SurfaceFlinger 等）在同一时间基准下以不同节奏工作。
-
-在整个链路中，Hardware Composer 并不是一个简单的“信号透传层”，而是一个非常关键的执行与决策组件。它位于 SurfaceFlinger 与真实显示硬件之间，是一个由厂商实现的 HAL（硬件抽象层）。SurfaceFlinger 负责管理所有图层（Layer）以及 buffer 的流转，但它并不直接决定这些图层如何在硬件上显示，而是将图层列表提交给 HWC，由 HWC 根据具体 SoC 的显示能力（如 overlay plane 数量、支持的格式、缩放能力等）做出合成策略决策。HWC 会判断哪些图层可以通过硬件 overlay 直接输出（例如视频层通常可以直接由显示控制器处理），哪些必须交给 GPU 进行合成（client composition），并负责将这些决策映射到具体的硬件资源上，例如分配显示平面（plane）、设置裁剪区域、变换矩阵、透明度等参数。
-
-此外，HWC 还负责最终的帧提交（present），也就是在合适的 VSync 时刻将准备好的 buffer 送入显示控制器开始扫描输出，这一步直接关系到是否会出现撕裂（tearing）以及帧的显示时序是否稳定。同时，HWC 也是 VSync 信号上传的关键节点之一，它接收来自硬件的 VSync，并将时间戳传递给 SurfaceFlinger，从而驱动整个软件调度体系。可以说，SurfaceFlinger 解决的是“显示什么”的问题，而 HWC 解决的是“如何用最优硬件路径显示”的问题，两者共同构成了 Android 显示系统中的“软件调度 + 硬件调度”双层架构。
-
-再从应用侧来看，UI 渲染并不是持续自动发生的，而是事件驱动的。只有当应用调用了 invalidate、requestLayout 或发生动画、输入事件时，才会通过 Choreographer 向系统注册回调，从而在下一次 VSync-App 到来时参与渲染流程。如果 UI 没有发生变化，即使 VSync 持续存在，也不会触发新的绘制，而是复用已有 buffer。这种“按需渲染”机制进一步降低了功耗和资源消耗。
-
-综合来看，Android 显示系统的核心可以抽象为：以硬件 VSync 作为统一时间基准，通过 SurfaceFlinger 的调度器构建稳定的软件时钟，并基于 phase offset 派生出多个不同用途的 VSync 信号，从而驱动应用绘制与系统合成形成流水线；同时借助 Hardware Composer 将逻辑图层高效映射到实际显示硬件能力上，实现低功耗、高性能、无撕裂的最终显示效果。这一整套机制本质上是一个典型的生产者-消费者模型与实时调度系统的结合体，是 Android 在复杂硬件环境下实现稳定 UI 渲染的核心基础。
 
