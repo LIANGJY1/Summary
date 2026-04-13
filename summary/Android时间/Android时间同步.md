@@ -104,6 +104,13 @@ flowchart TD
 
 在 Android 系统内部，时间的流转依赖于底层内核状态与系统服务的联动。`system_server` 作为核心枢纽，负责捕捉时间变化并通知座舱服务 (`CarService`)。
 
+> **概念澄清：这里的“Android 内核”指的是什么？**
+> 在智能座舱的 Hypervisor 架构下，一台车机里其实跑着多个操作系统，因此也存在多个“内核”：
+> - **Host Kernel (宿主机内核)**：直接管理物理硬件（如物理 CPU、内存、RTC 芯片）的底层内核，通常是 QNX 或深度定制的 Linux（如 ACRN, Xen）。
+> - **Guest Kernel (Android 虚拟机内核)**：也就是我们常说的“Android 内核”。它是运行在 Hypervisor 之上的一个独立的 Linux 内核。它**不直接拥有**物理硬件的控制权，它看到的所有硬件（包括 CPU、时钟）都是 Hypervisor 虚拟（或者透传）给它的。
+> 
+> 当我们说“Android 内核时间跳变”时，指的是这个 Guest Kernel 内部维护的软件时钟（`Timekeeping` 子系统中的 `CLOCK_REALTIME`）。这个虚拟的内核时间，要么是由上层的 Android 系统服务通过系统调用（`settimeofday` / `adjtimex`）修改的，要么是被底层的 Host Kernel 通过虚拟化技术（如 `kvm-clock`）强行同步过来的。
+
 **`system_server`** **是如何捕捉并联动** **`CarService`** **的？**
 
 - **捕捉机制**：Android 内核中的时间跳变（如底层 VM 透传或 Java 层 `AlarmManagerService.setTimeImpl` 系统调用）发生后，`AlarmManagerService` 内部机制会监听到内核挂钟（Wall Clock）的更改，或者它自己主动发起了更改。
