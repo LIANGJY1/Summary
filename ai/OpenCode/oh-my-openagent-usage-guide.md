@@ -19,15 +19,15 @@ Oh My OpenAgent 不是一个新模型，也不是单纯的聊天壳。它把 Ope
 
 为了避免混乱，本文统一这样写：
 
-| 名称 | 写法 | 说明 |
-| --- | --- | --- |
-| package | `oh-my-opencode` | 安装包和安装命令名 |
-| plugin | `oh-my-openagent` | OpenCode 插件名 |
-| agent | `Sisyphus`、`Prometheus`、`Oracle` | 代理名使用首字母大写 |
-| category | `deep`、`quick`、`writing` | 类别名使用原始代码名 |
-| skill | `playwright`、`git-master` | 技能名使用原始代码名 |
-| command | `/start-work`、`/handoff` | 命令名保留斜杠 |
-| config | `opencode.json`、`oh-my-openagent.json` | 配置文件名保持原样 |
+| 名称       | 写法                                     | 说明           |
+| -------- | -------------------------------------- | ------------ |
+| package  | `oh-my-opencode`                       | 安装包和安装命令名    |
+| plugin   | `oh-my-openagent`                      | OpenCode 插件名 |
+| agent    | `Sisyphus`、`Prometheus`、`Oracle`       | 代理名使用首字母大写   |
+| category | `deep`、`quick`、`writing`               | 类别名使用原始代码名   |
+| skill    | `playwright`、`git-master`              | 技能名使用原始代码名   |
+| command  | `/start-work`、`/handoff`               | 命令名保留斜杠      |
+| config   | `opencode.json`、`oh-my-openagent.json` | 配置文件名保持原样    |
 
 ## 3. 先选对入口
 
@@ -85,58 +85,58 @@ Oh My OpenAgent 不是一个新模型，也不是单纯的聊天壳。它把 Ope
 
 ## 5. 专家代理怎么分工
 
-| 代理 | 角色 | 适合场景 |
-| --- | --- | --- |
-| `Sisyphus` | 总编排代理 | 大多数复杂任务的入口 |
-| `Prometheus` | 规划代理 | 先问清楚，再开始干活 |
-| `Atlas` | 执行调度代理 | 按计划推进和收束任务 |
-| `Hephaestus` | 深度执行代理 | 复杂调试、跨文件修改、独立推进 |
-| `Metis` | 计划漏洞检查 | 检查计划是否漏边界和验收 |
-| `Momus` | 计划审查 | 高标准审核计划质量 |
-| `Oracle` | 架构和调试顾问 | 设计评审、根因分析、风险判断 |
-| `Explore` | 代码勘探员 | 快速定位入口、接口和调用链 |
-| `Librarian` | 资料研究员 | 官方文档、库用法、参考实现 |
-| `Multimodal-Looker` | 视觉分析代理 | 截图、图片、PDF、UI 视觉问题 |
-| `Sisyphus-Junior` | 执行代理 | 接受委派后实际完成任务 |
+| 代理                  | 角色      | 适合场景              |
+| ------------------- | ------- | ----------------- |
+| `Sisyphus`          | 总编排代理   | 大多数复杂任务的入口        |
+| `Prometheus`        | 规划代理    | 先问清楚，再开始干活        |
+| `Atlas`             | 执行调度代理  | 按计划推进和收束任务        |
+| `Hephaestus`        | 深度执行代理  | 复杂调试、跨文件修改、独立推进   |
+| `Metis`             | 计划漏洞检查  | 检查计划是否漏边界和验收      |
+| `Momus`             | 计划审查    | 高标准审核计划质量         |
+| `Oracle`            | 架构和调试顾问 | 设计评审、根因分析、风险判断    |
+| `Explore`           | 代码勘探员   | 快速定位入口、接口和调用链     |
+| `Librarian`         | 资料研究员   | 官方文档、库用法、参考实现     |
+| `Multimodal-Looker` | 视觉分析代理  | 截图、图片、PDF、UI 视觉问题 |
+| `Sisyphus-Junior`   | 执行代理    | 接受委派后实际完成任务       |
 
 ## 6. 类别、技能、命令
 
 ### 6.1 常见类别
 
-| 类别 | 作用 |
-| --- | --- |
+| 类别                   | 作用         |
+| -------------------- | ---------- |
 | `visual-engineering` | 前端、UI、视觉实现 |
-| `ultrabrain` | 高强度推理和复杂决策 |
-| `deep` | 深度自主执行 |
-| `artistry` | 创意型输出 |
-| `quick` | 快速小任务 |
-| `unspecified-low` | 通用低强度任务 |
-| `unspecified-high` | 通用高强度任务 |
-| `writing` | 文档和写作 |
+| `ultrabrain`         | 高强度推理和复杂决策 |
+| `deep`               | 深度自主执行     |
+| `artistry`           | 创意型输出      |
+| `quick`              | 快速小任务      |
+| `unspecified-low`    | 通用低强度任务    |
+| `unspecified-high`   | 通用高强度任务    |
+| `writing`            | 文档和写作      |
 
 ### 6.2 常见技能
 
-| 技能 | 作用 |
-| --- | --- |
-| `git-master` | 高质量 git 工作流 |
-| `playwright` | 浏览器自动化和回归验证 |
+| 技能               | 作用           |
+| ---------------- | ------------ |
+| `git-master`     | 高质量 git 工作流  |
+| `playwright`     | 浏览器自动化和回归验证  |
 | `playwright-cli` | CLI 风格浏览器自动化 |
-| `agent-browser` | 另一套浏览器自动化方案 |
-| `dev-browser` | 有状态浏览器自动化 |
-| `frontend-ui-ux` | 提升前端实现和视觉质量 |
+| `agent-browser`  | 另一套浏览器自动化方案  |
+| `dev-browser`    | 有状态浏览器自动化    |
+| `frontend-ui-ux` | 提升前端实现和视觉质量  |
 
 ### 6.3 常见命令
 
-| 命令 | 作用 |
-| --- | --- |
-| `/init-deep` | 生成分层 `AGENTS.md` |
-| `/start-work` | 从计划进入执行 |
-| `/refactor` | 智能重构工作流 |
-| `/handoff` | 生成交接内容 |
-| `/ulw-loop` | 持续推进复杂任务 |
-| `/ralph-loop` | 自我循环执行直到完成 |
-| `/cancel-ralph` | 取消循环 |
-| `/stop-continuation` | 停止继续推进机制 |
+| 命令                   | 作用               |
+| -------------------- | ---------------- |
+| `/init-deep`         | 生成分层 `AGENTS.md` |
+| `/start-work`        | 从计划进入执行          |
+| `/refactor`          | 智能重构工作流          |
+| `/handoff`           | 生成交接内容           |
+| `/ulw-loop`          | 持续推进复杂任务         |
+| `/ralph-loop`        | 自我循环执行直到完成       |
+| `/cancel-ralph`      | 取消循环             |
+| `/stop-continuation` | 停止继续推进机制         |
 
 ## 7. 背景代理和工具链
 
@@ -234,20 +234,20 @@ opencode models
 
 ### A.2 当前模型分配快照
 
-| 对象 | 当前模型 |
-| --- | --- |
-| `sisyphus` | `openai/gpt-5.4` `medium` |
-| `hephaestus` | `openai/gpt-5.4` `medium` |
-| `oracle` | `openai/gpt-5.4` `high` |
-| `prometheus` | `openai/gpt-5.4` `high` |
-| `metis` | `openai/gpt-5.4` `high` |
-| `momus` | `openai/gpt-5.4` `xhigh` |
-| `atlas` | `openai/gpt-5.4` `medium` |
-| `librarian` | `openai/gpt-5.4` `medium` |
-| `explore` | `openai/gpt-5.4` `medium` |
-| `multimodal-looker` | `openai/gpt-5.4` `medium`，fallback `gpt-5-nano` |
-| `quick` | `openai/gpt-5.4-mini` |
-| `unspecified-low` / `unspecified-high` | `openai/gpt-5.3-codex` `medium` |
+| 对象                                     | 当前模型                                            |
+| -------------------------------------- | ----------------------------------------------- |
+| `sisyphus`                             | `openai/gpt-5.4` `medium`                       |
+| `hephaestus`                           | `openai/gpt-5.4` `medium`                       |
+| `oracle`                               | `openai/gpt-5.4` `high`                         |
+| `prometheus`                           | `openai/gpt-5.4` `high`                         |
+| `metis`                                | `openai/gpt-5.4` `high`                         |
+| `momus`                                | `openai/gpt-5.4` `xhigh`                        |
+| `atlas`                                | `openai/gpt-5.4` `medium`                       |
+| `librarian`                            | `openai/gpt-5.4` `medium`                       |
+| `explore`                              | `openai/gpt-5.4` `medium`                       |
+| `multimodal-looker`                    | `openai/gpt-5.4` `medium`，fallback `gpt-5-nano` |
+| `quick`                                | `openai/gpt-5.4-mini`                           |
+| `unspecified-low` / `unspecified-high` | `openai/gpt-5.3-codex` `medium`                 |
 
 ### A.3 本机观察
 
@@ -276,3 +276,4 @@ opencode models
   }
 }
 ```
+
