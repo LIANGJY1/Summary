@@ -1,5 +1,7 @@
 # Oh My OpenAgent 使用手册
 
+Author：liang-jy
+
 本文是可复用的操作手册，重点放在编排、工作流、交接、循环执行和专家工具的使用方式。环境相关的配置快照放在文末附录，方便把这份文档直接迁移到别的环境。
 
 `oh-my-opencode` 是安装包和安装命令名，`oh-my-openagent` 是 OpenCode 插件名。本文统一使用这两个官方名称，不混用别名。
@@ -276,4 +278,3 @@ opencode models
   }
 }
 ```
-
