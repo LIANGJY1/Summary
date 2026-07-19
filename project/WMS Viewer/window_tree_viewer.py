@@ -1,7 +1,10 @@
 import subprocess
 import sys
+import os
 import re
 import difflib
+import socket
+import tempfile
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -88,6 +91,21 @@ def parse_dumpsys(output_lines):
         stack.append(node)
         
     return root
+
+def get_adb_path():
+    """尝试获取当前正在运行的 adb server 的绝对路径，避免由于 PATH 环境不同导致低版本 adb 杀死高版本 server"""
+    try:
+        if sys.platform.startswith('linux'):
+            result = subprocess.run(['pgrep', '-f', 'adb.*fork-server'], capture_output=True, text=True)
+            if result.stdout.strip():
+                pids = result.stdout.strip().split()
+                for pid in pids:
+                    exe_path = os.path.realpath(f'/proc/{pid}/exe')
+                    if os.path.exists(exe_path) and 'adb' in os.path.basename(exe_path):
+                        return exe_path
+    except Exception:
+        pass
+    return 'adb'
 
 class TreePane:
     def __init__(self, parent, title):
@@ -237,14 +255,29 @@ class WindowTreeApp:
         
         # Toolbar
         toolbar = ttk.Frame(self.root)
-        toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
+        
+        # 统一设置 Toolbar 中按钮和标签的字体大小
+        style.configure("TButton", font=("Segoe UI", 11))
+        style.configure("TLabel", font=("Segoe UI", 12))
         
         cmd_frame = ttk.Frame(toolbar)
         cmd_frame.pack(side=tk.LEFT, padx=(0, 20))
         ttk.Label(cmd_frame, text="执行命令: ").pack(side=tk.LEFT)
         self.cmd_var = tk.StringVar()
-        self.cmd_combobox = ttk.Combobox(cmd_frame, textvariable=self.cmd_var, width=35)
-        self.cmd_combobox['values'] = ("dumpsys window containers", "dumpsys activity containers")
+        # 将下拉框宽度增大，并修改字体以放大显示
+        self.cmd_combobox = ttk.Combobox(cmd_frame, textvariable=self.cmd_var, width=45, font=("Segoe UI", 12))
+        self.cmd_combobox['values'] = (
+            "dumpsys window containers", 
+            "dumpsys activity containers",
+            "dumpsys window windows",
+            "dumpsys activity activities",
+            "dumpsys window tokens",
+            "dumpsys window displays",
+            "dumpsys window policy",
+            "dumpsys window sessions",
+            "dumpsys window windows | awk '/Window #/{win=$0} /mHasSurface=true/{print win}'"
+        )
         self.cmd_combobox.current(0)
         self.cmd_combobox.pack(side=tk.LEFT, padx=5)
         
@@ -306,14 +339,30 @@ class WindowTreeApp:
         cmd_str = self.cmd_var.get()
         if not cmd_str:
             return
+        
+        adb_path = get_adb_path()
         try:
-            print(f"Executing for {pane.frame.cget('text')}: adb shell {cmd_str}")
-            cmd_args = ['adb', 'shell'] + cmd_str.split()
-            result = subprocess.run(cmd_args, capture_output=True, text=True, check=True)
+            print(f"Executing for {pane.frame.cget('text')}: {adb_path} shell {cmd_str}")
+            # 处理像 awk 这样带有管道和单引号的复杂命令
+            if "|" in cmd_str or "'" in cmd_str:
+                # 使用单引号包裹，并转义内部单引号，防止本地 shell 提前解析 $0 等变量
+                escaped_cmd_str = cmd_str.replace("'", "'\\''")
+                full_cmd = f"{adb_path} shell '{escaped_cmd_str}'"
+                result = subprocess.run(full_cmd, shell=True, capture_output=True, text=True, check=True)
+            else:
+                cmd_args = [adb_path, 'shell'] + cmd_str.split()
+                result = subprocess.run(cmd_args, capture_output=True, text=True, check=True)
+                
             lines = result.stdout.splitlines()
             root_node = parse_dumpsys(lines)
             pane.populate(root_node)
+        except subprocess.CalledProcessError as e:
+            pane.details_text.delete(1.0, tk.END)
+            error_msg = f"Error executing command: {e}\n\nSTDERR:\n{e.stderr}\n\nSTDOUT:\n{e.stdout}"
+            pane.details_text.insert(tk.END, error_msg)
+            print(error_msg)
         except Exception as e:
+            pane.details_text.delete(1.0, tk.END)
             pane.details_text.insert(tk.END, f"Error: {e}")
             
     def expand_both(self, target_level):
@@ -388,8 +437,73 @@ class WindowTreeApp:
                 if child.tree_id:
                     self.add_tag(pane, child.tree_id, tag)
 
+def check_single_instance_and_bring_to_front():
+    """
+    检查是否已有实例在运行。
+    如果是，则通过 Socket 通知旧实例拉起窗口，并退出当前进程。
+    如果不，则启动一个后台线程监听拉起请求。
+    """
+    lock_port = 54321  # 选取一个本地未使用的固定端口作为单例锁
+
+    try:
+        # 尝试绑定端口
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', lock_port))
+        s.listen(1)
+        
+        # 绑定成功，说明是第一个实例
+        # 启动一个后台线程来监听其他实例发来的请求
+        import threading
+        def listen_for_wakeup(server_socket):
+            while True:
+                try:
+                    conn, addr = server_socket.accept()
+                    data = conn.recv(1024)
+                    if data == b"WAKEUP":
+                        # 收到拉起请求，将主窗口置顶
+                        if 'app' in globals() and app.root:
+                            app.root.after(0, bring_window_to_front)
+                    conn.close()
+                except:
+                    break
+                    
+        t = threading.Thread(target=listen_for_wakeup, args=(s,), daemon=True)
+        t.start()
+        
+        # 保存 socket 防止被垃圾回收
+        global _single_instance_socket
+        _single_instance_socket = s
+        return True
+        
+    except socket.error:
+        # 绑定失败，说明已经有实例在运行了
+        try:
+            # 连接已有实例，发送 WAKEUP 信号
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect(('127.0.0.1', lock_port))
+            client.sendall(b"WAKEUP")
+            client.close()
+        except:
+            pass
+        return False
+
+def bring_window_to_front():
+    """将已存在的 Tkinter 窗口强制置顶显示"""
+    if 'app' in globals() and app.root:
+        # 恢复窗口（如果被最小化）
+        app.root.deiconify()
+        # 强制置顶并获取焦点
+        app.root.attributes('-topmost', True)
+        app.root.attributes('-topmost', False)
+        app.root.focus_force()
+
 def main():
+    if not check_single_instance_and_bring_to_front():
+        print("WMS Viewer is already running. Bringing it to front...")
+        sys.exit(0)
+        
     root = tk.Tk()
+    global app
     app = WindowTreeApp(root)
     
     # Auto-load left if file provided, else auto-load left from adb
@@ -401,7 +515,6 @@ def main():
         app.left_pane.populate(root_node)
     else:
         app.load_data(app.left_pane)
-        
     root.mainloop()
 
 if __name__ == "__main__":
