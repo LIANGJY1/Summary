@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uicheck — UI 元素位置比对</title>
+<style>
+  :root { --bg:#12141a; --panel:#1b1e26; --line:#2a2f3a; --fg:#e6e8ee; --dim:#8b93a3; --acc:#4da3ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { margin:0 0 10px; font-size:18px; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .controls input[type=text] { flex:1 1 300px; min-width:180px; padding:7px 10px; background:#0d0f14; color:var(--fg); border:1px solid var(--line); border-radius:6px; font-family:ui-monospace,monospace; font-size:12px; }
+  .controls input[type=number] { padding:6px 8px; background:#0d0f14; color:var(--fg); border:1px solid var(--line); border-radius:6px; }
+  .controls button { padding:8px 14px; background:var(--acc); color:#fff; border:0; border-radius:6px; cursor:pointer; font-weight:600; }
+  .controls button.ghost { background:#2a2f3a; }
+  .controls label { color:var(--dim); font-size:12px; }
+  main { padding:16px 20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .pane { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .pane h2 { margin:0 0 8px; font-size:13px; color:var(--dim); font-weight:600; }
+  .pane.full { grid-column:1/-1; }
+  canvas { width:100%; display:block; background:#000; border-radius:4px; cursor:crosshair; }
+  .legend { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; font-size:12px; color:var(--dim); }
+  .legend span { display:inline-flex; align-items:center; gap:4px; }
+  .legend i { width:10px; height:10px; display:inline-block; border-radius:2px; }
+  .toolbar { grid-column:1/-1; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .toolbar label { color:var(--dim); font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; font-family:ui-monospace,monospace; }
+  th,td { padding:5px 7px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--panel); }
+  td.delta { color:#ff7b72; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:#151a24; }
+  tbody tr.active { background:#17324d; outline:1px solid #00e5ff; }
+  tr.picked { background:#172033; }
+  .scroll { max-height:420px; overflow:auto; grid-column:1/-1; }
+  pre { background:#0d0f14; border:1px solid var(--line); border-radius:6px; padding:12px; overflow:auto; font-size:12px; max-height:320px; }
+  .muted { color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>uicheck — UI 元素位置比对（设计稿 vs 车机截图）</h1>
+  <div class="controls">
+    <label>设计稿</label>
+    <input id="designPath" type="text" placeholder="/绝对路径/design.png">
+    <input type="file" id="designFile" accept="image/*" style="display:none">
+    <button class="ghost" id="designFileBtn">选文件</button>
+    <label>车机截图</label>
+    <input id="shotPath" type="text" placeholder="/绝对路径/screenshot.png">
+    <input type="file" id="shotFile" accept="image/*" style="display:none">
+    <button class="ghost" id="shotFileBtn">选文件</button>
+    <label>忽略顶部</label><input id="ignoreTop" type="number" value="72" min="0" style="width:60px"><span class="muted">px</span>
+    <label>忽略底部</label><input id="ignoreBottom" type="number" value="96" min="0" style="width:60px"><span class="muted">px</span>
+    <button id="analyzeBtn">分析</button>
+    <button class="ghost" id="exportBtn">导出勾选</button>
+    <button class="ghost" id="suggestBtn">生成代码建议</button>
+    <span class="muted">拖拽图片到画布自动分析</span>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <h2>设计稿（绿框=元素）</h2>
+    <canvas id="designCanvas" width="900" height="500"></canvas>
+    <div class="legend" id="legend"></div>
+  </section>
+  <section class="pane">
+    <h2>车机截图（橙框=元素）</h2>
+    <canvas id="actualCanvas" width="900" height="500"></canvas>
+  </section>
+
+  <section class="pane full">
+    <h2>差异对比图（灰=无差异 · 红=有差异 · 绿框=设计位置 · 红框=实际位置 · 黄箭头=位移 · 点列表行高亮对应元素）</h2>
+    <canvas id="diffCanvas" width="1800" height="1012"></canvas>
+    <div class="toolbar" style="margin-top:8px">
+      <label><input type="checkbox" id="showDiff" checked> 高亮差异像素</label>
+      <label><input type="checkbox" id="showBoxes" checked> 显示元素框</label>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <label>最小差值(px)</label>
+    <input id="minDelta" type="number" value="2" min="0" style="width:70px">
+    <button class="ghost" id="filterBtn">应用过滤</button>
+    <button class="ghost" id="checkAll">全选</button>
+    <button class="ghost" id="checkNone">全不选</button>
+    <span class="muted" id="summary"></span>
+  </div>
+
+  <div class="scroll">
+    <table id="diffTable">
+      <thead>
+        <tr><th><input type="checkbox" id="headCheck"></th><th>#</th><th>层级</th><th>类型</th>
+            <th>设计 x,y,w,h</th><th>实际 x,y,w,h</th><th>差异（车机图相对UI图）</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <section class="pane full">
+    <h2>网格行指标（实心卡片）</h2>
+    <pre id="gridOut" class="muted">（分析后显示）</pre>
+  </section>
+
+  <section class="pane full">
+    <h2>导出结果（勾选的未对齐元素）</h2>
+    <pre id="exportOut" class="muted">（勾选后点「导出勾选」）</pre>
+  </section>
+
+  <section class="pane full">
+    <h2>代码改动建议（由勾选项生成）</h2>
+    <pre id="suggestOut" class="muted">（勾选后点「生成代码建议」）</pre>
+  </section>
+</main>
+
+<script>
+const KIND_COLORS = {card:'#4caf50', panel:'#2196f3', button:'#ff9800', icon:'#9c27b0', text:'#00bcd4', divider:'#e91e63', title:'#00e5ff', desc:'#ffd54f'};
+const CODE_MAP = [
+  {metric:'水平间距 gap',         src:'RecommendationFragment.java ITEM_SPACING_HORIZONTAL / CustomGridItemDecoration.horizontalSpacing'},
+  {metric:'垂直间距 gap↑(行距)',  src:'RecommendationFragment.java ITEM_SPACING_VERTICAL / CustomGridItemDecoration.verticalSpacing'},
+  {metric:'左右边距 L/R',         src:'layout-w*dp.xml 容器 LinearLayout 的 layout_marginHorizontal'},
+  {metric:'横幅→网格间距(首行)',  src:'layout-w*dp.xml mAppRecyclerView 的 layout_marginTop'},
+  {metric:'列数 spanCount',       src:'SplitScreenHelper.getGridSpanCount()'},
+  {metric:'卡片宽/高',            src:'item_app.xml 根布局宽高 + GridLayoutManager spanCount'},
+];
+const DIFF_THRESHOLD = 30;
+const DIM = 0.35;
+
+let DATA = null;
+const state = { design:{path:'',dataUrl:null}, shot:{path:'',dataUrl:null} };
+const cache = { designImg:null, actualImg:null, diff:{dd:null,ad:null,w:0,h:0} };
+let selectedDiffIdx = -1;
+let filteredRows = [];
+let analyzeSeq = 0;
+
+document.getElementById('legend').innerHTML = Object.entries(KIND_COLORS)
+  .map(([k,c]) => `<span><i style="background:${c}"></i>${k}</span>`).join('');
+
+function srcFor(side) {
+  const s = state[side];
+  return s.dataUrl || '/file?path=' + encodeURIComponent(s.path);
+}
+function ready(side) { return !!(state[side].dataUrl || state[side].path); }
+function readFile(file, cb) { const fr = new FileReader(); fr.onload = () => cb(fr.result); fr.readAsDataURL(file); }
+
+function autoAnalyze() { if (ready('design') && ready('shot')) analyze(); }
+
+function attachFile(inputId, btnId, side) {
+  document.getElementById(btnId).onclick = () => document.getElementById(inputId).click();
+  document.getElementById(inputId).onchange = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    readFile(f, dataUrl => {
+      state[side].dataUrl = dataUrl; state[side].path = '';
+      document.getElementById(side === 'design' ? 'designPath' : 'shotPath').value = '';
+      autoAnalyze();
+    });
+  };
+}
+attachFile('designFile', 'designFileBtn', 'design');
+attachFile('shotFile', 'shotFileBtn', 'shot');
+
+function attachDrop(elId, side) {
+  const el = document.getElementById(elId);
+  el.addEventListener('dragover', e => e.preventDefault());
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    readFile(f, dataUrl => { state[side].dataUrl = dataUrl; state[side].path = ''; autoAnalyze(); });
+  });
+}
+attachDrop('designCanvas', 'design');
+attachDrop('actualCanvas', 'shot');
+attachDrop('diffCanvas', 'design');
+
+function ignoreParams() {
+  return {
+    ignore_top: parseInt(document.getElementById('ignoreTop').value || '0', 10),
+    ignore_bottom: parseInt(document.getElementById('ignoreBottom').value || '0', 10),
+  };
+}
+
+async function analyze() {
+  const seq = ++analyzeSeq;
+  state.design.path = document.getElementById('designPath').value.trim();
+  state.shot.path = document.getElementById('shotPath').value.trim();
+  const body = { ...ignoreParams() };
+  if (state.design.dataUrl) body.design_data = state.design.dataUrl.split(',')[1];
+  else body.design = state.design.path;
+  if (state.shot.dataUrl) body.screenshot_data = state.shot.dataUrl.split(',')[1];
+  else body.screenshot = state.shot.path;
+  if (!body.design && !body.design_data) { alert('请填写设计稿路径或选择文件'); return; }
+  if (!body.screenshot && !body.screenshot_data) { alert('请填写截图路径或选择文件'); return; }
+  const r = await fetch('/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const resp = await r.json();
+  if (seq !== analyzeSeq) return;
+  DATA = resp;
+  if (DATA.error) { alert(DATA.error); return; }
+  await loadImages();
+  computeDiff();
+  selectedDiffIdx = -1;
+  renderAll();
+}
+
+function loadImages() {
+  return new Promise(resolve => {
+    let n = 0;
+    const done = () => { if (++n === 2) resolve(); };
+    cache.designImg = new Image(); cache.designImg.onload = done; cache.designImg.onerror = done;
+    cache.designImg.src = srcFor('design');
+    cache.actualImg = new Image(); cache.actualImg.onload = done; cache.actualImg.onerror = done;
+    cache.actualImg.src = srcFor('shot');
+  });
+}
+
+function computeDiff() {
+  const d = cache.designImg, a = cache.actualImg;
+  if (!d || !a) return;
+  const w = Math.min(d.naturalWidth, a.naturalWidth);
+  const h = Math.min(d.naturalHeight, a.naturalHeight);
+  const dc = document.createElement('canvas'); dc.width = w; dc.height = h;
+  const ac = document.createElement('canvas'); ac.width = w; ac.height = h;
+  dc.getContext('2d').drawImage(d, 0, 0, w, h);
+  ac.getContext('2d').drawImage(a, 0, 0, w, h);
+  cache.diff = {
+    w, h,
+    dd: dc.getContext('2d').getImageData(0, 0, w, h).data,
+    ad: ac.getContext('2d').getImageData(0, 0, w, h).data,
+  };
+}
+
+function renderAll() { renderDesign(); renderActual(); renderDiff(); renderTable(); renderGrid(); }
+
+function scaleOf(img, canvas) { return canvas.width / img.naturalWidth; }
+
+function renderDesign() {
+  const canvas = document.getElementById('designCanvas');
+  const img = cache.designImg;
+  if (!img) return;
+  const scale = scaleOf(img, canvas);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  drawBoxes(ctx, scale, DATA.design.elements, 'design');
+  drawChildren(ctx, scale, DATA.design.solid);
+}
+
+function renderActual() {
+  const canvas = document.getElementById('actualCanvas');
+  const img = cache.actualImg;
+  if (!img) return;
+  const scale = scaleOf(img, canvas);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  drawBoxes(ctx, scale, DATA.actual.elements, 'actual');
+  drawChildren(ctx, scale, DATA.actual.solid);
+}
+
+function drawBoxes(ctx, scale, elements, side) {
+  const showBoxes = document.getElementById('showBoxes').checked;
+  if (!showBoxes) return;
+  for (const el of elements) {
+    ctx.strokeStyle = KIND_COLORS[el.kind] || (side === 'design' ? '#4caf50' : '#ff9800');
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(el.x*scale, el.y*scale, el.w*scale, el.h*scale);
+  }
+  // selected highlight
+  if (selectedDiffIdx >= 0 && filteredRows[selectedDiffIdx]) {
+    const r = side === 'design' ? filteredRows[selectedDiffIdx].design : filteredRows[selectedDiffIdx].actual;
+    highlightBox(ctx, scale, r);
+  }
+}
+
+function highlightBox(ctx, scale, r) {
+  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4;
+  ctx.strokeRect(r.x*scale, r.y*scale, r.w*scale, r.h*scale);
+  ctx.fillStyle = 'rgba(0,229,255,0.18)';
+  ctx.fillRect(r.x*scale, r.y*scale, r.w*scale, r.h*scale);
+}
+
+function drawChildren(ctx, scale, solid) {
+  for (const s of solid) {
+    for (const c of s.children || []) {
+      const col = KIND_COLORS[c.kind] || '#fff';
+      ctx.strokeStyle = col; ctx.lineWidth = 1;
+      ctx.strokeRect(c.x*scale, c.y*scale, c.w*scale, c.h*scale);
+      ctx.fillStyle = col; ctx.font = '10px sans-serif';
+      ctx.fillText(c.kind, c.x*scale + 2, c.y*scale + 10);
+    }
+  }
+}
+
+function renderDiff() {
+  const canvas = document.getElementById('diffCanvas');
+  const img = cache.designImg;
+  const diff = cache.diff;
+  if (!img || !diff.dd) return;
+  const scale = canvas.width / diff.w;
+  canvas.height = Math.round(diff.h * scale);
+  const ctx = canvas.getContext('2d');
+  const out = ctx.createImageData(canvas.width, canvas.height);
+  const {dd, ad, w, h} = diff;
+  const showDiff = document.getElementById('showDiff').checked;
+  const ig = ignoreParams();
+  for (let y = 0; y < canvas.height; y++) {
+    const sy = Math.floor(y / scale);
+    const inIgnored = sy < ig.ignore_top || sy >= h - ig.ignore_bottom;
+    for (let x = 0; x < canvas.width; x++) {
+      const sx = Math.floor(x / scale);
+      const i = (sy * w + sx) * 4;
+      const o = (y * canvas.width + x) * 4;
+      if (inIgnored) {
+        out.data[o] = dd[i]*0.25; out.data[o+1] = dd[i+1]*0.25; out.data[o+2] = dd[i+2]*0.25; out.data[o+3] = 255;
+        continue;
+      }
+      const d = showDiff ? Math.max(Math.abs(dd[i]-ad[i]), Math.abs(dd[i+1]-ad[i+1]), Math.abs(dd[i+2]-ad[i+2])) : 0;
+      if (d >= DIFF_THRESHOLD) {
+        out.data[o] = 255; out.data[o+1] = 60; out.data[o+2] = 60; out.data[o+3] = 255;
+      } else {
+        out.data[o] = dd[i]*DIM; out.data[o+1] = dd[i+1]*DIM; out.data[o+2] = dd[i+2]*DIM; out.data[o+3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  if (document.getElementById('showBoxes').checked) {
+    drawBoxes(ctx, scale, DATA.design.elements, 'design');
+    drawBoxes(ctx, scale, DATA.actual.elements, 'actual');
+    drawChildren(ctx, scale, DATA.design.solid);
+    drawChildren(ctx, scale, DATA.actual.solid);
+    for (const d of filteredRows) {
+      const de = d.design, ae = d.actual;
+      const x1 = (de.x + de.w/2)*scale, y1 = (de.y + de.h/2)*scale;
+      const x2 = (ae.x + ae.w/2)*scale, y2 = (ae.y + ae.h/2)*scale;
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x2, y2, 4, 0, Math.PI*2); ctx.fillStyle = '#ffd23f'; ctx.fill();
+    }
+    if (selectedDiffIdx >= 0 && filteredRows[selectedDiffIdx]) {
+      const d = filteredRows[selectedDiffIdx];
+      highlightBox(ctx, scale, d.design);
+      highlightBox(ctx, scale, d.actual);
+    }
+  }
+}
+
+function allDiffs() {
+  const top = (DATA.diffs || []).map(d => ({...d, level: '页面'}));
+  const nested = (DATA.nested_diffs || []).map(d => ({...d, level: '卡片内'}));
+  return top.concat(nested);
+}
+
+function filterDiffs() {
+  const min = parseInt(document.getElementById('minDelta').value || '0', 10);
+  return allDiffs().filter(d => Math.max(Math.abs(d.delta.dx), Math.abs(d.delta.dy),
+    Math.abs(d.delta.dw), Math.abs(d.delta.dh)) >= min);
+}
+
+function describeDelta(dl) {
+  const p = [];
+  if (dl.dx > 0) p.push(`向右偏移 ${dl.dx}px`);
+  else if (dl.dx < 0) p.push(`向左偏移 ${-dl.dx}px`);
+  if (dl.dy > 0) p.push(`向下偏移 ${dl.dy}px`);
+  else if (dl.dy < 0) p.push(`向上偏移 ${-dl.dy}px`);
+  if (dl.dw > 0) p.push(`变宽 ${dl.dw}px`);
+  else if (dl.dw < 0) p.push(`变窄 ${-dl.dw}px`);
+  if (dl.dh > 0) p.push(`变高 ${dl.dh}px`);
+  else if (dl.dh < 0) p.push(`变矮 ${-dl.dh}px`);
+  return p.length ? p.join('，') : '一致';
+}
+
+function renderTable() {
+  const tbody = document.querySelector('#diffTable tbody');
+  filteredRows = filterDiffs();
+  tbody.innerHTML = filteredRows.map((d, i) => {
+    const de = d.design, ae = d.actual, dl = d.delta;
+    return `<tr data-i="${i}" class="${i === selectedDiffIdx ? 'active' : ''}">
+      <td><input type="checkbox" class="pick"></td>
+      <td>${i}</td>
+      <td>${d.level === '卡片内' ? '↳ 卡片内' : '页面'}</td>
+      <td>${d.kind}</td>
+      <td>${de.x},${de.y},${de.w},${de.h}</td>
+      <td>${ae.x},${ae.y},${ae.w},${ae.h}</td>
+      <td class="delta">${describeDelta(dl)}</td></tr>`;
+  }).join('');
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT') return;
+      selectedDiffIdx = parseInt(tr.dataset.i, 10);
+      tbody.querySelectorAll('tr').forEach(r => r.classList.toggle('active', r === tr));
+      renderDesign(); renderActual(); renderDiff();
+      tr.scrollIntoView({block:'nearest'});
+    });
+    tr.querySelector('.pick').addEventListener('change', () => tr.classList.toggle('picked', tr.querySelector('.pick').checked));
+  });
+  const np = filteredRows.filter(d => d.level === '页面').length;
+  const nn = filteredRows.filter(d => d.level === '卡片内').length;
+  document.getElementById('summary').textContent = `未对齐 ${filteredRows.length} 项（页面 ${np} + 卡片内 ${nn}），点击行可在图中高亮`;
+}
+
+document.getElementById('analyzeBtn').onclick = analyze;
+document.getElementById('filterBtn').onclick = renderTable;
+document.getElementById('checkAll').onclick = () => toggleAll(true);
+document.getElementById('checkNone').onclick = () => toggleAll(false);
+function toggleAll(on) {
+  document.querySelectorAll('#diffTable .pick').forEach(cb => { cb.checked = on; cb.closest('tr').classList.toggle('picked', on); });
+}
+document.getElementById('headCheck').onchange = e => toggleAll(e.target.checked);
+document.getElementById('showDiff').onchange = renderDiff;
+document.getElementById('showBoxes').onchange = () => { renderDesign(); renderActual(); renderDiff(); };
+let ignoreTimer = null;
+function onIgnoreInput() { clearTimeout(ignoreTimer); ignoreTimer = setTimeout(autoAnalyze, 400); }
+document.getElementById('ignoreTop').oninput = onIgnoreInput;
+document.getElementById('ignoreBottom').oninput = onIgnoreInput;
+
+function renderGrid() {
+  const g = DATA.grid;
+  document.getElementById('gridOut').textContent =
+    'design   ' + gridRow(g.design) + '\n' + 'actual   ' + gridRow(g.actual);
+}
+function gridRow(m) {
+  return m.rows.map(r => `y=${r.y} gap↑=${r.row_gap_above ?? '-'} gap=[${r.gap}] h=${r.height} L/R=${r.left_margin}/${r.right_margin}`).join('\n' + '         ');
+}
+
+document.getElementById('exportBtn').onclick = () => {
+  if (!DATA) return;
+  const picked = [];
+  document.querySelectorAll('#diffTable .pick:checked').forEach(cb => {
+    const d = filteredRows[parseInt(cb.closest('tr').dataset.i, 10)];
+    if (d) picked.push(d);
+  });
+  document.getElementById('exportOut').textContent = JSON.stringify({
+    elements: picked.map(d => ({kind:d.kind, design:d.design, actual:d.actual, delta:d.delta})),
+    codeMap: CODE_MAP,
+  }, null, 2);
+};
+
+function inferFix(d) {
+  const dl = d.delta, kind = d.kind;
+  const h = dl.dx !== 0 || dl.dw !== 0;
+  const v = dl.dy !== 0 || dl.dh !== 0;
+  if (kind === 'card' || kind === 'panel') {
+    if (v && !h && dl.dy !== 0) return {
+      issue: `整体纵向位移 ${dl.dy}px（${dl.dy < 0 ? '上移' : '下移'}）`,
+      fix: `上方间距 ${dl.dy < 0 ? '增大' : '减小'} ${Math.abs(dl.dy)}px`,
+      files: ['RecommendationFragment.java · ITEM_SPACING_VERTICAL', 'layout-w1920dp · mAppRecyclerView marginTop'],
+    };
+    if (h && !v && dl.dw !== 0) return {
+      issue: `宽度差 ${dl.dw}px`, fix: `宽度 ${dl.dw < 0 ? '减小' : '增大'} ${Math.abs(dl.dw)}px`,
+      files: ['item_app.xml · 根布局宽度 / GridLayoutManager spanCount'],
+    };
+    if (h && !v && dl.dx !== 0) return {
+      issue: `水平位移 ${dl.dx}px`, fix: `水平间距/边距调整 ${Math.abs(dl.dx)}px`,
+      files: ['RecommendationFragment.java · ITEM_SPACING_HORIZONTAL', 'layout · marginHorizontal'],
+    };
+  }
+  if (kind === 'button' || kind === 'icon' || kind === 'text') {
+    if (h && dl.dx !== 0) return { issue: `水平位移 ${dl.dx}px`, fix: `该元素水平位置调整 ${Math.abs(dl.dx)}px`, files: ['对应布局 XML · layout_marginStart/End'] };
+    if (v && dl.dy !== 0) return { issue: `纵向位移 ${dl.dy}px`, fix: `该元素纵向位置调整 ${Math.abs(dl.dy)}px`, files: ['对应布局 XML · layout_marginTop/Bottom'] };
+    if (dl.dw !== 0 || dl.dh !== 0) return { issue: `尺寸差 w${dl.dw} / h${dl.dh}`, fix: '该元素尺寸调整', files: ['对应布局 XML · layout_width/height'] };
+  }
+  if (kind === 'title' || kind === 'desc') {
+    const view = kind === 'title' ? 'app_name(标题)' : 'app_desc_short(描述)';
+    const label = kind === 'title' ? '标题' : '描述';
+    if (dl.dx !== 0) return { issue: `${label}水平位移 ${dl.dx}px`, fix: `${label}水平位置调整 ${Math.abs(dl.dx)}px`, files: [`item_app.xml · ${view}`] };
+    if (dl.dy !== 0) return { issue: `${label}纵向位移 ${dl.dy}px`, fix: `${label}纵向位置调整 ${Math.abs(dl.dy)}px`, files: [`item_app.xml · ${view}`] };
+    if (dl.dw !== 0 || dl.dh !== 0) return { issue: `${label}尺寸差`, fix: `${label}文字尺寸/间距调整`, files: [`item_app.xml · ${view} textSize/间距`] };
+  }
+  return { issue: '复合差异', fix: '需人工核对对应布局', files: ['对应布局 XML'] };
+}
+
+function groupSuggestions(selected) {
+  const groups = new Map();
+  for (const d of selected) {
+    const key = `${d.kind}|${d.delta.dx}|${d.delta.dy}|${d.delta.dw}|${d.delta.dh}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+  return [...groups.entries()].map(([key, items]) => {
+    const d = items[0];
+    return { kind: d.kind, count: items.length, delta: d.delta, ...inferFix(d) };
+  });
+}
+
+document.getElementById('suggestBtn').onclick = () => {
+  if (!DATA) return;
+  const picked = [];
+  document.querySelectorAll('#diffTable .pick:checked').forEach(cb => {
+    const d = filteredRows[parseInt(cb.closest('tr').dataset.i, 10)];
+    if (d) picked.push(d);
+  });
+  if (!picked.length) { alert('请先勾选要修改的元素'); return; }
+  const groups = groupSuggestions(picked);
+  const lines = groups.map(g =>
+    `[${g.kind}] ×${g.count}  ${describeDelta(g.delta)}\n` +
+    `  问题：${g.issue}\n` +
+    `  改法：${g.fix}\n` +
+    `  位置：${g.files.join('  /  ')}`
+  ).join('\n\n');
+  document.getElementById('suggestOut').textContent = '共 ' + groups.length + ' 组未对齐元素：\n\n' + lines;
+};
+</script>
+</body>
+</html>
