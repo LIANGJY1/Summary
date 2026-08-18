@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ADB Script Launcher
+Comment=GUI tool for executing ADB scripts
+Exec=python3 /home/liang/Project/MyProject/Summary/tools/launcher_tool/launcher_tool.py
+Icon=/home/liang/.local/share/icons/hicolor/128x128/apps/adb-script-launcher.png
+Terminal=false
+Categories=Development;
+Path=/home/liang/Project/MyProject/Summary/tools/launcher_tool
+StartupWMClass=aDBScriptLauncher

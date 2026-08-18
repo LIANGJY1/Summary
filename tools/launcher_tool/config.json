@@ -1,0 +1,43 @@
+{
+  "app": {
+    "title": "ADB Script Launcher",
+    "width": 900,
+    "height": 600,
+    "theme": "dark"
+  },
+  "scripts": [
+    {
+      "id": "push_launcher",
+      "name": "Push Launcher APK",
+      "description": "Push NsrLauncher.apk to device and reboot",
+      "group": "YD",
+      "command": "bash ./push_launcher.sh ${apk_path}",
+      "working_dir": null,
+      "env": null,
+      "parameters": [
+        {
+          "name": "apk_path",
+          "label": "APK Path",
+          "type": "file",
+          "default": "/home/liang/Desktop/APK/LauncherApk/test/NsrLauncher.apk",
+          "description": "Path to the APK file",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "reboot_launcher",
+      "name": "Restart Launcher",
+      "description": "Kill launcher process (auto-restarts)",
+      "group": "YD",
+      "command": "bash ./reboot_launcher.sh",
+      "working_dir": null,
+      "env": null
+    }
+  ],
+  "groups": [
+    {"id": "YD", "label": "YD", "expanded": true},
+    {"id": "Debug", "label": "Debug", "expanded": true},
+    {"id": "Utility", "label": "Utility", "expanded": true}
+  ]
+}
