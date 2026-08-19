@@ -615,6 +615,8 @@ class ScriptRunner:
             if script.env:
                 env.update(script.env)
 
+            import fcntl
+
             self.process = subprocess.Popen(
                 command,
                 shell=True,
@@ -622,14 +624,37 @@ class ScriptRunner:
                 stderr=subprocess.STDOUT,
                 cwd=str(cwd),
                 env=env,
-                bufsize=1,
-                universal_newlines=True
+                bufsize=0
             )
 
-            for line in iter(self.process.stdout.readline, ''):
-                if not self.running:
+            fd = self.process.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+            buf = ''
+            while self.running:
+                try:
+                    data = os.read(fd, 1024)
+                    if not data:
+                        if self.process.poll() is not None:
+                            break
+                        time.sleep(0.01)
+                        continue
+                    text = data.decode('utf-8', errors='replace')
+                    for ch in text:
+                        if ch in ('\r', '\n'):
+                            if buf:
+                                self.output_queue.put(('stdout', buf + '\n'))
+                                buf = ''
+                        else:
+                            buf += ch
+                except BlockingIOError:
+                    time.sleep(0.01)
+                except OSError:
                     break
-                self.output_queue.put(('stdout', line))
+
+            if buf:
+                self.output_queue.put(('stdout', buf + '\n'))
 
             self.process.wait()
 
@@ -1063,6 +1088,7 @@ class OutputPanel(Frame):
         self.text.insert(END, text, tag)
         self.text.see(END)
         self.text.config(state=DISABLED)
+        self.text.update_idletasks()
 
     def clear(self):
         self.text.config(state=NORMAL)
@@ -1258,7 +1284,7 @@ class LauncherApp:
         except queue.Empty:
             pass
 
-        self.root.after(50, self._consume_output)
+        self.root.after(10, self._consume_output)
 
     def _run_script(self, script: ScriptConfig):
         if script.parameters:
