@@ -1,5 +1,43 @@
 {
   "push_launcher": {
     "apk_path": "/home/liang/Project/Reachauto/YaDi/yadea_master/application/Launcher/build/outputs/apk/release/NsrLauncher.apk"
-  }
+  },
+  "adb_logcat": {
+    "grep_filter": ""
+  },
+  "_keybindings": {
+    "search_open": "Control-f",
+    "search_close": "Escape",
+    "search_next": "Return",
+    "filter_apply": "Return"
+  },
+  "_logcat": {
+    "export_path": "/home/liang/Desktop"
+  },
+  "ui_screenshot": {
+    "screenshot_dir": "/home/liang/Documents/HC/UI/screenshot"
+  },
+  "_enabled": {
+    "push_launcher": true,
+    "reboot_launcher": true,
+    "ui_screenshot": true,
+    "start_3daa": true,
+    "cold_boot_3daa": true,
+    "adb_logcat": false,
+    "adb_logcat_clear": true
+  },
+  "_prompts": [
+    {
+      "name": "源码注释",
+      "content": " ▪ 下面这段提示词可以直接复用，后续分析 Glide 源码时按这个范式来：\n    你是一位精通 Android 源码与架构设计的工程师。请对项目中指定的源码进行深度分析，并按以下规则处理：\n \n    ## 分析要求\n    1. 先用 Read/Grep/Glob 定位目标类、方法及其调用链，通读相关代码与上下游依赖。\n    2. 对目标代码链路进行逐行/逐块解读，说明每一行代码的作用、设计意图、并发安全、性能考量与潜在坑点。\n    3. 重点回答：这段代码解决了什么问题？为什么要这样设计？与框架其他组件是什么关系？\n    4. 若涉及用户可扩展机制（如 AppGlideModule / LibraryGlideModule），必须给出应用/库的使用步骤，以及编译期产物到运行时的完整链路。\n \n    ## 注释规范\n    1. 所有新增/修改的中文注释统一使用双斜杠 `//`，禁止使用 `/* */` 块注释；原有 Javadoc 保持不变。\n    2. 只加有意义的注释，禁止添加无意义的结束符注释，例如 `// if 结束`、`// 方法结束`。\n    3. 在类/方法顶部补充职责定位、设计思想、在框架中的位置、关键协作对象。\n    4. 对关键代码行（判空、加锁、反射、回调、写回单例等）直接在其后或上方加注释说明。\n    5. 不改动任何源码逻辑，仅修改注释。\n \n    ## 文档沉淀\n    1. 将核心分析结论以结构化 Markdown 追加到项目根目录的 `Glide.md`。\n    2. 注意文章层级（## / ### / ####），与已有章节衔接，避免无脑堆砌。\n    3. 文档内容应覆盖：问题背景、代码链路、设计思想、组件关系、使用方式、易错点。\n \n    ## 输出格式\n    1. 先给出简要分析结论；\n    2. 再列出已修改/补充注释的文件路径；\n    3. 最后说明已同步到 `Glide.md` 的章节标题。\n   直接复制这段提示词即可作为后续 Glide 源码分析的初始 prompt。"
+    },
+    {
+      "name": "New Prompt",
+      "content": " ▪ 下面这段提示词可以直接复用，后续分析 Glide 源码时按这个范式来：\n    你是一位精通 Android 源码与架构设计的工程师。请对项目中指定的源码进行深度分析，并按以下规则处理：\n \n    ## 分析要求\n    1. 先用 Read/Grep/Glob 定位目标类、方法及其调用链，通读相关代码与上下游依赖。\n    2. 对目标代码链路进行逐行/逐块解读，说明每一行代码的作用、设计意图、并发安全、性能考量与潜在坑点。\n    3. 重点回答：这段代码解决了什么问题？为什么要这样设计？与框架其他组件是什么关系？\n    4. 若涉及用户可扩展机制（如 AppGlideModule / LibraryGlideModule），必须给出应用/库的使用步骤，以及编译期产物到运行时的完整链路。\n \n    ## 注释规范\n    1. 所有新增/修改的中文注释统一使用双斜杠 `//`，禁止使用 `/* */` 块注释；原有 Javadoc 保持不变。\n    2. 只加有意义的注释，禁止添加无意义的结束符注释，例如 `// if 结束`、`// 方法结束`。\n    3. 在类/方法顶部补充职责定位、设计思想、在框架中的位置、关键协作对象。\n    4. 对关键代码行（判空、加锁、反射、回调、写回单例等）直接在其后或上方加注释说明。\n    5. 不改动任何源码逻辑，仅修改注释。\n \n    ## 文档沉淀\n    1. 将核心分析结论以结构化 Markdown 追加到项目根目录的 `Glide.md`。\n    2. 注意文章层级（## / ### / ####），与已有章节衔接，避免无脑堆砌。\n    3. 文档内容应覆盖：问题背景、代码链路、设计思想、组件关系、使用方式、易错点。\n \n    ## 输出格式\n    1. 先给出简要分析结论；\n    2. 再列出已修改/补充注释的文件路径；\n    3. 最后说明已同步到 `Glide.md` 的章节标题。\n   直接复制这段提示词即可作为后续 Glide 源码分析的初始 prompt。"
+    },
+    {
+      "name": "New Prompt 2",
+      "content": ""
+    }
+  ]
 }

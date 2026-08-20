@@ -1,8 +1,8 @@
 {
   "app": {
     "title": "ADB Script Launcher",
-    "width": 900,
-    "height": 600,
+    "width": 1200,
+    "height": 800,
     "theme": "dark"
   },
   "scripts": [
@@ -33,11 +33,96 @@
       "command": "bash ./reboot_launcher.sh",
       "working_dir": null,
       "env": null
+    },
+    {
+      "id": "ui_screenshot",
+      "name": "Screen Shot",
+      "description": "Press Enter to capture screenshots via adb",
+      "group": "UI",
+      "command": "export PATH=\"/home/liang/Android/Sdk/platform-tools:$PATH\"; python3 /home/liang/Documents/HC/UI/screenshot/screenshot.py ${screenshot_dir}",
+      "working_dir": null,
+      "env": null,
+      "parameters": [
+        {
+          "name": "screenshot_dir",
+          "label": "Screenshot Directory",
+          "type": "directory",
+          "default": "/home/liang/Documents/HC/UI/screenshot",
+          "description": "Directory where screenshots will be saved",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "start_3daa",
+      "name": "Start up 3DAA",
+      "description": "Launch 3DAA emulator with writable system",
+      "group": "Emulator",
+      "command": "nohup ~/Android/Sdk/emulator/emulator -avd 3DAA -writable-system > /dev/null 2>&1 &",
+      "working_dir": null,
+      "env": null
+    },
+    {
+      "id": "cold_boot_3daa",
+      "name": "Cold Boot 3DAA",
+      "description": "Launch 3DAA emulator with writable system and cold boot",
+      "group": "Emulator",
+      "command": "nohup ~/Android/Sdk/emulator/emulator -avd 3DAA -writable-system -no-snapshot > /dev/null 2>&1 &",
+      "working_dir": null,
+      "env": null
+    },
+    {
+      "id": "adb_logcat",
+      "name": "ADB Logcat",
+      "description": "Real-time logcat output with optional grep filter",
+      "group": "Emulator",
+      "enabled": false,
+      "command": "if [ -z \"${grep_filter}\" ]; then ~/Android/Sdk/platform-tools/adb logcat; else ~/Android/Sdk/platform-tools/adb logcat | grep --line-buffered \"${grep_filter}\"; fi",
+      "working_dir": null,
+      "env": null,
+      "parameters": [
+        {
+          "name": "grep_filter",
+          "label": "Grep Filter",
+          "type": "text",
+          "default": "",
+          "description": "Optional keyword to filter log output (leave empty for all logs)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "adb_logcat_clear",
+      "name": "Clear Logcat",
+      "description": "Clear all logcat buffers",
+      "group": "Debug",
+      "command": "~/Android/Sdk/platform-tools/adb logcat -c",
+      "working_dir": null,
+      "env": null
+    },
+    {
+      "id": "remove_comment_slashes",
+      "name": "Remove Comment Slashes",
+      "description": "Remove leading '//' from each line in clipboard",
+      "group": "Utility",
+      "command": "python3 ./remove_comment_slashes.py",
+      "working_dir": null,
+      "env": null
     }
   ],
   "groups": [
     {"id": "YD", "label": "YD", "expanded": true},
+    {"id": "UI", "label": "UI", "expanded": true},
+    {"id": "Surface", "label": "Surface", "expanded": true},
+    {"id": "Emulator", "label": "Emulator", "expanded": true},
     {"id": "Debug", "label": "Debug", "expanded": true},
     {"id": "Utility", "label": "Utility", "expanded": true}
-  ]
+  ],
+  "tools": {
+    "wms_viewer": {
+      "enabled": true,
+      "default_command": "dumpsys window containers",
+      "icon_path": "wms_viewer_icon.png"
+    }
+  }
 }
