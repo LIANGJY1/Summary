@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """ADB Script Launcher - Configurable GUI for executing shell scripts."""
 
+import datetime
 import json
 import os
 import re
@@ -9,12 +10,13 @@ import sys
 import threading
 import queue
 import time
+import uuid
 from pathlib import Path
 from tkinter import (
     Tk, Frame, Label, Button, Text, Scrollbar, Entry, Toplevel, Canvas, LabelFrame,
     Listbox,
     END, BOTH, LEFT, RIGHT, TOP, BOTTOM, Y, X, WORD, DISABLED, NORMAL, W, E,
-    StringVar, IntVar, Menu, messagebox, filedialog, Checkbutton, OptionMenu
+    StringVar, IntVar, BooleanVar, Menu, messagebox, filedialog, Checkbutton, OptionMenu
 )
 from tkinter import ttk
 from tkinter.font import Font, families
@@ -2191,6 +2193,8 @@ class PromptsPanel:
             font=FontManager.ui(FONT_LG)
         )
         self.name_entry.pack(side=LEFT, fill=X, expand=True)
+        self.name_entry.bind('<KeyRelease>', self._schedule_save)
+        self.name_entry.bind('<FocusOut>', self._immediate_save)
 
         _make_button(
             toolbar,
@@ -2315,10 +2319,31 @@ class PromptsPanel:
             highlightthickness=0,
             yscrollcommand=text_scrollbar.set,
             padx=SP['md'],
-            pady=SP['sm']
+            pady=SP['sm'],
+            undo=True,
+            maxundo=-1
         )
         self.text.pack(side=LEFT, fill=BOTH, expand=True)
         text_scrollbar.config(command=self.text.yview)
+        self.text.bind('<KeyRelease>', self._schedule_save)
+        self.text.bind('<FocusOut>', self._immediate_save)
+
+        self._save_debounce_id = None
+
+    def _schedule_save(self, event=None):
+        if self._save_debounce_id is not None:
+            self.frame.after_cancel(self._save_debounce_id)
+        self._save_debounce_id = self.frame.after(400, self._debounced_save)
+
+    def _immediate_save(self, event=None):
+        if self._save_debounce_id is not None:
+            self.frame.after_cancel(self._save_debounce_id)
+            self._save_debounce_id = None
+        self._save_current_prompt()
+
+    def _debounced_save(self):
+        self._save_debounce_id = None
+        self._save_current_prompt()
 
     def _load_prompts(self):
         try:
@@ -2366,6 +2391,7 @@ class PromptsPanel:
         self.name_var.set(prompt.get('name', ''))
         self.text.delete('1.0', END)
         self.text.insert('1.0', prompt.get('content', ''))
+        self.text.edit_reset()
 
     def _generate_name(self) -> str:
         base = "New Prompt"
@@ -2439,6 +2465,596 @@ class PromptsPanel:
         self.frame.clipboard_append(content)
 
 
+class Schedule:
+    REPEAT_OPTIONS = ['once', 'daily', 'weekdays', 'weekly']
+
+    def __init__(self, data: dict):
+        self.id = data.get('id', str(uuid.uuid4())[:8])
+        self.name = data.get('name', 'New Schedule')
+        self.script_id = data.get('script_id', '')
+        self.datetime_str = data.get('datetime', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        self.repeat = data.get('repeat', 'once')
+        if self.repeat not in self.REPEAT_OPTIONS:
+            self.repeat = 'once'
+        self.enabled = data.get('enabled', True)
+        self.last_run = data.get('last_run', '')
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'script_id': self.script_id,
+            'datetime': self.datetime_str,
+            'repeat': self.repeat,
+            'enabled': self.enabled,
+            'last_run': self.last_run,
+        }
+
+
+class Scheduler:
+    def __init__(self, schedules: list, callback):
+        self.schedules = schedules
+        self.callback = callback
+        self.running = False
+        self._thread = None
+
+    def start(self):
+        if self.running:
+            return
+        self.running = True
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self.running = False
+
+    def _loop(self):
+        while self.running:
+            try:
+                self._check_schedules()
+            except Exception as e:
+                print(f"Scheduler error: {e}")
+            time.sleep(1)
+
+    def _check_schedules(self):
+        now = datetime.datetime.now()
+        for schedule in self.schedules:
+            if not schedule.enabled:
+                continue
+            if self._should_run(schedule, now):
+                schedule.last_run = now.strftime('%Y-%m-%d %H:%M:%S')
+                self.callback(schedule)
+
+    def _should_run(self, schedule: Schedule, now: datetime.datetime) -> bool:
+        try:
+            base = datetime.datetime.strptime(schedule.datetime_str, '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return False
+
+        if schedule.last_run:
+            try:
+                last = datetime.datetime.strptime(schedule.last_run, '%Y-%m-%d %H:%M:%S')
+                if (last.year, last.month, last.day, last.hour, last.minute) == (now.year, now.month, now.day, now.hour, now.minute):
+                    return False
+            except Exception:
+                pass
+
+        if schedule.repeat == 'once':
+            return now >= base and (now - base).total_seconds() < 60
+        elif schedule.repeat == 'daily':
+            return (now.hour, now.minute) == (base.hour, base.minute)
+        elif schedule.repeat == 'weekdays':
+            return now.weekday() < 5 and (now.hour, now.minute) == (base.hour, base.minute)
+        elif schedule.repeat == 'weekly':
+            return now.weekday() == base.weekday() and (now.hour, now.minute) == (base.hour, base.minute)
+        return False
+
+
+class SchedulesPanel:
+    """Schedule management with list + form."""
+
+    def __init__(self, parent, colors: dict, settings: SettingsManager, scripts: list, on_change):
+        self.colors = colors
+        self.settings = settings
+        self.scripts = scripts
+        self.on_change = on_change
+        self.schedules = []
+        self.selected_index = None
+        self._ignore_select = False
+
+        self.frame = Frame(parent, bg=colors['bg'])
+        self.frame.pack(fill=BOTH, expand=True)
+
+        self._create_toolbar()
+        self._create_panels()
+        self._load_schedules()
+
+    def _create_toolbar(self):
+        toolbar = Frame(self.frame, bg=self.colors['bg'])
+        toolbar.pack(fill=X, padx=SP['sm'], pady=SP['sm'])
+
+        _make_button(
+            toolbar,
+            text="Add",
+            command=self._add_schedule,
+            colors=self.colors,
+            kind='primary',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        ).pack(side=LEFT, padx=(0, SP['sm']))
+
+        _make_button(
+            toolbar,
+            text="Save",
+            command=self._save_current_schedule,
+            colors=self.colors,
+            kind='secondary',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        ).pack(side=LEFT, padx=(0, SP['sm']))
+
+        _make_button(
+            toolbar,
+            text="Delete",
+            command=self._delete_schedule,
+            colors=self.colors,
+            kind='danger',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        ).pack(side=LEFT, padx=(0, SP['sm']))
+
+        _make_button(
+            toolbar,
+            text="Toggle Enable",
+            command=self._toggle_enable,
+            colors=self.colors,
+            kind='ghost',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        ).pack(side=LEFT, padx=(0, SP['sm']))
+
+    def _create_panels(self):
+        paned = PanedWindow(self.frame, orient='horizontal', bg=self.colors['border'])
+        paned.pack(fill=BOTH, expand=True, padx=SP['sm'], pady=(0, SP['sm']))
+
+        list_frame = Frame(paned, bg=self.colors['bg'])
+        paned.add(list_frame, minsize=160)
+
+        Label(
+            list_frame,
+            text="Schedules",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_header'],
+            font=FontManager.ui(FONT_LG, bold=True),
+            anchor='w'
+        ).pack(fill=X, pady=(0, SP['xs']))
+
+        list_container = Frame(list_frame, bg=self.colors['bg'])
+        list_container.pack(fill=BOTH, expand=True)
+
+        scrollbar = Scrollbar(list_container, bg=self.colors['bg_secondary'])
+        scrollbar.pack(side=RIGHT, fill=Y)
+
+        self.listbox = Listbox(
+            list_container,
+            bg=self.colors['bg_input'],
+            fg=self.colors['fg'],
+            selectbackground=self.colors['selection_bg'],
+            selectforeground=self.colors['selection_fg'],
+            relief='flat',
+            highlightthickness=1,
+            highlightbackground=self.colors['border'],
+            highlightcolor=self.colors['bg_button'],
+            font=FontManager.ui(FONT_MD),
+            yscrollcommand=scrollbar.set,
+            exportselection=False
+        )
+        self.listbox.pack(side=LEFT, fill=BOTH, expand=True)
+        scrollbar.config(command=self.listbox.yview)
+        self.listbox.bind('<<ListboxSelect>>', self._on_select)
+
+        form_frame = Frame(paned, bg=self.colors['bg'])
+        paned.add(form_frame, minsize=300)
+
+        Label(
+            form_frame,
+            text="Schedule Settings",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_header'],
+            font=FontManager.ui(FONT_LG, bold=True),
+            anchor='w'
+        ).pack(fill=X, pady=(0, SP['xs']))
+
+        self.countdown_label = Label(
+            form_frame,
+            text="Next run: --",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_info'],
+            font=FontManager.ui(FONT_MD, bold=True),
+            anchor='w'
+        )
+        self.countdown_label.pack(fill=X, pady=(0, SP['sm']))
+
+        self.form = Frame(form_frame, bg=self.colors['bg'])
+        self.form.pack(fill=BOTH, expand=True, padx=SP['sm'])
+
+        self._add_form_row("Name:", 'name_var', self.form)
+        self._add_script_row(self.form)
+        self._add_form_row("DateTime (YYYY-MM-DD HH:MM:SS):", 'datetime_var', self.form, width=30)
+        self._add_repeat_row(self.form)
+        self._add_enabled_row(self.form)
+
+        Label(
+            form_frame,
+            text="Execution Log",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_header'],
+            font=FontManager.ui(FONT_LG, bold=True),
+            anchor='w'
+        ).pack(fill=X, pady=(SP['sm'], SP['xs']))
+
+        log_container = Frame(
+            form_frame,
+            bg=self.colors['bg_input'],
+            highlightthickness=1,
+            highlightbackground=self.colors['border']
+        )
+        log_container.pack(fill=BOTH, expand=True)
+
+        log_scrollbar = Scrollbar(log_container, bg=self.colors['bg_secondary'])
+        log_scrollbar.pack(side=RIGHT, fill=Y)
+
+        self.log_text = Text(
+            log_container,
+            bg=self.colors['bg_input'],
+            fg=self.colors['fg_dim'],
+            insertbackground=self.colors['fg'],
+            selectbackground=self.colors['selection_bg'],
+            selectforeground=self.colors['selection_fg'],
+            font=FontManager.ui(FONT_SM),
+            wrap=WORD,
+            relief='flat',
+            highlightthickness=0,
+            yscrollcommand=log_scrollbar.set,
+            padx=SP['md'],
+            pady=SP['sm'],
+            height=6
+        )
+        self.log_text.pack(side=LEFT, fill=BOTH, expand=True)
+        log_scrollbar.config(command=self.log_text.yview)
+
+    def _add_form_row(self, label: str, var_name: str, parent, width=20):
+        row = Frame(parent, bg=self.colors['bg'])
+        row.pack(fill=X, pady=SP['xs'])
+
+        Label(
+            row,
+            text=label,
+            bg=self.colors['bg'],
+            fg=self.colors['fg'],
+            font=FontManager.ui(FONT_SM),
+            width=22,
+            anchor='w'
+        ).pack(side=LEFT)
+
+        var = StringVar()
+        setattr(self, var_name, var)
+        entry = Entry(
+            row,
+            textvariable=var,
+            bg=self.colors['bg_input'],
+            fg=self.colors['fg'],
+            insertbackground=self.colors['fg'],
+            relief='flat',
+            highlightthickness=1,
+            highlightbackground=self.colors['border'],
+            highlightcolor=self.colors['bg_button'],
+            font=FontManager.ui(FONT_MD),
+            width=width
+        )
+        entry.pack(side=LEFT, fill=X, expand=True)
+
+    def _add_script_row(self, parent):
+        row = Frame(parent, bg=self.colors['bg'])
+        row.pack(fill=X, pady=SP['xs'])
+
+        Label(
+            row,
+            text="Script:",
+            bg=self.colors['bg'],
+            fg=self.colors['fg'],
+            font=FontManager.ui(FONT_SM),
+            width=22,
+            anchor='w'
+        ).pack(side=LEFT)
+
+        self.script_var = StringVar()
+        options = [s.name for s in self.scripts]
+        self.script_option = OptionMenu(row, self.script_var, *options) if options else None
+        if self.script_option:
+            self.script_option.configure(
+                bg=self.colors['bg_input'],
+                fg=self.colors['fg'],
+                activebackground=self.colors['bg_hover'],
+                activeforeground=self.colors['fg'],
+                highlightthickness=0,
+                font=FontManager.ui(FONT_MD)
+            )
+            self.script_option.pack(side=LEFT, fill=X, expand=True)
+
+    def _add_repeat_row(self, parent):
+        row = Frame(parent, bg=self.colors['bg'])
+        row.pack(fill=X, pady=SP['xs'])
+
+        Label(
+            row,
+            text="Repeat:",
+            bg=self.colors['bg'],
+            fg=self.colors['fg'],
+            font=FontManager.ui(FONT_SM),
+            width=22,
+            anchor='w'
+        ).pack(side=LEFT)
+
+        self.repeat_var = StringVar(value='once')
+        self.repeat_option = OptionMenu(row, self.repeat_var, *Schedule.REPEAT_OPTIONS)
+        self.repeat_option.configure(
+            bg=self.colors['bg_input'],
+            fg=self.colors['fg'],
+            activebackground=self.colors['bg_hover'],
+            activeforeground=self.colors['fg'],
+            highlightthickness=0,
+            font=FontManager.ui(FONT_MD)
+        )
+        self.repeat_option.pack(side=LEFT, fill=X, expand=True)
+
+    def _add_enabled_row(self, parent):
+        row = Frame(parent, bg=self.colors['bg'])
+        row.pack(fill=X, pady=SP['xs'])
+
+        self.enabled_var = BooleanVar(value=True)
+        cb = Checkbutton(
+            row,
+            text="Enabled",
+            variable=self.enabled_var,
+            bg=self.colors['bg'],
+            fg=self.colors['fg'],
+            selectcolor=self.colors['bg_input'],
+            activebackground=self.colors['bg'],
+            activeforeground=self.colors['fg'],
+            font=FontManager.ui(FONT_SM)
+        )
+        cb.pack(side=LEFT)
+
+    def _load_schedules(self):
+        try:
+            raw = self.settings.settings.get('_schedules', [])
+            self.schedules = [Schedule(s) for s in raw]
+        except Exception:
+            self.schedules = []
+
+        self._update_list()
+        self._load_log()
+        self._update_countdown()
+        if self.schedules:
+            self.listbox.selection_set(0)
+            self._on_select()
+
+    def _compute_next_run(self, schedule: Schedule):
+        try:
+            base = datetime.datetime.strptime(schedule.datetime_str, '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return None
+
+        now = datetime.datetime.now()
+
+        if schedule.repeat == 'once':
+            return base if base > now else None
+        elif schedule.repeat == 'daily':
+            next_run = now.replace(hour=base.hour, minute=base.minute, second=base.second, microsecond=0)
+            if next_run <= now:
+                next_run += datetime.timedelta(days=1)
+            return next_run
+        elif schedule.repeat == 'weekdays':
+            next_run = now.replace(hour=base.hour, minute=base.minute, second=base.second, microsecond=0)
+            if next_run <= now:
+                next_run += datetime.timedelta(days=1)
+            while next_run.weekday() >= 5:
+                next_run += datetime.timedelta(days=1)
+            return next_run
+        elif schedule.repeat == 'weekly':
+            days_ahead = base.weekday() - now.weekday()
+            if days_ahead <= 0:
+                days_ahead += 7
+            next_run = now + datetime.timedelta(days=days_ahead)
+            next_run = next_run.replace(hour=base.hour, minute=base.minute, second=base.second, microsecond=0)
+            return next_run
+        return None
+
+    def _format_delta(self, delta: datetime.timedelta) -> str:
+        total = int(delta.total_seconds())
+        if total < 0:
+            total = 0
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+        seconds = total % 60
+        if hours > 0:
+            return f"{hours}h {minutes}m {seconds}s"
+        elif minutes > 0:
+            return f"{minutes}m {seconds}s"
+        else:
+            return f"{seconds}s"
+
+    def _update_countdown(self):
+        next_runs = []
+        for schedule in self.schedules:
+            if not schedule.enabled:
+                continue
+            next_run = self._compute_next_run(schedule)
+            if next_run:
+                next_runs.append((next_run, schedule.name))
+
+        if next_runs:
+            next_runs.sort()
+            next_time, name = next_runs[0]
+            delta = next_time - datetime.datetime.now()
+            text = f"Next run: {name} in {self._format_delta(delta)}"
+        else:
+            text = "Next run: --"
+
+        self.countdown_label.config(text=text)
+        self.frame.after(1000, self._update_countdown)
+
+    def _load_log(self):
+        try:
+            logs = self.settings.settings.get('_schedule_logs', [])
+        except Exception:
+            logs = []
+        self.log_text.delete('1.0', END)
+        for entry in logs[-50:]:
+            self._append_log_line(entry)
+
+    def _append_log_line(self, entry: dict):
+        timestamp = entry.get('time', '')
+        name = entry.get('name', 'Unknown')
+        status = entry.get('status', 'info')
+        message = entry.get('message', '')
+        self.log_text.insert(END, f"{timestamp}  {name}  [{status}] {message}\n")
+        self.log_text.see(END)
+
+    def add_log(self, schedule_name: str, status: str, message: str):
+        entry = {
+            'time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'name': schedule_name,
+            'status': status,
+            'message': message,
+        }
+        logs = self.settings.settings.get('_schedule_logs', [])
+        logs.append(entry)
+        self.settings.settings['_schedule_logs'] = logs[-100:]
+        self.settings.save()
+        self._append_log_line(entry)
+
+    def _persist(self):
+        try:
+            self.settings.settings['_schedules'] = [s.to_dict() for s in self.schedules]
+            self.settings.save()
+            if self.on_change:
+                self.on_change(self.schedules)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save schedules:\n{e}")
+
+    def _update_list(self):
+        self._ignore_select = True
+        self.listbox.delete(0, END)
+        for schedule in self.schedules:
+            status = "[ON]" if schedule.enabled else "[OFF]"
+            self.listbox.insert(END, f"{status} {schedule.name}")
+        self._ignore_select = False
+
+    def _on_select(self, event=None):
+        if self._ignore_select:
+            return
+
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+
+        self.selected_index = selection[0]
+        schedule = self.schedules[self.selected_index]
+        self.name_var.set(schedule.name)
+        self.datetime_var.set(schedule.datetime_str)
+        self.repeat_var.set(schedule.repeat)
+        self.enabled_var.set(schedule.enabled)
+
+        script_name = ""
+        for script in self.scripts:
+            if script.id == schedule.script_id:
+                script_name = script.name
+                break
+        if script_name and self.script_option:
+            self.script_var.set(script_name)
+        elif self.script_option and self.scripts:
+            self.script_var.set(self.scripts[0].name)
+
+    def _get_script_id(self) -> str:
+        if not self.script_option:
+            return ""
+        name = self.script_var.get()
+        for script in self.scripts:
+            if script.name == name:
+                return script.id
+        return ""
+
+    def _add_schedule(self):
+        now = datetime.datetime.now()
+        default_time = (now + datetime.timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
+        default_script_id = self.scripts[0].id if self.scripts else ""
+
+        schedule = Schedule({
+            'name': 'New Schedule',
+            'script_id': default_script_id,
+            'datetime': default_time,
+            'repeat': 'once',
+            'enabled': True
+        })
+        self.schedules.append(schedule)
+        self._persist()
+        self._update_list()
+
+        index = len(self.schedules) - 1
+        self.listbox.selection_clear(0, END)
+        self.listbox.selection_set(index)
+        self.listbox.see(index)
+        self._on_select()
+
+    def _save_current_schedule(self):
+        if self.selected_index is None or self.selected_index >= len(self.schedules):
+            return
+
+        schedule = self.schedules[self.selected_index]
+        schedule.name = self.name_var.get().strip() or 'Unnamed'
+        schedule.script_id = self._get_script_id()
+        schedule.datetime_str = self.datetime_var.get().strip()
+        schedule.repeat = self.repeat_var.get()
+        schedule.enabled = self.enabled_var.get()
+
+        self._persist()
+        self._update_list()
+
+    def _delete_schedule(self):
+        if self.selected_index is None:
+            return
+
+        if not messagebox.askyesno("Confirm", "Delete this schedule?"):
+            return
+
+        del self.schedules[self.selected_index]
+        self._persist()
+        self._update_list()
+
+        new_index = min(self.selected_index, len(self.schedules) - 1)
+        if self.schedules:
+            self.listbox.selection_set(new_index)
+            self.listbox.see(new_index)
+            self.selected_index = None
+            self._on_select()
+
+    def _toggle_enable(self):
+        if self.selected_index is None:
+            return
+
+        schedule = self.schedules[self.selected_index]
+        schedule.enabled = not schedule.enabled
+        self.enabled_var.set(schedule.enabled)
+        self._persist()
+        self._update_list()
+
+
 class LauncherApp:
     def __init__(self, config_path: str):
         self.config_path = Path(config_path)
@@ -2456,6 +3072,7 @@ class LauncherApp:
         self._create_menu()
         self._create_layout()
         self._load_scripts()
+        self._start_scheduler()
         self._start_output_consumer()
 
     def _setup_window(self):
@@ -2566,6 +3183,14 @@ class LauncherApp:
         self.notebook.add(prompts_tab, text="  Prompts  ")
 
         self.prompts_panel = PromptsPanel(prompts_tab, self.colors, self.settings)
+
+        schedules_tab = Frame(self.notebook, bg=self.colors['bg'])
+        self.notebook.add(schedules_tab, text="  Schedules  ")
+
+        self.schedules_panel = SchedulesPanel(
+            schedules_tab, self.colors, self.settings, self.config.scripts,
+            on_change=self._on_schedules_change
+        )
 
         self.status_bar = StatusBar(self.root, self.colors)
         self.status_bar.pack(side='bottom', fill=X)
@@ -2707,6 +3332,68 @@ class LauncherApp:
             python = sys.executable
             os.execl(python, python, *sys.argv)
 
+    def _start_scheduler(self):
+        self.scheduler = Scheduler(
+            self.schedules_panel.schedules,
+            lambda s: self.root.after(0, self._run_scheduled_script, s)
+        )
+        self.scheduler.start()
+
+    def _on_schedules_change(self, schedules):
+        if hasattr(self, 'scheduler'):
+            self.scheduler.schedules = schedules
+
+    def _run_scheduled_script(self, schedule: Schedule):
+        script = None
+        for s in self.config.scripts:
+            if s.id == schedule.script_id:
+                script = s
+                break
+
+        if not script:
+            self.output_panel.append(
+                f"[Scheduler] '{schedule.name}' failed: script not found\n", 'error'
+            )
+            return
+
+        if self.runner.running:
+            self.output_panel.append(
+                f"[Scheduler] '{schedule.name}' skipped: another script is running\n", 'warning'
+            )
+            return
+
+        params = {}
+        for param in script.parameters:
+            value = self.settings.get(script.id, param.name, param.default)
+            if param.required and not value:
+                self.output_panel.append(
+                    f"[Scheduler] '{schedule.name}' failed: missing {param.label}\n", 'error'
+                )
+                return
+            params[param.name] = value
+
+        self.output_panel.clear()
+        self.output_panel.set_status('info')
+        self.status_bar.set_status(f"Scheduled: {script.name}", 'running')
+
+        # Persist last_run time to avoid duplicate executions
+        try:
+            self.settings.settings['_schedules'] = [s.to_dict() for s in self.scheduler.schedules]
+            self.settings.save()
+        except Exception:
+            pass
+
+        if self.schedules_panel:
+            self.schedules_panel.add_log(schedule.name, 'running', f"Triggered: {script.name}")
+
+        if 'logcat' in script.command.lower():
+            self.output_panel.show_logcat_bar()
+            self.output_panel._clear_device_logcat()
+        else:
+            self.output_panel.hide_logcat_bar()
+
+        self.runner.execute(script, self.base_dir, params)
+
     def _show_about(self):
         messagebox.showinfo(
             "About",
@@ -2717,6 +3404,8 @@ class LauncherApp:
         )
 
     def _on_close(self):
+        if hasattr(self, 'scheduler'):
+            self.scheduler.stop()
         if self.runner.running:
             if messagebox.askyesno("Confirm", "A script is running. Stop and exit?"):
                 self.runner.stop()

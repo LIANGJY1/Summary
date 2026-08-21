@@ -108,6 +108,60 @@
       "command": "python3 ./remove_comment_slashes.py",
       "working_dir": null,
       "env": null
+    },
+    {
+      "id": "feishu_checkin_usb",
+      "name": "Feishu Check-in (USB)",
+      "description": "Feishu attendance check-in via USB cable",
+      "group": "Utility",
+      "command": "python3 ./feishu_checkin.py usb 5555 ${unlock_pin}",
+      "working_dir": null,
+      "env": null,
+      "parameters": [
+        {
+          "name": "unlock_pin",
+          "label": "Unlock PIN",
+          "type": "text",
+          "default": "",
+          "description": "Leave empty if no PIN or already unlocked",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "feishu_checkin",
+      "name": "Feishu Check-in (Wireless)",
+      "description": "Remote Feishu attendance check-in via wireless ADB",
+      "group": "Utility",
+      "command": "python3 ./feishu_checkin.py ${device_ip} ${device_port} ${unlock_pin}",
+      "working_dir": null,
+      "env": null,
+      "parameters": [
+        {
+          "name": "device_ip",
+          "label": "Phone IP",
+          "type": "text",
+          "default": "10.10.0.120",
+          "description": "Phone IP address on the same Wi-Fi network",
+          "required": true
+        },
+        {
+          "name": "device_port",
+          "label": "ADB Port",
+          "type": "text",
+          "default": "5555",
+          "description": "Wireless ADB port (default 5555)",
+          "required": true
+        },
+        {
+          "name": "unlock_pin",
+          "label": "Unlock PIN",
+          "type": "text",
+          "default": "",
+          "description": "Leave empty if no PIN or already unlocked",
+          "required": false
+        }
+      ]
     }
   ],
   "groups": [
