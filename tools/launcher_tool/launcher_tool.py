@@ -102,6 +102,51 @@ SP = {
 }
 
 
+# AppStore 38 张 UI 参考截图（与 capture_appstore_screenshots.py 对齐）
+UI_SCREENSHOT_SCRIPT_PATH = "/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore/tools/screenshot/capture_appstore_screenshots.py"
+
+UI_SCREENSHOTS = [
+    ("001", "001_1.1.1 功能入口"),
+    ("002", "002_1.1.6 应用商店-按钮状态（全）"),
+    ("003", "003_1.1.3 应用商店首页-加载中"),
+    ("004", "004_1.1.4 应用商店首页-加载失败、接口异常"),
+    ("005", "005_1.1.5 应用商店首页-Empty"),
+    ("006", "006_1.1.8 应用商店-banner获取异常"),
+    ("007", "007_1.1.9 应用商店首页-无banner位"),
+    ("008", "008_1.1.10 应用商店首页_滚动"),
+    ("009", "009_1.2.1 预装单个应用更新确认"),
+    ("010", "010_1.2.2 预装组合包更新确认"),
+    ("011", "011_1.2.3 预装应用安装前确认"),
+    ("012", "012_1.2.4 预装应用更新完成提醒_Notificationg"),
+    ("013", "013_1.3.1 应用搜索"),
+    ("014", "014_1.3.3 搜索页面（loading）_点击搜索按钮键盘收起"),
+    ("015", "015_1.3.4 搜索页面（搜索结果）"),
+    ("016", "016_1.3.5 搜索页面（搜索结果未空）"),
+    ("017", "017_1.3.6 搜索页面（搜索异常）"),
+    ("018", "018_1.3.7 搜索页面（热门推荐无数据、无网络）"),
+    ("019", "019_2.1.2 我的应用列表-全部更新"),
+    ("020", "020_2.1.3 我的应用列表-加载中"),
+    ("021", "021_2.1.4 我的应用列表-无网络、异常数据"),
+    ("022", "022_2.1.6 我的应用列表-卸载中"),
+    ("023", "023_2.1.7 我的应用列表-删除确认"),
+    ("024", "024_2.2.1 设置页"),
+    ("025", "025_2.2.3 自动更新弹窗"),
+    ("026", "026_2.2.4 还原确认"),
+    ("027", "027_2.2.5 Honda Connect Core 弹窗查看"),
+    ("028", "028_2.2.6 Honda Connect Core 弹窗查看（Loading）"),
+    ("029", "029_2.2.7 Honda Connect Core 弹窗查看（加载失败）"),
+    ("030", "030_3.1.1 应用详情-后装-可更新"),
+    ("031", "031_3.1.1 应用详情-后装-图片加载失败"),
+    ("032", "032_3.1.2 应用详情-后装-可更新-下"),
+    ("033", "033_3.1.3 应用详情-loading"),
+    ("034", "034_3.1.4 应用详情-已安装-无网络、数据异常"),
+    ("035", "035_3.1.5 应用详情-未安装-无网络、数据异常"),
+    ("036", "036_3.1.7 应用详情 放大查看预览图"),
+    ("037", "037_3.1.7 应用详情 放大查看预览图（图片加载失败）"),
+    ("038", "038_4.1.1 三方应用通用走行限制"),
+]
+
+
 def _bind_hover(widget, base_bg, hover_bg):
     """Add a simple hover state to a flat widget."""
     widget.bind('<Enter>', lambda e: widget.configure(bg=hover_bg))
@@ -3055,6 +3100,306 @@ class SchedulesPanel:
         self._update_list()
 
 
+class UIScreenshotPanel:
+    """38 张 AppStore UI 截图的触发面板。
+
+    左侧为按钮网格，点击触发对应序号的截图脚本；
+    右键菜单支持重命名按钮，名称持久化到 settings.json。
+    """
+
+    def __init__(self, parent, colors, settings, runner, base_dir, output_panel):
+        self.parent = parent
+        self.colors = colors
+        self.settings = settings
+        self.runner = runner
+        self.base_dir = base_dir
+        self.output_panel = output_panel
+        self._buttons = {}
+        self._create_widgets()
+
+    def _create_widgets(self):
+        self.frame = Frame(self.parent, bg=self.colors['bg'])
+        self.frame.pack(fill=BOTH, expand=True)
+
+        # 顶部操作栏
+        toolbar = Frame(self.frame, bg=self.colors['bg'])
+        toolbar.pack(fill=X, padx=SP['lg'], pady=SP['md'])
+
+        Label(
+            toolbar,
+            text="AppStore UI 截图",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_header'],
+            font=FontManager.ui(FONT_2XL, bold=True)
+        ).pack(side=LEFT)
+
+        self.capture_all_btn = _make_button(
+            toolbar,
+            text="全部捕获",
+            command=self._capture_all,
+            colors=self.colors,
+            kind='primary',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        )
+        self.capture_all_btn.pack(side=LEFT, padx=(SP['lg'], 0))
+
+        self.reset_names_btn = _make_button(
+            toolbar,
+            text="重置名称",
+            command=self._reset_names,
+            colors=self.colors,
+            kind='secondary',
+            padx=SP['md'],
+            pady=SP['xs'],
+            font_size=FONT_SM
+        )
+        self.reset_names_btn.pack(side=LEFT, padx=(SP['sm'], 0))
+
+        Label(
+            toolbar,
+            text="右键按钮可修改名称",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_dim'],
+            font=FontManager.ui(FONT_SM)
+        ).pack(side=LEFT, padx=(SP['lg'], 0))
+
+        # 状态栏
+        self.status_label = Label(
+            toolbar,
+            text="",
+            bg=self.colors['bg'],
+            fg=self.colors['fg_info'],
+            font=FontManager.ui(FONT_SM, bold=True)
+        )
+        self.status_label.pack(side=RIGHT, padx=(SP['lg'], 0))
+
+        # 滚动区域
+        container = Frame(self.frame, bg=self.colors['bg'])
+        container.pack(fill=BOTH, expand=True, padx=SP['lg'], pady=(0, SP['lg']))
+
+        canvas = Canvas(container, bg=self.colors['bg'], highlightthickness=0)
+        scrollbar = Scrollbar(container, orient="vertical", command=canvas.yview)
+        self.grid_frame = Frame(canvas, bg=self.colors['bg'])
+
+        self.grid_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=self.grid_frame, anchor="nw", tags="grid")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig("grid", width=event.width)
+
+        canvas.bind("<Configure>", _on_canvas_configure)
+        canvas.pack(side=LEFT, fill=BOTH, expand=True)
+        scrollbar.pack(side=RIGHT, fill=Y)
+
+        # 绑定鼠标滚轮
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-3, "units"))
+        canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(3, "units"))
+
+        self._render_grid()
+
+    def _render_grid(self):
+        for widget in self.grid_frame.winfo_children():
+            widget.destroy()
+        self._buttons.clear()
+
+        for idx, (index, default_name) in enumerate(UI_SCREENSHOTS):
+            row = idx // 2
+            col = idx % 2
+            name = self.settings.get('_ui_screenshot_names', index, default_name)
+
+            card = Frame(
+                self.grid_frame,
+                bg=self.colors['bg_secondary'],
+                highlightthickness=1,
+                highlightbackground=self.colors['border']
+            )
+            card.grid(row=row, column=col, sticky='nsew', padx=SP['sm'], pady=SP['sm'])
+
+            header = Frame(card, bg=self.colors['bg_secondary'])
+            header.pack(fill=X, padx=SP['md'], pady=SP['md'])
+
+            Label(
+                header,
+                text=index,
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['accent'],
+                font=FontManager.ui(FONT_XS, bold=True)
+            ).pack(side=LEFT)
+
+            btn = _make_button(
+                card,
+                text=name,
+                command=lambda i=index: self._capture_one(i),
+                colors=self.colors,
+                kind='secondary',
+                padx=SP['md'],
+                pady=SP['sm'],
+                font_size=FONT_SM,
+                anchor='w'
+            )
+            btn.pack(fill=X, padx=SP['md'], pady=(0, SP['md']))
+            self._buttons[index] = btn
+
+            # 右键菜单
+            menu = Menu(self.parent, tearoff=0)
+            menu.configure(
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['fg'],
+                activebackground=self.colors['bg_hover'],
+                activeforeground=self.colors['fg'],
+                relief='flat',
+                bd=0,
+                font=FontManager.ui(FONT_MD)
+            )
+            menu.add_command(label="重命名", command=lambda i=index: self._rename(i))
+            menu.add_command(label="捕获", command=lambda i=index: self._capture_one(i))
+
+            btn.bind("<Button-3>", lambda e, m=menu: self._show_menu(e, m))
+
+        # 让两列等宽
+        self.grid_frame.grid_columnconfigure(0, weight=1)
+        self.grid_frame.grid_columnconfigure(1, weight=1)
+
+    def _show_menu(self, event, menu):
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _capture_one(self, index):
+        script = ScriptConfig({
+            'id': f'ui_screenshot_{index}',
+            'name': f'UI Screenshot {index}',
+            'command': (
+                f"python3 {UI_SCREENSHOT_SCRIPT_PATH} "
+                f"--only {index} --launch-only"
+            ),
+            'group': 'UI',
+        })
+        self._start_capture(f"正在拉起 {index} ...")
+        self.output_panel.clear()
+        self.output_panel.set_status('info')
+        self.runner.execute(script, self.base_dir)
+
+    def _capture_all(self):
+        script = ScriptConfig({
+            'id': 'ui_screenshot_all',
+            'name': 'UI Screenshots All',
+            'command': (
+                f"python3 {UI_SCREENSHOT_SCRIPT_PATH} "
+                f"--launch-only"
+            ),
+            'group': 'UI',
+        })
+        self._start_capture("正在拉起全部 38 个模拟数据页面 ...")
+        self.output_panel.clear()
+        self.output_panel.set_status('info')
+        self.runner.execute(script, self.base_dir)
+
+    def _start_capture(self, message):
+        self.status_label.config(text=message, fg=self.colors['fg_info'])
+        self._set_buttons_enabled(False)
+        self._poll_status()
+
+    def _set_buttons_enabled(self, enabled):
+        state = NORMAL if enabled else DISABLED
+        for btn in list(self._buttons.values()) + [self.capture_all_btn, self.reset_names_btn]:
+            try:
+                btn.config(state=state)
+            except Exception:
+                pass
+
+    def _poll_status(self):
+        if not self.runner.running:
+            self._finish_capture()
+            return
+        self.frame.after(200, self._poll_status)
+
+    def _finish_capture(self):
+        self.status_label.config(text="完成", fg=self.colors['fg_success'])
+        self._set_buttons_enabled(True)
+        # 3 秒后清空状态
+        self.frame.after(3000, lambda: self.status_label.config(text=""))
+
+    def _reset_names(self):
+        for index, default_name in UI_SCREENSHOTS:
+            self.settings.set('_ui_screenshot_names', index, default_name)
+        self._render_grid()
+
+    def _rename(self, index):
+        default_name = next((name for i, name in UI_SCREENSHOTS if i == index), index)
+        current = self.settings.get('_ui_screenshot_names', index, default_name)
+
+        dialog = Toplevel(self.parent)
+        dialog.title("重命名")
+        dialog.transient(self.parent)
+        dialog.grab_set()
+        dialog.configure(bg=self.colors['bg'])
+        dialog.geometry("500x160")
+        dialog.resizable(False, False)
+
+        Label(
+            dialog,
+            text=f"编号 {index} 的显示名称：",
+            bg=self.colors['bg'],
+            fg=self.colors['fg'],
+            font=FontManager.ui(FONT_MD)
+        ).pack(anchor=W, padx=SP['xl'], pady=(SP['xl'], SP['md']))
+
+        var = StringVar(value=current)
+        entry = _create_entry(dialog, self.colors, var)
+        entry.pack(fill=X, padx=SP['xl'], pady=SP['sm'])
+        entry.select_range(0, END)
+        entry.focus_set()
+
+        def _on_ok(event=None):
+            value = var.get().strip()
+            if value:
+                self.settings.set('_ui_screenshot_names', index, value)
+                self._render_grid()
+            dialog.destroy()
+
+        def _on_cancel(event=None):
+            dialog.destroy()
+
+        entry.bind('<Return>', _on_ok)
+        entry.bind('<Escape>', _on_cancel)
+
+        btn_frame = Frame(dialog, bg=self.colors['bg'])
+        btn_frame.pack(fill=X, padx=SP['xl'], pady=SP['xl'])
+
+        _make_button(
+            btn_frame,
+            text="确定",
+            command=_on_ok,
+            colors=self.colors,
+            kind='primary',
+            padx=SP['xl'],
+            pady=SP['xs'],
+            font_size=FONT_MD
+        ).pack(side=RIGHT, padx=(SP['sm'], 0))
+
+        _make_button(
+            btn_frame,
+            text="取消",
+            command=_on_cancel,
+            colors=self.colors,
+            kind='secondary',
+            padx=SP['xl'],
+            pady=SP['xs'],
+            font_size=FONT_MD
+        ).pack(side=RIGHT)
+
+
 class LauncherApp:
     def __init__(self, config_path: str):
         self.config_path = Path(config_path)
@@ -3190,6 +3535,14 @@ class LauncherApp:
         self.schedules_panel = SchedulesPanel(
             schedules_tab, self.colors, self.settings, self.config.scripts,
             on_change=self._on_schedules_change
+        )
+
+        ui_tab = Frame(self.notebook, bg=self.colors['bg'])
+        self.notebook.add(ui_tab, text="  UI  ")
+
+        self.ui_panel = UIScreenshotPanel(
+            ui_tab, self.colors, self.settings, self.runner, self.base_dir,
+            self.output_panel
         )
 
         self.status_bar = StatusBar(self.root, self.colors)
