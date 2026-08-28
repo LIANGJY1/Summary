@@ -31,3 +31,15 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Python
+__pycache__/
+*.pyc
+
+# Compiled binaries
+*.out
+
+# Agent/editor local state
+.qoder/
+.sisyphus/
+.DS_Store

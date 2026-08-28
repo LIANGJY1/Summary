@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls -la /usr/bin/adb /home/liang/Android/Sdk/platform-tools/adb 2>&1)",
-      "Read(//usr/lib/android-sdk/platform-tools/**)"
-    ]
-  }
-}
