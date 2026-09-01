@@ -2,6 +2,11 @@
 
 用于在目标车机上自动截取 AppStoreApp 各页面实际效果图，与参考图进行对比。
 
+> 本目录原属 Honda27M AppStore 工程（`tools/screenshot/`，2026-09-01 迁出独立管理）。
+> 来历、与原项目的关系及外部依赖见上层 [../README.md](../README.md)。
+> 下文出现的 `AppStoreApp/...`、`AppStoreService/...` 路径均指**原项目仓库**
+> `/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore` 内的路径。
+
 ## 设计原则
 
 - **零侵入**：不修改 `AppStoreApp` 既有业务代码，辅助逻辑全部放在 `src/debug`。
@@ -20,7 +25,9 @@
 
 ## 术语
 
-见仓库根目录 [CONTEXT.md](../../CONTEXT.md)：**UI图** = UE 设计稿；**实机图** = 车机实拍画面。
+术语表在原 AppStore 项目仓库根目录（迁移后相对链接失效，改记绝对路径）：
+`/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore/CONTEXT.md`。
+核心术语：**UI图** = UE 设计稿；**实机图** = 车机实拍画面。
 
 ## 前置条件
 
