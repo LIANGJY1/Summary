@@ -23,6 +23,7 @@
 import argparse
 import re
 import shutil
+import time
 from pathlib import Path
 
 # 像素级比对：尝试使用 PIL，若不可用则回退为并排
@@ -291,11 +292,11 @@ ROW_TEMPLATE = """
   <div class="imgs">
     <div class="pane {ref_class}">
       <div class="label">UI图（分屏设计稿） <span class="copy" data-src="assets/{ref}" title="复制原图链接，拖拽图片可直接至 PS">复制原图</span> · <a href="assets/{ref}" download style="color:#8cf;font-size:11px;">下载</a></div>
-      <img src="assets/{ref}" loading="lazy" draggable="true" title="拖拽至 PS / 右键复制原图">
+      <img src="assets/{ref}?v={v}" loading="lazy" draggable="true" title="拖拽至 PS / 右键复制原图">
     </div>
     <div class="pane {cap_class}">
       <div class="label">实机图（车机分屏截屏） <span class="copy" data-src="assets/{cap}" title="复制原图链接，拖拽图片可直接至 PS">复制原图</span> · <a href="assets/{cap}" download style="color:#8cf;font-size:11px;">下载</a></div>
-      <img src="assets/{cap}" loading="lazy" draggable="true" title="拖拽至 PS / 右键复制原图">
+      <img src="assets/{cap}?v={v}" loading="lazy" draggable="true" title="拖拽至 PS / 右键复制原图">
     </div>
     {diff_pane}
   </div>
@@ -309,6 +310,7 @@ def render(rows: list, out_path: Path, ref_dir: Path, actual_dir: Path, variant:
     n_orphan = sum(1 for r in rows if r["status"] == "orphan_capture")
     summary = (f"共 {len(rows)} 个序号 ｜ 已配对 {n_both} ｜ 未截 {n_missing} ｜ 多出 {n_orphan}"
                f"<br>模式：{variant}<br>UI图目录：{ref_dir}<br>实机图目录：{actual_dir}<br>差异率 = 差异像素 / 总像素×100，阈值 15")
+    v = time.strftime("%Y%m%d%H%M%S")  # 缓存破坏：同路径图片刷新后浏览器不再用旧缓存
     parts = []
     for r in rows:
         ratio = r.get("ratio")
@@ -319,14 +321,14 @@ def render(rows: list, out_path: Path, ref_dir: Path, actual_dir: Path, variant:
         else:
             ratio_badge = '<span class="ratio">差异 --</span>' if r["status"] == "both" else ""
         if diff:
-            diff_pane = f'<div class="diff"><div class="label">差异高亮（红） <span class="copy" data-src="assets/{diff}" title="复制原图">复制原图</span> · <a href="assets/{diff}" download style="color:#8cf;font-size:11px;">下载</a></div><img src="assets/{diff}" loading="lazy" draggable="true" title="拖拽至 PS"></div>'
+            diff_pane = f'<div class="diff"><div class="label">差异高亮（红） <span class="copy" data-src="assets/{diff}" title="复制原图">复制原图</span> · <a href="assets/{diff}" download style="color:#8cf;font-size:11px;">下载</a></div><img src="assets/{diff}?v={v}" loading="lazy" draggable="true" title="拖拽至 PS"></div>'
         else:
             diff_pane = ""
         parts.append(ROW_TEMPLATE.format(
             index=r["index"], title=r["title"],
             status_class={"missing_capture": "missing", "orphan_capture": "orphan"}.get(r["status"], ""),
             status_label=STATUS_LABEL[r["status"]],
-            ref=r["ref"] or "x", cap=r["cap"] or "x",
+            ref=r["ref"] or "x", cap=r["cap"] or "x", v=v,
             ref_class="" if r["ref"] else "missing",
             cap_class="" if r["cap"] else "missing",
             ratio_badge=ratio_badge,
