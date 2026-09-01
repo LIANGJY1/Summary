@@ -1,0 +1,7 @@
+{
+  "_comment": "Screen coordinates for AppStoreApp screenshot automation. Calibrate per device/resolution.",
+  "tab_mine": "input tap 1100 120",
+  "tab_mine_settings": "input tap 120 330",
+  "swipe_home_down": "input swipe 648 750 648 200 400",
+  "swipe_detail_down": "input swipe 960 700 960 300"
+}

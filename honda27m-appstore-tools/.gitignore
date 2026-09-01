@@ -1,0 +1,4 @@
+# 本地产物，不入库：实机截图素材与生成的对比报告（可由脚本重建）
+screenshot/screenshots/
+screenshot/report/
+__pycache__/

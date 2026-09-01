@@ -1,0 +1,33 @@
+{
+  "split_icon": "input tap 1746 1032",
+  "store_icon_right": "input tap 1350 690",
+  "divider_grab_x_initial": 960,
+  "divider_grab_y": 540,
+  "divider_initial_center": 960,
+  "divider_full_center": 129,
+  "divider_32_center": 636,
+  "divider_31_center": 1284,
+  "drag_duration_ms": 900,
+  "note_grab_tolerance": "分隔杆抓取容差很窄：SPLIT_21 必须从 960 起拖，969 抓不到；从 FULL 右拖终点 1290（非 1284）才能过 SPLIT_21 吸附点落到 31",
+  "drag_targets_from_21": {
+    "SPLIT_21": null,
+    "SPLIT_32": [960, 540, 610, 540],
+    "SPLIT_FULL": [960, 540, 130, 540],
+    "SPLIT_31_step1": [960, 540, 130, 540],
+    "SPLIT_31_step2": [129, 540, 1290, 540]
+  },
+  "my_tab_coords": {
+    "SPLIT_FULL": [1153, 203],
+    "SPLIT_32": [1405, 203],
+    "SPLIT_21": [1569, 201],
+    "SPLIT_31": [1680, 205]
+  },
+  "settings_entry_coords": {
+    "SPLIT_FULL": [222, 470],
+    "SPLIT_32": [738, 470],
+    "SPLIT_21": [1058, 470],
+    "SPLIT_31": [1381, 470]
+  },
+  "note_uiautomator": "本机 uiautomator dump 频繁 idle 超时（mock 首页/我的应用页有持续动画），导航一律用实测坐标",
+  "note_dock_signal": "商店停靠确认轮询 logcat SplitScreenClient 'width is 951'；档位日志只在切换瞬间与动画期间产生，验证前清 logcat、验证中只读不清"
+}
