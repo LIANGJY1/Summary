@@ -17,7 +17,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `capture_appstore_screenshots.py` | 一键截图脚本（模式在脚本顶部配置区一键切换；支持 `--only 序号`、`--category 分类`、`--launch-only`） |
+| `capture_appstore_screenshots.py` | 一键截图脚本（模式与本次任务范围都在脚本顶部配置区切换：`CURRENT_VARIANT` / `CURRENT_TASKS`） |
 | `compare_report.py` | UI图 ↔ 实机图 配对并排 HTML 报告生成器 |
 | `walkthrough.md` | UI走查对照表（38 张图的走查状态与差异记录） |
 | `coordinates.json` | 不同分辨率车机的点击/滑动坐标校准 |
@@ -39,12 +39,8 @@
 ## 用法
 
 ```bash
-# 命令永远固定不变；要截哪个模式，改脚本顶部 CURRENT_VARIANT 一行后直接运行
+# 命令永远固定不变；截哪个模式改 CURRENT_VARIANT、跑哪些任务改 CURRENT_TASKS，均在脚本顶部
 python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
-
-# 只跑指定序号 / 分类（与模式无关，随时可用）
-python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --only 001,013,015
-python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --category mine
 
 # 查看全部模式、输出路径与当前生效项
 python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --list-variants
@@ -88,6 +84,18 @@ VARIANTS = {
 
 - 切换模式：只改 `CURRENT_VARIANT`；截图与对比报告两条命令都保持不变，自动跟随。
 - `ref_dir` 未配置（None）时，compare_report 回退其内置默认 UI图 目录。
+
+### 任务分类与本次执行范围
+
+任务分类登记在脚本顶部 `CATEGORIES`（key 对应任务的 `category` 字段）；本次跑哪些任务由「任务选择配置区」的 `CURRENT_TASKS` 决定。每次运行会先按分类打印任务清单并标记本次执行项，再开始截图：
+
+```python
+CURRENT_TASKS = "all"          # all=全部；逗号分隔可混选，例如：
+# CURRENT_TASKS = "search"     # 整个搜索分类（分类名）
+# CURRENT_TASKS = "2"          # 清单中编号 [2] 的分类（分类号）
+# CURRENT_TASKS = "013"        # 单个任务（任务序号；"013" 是任务、"1" 是分类号，序号优先）
+# CURRENT_TASKS = "search,019" # 分类与序号混用
+```
 
 ### 模式 ↔ 实机图 ↔ UI图 一一对应
 

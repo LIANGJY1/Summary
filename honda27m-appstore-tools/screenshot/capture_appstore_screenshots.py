@@ -12,13 +12,17 @@ AppStoreApp 车机 UI 实际效果图一键截取工具。
 - AppStoreApp 已安装（包名 com.hynex.appstoreapp）。
 - 运行环境有 Python 3.8+ 和 adb。
 
-用法（命令固定不变，切换模式只改脚本顶部 CURRENT_VARIANT 一行）：
-    1. 编辑本文件顶部「一键模式配置区」，把 CURRENT_VARIANT 改成目标模式；
+用法（命令固定不变，只改脚本顶部配置区）：
+    1. 编辑「一键模式配置区」的 CURRENT_VARIANT，选目标模式；
        该模式的输出路径与车机环境准备命令在同处 VARIANTS 里配置。
-    2. 固定运行：
+    2. 编辑「任务选择配置区」的 CURRENT_TASKS，决定本次执行哪些任务：
+       "all"=全部；也可填分类名/分类号/任务序号，逗号分隔、可混用，
+       如 "search"（整个搜索分类）、"013"（单个任务）、"search,019"（混用）。
+    3. 固定运行：
        python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
+       每次运行会先按分类打印任务清单并标记本次执行项，再开始截图。
 辅助参数（可选）：--list-variants 查看全部模式；--variant <名称> 本次临时覆盖；
---only 序号 / --category 分类 / --launch-only / --device serial 含义不变。
+--launch-only / --device serial 含义不变。
 各模式写入各自独立子目录，互不覆盖。
 """
 
@@ -120,6 +124,71 @@ VARIANTS = {
         ],
     },
 }
+
+# ========================= 任务分类配置区 =========================
+# 截图任务分类元数据：key 对应 ScreenshotTask.category 字段，value 用于清单展示与交互选择。
+# 新增分类时在此登记即可；未登记的分类按原始 key 展示，不影响执行。
+CATEGORIES = {
+    "home": "首页 / Recommendation",
+    "dialog": "弹窗 / Dialog",
+    "search": "搜索 / Search",
+    "mine": "我的应用 / Mine",
+    "detail": "应用详情 / AppDetail",
+    "restriction": "行驶限制 / Restriction",
+}
+
+# ========================= 任务选择配置区 =========================
+# 本次执行哪些截图任务；运行时按分类打印任务清单并标记本次执行项，再开始截图。
+# 写法（逗号分隔、可混用）：all=全部；分类号（清单中的 [n]，如 2）；
+# 分类名（如 search）；任务序号（如 013，优先于分类号解释，"013" 是任务、"1" 是分类号）。
+CURRENT_TASKS = "dialog"
+#
+# 任务速查（38 项全量；◆=已启用，○=已注释归档——在 build_tasks() 中取消注释即可恢复；
+# 括号内为对应 UI设计稿编号。本表为静态参考，运行时清单始终反映当前实际启用项）：
+#   首页 <home>
+#       002 按钮状态全（1.1.6）◆
+#       001 功能入口（1.1.1）○
+#       003 首页加载中（1.1.3）○
+#       004 首页加载失败（1.1.4）○
+#       005 首页空数据（1.1.5）○
+#       006 首页 banner 异常（1.1.8）○
+#       007 首页无 banner（1.1.9）○
+#       008 首页滚动（1.1.10）○
+#   弹窗 <dialog>
+#       023 删除确认弹窗（2.1.7）◆
+#       009 预装单个应用更新确认（1.2.1）○
+#       010 预装组合包更新确认（1.2.2）○
+#       011 预装应用安装前确认（1.2.3）○
+#       012 预装应用更新完成提醒（1.2.4）○
+#       025 自动更新弹窗（2.2.3）○
+#       026 还原确认弹窗（2.2.4）○
+#       027 HCC 弹窗查看（2.2.5）○
+#       028 HCC 弹窗 loading（2.2.6）○
+#       029 HCC 弹窗加载失败（2.2.7）○
+#       036 应用详情-放大预览图（3.1.7）○
+#       037 应用详情-放大预览图加载失败（3.1.7）○
+#   搜索 <search>
+#       013 应用搜索默认（1.3.1）◆
+#       014 搜索 loading（1.3.3）◆
+#       015 搜索结果（1.3.4）◆
+#       016 搜索结果为空（1.3.5）◆
+#       017 搜索异常（1.3.6）◆
+#       018 搜索热门推荐无网络（1.3.7）◆
+#   我的应用 <mine>
+#       019 我的应用-全部更新（2.1.2）◆
+#       020 我的应用加载中（2.1.3）◆
+#       021 我的应用无网络（2.1.4）◆
+#       022 我的应用-卸载中（2.1.6）◆
+#       024 设置页（2.2.1）○
+#   应用详情 <detail>
+#       030 应用详情-后装-可更新（3.1.1）○
+#       031 应用详情-图片加载失败（3.1.1）○
+#       032 应用详情-滚动（3.1.2）○
+#       033 应用详情 loading（3.1.3）○
+#       034 应用详情-已安装-异常（3.1.4）○
+#       035 应用详情-未安装-异常（3.1.5）○
+#   行驶限制 <restriction>
+#       038 三方应用通用走行限制（4.1.1）○
 
 
 @dataclass
@@ -487,149 +556,149 @@ def build_tasks() -> List[ScreenshotTask]:
             nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
             prerequisites="网络正常，有数据",
         ),
-#         ScreenshotTask(
-#             index="003",
-#             filename="003_1.1.3 应用商店首页-加载中.png",
-#             category="home",
-#             description="首页加载中",
-#             adb_direct=False,
-#             nav_steps=[
-#                 # 启动后立即截图，mock 延迟让 loading 状态保持
-#                 f"am start -n {ACTIVITY_MAIN}",
-#             ],
-#             prerequisites="mock 延迟 1.5s 加载",
-#             scenario="home_loading",
-#             # loading 状态：趁还在加载立即截图
-#             wait_seconds=0.8,
-#         ),
-#         ScreenshotTask(
-#             index="004",
-#             filename="004_1.1.4 应用商店首页-加载失败、接口异常.png",
-#             category="home",
-#             description="首页加载失败",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -n {ACTIVITY_MAIN}",
-#             ],
-#             prerequisites="mock 失败响应",
-#             scenario="home_error",
-#             wait_seconds=2.0,
-#         ),
-#         ScreenshotTask(
-#             index="005",
-#             filename="005_1.1.5 应用商店首页-Empty.png",
-#             category="home",
-#             description="首页空数据",
-#             adb_direct=False,
-#             nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
-#             prerequisites="mock 空列表",
-#             scenario="home_empty",
-#             # 空状态需要等 empty view 渲染
-#             wait_seconds=4.0,
-#         ),
-#         ScreenshotTask(
-#             index="006",
-#             filename="006_1.1.8 应用商店-banner获取异常.png",
-#             category="home",
-#             description="首页 banner 异常",
-#             adb_direct=False,
-#             nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
-#             prerequisites="mock 第三张 banner 图失效",
-#             scenario="home_banner_error",
-#         ),
-#         ScreenshotTask(
-#             index="007",
-#             filename="007_1.1.9 应用商店首页-无banner位.png",
-#             category="home",
-#             description="首页无 banner",
-#             adb_direct=False,
-#             nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
-#             prerequisites="mock 无 banner 数据",
-#             scenario="home_no_banner",
-#         ),
-#         ScreenshotTask(
-#             index="008",
-#             filename="008_1.1.10 应用商店首页_滚动.png",
-#             category="home",
-#             description="首页滚动",
-#             adb_direct=True,
-#             nav_steps=[
-#                 f"am start -n {ACTIVITY_MAIN}",
-#                 # 单次短滑动可能被吞掉导致页面未上滑，连续滑动两次确保明显滚出首屏
-#                 SWIPE_HOME_DOWN,
-#                 SWIPE_HOME_DOWN,
-#             ],
-#             prerequisites="网络正常，数据足够多",
-#         ),
-#
-#         # 2. 预装应用弹窗
-#         ScreenshotTask(
-#             index="009",
-#             filename="009_1.2.1 预装单个应用更新确认.png",
-#             category="dialog",
-#             description="预装单个应用更新确认",
-#             adb_direct=False,
-#             nav_steps=BG_MINE + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
-#                 f"--ei appType 2 "
-#                 f"-e appName '百度地图' "
-#                 f"-e apkSize '156MB' "
-#                 f"-e preAppName '百度地图汽车版' "
-#                 f"-e preServiceName '百度汽车服务' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="010",
-#             filename="010_1.2.2 预装组合包更新确认.png",
-#             category="dialog",
-#             description="预装组合包更新确认",
-#             adb_direct=False,
-#             nav_steps=BG_MINE + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
-#                 f"--ei appType 3 "
-#                 f"-e appName '应用组合包' "
-#                 f"-e apkSize '320MB' "
-#                 f"-e preAppName '高德地图,QQ音乐' "
-#                 f"-e preServiceName '语音服务' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="011",
-#             filename="011_1.2.3 预装应用安装前确认.png",
-#             category="dialog",
-#             description="预装应用安装前确认",
-#             adb_direct=False,
-#             nav_steps=BG_MINE + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_INSTALL "
-#                 f"-e appName '百度地图' "
-#                 f"-e preAppName '百度地图' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="012",
-#             filename="012_1.2.4 预装应用更新完成提醒_Notificationg.png",
-#             category="dialog",
-#             description="预装应用更新完成提醒",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -n {ACTIVITY_MAIN}",
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_PRE_APP_MESSAGE_POPUP "
-#                 f"--ei updateSuccess 1 "
-#                 f"--ei appType 3 "
-#                 f"-e appName '应用组合包' "
-#                 f"-e preAppName '高德地图,QQ音乐' "
-#                 f"-e preServiceName '语音服务' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="真机需运行消息中心服务；横幅5s自动消去，须在窗口内截图",
-#             wait_seconds=1.0,
-#         ),
+        ScreenshotTask(
+            index="003",
+            filename="003_1.1.3 应用商店首页-加载中.png",
+            category="home",
+            description="首页加载中",
+            adb_direct=False,
+            nav_steps=[
+                # 启动后立即截图，mock 延迟让 loading 状态保持
+                f"am start -n {ACTIVITY_MAIN}",
+            ],
+            prerequisites="mock 延迟 1.5s 加载",
+            scenario="home_loading",
+            # loading 状态：趁还在加载立即截图
+            wait_seconds=0.8,
+        ),
+        ScreenshotTask(
+            index="004",
+            filename="004_1.1.4 应用商店首页-加载失败、接口异常.png",
+            category="home",
+            description="首页加载失败",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -n {ACTIVITY_MAIN}",
+            ],
+            prerequisites="mock 失败响应",
+            scenario="home_error",
+            wait_seconds=2.0,
+        ),
+        ScreenshotTask(
+            index="005",
+            filename="005_1.1.5 应用商店首页-Empty.png",
+            category="home",
+            description="首页空数据",
+            adb_direct=False,
+            nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
+            prerequisites="mock 空列表",
+            scenario="home_empty",
+            # 空状态需要等 empty view 渲染
+            wait_seconds=4.0,
+        ),
+        ScreenshotTask(
+            index="006",
+            filename="006_1.1.8 应用商店-banner获取异常.png",
+            category="home",
+            description="首页 banner 异常",
+            adb_direct=False,
+            nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
+            prerequisites="mock 第三张 banner 图失效",
+            scenario="home_banner_error",
+        ),
+        ScreenshotTask(
+            index="007",
+            filename="007_1.1.9 应用商店首页-无banner位.png",
+            category="home",
+            description="首页无 banner",
+            adb_direct=False,
+            nav_steps=[f"am start -n {ACTIVITY_MAIN}"],
+            prerequisites="mock 无 banner 数据",
+            scenario="home_no_banner",
+        ),
+        ScreenshotTask(
+            index="008",
+            filename="008_1.1.10 应用商店首页_滚动.png",
+            category="home",
+            description="首页滚动",
+            adb_direct=True,
+            nav_steps=[
+                f"am start -n {ACTIVITY_MAIN}",
+                # 单次短滑动可能被吞掉导致页面未上滑，连续滑动两次确保明显滚出首屏
+                SWIPE_HOME_DOWN,
+                SWIPE_HOME_DOWN,
+            ],
+            prerequisites="网络正常，数据足够多",
+        ),
+
+        # 2. 预装应用弹窗
+        ScreenshotTask(
+            index="009",
+            filename="009_1.2.1 预装单个应用更新确认.png",
+            category="dialog",
+            description="预装单个应用更新确认",
+            adb_direct=False,
+            nav_steps=BG_MINE + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
+                f"--ei appType 2 "
+                f"-e appName '百度地图' "
+                f"-e apkSize '156MB' "
+                f"-e preAppName '百度地图汽车版' "
+                f"-e preServiceName '百度汽车服务' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="010",
+            filename="010_1.2.2 预装组合包更新确认.png",
+            category="dialog",
+            description="预装组合包更新确认",
+            adb_direct=False,
+            nav_steps=BG_MINE + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
+                f"--ei appType 3 "
+                f"-e appName '应用组合包' "
+                f"-e apkSize '320MB' "
+                f"-e preAppName '高德地图,QQ音乐' "
+                f"-e preServiceName '语音服务' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="011",
+            filename="011_1.2.3 预装应用安装前确认.png",
+            category="dialog",
+            description="预装应用安装前确认",
+            adb_direct=False,
+            nav_steps=BG_MINE + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_INSTALL "
+                f"-e appName '百度地图' "
+                f"-e preAppName '百度地图' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="012",
+            filename="012_1.2.4 预装应用更新完成提醒_Notificationg.png",
+            category="dialog",
+            description="预装应用更新完成提醒",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -n {ACTIVITY_MAIN}",
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_PRE_APP_MESSAGE_POPUP "
+                f"--ei updateSuccess 1 "
+                f"--ei appType 3 "
+                f"-e appName '应用组合包' "
+                f"-e preAppName '高德地图,QQ音乐' "
+                f"-e preServiceName '语音服务' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="真机需运行消息中心服务；横幅5s自动消去，须在窗口内截图",
+            wait_seconds=1.0,
+        ),
 #         3. 搜索 / Search（所有搜索截图均不允许带软键盘，统一 dismiss_keyboard=True）
         ScreenshotTask(
             index="013",
@@ -798,244 +867,327 @@ def build_tasks() -> List[ScreenshotTask]:
             prerequisites="debug helper 可用",
         ),
 
-#         # 5. 设置 / Settings
-#         ScreenshotTask(
-#             index="024",
-#             filename="024_2.2.1 设置页.png",
-#             category="mine",
-#             description="设置页",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -n {ACTIVITY_MAIN}",
-#                 TAB_MINE,
-#                 TAB_MINE_SETTINGS,
-#             ],
-#             prerequisites="无",
-#             # Mine/设置页数据加载较慢，多等一下
-#             wait_seconds=4.0,
-#         ),
-#         ScreenshotTask(
-#             index="025",
-#             filename="025_2.2.3 自动更新弹窗.png",
-#             category="dialog",
-#             description="自动更新弹窗",
-#             adb_direct=False,
-#             nav_steps=BG_SETTINGS + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_AUTO_UPDATE -n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="026",
-#             filename="026_2.2.4 还原确认.png",
-#             category="dialog",
-#             description="还原确认弹窗",
-#             adb_direct=False,
-#             nav_steps=BG_SETTINGS + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_RESTORE "
-#                 f"-e previousVersion HCC5.00 "
-#                 f"-e currentApps '应用A,应用B' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="027",
-#             filename="027_2.2.5 Honda Connect Core 弹窗查看.png",
-#             category="dialog",
-#             description="HCC 弹窗查看",
-#             adb_direct=False,
-#             nav_steps=BG_SETTINGS + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC "
-#                 f"-e hccContent 'Honda Connect Core<br>版本信息<br>导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超' "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="028",
-#             filename="028_2.2.6 Honda Connect Core 弹窗查看（Loading）.png",
-#             category="dialog",
-#             description="HCC 弹窗 loading",
-#             adb_direct=False,
-#             nav_steps=BG_SETTINGS + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC_LOADING -n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="029",
-#             filename="029_2.2.7 Honda Connect Core 弹窗查看（加载失败）.png",
-#             category="dialog",
-#             description="HCC 弹窗加载失败",
-#             adb_direct=False,
-#             nav_steps=BG_SETTINGS + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC_FAILED -n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#
-#         # 6. 应用详情 / AppDetail
-#         ScreenshotTask(
-#             index="030",
-#             filename="030_3.1.1 应用详情-后装-可更新.png",
-#             category="detail",
-#             description="应用详情-后装-可更新",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.netease.cloudmusic "
-#                 f"-e appName 网易云音乐 "
-#                 f"-e appVersionId 1047 "
-#                 f"--ei appType 1 "
-#                 f"--ei buttonState 0 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用，后端有数据则显示成功页",
-#         ),
-#         ScreenshotTask(
-#             index="031",
-#             filename="031_3.1.1 应用详情-后装-图片加载失败.png",
-#             category="detail",
-#             description="应用详情-图片加载失败",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.netease.cloudmusic "
-#                 f"-e appName 网易云音乐 "
-#                 f"-e appVersionId 1047 "
-#                 f"--ei appType 1 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="mock 详情预览图失效",
-#             scenario="detail_image_error",
-#         ),
-#         ScreenshotTask(
-#             index="032",
-#             filename="032_3.1.2 应用详情-后装-可更新-下.png",
-#             category="detail",
-#             description="应用详情-滚动",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.netease.cloudmusic "
-#                 f"-e appName 网易云音乐 "
-#                 f"-e appVersionId 1047 "
-#                 f"--ei appType 1 "
-#                 f"--ei buttonState 0 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#                 # 单次滑动只到页面中部，连续滑动多次确保滚动到底部
-#                 SWIPE_DETAIL_DOWN,
-#                 SWIPE_DETAIL_DOWN,
-#                 SWIPE_DETAIL_DOWN,
-#             ],
-#             prerequisites="debug helper 可用，详情页成功加载",
-#         ),
-#         ScreenshotTask(
-#             index="033",
-#             filename="033_3.1.3 应用详情-loading.png",
-#             category="detail",
-#             description="应用详情 loading",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.netease.cloudmusic "
-#                 f"-e appName 网易云音乐 "
-#                 f"-e appVersionId 1047 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             # detail_loading 场景延迟 1.8s 回包，需在窗口内抢拍
-#             scenario="detail_loading",
-#             wait_seconds=0.6,
-#             prerequisites="detail_loading 场景延迟回包时抢拍加载中",
-#         ),
-#         ScreenshotTask(
-#             index="034",
-#             filename="034_3.1.4 应用详情-已安装-无网络、数据异常.png",
-#             category="detail",
-#             description="应用详情-已安装-异常",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.netease.cloudmusic "
-#                 f"-e appName QQ音乐 "
-#                 f"-e appVersionId 1047 "
-#                 f"--ei appType 1 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             # UI图要求全描述字段 --；不走 real+飞行模式：com.android.settings 不在商店 DB，
-#             # isAppInstalled=false 会落到"未安装"失败页而非已安装详情
-#             prerequisites="detail_installed_error 场景：详情数据异常全字段 --，已安装态显示 更新/卸载",
-#             scenario="detail_installed_error",
-#         ),
-#         ScreenshotTask(
-#             index="035",
-#             filename="035_3.1.5 应用详情-未安装-无网络、数据异常.png",
-#             category="detail",
-#             description="应用详情-未安装-异常",
-#             adb_direct=False,
-#             nav_steps=[
-#                 "cmd connectivity airplane-mode enable",
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
-#                 f"-e packageName com.hynex.notinstalled.app "
-#                 f"-e appName NotInstalledApp "
-#                 f"--ei appType 1 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="无网络 + real 场景绕过 mock，未安装应用走加载失败页",
-#             # 失败/异常状态需要等网络超时（约 20s）后才能出现
-#             wait_seconds=3.0,
-#             scenario="real",
-#         ),
-#         ScreenshotTask(
-#             index="036",
-#             filename="036_3.1.7 应用详情 放大查看预览图.png",
-#             category="dialog",
-#             description="应用详情-放大预览图",
-#             adb_direct=False,
-#             nav_steps=BG_DETAIL + [
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_IMAGE_PREVIEW "
-#                 f"-e imageUrls 'file:///android_asset/screenshot_images/preview_music.png,file:///android_asset/screenshot_images/preview_music.png' "
-#                 f"--ei previewIndex 0 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#         ),
-#         ScreenshotTask(
-#             index="037",
-#             filename="037_3.1.7 应用详情 放大查看预览图（图片加载失败）.png",
-#             category="dialog",
-#             description="应用详情-放大预览图加载失败",
-#             adb_direct=False,
-#             nav_steps=[
-#                 "cmd connectivity airplane-mode enable",
-#             ] + BG_DETAIL + [
-#                 # file:// 本地资源不受飞行模式影响，必须用无效 URL 才能让 Glide 走 error 占位
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_IMAGE_PREVIEW "
-#                 f"-e imageUrls 'https://invalid.example.com/404.png' "
-#                 f"--ei previewIndex 0 "
-#                 f"-n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="无网络 + 无效图片 URL，Glide 加载失败显示 error 占位",
-#         ),
-#
-#         # 7. 行驶限制页
-#         ScreenshotTask(
-#             index="038",
-#             filename="038_4.1.1 三方应用通用走行限制.png",
-#             category="restriction",
-#             description="三方应用通用走行限制",
-#             adb_direct=False,
-#             nav_steps=[
-#                 f"am start -n {ACTIVITY_MAIN}",
-#                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_RESTRICTION -n {ACTIVITY_DEBUG_HELPER}",
-#             ],
-#             prerequisites="debug helper 可用",
-#             # 走行限制 toast 停留时间短，尽快截图
-#             wait_seconds=0.5,
-#         ),
+        # 5. 设置 / Settings
+        ScreenshotTask(
+            index="024",
+            filename="024_2.2.1 设置页.png",
+            category="mine",
+            description="设置页",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -n {ACTIVITY_MAIN}",
+                TAB_MINE,
+                TAB_MINE_SETTINGS,
+            ],
+            prerequisites="无",
+            # Mine/设置页数据加载较慢，多等一下
+            wait_seconds=4.0,
+        ),
+        ScreenshotTask(
+            index="025",
+            filename="025_2.2.3 自动更新弹窗.png",
+            category="dialog",
+            description="自动更新弹窗",
+            adb_direct=False,
+            nav_steps=BG_SETTINGS + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_AUTO_UPDATE -n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="026",
+            filename="026_2.2.4 还原确认.png",
+            category="dialog",
+            description="还原确认弹窗",
+            adb_direct=False,
+            nav_steps=BG_SETTINGS + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_RESTORE "
+                f"-e previousVersion HCC5.00 "
+                f"-e currentApps '应用A,应用B' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="027",
+            filename="027_2.2.5 Honda Connect Core 弹窗查看.png",
+            category="dialog",
+            description="HCC 弹窗查看",
+            adb_direct=False,
+            nav_steps=BG_SETTINGS + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC "
+                f"-e hccContent 'Honda Connect Core<br>版本信息<br>导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超给力。不仅能精准规划路线,实时路况信息还能帮你巧妙避开拥堵路段,节省出行时间。即使在复杂导航出行方面,它的导航应用超' "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="028",
+            filename="028_2.2.6 Honda Connect Core 弹窗查看（Loading）.png",
+            category="dialog",
+            description="HCC 弹窗 loading",
+            adb_direct=False,
+            nav_steps=BG_SETTINGS + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC_LOADING -n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="029",
+            filename="029_2.2.7 Honda Connect Core 弹窗查看（加载失败）.png",
+            category="dialog",
+            description="HCC 弹窗加载失败",
+            adb_direct=False,
+            nav_steps=BG_SETTINGS + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_HCC_FAILED -n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+
+        # 6. 应用详情 / AppDetail
+        ScreenshotTask(
+            index="030",
+            filename="030_3.1.1 应用详情-后装-可更新.png",
+            category="detail",
+            description="应用详情-后装-可更新",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.netease.cloudmusic "
+                f"-e appName 网易云音乐 "
+                f"-e appVersionId 1047 "
+                f"--ei appType 1 "
+                f"--ei buttonState 0 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用，后端有数据则显示成功页",
+        ),
+        ScreenshotTask(
+            index="031",
+            filename="031_3.1.1 应用详情-后装-图片加载失败.png",
+            category="detail",
+            description="应用详情-图片加载失败",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.netease.cloudmusic "
+                f"-e appName 网易云音乐 "
+                f"-e appVersionId 1047 "
+                f"--ei appType 1 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="mock 详情预览图失效",
+            scenario="detail_image_error",
+        ),
+        ScreenshotTask(
+            index="032",
+            filename="032_3.1.2 应用详情-后装-可更新-下.png",
+            category="detail",
+            description="应用详情-滚动",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.netease.cloudmusic "
+                f"-e appName 网易云音乐 "
+                f"-e appVersionId 1047 "
+                f"--ei appType 1 "
+                f"--ei buttonState 0 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+                # 单次滑动只到页面中部，连续滑动多次确保滚动到底部
+                SWIPE_DETAIL_DOWN,
+                SWIPE_DETAIL_DOWN,
+                SWIPE_DETAIL_DOWN,
+            ],
+            prerequisites="debug helper 可用，详情页成功加载",
+        ),
+        ScreenshotTask(
+            index="033",
+            filename="033_3.1.3 应用详情-loading.png",
+            category="detail",
+            description="应用详情 loading",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.netease.cloudmusic "
+                f"-e appName 网易云音乐 "
+                f"-e appVersionId 1047 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            # detail_loading 场景延迟 1.8s 回包，需在窗口内抢拍
+            scenario="detail_loading",
+            wait_seconds=0.6,
+            prerequisites="detail_loading 场景延迟回包时抢拍加载中",
+        ),
+        ScreenshotTask(
+            index="034",
+            filename="034_3.1.4 应用详情-已安装-无网络、数据异常.png",
+            category="detail",
+            description="应用详情-已安装-异常",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.netease.cloudmusic "
+                f"-e appName QQ音乐 "
+                f"-e appVersionId 1047 "
+                f"--ei appType 1 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            # UI图要求全描述字段 --；不走 real+飞行模式：com.android.settings 不在商店 DB，
+            # isAppInstalled=false 会落到"未安装"失败页而非已安装详情
+            prerequisites="detail_installed_error 场景：详情数据异常全字段 --，已安装态显示 更新/卸载",
+            scenario="detail_installed_error",
+        ),
+        ScreenshotTask(
+            index="035",
+            filename="035_3.1.5 应用详情-未安装-无网络、数据异常.png",
+            category="detail",
+            description="应用详情-未安装-异常",
+            adb_direct=False,
+            nav_steps=[
+                "cmd connectivity airplane-mode enable",
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
+                f"-e packageName com.hynex.notinstalled.app "
+                f"-e appName NotInstalledApp "
+                f"--ei appType 1 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="无网络 + real 场景绕过 mock，未安装应用走加载失败页",
+            # 失败/异常状态需要等网络超时（约 20s）后才能出现
+            wait_seconds=3.0,
+            scenario="real",
+        ),
+        ScreenshotTask(
+            index="036",
+            filename="036_3.1.7 应用详情 放大查看预览图.png",
+            category="dialog",
+            description="应用详情-放大预览图",
+            adb_direct=False,
+            nav_steps=BG_DETAIL + [
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_IMAGE_PREVIEW "
+                f"-e imageUrls 'file:///android_asset/screenshot_images/preview_music.png,file:///android_asset/screenshot_images/preview_music.png' "
+                f"--ei previewIndex 0 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+        ),
+        ScreenshotTask(
+            index="037",
+            filename="037_3.1.7 应用详情 放大查看预览图（图片加载失败）.png",
+            category="dialog",
+            description="应用详情-放大预览图加载失败",
+            adb_direct=False,
+            nav_steps=[
+                "cmd connectivity airplane-mode enable",
+            ] + BG_DETAIL + [
+                # file:// 本地资源不受飞行模式影响，必须用无效 URL 才能让 Glide 走 error 占位
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_IMAGE_PREVIEW "
+                f"-e imageUrls 'https://invalid.example.com/404.png' "
+                f"--ei previewIndex 0 "
+                f"-n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="无网络 + 无效图片 URL，Glide 加载失败显示 error 占位",
+        ),
+
+        # 7. 行驶限制页
+        ScreenshotTask(
+            index="038",
+            filename="038_4.1.1 三方应用通用走行限制.png",
+            category="restriction",
+            description="三方应用通用走行限制",
+            adb_direct=False,
+            nav_steps=[
+                f"am start -n {ACTIVITY_MAIN}",
+                f"am start -a {PACKAGE_NAME}.screenshot.SHOW_RESTRICTION -n {ACTIVITY_DEBUG_HELPER}",
+            ],
+            prerequisites="debug helper 可用",
+            # 走行限制 toast 停留时间短，尽快截图
+            wait_seconds=0.5,
+        ),
     ]
     return tasks
+
+
+def group_tasks_by_category(tasks: List[ScreenshotTask]) -> dict:
+    """按 category 分组任务，保持任务定义顺序。"""
+    grouped: dict = {}
+    for t in tasks:
+        grouped.setdefault(t.category, []).append(t)
+    return grouped
+
+
+def spec_no(task: ScreenshotTask) -> str:
+    """从输出文件名提取对应 UI设计稿编号（如 1.3.1），没有则返回空串。"""
+    m = re.match(r"^\d+_(\d+(?:\.\d+)*)", task.filename)
+    return m.group(1) if m else ""
+
+
+def print_task_menu(tasks: List[ScreenshotTask], selected_indices: Optional[set] = None) -> None:
+    """按分类打印任务清单：分类带编号 [n]，任务带原始序号与设计稿编号。
+
+    传入 selected_indices（子集）时逐项标记执行/跳过；全量或 None 时不出标记。
+    """
+    grouped = group_tasks_by_category(tasks)
+    print(f"\n===== 截图任务清单（共 {len(tasks)} 项 / {len(grouped)} 类）=====")
+    for no, (cat, items) in enumerate(grouped.items(), 1):
+        print(f"  [{no}] {CATEGORIES.get(cat, cat)} <{cat}>，{len(items)} 项")
+        for t in items:
+            extra = f"    [scenario: {t.scenario}]" if t.scenario else ""
+            mark = ""
+            if selected_indices is not None:
+                mark = "    <-- 本次执行" if t.index in selected_indices else "    (跳过)"
+            sn = spec_no(t)
+            label = f"{sn} {t.description}" if sn else t.description
+            print(f"        {t.index}  {label}{extra}{mark}")
+    print()
+
+
+def parse_task_selection(tasks: List[ScreenshotTask], raw: str) -> Optional[tuple]:
+    """解析任务选择表达式（CURRENT_TASKS），返回 (分类集合, 任务序号集合)。
+
+    - all / 空 → (None, None)，表示全选；
+    - 分类号（清单中的 [n]）、分类 key、任务序号（如 013）可混用，逗号分隔；
+    - 三位数数字一律按任务序号解释（"013" 是任务，"1" 才是分类号）；
+      未命中的三位数说明该任务未启用（注释归档）或不存在，直接报错而非当作分类号；
+    - 含无法识别的项时返回 None，由调用方报错退出。
+    """
+    text = raw.strip()
+    if text.lower() in ("", "all", "a", "全部"):
+        return (None, None)
+    cat_keys = list(group_tasks_by_category(tasks).keys())
+    all_indices = {t.index for t in tasks}
+    categories: set = set()
+    indices: set = set()
+    for token in text.replace("，", ",").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token.lower() in ("all", "全部"):
+            return (None, None)
+        if token in all_indices:
+            indices.add(token)
+        elif re.fullmatch(r"\d{3,}", token):
+            print(f"  ! 任务 {token} 不在当前清单中（已注释归档或不存在，取消 build_tasks() 中注释后可用）")
+            return None
+        elif token.isdigit() and 1 <= int(token) <= len(cat_keys):
+            categories.add(cat_keys[int(token) - 1])
+        elif token in cat_keys:
+            categories.add(token)
+        else:
+            print(f"  ! 无法识别: {token}（可用分类: {', '.join(cat_keys)}；任务序号见上方清单）")
+            return None
+    if not categories and not indices:
+        return (None, None)
+    return (categories, indices)
+
+
+def filter_tasks(tasks: List[ScreenshotTask], categories: Optional[set], indices: Optional[set]) -> List[ScreenshotTask]:
+    """按分类/序号过滤任务，保持定义顺序；两个集合都为空时返回全部。"""
+    if not categories and not indices:
+        return tasks
+    return [
+        t for t in tasks
+        if (categories and t.category in categories) or (t.index in indices)
+    ]
 
 
 def execute_task(device: str, task: ScreenshotTask, output_dir: Path, launch_only: bool = False) -> bool:
@@ -1141,12 +1293,6 @@ def main() -> None:
         help="列出全部模式、说明、输出路径及当前生效项后退出",
     )
     parser.add_argument("--device", "-d", default=None, help="adb 设备 serial")
-    parser.add_argument("--only", default=None, help="仅执行指定序号的任务，逗号分隔，如 001,013,015")
-    parser.add_argument(
-        "--category",
-        default=None,
-        help="仅执行指定分类的任务，逗号分隔，如 home,mine（可选值见任务 category 字段）",
-    )
     parser.add_argument(
         "--launch-only",
         action="store_true",
@@ -1171,6 +1317,26 @@ def main() -> None:
 
     if variant not in VARIANTS:
         print(f"提示: 模式 {variant} 未登记在脚本顶部 VARIANTS 中，将使用默认目录 screenshots/{variant}/。")
+
+    # ---- 按「任务选择配置区」的 CURRENT_TASKS 筛选本次执行范围（不依赖设备） ----
+    tasks = build_tasks()
+    parsed = parse_task_selection(tasks, CURRENT_TASKS)
+    if parsed is None:
+        valid_cats = ", ".join(group_tasks_by_category(tasks).keys())
+        sys.exit(
+            f"错误：脚本顶部 CURRENT_TASKS = {CURRENT_TASKS!r} 含无法识别的写法；"
+            f"可用分类: {valid_cats}；任务序号见上方清单。"
+        )
+    categories, indices = parsed
+    selected = filter_tasks(tasks, categories, indices)
+    if not selected:
+        print("CURRENT_TASKS 未匹配到任何已启用的截图任务，退出。")
+        return
+    if len(selected) < len(tasks):
+        print_task_menu(tasks, {t.index for t in selected})
+    else:
+        print_task_menu(tasks)
+    print(f"本次执行 {len(selected)}/{len(tasks)} 项: {', '.join(t.index for t in selected)}")
 
     device = ensure_device_connected(args.device)
     print(f"使用设备: {device}")
@@ -1201,19 +1367,11 @@ def main() -> None:
         # 确保车机截图目录存在
         run_adb(["shell", f"mkdir -p {REMOTE_SCREENSHOT_DIR}"], device=device)
 
-    tasks = build_tasks()
-    if args.category:
-        category_set = set(args.category.split(","))
-        tasks = [t for t in tasks if t.category in category_set]
-    if args.only:
-        only_set = set(args.only.split(","))
-        tasks = [t for t in tasks if t.index in only_set]
-
     success_count = 0
     skip_count = 0
     fail_count = 0
 
-    for task in tasks:
+    for task in selected:
         if execute_task(device, task, output_dir, launch_only=launch_only):
             success_count += 1
         else:

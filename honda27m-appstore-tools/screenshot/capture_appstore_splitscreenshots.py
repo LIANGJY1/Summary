@@ -7,12 +7,16 @@ AppStoreApp 分屏形态截图工具（独立脚本）。
 分屏编排：按页面分组，一个周期内清数据 → 进一次分屏 → 导航到目标页 →
 依次拖拽切换档位并截图（不再每张图都重进分屏）。
 
-用法（命令固定不变，切换模式只改脚本顶部 CURRENT_VARIANT 一行）：
-    1. 编辑本文件顶部「一键模式配置区（分屏）」，把 CURRENT_VARIANT 改成目标模式；
-    2. 固定运行：
+用法（命令固定不变，只改脚本顶部配置区）：
+    1. 编辑「一键模式配置区（分屏）」的 CURRENT_VARIANT，选目标模式；
+    2. 编辑「任务选择配置区」的 CURRENT_TASKS，决定本次执行哪些任务：
+       "all"=全部；也可填分类名/分类号/任务序号，逗号分隔、可混用，
+       如 "mine"（我的应用分类）、"017"（单个任务）。
+    3. 固定运行：
        python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
+       运行时先按分类打印任务清单并标记本次执行项，再开始截图。
 辅助参数（可选）：--list-variants 查看全部分屏模式；--variant <名称> 本次临时覆盖；
---only 序号 / --category 分类 / --device serial / --output 目录 含义不变。
+--device serial / --output 目录 含义不变。
 分屏产物写入 screenshots/<模式>_split/，与全屏截图分目录存放，互不覆盖。
 """
 
@@ -61,6 +65,35 @@ SPLIT_VARIANTS = {
         "ref_dir": None,  # 自动映射 分屏en_L
     },
 }
+
+# ========================= 任务分类配置区（分屏） =========================
+# 分屏截图任务分类元数据：key 对应 SplitScreenshotTask.category 字段（即页面周期所属分类），
+# value 用于清单展示与选择。与全屏脚本 CATEGORIES 保持同一套 key。
+CATEGORIES = {
+    "home": "首页 / Recommendation",
+    "dialog": "弹窗 / Dialog",
+    "search": "搜索 / Search",
+    "mine": "我的应用 / Mine",
+    "detail": "应用详情 / AppDetail",
+    "restriction": "行驶限制 / Restriction",
+}
+
+# ========================= 任务选择配置区（分屏） =========================
+# 本次执行哪些分屏截图任务；运行时按分类打印任务清单并标记本次执行项，再开始截图。
+# 写法（逗号分隔、可混用）：all=全部；分类号（清单中的 [n]，如 2）；
+# 分类名（如 mine）；任务序号（如 017，优先于分类号解释，"017" 是任务、"1" 是分类号）。
+# 任务按页面周期执行：只选某页面的部分档位时，该页面仍进一次分屏，只截所选档位。
+#
+# 任务速查（24 项 = 6 页面 × 4 档位，全部启用；每 4 个连续序号为同一页面的四个档位，
+# 依次为 全屏分屏 / 2／3屏 / 1／2屏 / 1／3屏；括号内为对应 UI设计稿编号。
+# 任务由 build_groups() 的页面周期自动生成，增删页面后以运行时打印的清单为准）：
+#   001-004 应用商店首页（1.1.2）<home>
+#   005-008 预装组合包更新确认（1.2.2）<dialog>
+#   009-012 应用搜索（1.3.1）<search>
+#   013-016 我的应用列表-全部更新（2.1.2）<mine>
+#   017-020 设置页（2.2.1）<mine>
+#   021-024 应用详情-后装-可更新（3.1.1）<detail>
+CURRENT_TASKS = "all"
 
 
 def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
@@ -401,6 +434,83 @@ def attach_tasks(groups: List[PageGroup]) -> None:
             idx += 1
 
 
+# ========================= 任务分类与选择 =========================
+
+def group_tasks_by_category(tasks: List[SplitScreenshotTask]) -> dict:
+    """按 category 分组任务，保持任务定义顺序。"""
+    grouped: dict = {}
+    for t in tasks:
+        grouped.setdefault(t.category, []).append(t)
+    return grouped
+
+
+def print_task_menu(tasks: List[SplitScreenshotTask], selected_indices: Optional[set] = None) -> None:
+    """按分类打印任务清单：分类带编号 [n]，任务带原始序号。
+
+    description 本身以设计稿编号开头（如 "1.1.2 应用商店首页"），可直接用于识别。
+    传入 selected_indices（子集）时逐项标记执行/跳过；全量或 None 时不出标记。
+    """
+    grouped = group_tasks_by_category(tasks)
+    print(f"\n===== 分屏任务清单（共 {len(tasks)} 项 / {len(grouped)} 类）=====")
+    for no, (cat, items) in enumerate(grouped.items(), 1):
+        print(f"  [{no}] {CATEGORIES.get(cat, cat)} <{cat}>，{len(items)} 项")
+        for t in items:
+            mark = ""
+            if selected_indices is not None:
+                mark = "    <-- 本次执行" if t.index in selected_indices else "    (跳过)"
+            print(f"        {t.index}  {t.description}{mark}")
+    print()
+
+
+def parse_task_selection(tasks: List[SplitScreenshotTask], raw: str) -> Optional[tuple]:
+    """解析任务选择表达式（CURRENT_TASKS），返回 (分类集合, 任务序号集合)。
+
+    - all / 空 → (None, None)，表示全选；
+    - 分类号（清单中的 [n]）、分类 key、任务序号（如 017）可混用，逗号分隔；
+    - 三位数数字一律按任务序号解释（"017" 是任务，"1" 才是分类号）；
+      未命中的三位数说明该任务不存在，直接报错而非当作分类号；
+    - 含无法识别的项时返回 None，由调用方报错退出。
+    """
+    text = raw.strip()
+    if text.lower() in ("", "all", "a", "全部"):
+        return (None, None)
+    cat_keys = list(group_tasks_by_category(tasks).keys())
+    all_indices = {t.index for t in tasks}
+    categories: set = set()
+    indices: set = set()
+    for token in text.replace("，", ",").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token.lower() in ("all", "全部"):
+            return (None, None)
+        if token in all_indices:
+            indices.add(token)
+        elif re.fullmatch(r"\d{3,}", token):
+            print(f"  ! 任务 {token} 不在当前清单中（分屏任务为 001-024，见上方速查表）")
+            return None
+        elif token.isdigit() and 1 <= int(token) <= len(cat_keys):
+            categories.add(cat_keys[int(token) - 1])
+        elif token in cat_keys:
+            categories.add(token)
+        else:
+            print(f"  ! 无法识别: {token}（可用分类: {', '.join(cat_keys)}；任务序号见上方速查表）")
+            return None
+    if not categories and not indices:
+        return (None, None)
+    return (categories, indices)
+
+
+def filter_tasks(tasks: List[SplitScreenshotTask], categories: Optional[set], indices: Optional[set]) -> List[SplitScreenshotTask]:
+    """按分类/序号过滤任务，保持定义顺序；两个集合都为空时返回全部。"""
+    if not categories and not indices:
+        return tasks
+    return [
+        t for t in tasks
+        if (categories and t.category in categories) or (t.index in indices)
+    ]
+
+
 def wait_desktop_settled(device: str, timeout: float = 8.0) -> None:
     """等待分屏壳收起、桌面回到前台（以 topResumedActivity 指向 launcher 为准）。
 
@@ -678,8 +788,6 @@ def main() -> None:
     parser.add_argument("--variant", "-V", default=None,
                         help=f"本次临时覆盖模式；默认取脚本顶部 CURRENT_VARIANT={CURRENT_VARIANT}")
     parser.add_argument("--device", "-d", default=None, help="adb 设备 serial")
-    parser.add_argument("--only", default=None, help="仅执行指定序号")
-    parser.add_argument("--category", default=None, help="仅执行指定分类")
     parser.add_argument("--list-variants", action="store_true", help="列出全部分屏模式、说明及当前生效项后退出")
     args = parser.parse_args()
 
@@ -699,6 +807,28 @@ def main() -> None:
     if variant not in SPLIT_VARIANTS:
         print(f"提示: 模式 {variant} 未登记在脚本顶部 SPLIT_VARIANTS 中，将使用默认目录 screenshots/{variant}_split/。")
 
+    # ---- 按「任务选择配置区」的 CURRENT_TASKS 筛选本次执行范围（不依赖设备） ----
+    groups = build_groups()
+    attach_tasks(groups)
+    tasks = [t for g in groups for t in g.tasks]
+    parsed = parse_task_selection(tasks, CURRENT_TASKS)
+    if parsed is None:
+        valid_cats = ", ".join(group_tasks_by_category(tasks).keys())
+        sys.exit(
+            f"错误：脚本顶部 CURRENT_TASKS = {CURRENT_TASKS!r} 含无法识别的写法；"
+            f"可用分类: {valid_cats}；任务序号见上方速查表。"
+        )
+    categories, indices = parsed
+    selected = filter_tasks(tasks, categories, indices)
+    if not selected:
+        print("CURRENT_TASKS 未匹配到任何分屏截图任务，退出。")
+        return
+    if len(selected) < len(tasks):
+        print_task_menu(tasks, {t.index for t in selected})
+    else:
+        print_task_menu(tasks)
+    print(f"本次执行 {len(selected)}/{len(tasks)} 项: {', '.join(t.index for t in selected)}")
+
     device = ensure_device_connected(args.device)
     print(f"设备: {device}")
     print(f"变体: {variant}")
@@ -712,14 +842,10 @@ def main() -> None:
 
     groups = build_groups()
     attach_tasks(groups)
-    if args.category:
-        cats = set(args.category.split(","))
-        for g in groups:
-            g.tasks = [t for t in g.tasks if t.category in cats]
-    if args.only:
-        only_set = set(args.only.split(","))
-        for g in groups:
-            g.tasks = [t for t in g.tasks if t.index in only_set]
+    # 应用本次任务选择：仅保留被选中的任务，没有选中任务的页面周期整体跳过
+    selected_ids = {t.index for t in selected}
+    for g in groups:
+        g.tasks = [t for t in g.tasks if t.index in selected_ids]
     groups = [g for g in groups if g.tasks]
 
     success = fail = 0
