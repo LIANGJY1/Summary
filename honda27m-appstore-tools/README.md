@@ -62,8 +62,10 @@ UI走查、截图任务、Mock 场景、Debug Helper、差异率阈值 30 等定
 | **车机** | adb 连接、已开启调试 | 已安装含 `ScreenshotDebugActivity` 的 debug APK；不同分辨率车机的点击/滑动坐标在本目录 `screenshot/coordinates.json`、`screenshot/split_coordinates.json` 校准（这两个文件已入库） |
 | Python + PIL | 本机 | Python 3.8+；PIL 可选，缺失时报告退化为纯并排无差异列 |
 
-UI 设计稿根目录硬编码在 `screenshot/capture_appstore_screenshots.py` 的
-`UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"`，设计稿库搬家时改这里。
+UI 设计稿根目录 `UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"`
+硬编码在两个截图脚本内各自维护（全屏 `capture_appstore_screenshots.py`、
+分屏 `capture_appstore_splitscreenshots.py`，二者完全独立、互不依赖），
+设计稿库搬家时两处都要改。
 
 ## 目录结构与数据说明
 
@@ -72,7 +74,7 @@ honda27m-appstore-tools/
 ├── README.md                 # 本文件：来历与关系记录
 └── screenshot/               # 工具本体（原 tools/screenshot 原样迁移）
     ├── capture_appstore_screenshots.py     # 全屏一键截图（模式在顶部 CURRENT_VARIANT 切换）
-    ├── capture_appstore_splitscreenshots.py# 分屏一键截图（输出目录自动追加 _split 后缀）
+    ├── capture_appstore_splitscreenshots.py# 分屏一键截图（独立脚本：自带 CURRENT_VARIANT/SPLIT_VARIANTS 配置与 ADB 基础设施，输出 screenshots/<模式>_split/）
     ├── compare_report.py                   # UI图↔实机图 并排对比报告（跟随当前模式）
     ├── compare_split_report.py             # 分屏版对比报告（UI图 映射到 分屏cn_D 等）
     ├── fix_keyboard.py                     # 车机输入法诊断修复（截图中断后 ime 残留）
@@ -102,10 +104,10 @@ honda27m-appstore-tools/
 | zh_day_split | `zh_day_split_split/` ① | `分屏cn_L` |
 | en_day_split | `en_day_split_split/` ① | `分屏en_L` |
 
-① **_split 后缀约定**：分屏截图脚本（`capture_appstore_splitscreenshots.py`）输出时会在
-模式 output_dir 后追加 `_split`。`compare_report.py` 已做自动回退（配置目录不存在而
+① **_split 后缀约定**：分屏截图脚本（`capture_appstore_splitscreenshots.py`，独立脚本）
+默认输出 `screenshots/<模式>_split/`。`compare_report.py` 已做自动回退（配置目录不存在而
 `<目录>_split` 存在时自动改用后者，2026-09-01 修复，此前该问题导致配对恒为 0）；
-`compare_split_report.py` 则始终按 `<模式>_split` 解析。
+`compare_split_report.py` 则始终按 `<模式>_split` 解析（配置只读分屏脚本顶部 CURRENT_VARIANT）。
 
 截图任务三位序号与 UI图 一一对应：全屏 001–038、分屏 001–024、服务激活 001–016。
 
@@ -128,6 +130,7 @@ python3 honda27m-appstore-tools/screenshot/compare_split_report.py
 - **看到本目录不知来历** → 读本文件「来源与迁移记录」。
 - **原 AppStore 项目搬迁/改名/删除** → 本工具不受影响，仅需更新本文件中的原仓库路径；
   若包名/Activity 改名，同步 `screenshot/capture_appstore_screenshots.py` 顶部常量。
-- **UI 设计稿库搬家** → 改 `screenshot/capture_appstore_screenshots.py` 的 `UI_REF_ROOT`。
+- **UI 设计稿库搬家** → 改 `screenshot/capture_appstore_screenshots.py` 和
+  `screenshot/capture_appstore_splitscreenshots.py` 各自的 `UI_REF_ROOT`（两个脚本独立维护）。
 - **换新车机分辨率** → 重校 `screenshot/coordinates.json` / `split_coordinates.json`，
   方法见 screenshot/README.md「配置 JSON 说明」。

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-分屏 UI图 ↔ 实机图 配对并排 HTML 报告生成器。
+分屏 UI图 ↔ 实机图 配对并排 HTML 报告生成器（独立脚本）。
 
-与 compare_report.py（全屏版）同构：按三位序号自动配对 分屏UE设计稿 与 车机实拍截图，
-生成自包含的并排对比页面（含像素级差异高亮），供 分屏UI走查 肉眼比对使用。零第三方依赖
+按三位序号自动配对 分屏UE设计稿 与 车机实拍截图，生成自包含的并排对比页面
+（含像素级差异高亮），供 分屏UI走查 肉眼比对使用。零第三方依赖
 （PIL 可选：缺失时退化为纯并排、无差异列）。
 
-与全屏版的差异只在默认目录解析：
+完全独立于全屏脚本（compare_report.py / capture_appstore_screenshots.py）：
+    模式配置：跟随 capture_appstore_splitscreenshots.py 顶部 CURRENT_VARIANT（分屏独立配置）
     实机图：capture_appstore_splitscreenshots.py 的默认输出 screenshots/<模式>_split/
-    UI图：  模式名映射到 分屏<cn|en>_<D|L>（模式名中的 fullscreen 视作 split，
-            因此当前截图脚本停在 zh_day_fullscreen 时也能配到分屏设计稿）
+    UI图：  模式名映射到 分屏<cn|en>_<D|L>（模式名中的 fullscreen 视作 split）
     报告：  report/<模式>_split/index.html
 
-用法（默认跟随 capture_appstore_screenshots.py 顶部 CURRENT_VARIANT）：
+用法（默认跟随 capture_appstore_splitscreenshots.py 顶部 CURRENT_VARIANT）：
     python3 honda27m-appstore-tools/screenshot/compare_split_report.py
 
 可选覆盖（不影响截图脚本配置）：
@@ -33,19 +33,18 @@ try:
 except Exception:
     HAS_PIL = False
 
-# 与截图脚本共用配置：读取 CURRENT_VARIANT / resolve_output_dir / get_mode_ref_dir。
-# 经 capture_appstore_splitscreenshots 间接导入，保持与分屏截图脚本相同的依赖路径。
+# 与分屏截图脚本共用配置：读取其顶部 CURRENT_VARIANT / resolve_output_dir /
+# get_mode_ref_dir。分屏模式配置独立维护在 capture_appstore_splitscreenshots.py
+# 内，不依赖全屏脚本 capture_appstore_screenshots.py。
 try:
     import capture_appstore_splitscreenshots as _split_cfg
-    _capture_cfg = _split_cfg.cas
 except Exception:
     _split_cfg = None
-    _capture_cfg = None
 
 
 def get_current_variant() -> str:
-    """当前模式名：跟随截图脚本顶部 CURRENT_VARIANT。"""
-    return (getattr(_capture_cfg, "CURRENT_VARIANT", "") or "").strip()
+    """当前模式名：跟随分屏截图脚本顶部 CURRENT_VARIANT。"""
+    return (getattr(_split_cfg, "CURRENT_VARIANT", "") or "").strip()
 
 
 def to_split_form(variant: str) -> str:
@@ -57,14 +56,13 @@ def to_split_form(variant: str) -> str:
 
 
 def default_actual_dir(variant: str) -> Path:
-    """默认实机图目录：复刻分屏截图脚本 main() 的解析——resolve_output_dir 后追加 _split。"""
-    p = _capture_cfg.resolve_output_dir(None, variant)
-    return p.parent / (p.name + "_split")
+    """默认实机图目录：分屏截图脚本的 resolve_output_dir 直接指向 screenshots/<模式>_split。"""
+    return Path(_split_cfg.resolve_output_dir(None, variant))
 
 
 def default_ref_dir(variant: str) -> Path:
-    """默认 UI图目录：模式名（形态归一为 split）按 <语言>_<昼夜>_<形态> 映射 分屏<cn|en>_<D|L>。"""
-    resolved = _capture_cfg.get_mode_ref_dir(to_split_form(variant))
+    """默认 UI图目录：模式名（形态归一为 split）按 <语言>_<昼夜>_split 映射 分屏<cn|en>_<D|L>。"""
+    resolved = _split_cfg.get_mode_ref_dir(to_split_form(variant))
     if resolved:
         return Path(resolved)
     return Path(__file__).with_name("screenshots")
@@ -339,9 +337,9 @@ def render(rows: list, out_path: Path, ref_dir: Path, actual_dir: Path, variant:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="分屏 UI图↔实机图 并排对比报告生成器（默认跟随截图脚本当前模式，实机图取 <模式>_split）")
+    parser = argparse.ArgumentParser(description="分屏 UI图↔实机图 并排对比报告生成器（默认跟随分屏截图脚本顶部 CURRENT_VARIANT，实机图取 <模式>_split）")
     parser.add_argument("--variant", "-V", default=None,
-                        help=f"模式名（默认跟随截图脚本: {get_current_variant()}）；UI图按其分屏形态映射，实机图取 screenshots/<模式>_split")
+                        help=f"模式名（默认跟随分屏截图脚本: {get_current_variant()}）；UI图按其分屏形态映射，实机图取 screenshots/<模式>_split")
     parser.add_argument("--ref-dir", type=Path, default=None,
                         help="UI图目录（默认按模式名映射 分屏<cn|en>_<D|L>）")
     parser.add_argument("--actual-dir", type=Path, default=None,
@@ -352,7 +350,7 @@ def main() -> None:
 
     variant = (args.variant or get_current_variant()).strip()
     if not variant:
-        raise SystemExit("错误：无法识别模式（截图脚本 CURRENT_VARIANT 为空），请用 --variant 指定。")
+        raise SystemExit("错误：无法识别模式（分屏截图脚本 CURRENT_VARIANT 为空），请用 --variant 指定。")
 
     ref_dir = args.ref_dir or default_ref_dir(variant)
     actual_dir = args.actual_dir or default_actual_dir(variant)

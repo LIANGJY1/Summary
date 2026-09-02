@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-AppStoreApp 分屏形态截图工具。
+AppStoreApp 分屏形态截图工具（独立脚本）。
 
-与 capture_appstore_screenshots.py 同目录，import 复用其基础设施。
+不依赖全屏脚本 capture_appstore_screenshots.py：包名/路径常量、ADB 基础设施、
+模式配置均在本文件内自带，改动本文件不会影响全屏脚本，反之亦然。
 分屏编排：按页面分组，一个周期内清数据 → 进一次分屏 → 导航到目标页 →
 依次拖拽切换档位并截图（不再每张图都重进分屏）。
 
-用法：
-    python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
-    python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py --only 001,005
-    python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py --category search
+用法（命令固定不变，切换模式只改脚本顶部 CURRENT_VARIANT 一行）：
+    1. 编辑本文件顶部「一键模式配置区（分屏）」，把 CURRENT_VARIANT 改成目标模式；
+    2. 固定运行：
+       python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
+辅助参数（可选）：--list-variants 查看全部分屏模式；--variant <名称> 本次临时覆盖；
+--only 序号 / --category 分类 / --device serial / --output 目录 含义不变。
+分屏产物写入 screenshots/<模式>_split/，与全屏截图分目录存放，互不覆盖。
 """
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -23,16 +26,226 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# 复用现有脚本的基础设施
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import capture_appstore_screenshots as cas
+PACKAGE_NAME = "com.hynex.appstoreapp"
+SERVICE_PACKAGE = "com.hynex.appstoreservice"
+SCENARIO_ACTION = "com.hynex.appstoreservice.MOCK_SCENARIO"
+ACTIVITY_SEARCH = f"{PACKAGE_NAME}/.feature.search.SearchAppActivity"
+ACTIVITY_DEBUG_HELPER = f"{PACKAGE_NAME}/.screenshot.ScreenshotDebugActivity"
+REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 
-PACKAGE_NAME = cas.PACKAGE_NAME
-SERVICE_PACKAGE = cas.SERVICE_PACKAGE
-ACTIVITY_MAIN = cas.ACTIVITY_MAIN
-ACTIVITY_SEARCH = cas.ACTIVITY_SEARCH
-ACTIVITY_DEBUG_HELPER = cas.ACTIVITY_DEBUG_HELPER
-REMOTE_SCREENSHOT_DIR = cas.REMOTE_SCREENSHOT_DIR
+# ========================= 一键模式配置区（分屏） =========================
+# 要截取哪个分屏模式，就把 CURRENT_VARIANT 改成对应 key，命令保持：
+#     python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
+# 分屏模式独立维护（与全屏脚本 VARIANTS 无关）；产物固定写入 screenshots/<模式>_split/，
+# 未登记在 SPLIT_VARIANTS 的自定义名称同样可用（自动落同名目录并自动建目录）。
+CURRENT_VARIANT = "en_dark_split"
+# UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_split 约定自动映射到其下
+# 「分屏<cn|en>_<D|L>」子目录，实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；
+# ref_dir 字段仅作手动覆盖用。compare_split_report.py 按同一规则取 UI图。
+UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"
+SPLIT_VARIANTS = {
+    "zh_dark_split": {
+        "desc": "中文 · 黑天 · 分屏",
+        "ref_dir": None,  # 自动映射 分屏cn_D
+    },
+    "en_dark_split": {
+        "desc": "English · 黑天 · 分屏",
+        "ref_dir": None,  # 自动映射 分屏en_D
+    },
+    "zh_day_split": {
+        "desc": "中文 · 白天 · 分屏",
+        "ref_dir": None,  # 自动映射 分屏cn_L
+    },
+    "en_day_split": {
+        "desc": "English · 白天 · 分屏",
+        "ref_dir": None,  # 自动映射 分屏en_L
+    },
+}
+
+
+def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
+    """解析本次运行的本地输出目录，分屏产物固定写入 screenshots/<模式>_split/。
+
+    优先级：显式 --output（作为根目录，追加变体子目录）> 默认
+    screenshots/<variant>_split。相对路径相对脚本所在目录解析，不随当前
+    工作目录漂移；与全屏截图分目录存放，避免同序号文件互相覆盖、
+    干扰 compare_split_report 配对。
+    """
+    script_dir = Path(__file__).resolve().parent
+    if output_arg:
+        return Path(output_arg).resolve() / variant
+    return script_dir / "screenshots" / f"{variant}_split"
+
+
+def resolve_ref_dir(variant: str) -> Optional[str]:
+    """按模式名约定解析对应的分屏 UI图 子目录，实现与 extracted_images 一一对应。
+
+    映射规则：<语言>_<昼夜>_split → 分屏<cn|en>_<D|L>，
+    其中 zh→cn、en→en，dark→D（黑天）、day→L（白天）。
+    不符合约定的名称返回 None，由调用方回退手动配置或内置默认。
+    """
+    parts = variant.split("_")
+    if len(parts) != 3 or parts[2] != "split":
+        return None
+    lang_code = {"zh": "cn", "en": "en"}.get(parts[0])
+    theme_code = {"dark": "D", "day": "L"}.get(parts[1])
+    if not (lang_code and theme_code):
+        return None
+    return str(UI_REF_ROOT / f"分屏{lang_code}_{theme_code}")
+
+
+def get_mode_ref_dir(variant: str) -> Optional[str]:
+    """模式的 UI图 目录：SPLIT_VARIANTS 显式 ref_dir 优先，否则按模式名自动映射。"""
+    configured = SPLIT_VARIANTS.get(variant, {}).get("ref_dir")
+    if isinstance(configured, str) and configured.strip():
+        p = Path(configured.strip()).expanduser()
+        return str(p if p.is_absolute() else Path(__file__).resolve().parent / p)
+    return resolve_ref_dir(variant)
+
+
+# ========================= ADB 基础设施 =========================
+
+def run_adb(args: List[str], device: Optional[str] = None, check: bool = True, timeout: float = 30) -> subprocess.CompletedProcess:
+    """执行 adb 命令，带超时防止永久阻塞。"""
+    cmd = ["adb"]
+    if device:
+        cmd.extend(["-s", device])
+    cmd.extend(args)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        # 超时视为失败，返回带错误信息的 CompletedProcess 占位
+        raise subprocess.CalledProcessError(returncode=124, cmd=cmd, output=e.stdout or "", stderr=f"adb timeout after {timeout}s: {' '.join(cmd)}")
+
+
+def ensure_device_connected(device: Optional[str] = None) -> str:
+    """检查 adb 连接，返回设备 serial。"""
+    result = run_adb(["devices"], device=None, check=True)
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip() and not line.startswith("List")]
+    if not lines:
+        sys.exit("错误：没有检测到 adb 设备。")
+
+    devices = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "device":
+            devices.append(parts[0])
+
+    if len(devices) == 0:
+        sys.exit("错误：adb 设备未授权或不可用。")
+
+    if device:
+        if device not in devices:
+            sys.exit(f"错误：指定的设备 {device} 不在已连接列表中。")
+        return device
+
+    if len(devices) > 1:
+        sys.exit(f"错误：检测到多个 adb 设备 {devices}，请使用 --device 指定。")
+
+    return devices[0]
+
+
+def wait_for_idle(timeout: float = 3.5) -> None:
+    """等待页面稳定。"""
+    time.sleep(timeout)
+
+
+def wait_for_activity_foreground(device: str, activity_short: str, timeout: float = 10.0) -> bool:
+    """轮询等待指定 Activity 处于前台，返回是否成功。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = run_adb(
+            ["shell", "dumpsys", "activity", "activities"],
+            device=device,
+            check=False,
+        )
+        if activity_short in result.stdout:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def is_keyboard_shown(device: str) -> bool:
+    """通过 dumpsys input_method 判断软键盘是否处于显示状态。
+
+    优先读 mInputShown；缺失时退回 mImeWindowVis（非 0 即可见）。
+    注意：ime disable/enable 操作后 mInputShown 可能残留旧值，仅作消去
+    路径的判定依据，不用于校验抑制效果（抑制效果以截图为准）。
+    """
+    result = run_adb(["shell", "dumpsys", "input_method"], device=device, check=False)
+    out = result.stdout or ""
+    if "mInputShown=true" in out:
+        return True
+    if "mInputShown=false" in out:
+        return False
+    match = re.search(r"mImeWindowVis=(\d+)", out)
+    return bool(match and match.group(1) != "0") or ("mImeWindowVis" not in out)
+
+
+def suppress_soft_keyboard(device: str):
+    """禁用所有已启用输入法，从源头阻止截图期间键盘弹出。
+
+    返回 (已禁用的输入法 id 列表, 原默认输入法)，供恢复使用。
+    实测车机（讯飞输入法）：搜索页键盘在页面启动约 3.5s 后才弹出
+    （onResume 的 show(ime()) 在窗口获得焦点后才生效），事后消去存在
+    时机竞态且盲发 BACK 会误退页面；禁用式与时序无关，ime enable 可完整恢复。
+    """
+    default_ime = (run_adb(["shell", "settings", "get", "secure", "default_input_method"],
+                           device=device, check=False).stdout or "").strip() or None
+    result = run_adb(["shell", "ime", "list", "-s"], device=device, check=False)
+    ime_ids = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    for ime_id in ime_ids:
+        run_adb(["shell", "ime", "disable", ime_id], device=device, check=False)
+    time.sleep(0.3)
+    return ime_ids, default_ime
+
+
+def restore_soft_keyboard(device: str, ime_ids: List[str], default_ime: Optional[str]) -> None:
+    """恢复被禁用的输入法，并确保默认输入法不变。"""
+    for ime_id in ime_ids:
+        run_adb(["shell", "ime", "enable", ime_id], device=device, check=False)
+    if default_ime:
+        current = (run_adb(["shell", "settings", "get", "secure", "default_input_method"],
+                           device=device, check=False).stdout or "").strip()
+        if current != default_ime:
+            run_adb(["shell", "ime", "set", default_ime], device=device, check=False)
+
+
+def capture_screen(device: str, remote_path: str) -> None:
+    """使用 adb shell screencap 截图并保存到车机路径。"""
+    run_adb(["shell", "screencap", "-p", remote_path], device=device)
+
+
+def pull_screenshot(device: str, remote_path: str, local_path: Path) -> None:
+    """将车机截图拉取到本地。"""
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    run_adb(["pull", remote_path, str(local_path)], device=device)
+
+
+def clear_app(device: str) -> None:
+    """强制停止 App 和 Service，并清空 Service 数据，避免旧 DB 版本号影响更新状态。"""
+    run_adb(["shell", f"am force-stop {PACKAGE_NAME}"], device=device, check=False)
+    run_adb(["shell", f"am force-stop {SERVICE_PACKAGE}"], device=device, check=False)
+    run_adb(["shell", f"pm clear {SERVICE_PACKAGE}"], device=device, check=False)
+    time.sleep(0.5)
+
+
+def set_mock_scenario(device: str, scenario: Optional[str]) -> None:
+    """通过启动无界面 MockScenarioActivity 设置 AppStoreService 的 mock 数据场景。"""
+    run_adb(
+        [
+            "shell", "am", "start", "-a", SCENARIO_ACTION,
+            "-e", "scenario", scenario or "default",
+            "-n", "com.hynex.appstoreservice/.mock.MockScenarioActivity",
+        ],
+        device=device,
+        check=False,
+    )
+    # 等待 activity 写入 scenario
+    time.sleep(0.5)
+
+
+# ========================= 分屏坐标与档位定义 =========================
 
 # 分屏坐标（实测校准）
 COORDS_PATH = Path(__file__).with_name("split_coordinates.json")
@@ -197,7 +410,7 @@ def wait_desktop_settled(device: str, timeout: float = 8.0) -> None:
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
-        result = cas.run_adb(
+        result = run_adb(
             ["shell", "dumpsys activity activities | grep topResumedActivity"],
             device=device, check=False,
         )
@@ -215,7 +428,7 @@ def wait_split_picker(device: str, timeout: float = 5.0) -> bool:
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
-        result = cas.run_adb(
+        result = run_adb(
             ["shell", "dumpsys SurfaceFlinger --list | grep -c AllAppActivity"],
             device=device, check=False,
         )
@@ -241,15 +454,15 @@ def enter_split(device: str, task_index: str = "", output_dir: Optional[Path] = 
     """
     for attempt in range(3):
         if attempt > 0:
-            cas.run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
+            run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
             time.sleep(0.8)
-        cas.run_adb(["shell", "input", "keyevent", "KEYCODE_HOME"], device=device, check=False)
+        run_adb(["shell", "input", "keyevent", "KEYCODE_HOME"], device=device, check=False)
         wait_desktop_settled(device)
-        cas.run_adb(["shell", "logcat", "-c"], device=device, check=False)
+        run_adb(["shell", "logcat", "-c"], device=device, check=False)
         # 点分屏图标，picker 确认打开后右格才是可点的商店图标
         picker_open = False
         for _ in range(3):
-            cas.run_adb(["shell", SPLIT_ICON_TAP], device=device)
+            run_adb(["shell", SPLIT_ICON_TAP], device=device)
             if wait_split_picker(device, timeout=5.0):
                 picker_open = True
                 break
@@ -269,8 +482,8 @@ def enter_split(device: str, task_index: str = "", output_dir: Optional[Path] = 
     # 三次都失败，截图留证
     if output_dir is not None:
         dbg = output_dir / f"_debug_enter_split_{task_index}.png"
-        cas.capture_screen(device, "/sdcard/enter_split_fail.png")
-        cas.pull_screenshot(device, "/sdcard/enter_split_fail.png", dbg)
+        capture_screen(device, "/sdcard/enter_split_fail.png")
+        pull_screenshot(device, "/sdcard/enter_split_fail.png", dbg)
         print(f"(失败现场见 {dbg}) ", end="", flush=True)
     return False
 
@@ -293,7 +506,7 @@ def wait_for_mode(device: str, expected_mode: str, timeout: float = 8.0,
     last_width = None
     last_tap = time.time()
     while time.time() < deadline:
-        result = cas.run_adb(
+        result = run_adb(
             ["shell", "logcat", "-d", "-s", "SplitScreenClient"],
             device=device, check=False,
         )
@@ -304,9 +517,9 @@ def wait_for_mode(device: str, expected_mode: str, timeout: float = 8.0,
         if widths:
             last_width = widths[-1]
         if retap_cmd and time.time() - last_tap >= retap_interval:
-            pid = cas.run_adb(["shell", "pidof", PACKAGE_NAME], device=device, check=False)
+            pid = run_adb(["shell", "pidof", PACKAGE_NAME], device=device, check=False)
             if not (pid.stdout or "").strip():
-                cas.run_adb(["shell", retap_cmd], device=device, check=False)
+                run_adb(["shell", retap_cmd], device=device, check=False)
                 last_tap = time.time()
         time.sleep(0.5)
     print(f"(logcat 最后宽度: {last_width}) ", end="", flush=True)
@@ -324,7 +537,7 @@ def drag_to_mode(device: str, cur: str, target: str) -> bool:
         for attempt in range(3):
             cmd = (f"input draganddrop {DRAG_BAR_X[cur]} 540 "
                    f"{DROP_X[seg_target]} 540 {DRAG_DURATION}")
-            cas.run_adb(["shell", cmd], device=device, check=False)
+            run_adb(["shell", cmd], device=device, check=False)
             time.sleep(2.5)
             if wait_for_mode(device, seg_target, timeout=5.0):
                 ok = True
@@ -332,7 +545,7 @@ def drag_to_mode(device: str, cur: str, target: str) -> bool:
             print(f"(拖拽未达 {seg_target}，重试 {attempt + 1}/3) ", end="", flush=True)
         if not ok:
             return False
-        cas.run_adb(["shell", "logcat", "-c"], device=device, check=False)
+        run_adb(["shell", "logcat", "-c"], device=device, check=False)
         cur = seg_target
     return True
 
@@ -344,7 +557,7 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
             # 重建 helper 单实例：既消掉上一档的弹窗/页面（不叠加），
             # 又避免 BACK 导致窗格失去焦点
             step = step.replace("am start", "am start --activity-clear-top", 1)
-        cas.run_adb(["shell", step], device=device)
+        run_adb(["shell", step], device=device)
         # am start 的页面在分屏容器内启动较慢，等稳再走后续步骤
         # （过短会导致 dismiss 键盘的 BACK 把还在启动的页面整个关掉）
         time.sleep(3.0)
@@ -352,24 +565,24 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
     # 设置页和我的应用：顶栏「我的」tab 与侧栏「设置」均用实测坐标
     if group.category == "mine":
         mx, my = MY_TAB_COORDS[mode]
-        cas.run_adb(["shell", f"input tap {mx} {my}"], device=device)
+        run_adb(["shell", f"input tap {mx} {my}"], device=device)
         time.sleep(1.5)
         if "设置" in group.base_name:
             sx = MODE_PANE_LEFT[mode] + SETTINGS_ENTRY_OFFSET_X
-            cas.run_adb(["shell", f"input tap {sx} {SETTINGS_ENTRY_Y}"], device=device)
+            run_adb(["shell", f"input tap {sx} {SETTINGS_ENTRY_Y}"], device=device)
             time.sleep(1.5)
 
     # 收键盘：仅在键盘确实弹出时发 BACK，否则 BACK 会退出目标页面
     if group.dismiss_keyboard:
         for _ in range(4):
-            if cas.is_keyboard_shown(device):
-                cas.run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device)
+            if is_keyboard_shown(device):
+                run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device)
                 time.sleep(1.0)
             else:
                 break
 
     # 搜索页验证：确认 SearchAppActivity 确实在前台（防止 BACK 误退）
-    if group.category == "search" and not cas.wait_for_activity_foreground(device, "SearchAppActivity", timeout=6.0):
+    if group.category == "search" and not wait_for_activity_foreground(device, "SearchAppActivity", timeout=6.0):
         print("WARN: SearchAppActivity 不在前台 ", end="", flush=True)
 
 
@@ -387,12 +600,12 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
     suppressed_default_ime: Optional[str] = None
     try:
         # 1. 清数据 + 设置场景（清 logcat，档位验证只看本周期产生的日志）
-        cas.clear_app(device)
-        cas.set_mock_scenario(device, group.scenario)
-        cas.run_adb(["shell", "logcat", "-c"], device=device, check=False)
+        clear_app(device)
+        set_mock_scenario(device, group.scenario)
+        run_adb(["shell", "logcat", "-c"], device=device, check=False)
 
         if group.dismiss_keyboard:
-            suppressed_imes, suppressed_default_ime = cas.suppress_soft_keyboard(device)
+            suppressed_imes, suppressed_default_ime = suppress_soft_keyboard(device)
 
         # 2. 进入分屏（一次）
         if not enter_split(device, task_index=f"{group.tasks[0].index}-{group.tasks[-1].index}",
@@ -417,11 +630,11 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
                     # 回到干净首页再拖：搜索页内容会吞掉拖拽手势，
                     # 且对已运行的搜索页重复 am start 会被重置回热门推荐
                     for _ in range(3):
-                        if not cas.is_keyboard_shown(device):
+                        if not is_keyboard_shown(device):
                             break
-                        cas.run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
+                        run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
                         time.sleep(1.0)
-                    cas.run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
+                    run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
                     time.sleep(1.2)
                 if not drag_to_mode(device, cur, mode):
                     print(f"[{task.index}] {task.description} ... FAIL（未进入 {mode}）")
@@ -435,12 +648,12 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
                 time.sleep(1.8)  # 拖拽后布局重排
             if group.nav_per_mode:
                 navigate_to_page(device, group, mode)
-                cas.wait_for_idle(group.wait_seconds)
+                wait_for_idle(group.wait_seconds)
             print(f"[{task.index}] {task.description} ...", end=" ", flush=True)
             local_path = output_dir / task.category / task.filename
             remote_path = f"{REMOTE_SCREENSHOT_DIR}/{task.index}.png"
-            cas.capture_screen(device, remote_path)
-            cas.pull_screenshot(device, remote_path, local_path)
+            capture_screen(device, remote_path)
+            pull_screenshot(device, remote_path, local_path)
             print("OK")
             results[task.index] = True
         return _tally(group, results)
@@ -451,7 +664,7 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
         return _tally(group, results)
     finally:
         if suppressed_imes:
-            cas.restore_soft_keyboard(device, suppressed_imes, suppressed_default_ime)
+            restore_soft_keyboard(device, suppressed_imes, suppressed_default_ime)
 
 
 def _tally(group: PageGroup, results: Dict[str, bool]) -> Tuple[int, int]:
@@ -460,35 +673,42 @@ def _tally(group: PageGroup, results: Dict[str, bool]) -> Tuple[int, int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="AppStoreApp 分屏截图工具")
-    parser.add_argument("--output", "-o", default=None, help="输出根目录")
-    parser.add_argument("--variant", "-V", default=None, help="覆盖模式")
+    parser = argparse.ArgumentParser(description="AppStoreApp 分屏截图工具（独立脚本，模式配置见顶部 CURRENT_VARIANT）")
+    parser.add_argument("--output", "-o", default=None, help="输出根目录（实际写入 <根目录>/<variant>/；默认 screenshots/<variant>_split）")
+    parser.add_argument("--variant", "-V", default=None,
+                        help=f"本次临时覆盖模式；默认取脚本顶部 CURRENT_VARIANT={CURRENT_VARIANT}")
     parser.add_argument("--device", "-d", default=None, help="adb 设备 serial")
     parser.add_argument("--only", default=None, help="仅执行指定序号")
     parser.add_argument("--category", default=None, help="仅执行指定分类")
-    parser.add_argument("--list-variants", action="store_true", help="列出模式")
+    parser.add_argument("--list-variants", action="store_true", help="列出全部分屏模式、说明及当前生效项后退出")
     args = parser.parse_args()
 
-    variant = (args.variant or "").strip() or cas.CURRENT_VARIANT
+    variant = (args.variant or "").strip() or CURRENT_VARIANT
 
     if args.list_variants:
-        print(f"当前: {variant}")
-        print("分屏截图使用 capture_appstore_screenshots.py 的 VARIANTS 配置")
+        print(f"当前生效: {variant}\n")
+        print(f"{'模式':<22}说明\t实机图目录\tUI图目录（一一对应）")
+        for name, entry in SPLIT_VARIANTS.items():
+            ref = get_mode_ref_dir(name) or "-"
+            marker = "   <-- 当前生效" if name == variant else ""
+            print(f"{name:<22}{entry.get('desc', '')}\tscreenshots/{name}_split\t{ref}{marker}")
+        if variant not in SPLIT_VARIANTS:
+            print(f"{variant:<22}(自定义)\tscreenshots/{variant}_split\t{get_mode_ref_dir(variant) or '-'}")
         return
 
-    device = cas.ensure_device_connected(args.device)
+    if variant not in SPLIT_VARIANTS:
+        print(f"提示: 模式 {variant} 未登记在脚本顶部 SPLIT_VARIANTS 中，将使用默认目录 screenshots/{variant}_split/。")
+
+    device = ensure_device_connected(args.device)
     print(f"设备: {device}")
     print(f"变体: {variant}")
 
-    output_dir = cas.resolve_output_dir(args.output, variant)
-    if args.output is None:
-        # 分屏产物与全屏截图分目录存放，避免同序号文件互相覆盖、干扰 compare_report 配对
-        output_dir = output_dir.parent / (output_dir.name + "_split")
+    output_dir = resolve_output_dir(args.output, variant)
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"输出: {output_dir}")
 
     # 远端截图目录不存在时 screencap 会失败，先建目录
-    cas.run_adb(["shell", "mkdir", "-p", REMOTE_SCREENSHOT_DIR], device=device, check=False)
+    run_adb(["shell", "mkdir", "-p", REMOTE_SCREENSHOT_DIR], device=device, check=False)
 
     groups = build_groups()
     attach_tasks(groups)

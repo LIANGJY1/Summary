@@ -47,7 +47,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
 # 每个模式独立输出子目录，互不覆盖；目录命名约定 <语言>_<昼夜>_<形态>，
 # 未登记在 VARIANTS 的自定义名称同样可用（自动落到 screenshots/<名称>/ 并自动建目录）。
-CURRENT_VARIANT = "zh_dark_split"
+CURRENT_VARIANT = "en_dark_fullscreen"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_<形态> 约定自动映射到其下子目录，
 # 实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；ref_dir 字段仅作手动覆盖用。
 UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"
