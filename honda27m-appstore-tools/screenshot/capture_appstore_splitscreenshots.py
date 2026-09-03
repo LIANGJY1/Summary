@@ -5,7 +5,8 @@ AppStoreApp 分屏形态截图工具（独立脚本）。
 不依赖全屏脚本 capture_appstore_screenshots.py：包名/路径常量、ADB 基础设施、
 模式配置均在本文件内自带，改动本文件不会影响全屏脚本，反之亦然。
 分屏编排：按页面分组，一个周期内清数据 → 进一次分屏 → 导航到目标页 →
-依次拖拽切换档位并截图（不再每张图都重进分屏）。
+依次拖拽切换档位并截图（不再每张图都重进分屏），收尾点分屏图标平滑退出
+（不依赖强杀让分屏壳塌掉，避免页面黑屏，下一周期从干净桌面进场）。
 
 用法（命令固定不变，只改脚本顶部配置区）：
     1. 编辑「一键模式配置区（分屏）」的 CURRENT_VARIANT，选目标模式；
@@ -42,7 +43,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
 # 分屏模式独立维护（与全屏脚本 VARIANTS 无关）；产物固定写入 screenshots/<模式>_split/，
 # 未登记在 SPLIT_VARIANTS 的自定义名称同样可用（自动落同名目录并自动建目录）。
-CURRENT_VARIANT = "en_dark_split"
+CURRENT_VARIANT = "zh_dark_split"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_split 约定自动映射到其下
 # 「分屏<cn|en>_<D|L>」子目录，实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；
 # ref_dir 字段仅作手动覆盖用。compare_split_report.py 按同一规则取 UI图。
@@ -93,7 +94,7 @@ CATEGORIES = {
 #   013-016 我的应用列表-全部更新（2.1.2）<mine>
 #   017-020 设置页（2.2.1）<mine>
 #   021-024 应用详情-后装-可更新（3.1.1）<detail>
-CURRENT_TASKS = "all"
+CURRENT_TASKS = "home"
 
 
 def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
@@ -377,13 +378,14 @@ class PageGroup:
     scenario: Optional[str] = None
     wait_seconds: float = 2.0
     dismiss_keyboard: bool = False
-    # am start 类页面（弹窗/搜索/详情）每档截图前重新导航，但策略不同：
-    # - 弹窗/详情（nav_clear_top）：helper 是 standard 启动模式，重复 am start
-    #   会叠加实例和弹窗，BACK 又会让窗格失去焦点（拖拽全废），必须用
-    #   --activity-clear-top 重建单实例（实测单弹窗、焦点保持、拖拽正常）
+    # am start 类页面（搜索/详情）每档截图前重新导航：
+    # - 详情（nav_clear_top）：helper 是 standard 启动模式，重复 am start
+    #   会叠加实例和页面，BACK 又会让窗格失去焦点（拖拽全废），必须用
+    #   --activity-clear-top 重建单实例（实测单实例、焦点保持、拖拽正常）
     # - 搜索（dismiss_before_drag）：先 BACK 关掉搜索页回首页再拖——搜索页
     #   内容会吞掉拖拽手势，且对已运行的搜索页重复 am start 会被重置回热门推荐
-    # 坐标导航页（首页/我的/设置）导航一次后靠拖拽保持页面
+    # 其余页面（首页/我的/设置/弹窗）只导航一次：弹窗 Activity 随档位切换的
+    # 尺寸变化自动重建、弹窗重新弹出，切换分屏时无需任何补操作
     nav_per_mode: bool = False
     nav_clear_top: bool = False
     dismiss_before_drag: bool = False
@@ -394,12 +396,13 @@ def build_groups() -> List[PageGroup]:
     """构造6个页面周期，共24个分屏截图任务（6页面×4档位）。"""
     return [
         PageGroup("home", "1.1.2 应用商店首页", wait_seconds=3.0),
+        # 弹窗只触发一次：档位切换时 Activity 随分屏尺寸重建，弹窗自动重新弹出
         PageGroup("dialog", "1.2.2 预装组合包更新确认", nav_steps=[
             f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
             f"--ei appType 3 -e appName '应用组合包' -e apkSize '320MB' "
             f"-e preAppName '高德地图,QQ音乐' -e preServiceName '语音服务' "
             f"-n {ACTIVITY_DEBUG_HELPER}",
-        ], wait_seconds=1.5, nav_per_mode=True, nav_clear_top=True),
+        ], wait_seconds=1.5),
         PageGroup("search", "1.3.1 应用搜索", nav_steps=[
             f"am start -n {ACTIVITY_SEARCH} -e caller screenshot",
         ], scenario="search_default", nav_per_mode=True,
@@ -511,12 +514,12 @@ def filter_tasks(tasks: List[SplitScreenshotTask], categories: Optional[set], in
     ]
 
 
-def wait_desktop_settled(device: str, timeout: float = 8.0) -> None:
+def wait_desktop_settled(device: str, timeout: float = 8.0) -> bool:
     """等待分屏壳收起、桌面回到前台（以 topResumedActivity 指向 launcher 为准）。
 
-    pm clear 强杀商店后，分屏壳收起有延迟；桌面未就绪时分屏图标点击会被吞
-    （实测停靠本身只需约 3 秒，点击被吞才是入口失败的主因），固定 sleep 等
-    不准这个收起过程，必须轮询确认。
+    点分屏图标退出（或强杀兜底）后，壳的收起仍有延迟；桌面未就绪时分屏图标
+    点击会被吞（实测停靠本身只需约 3 秒，点击被吞才是入口失败的主因），
+    固定 sleep 等不准这个过程，必须轮询确认。返回超时前桌面是否就绪。
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -525,8 +528,9 @@ def wait_desktop_settled(device: str, timeout: float = 8.0) -> None:
             device=device, check=False,
         )
         if "launcher" in (result.stdout or "").lower():
-            return
+            return True
         time.sleep(0.5)
+    return False
 
 
 def wait_split_picker(device: str, timeout: float = 5.0) -> bool:
@@ -549,20 +553,39 @@ def wait_split_picker(device: str, timeout: float = 5.0) -> bool:
     return False
 
 
+def exit_split(device: str) -> bool:
+    """点分屏图标平滑退出分屏，等桌面回到前台后返回是否确认退出。
+
+    分屏态下再点一次分屏图标即退出，由系统平滑收起分屏壳；强杀进程让壳
+    塌掉会出现页面黑屏，故每个周期收尾都走本函数（含最后一个周期，运行
+    结束设备停留在干净桌面）。仅在确认停靠成功后调用。退出同样以
+    topResumedActivity 回到 launcher 确认，超时未退则 HOME 兜底——即便
+    没退干净，下一周期 clear_app + enter_split 的 HOME/等待流程也能自愈。
+    """
+    run_adb(["shell", SPLIT_ICON_TAP], device=device, check=False)
+    if wait_desktop_settled(device, timeout=8.0):
+        return True
+    print("(平滑退出超时，HOME 兜底) ", end="", flush=True)
+    run_adb(["shell", "input", "keyevent", "KEYCODE_HOME"], device=device, check=False)
+    wait_desktop_settled(device, timeout=4.0)
+    return False
+
+
 def enter_split(device: str, task_index: str = "", output_dir: Optional[Path] = None) -> bool:
     """从桌面进入分屏：点分屏图标 → 右格选商店（左格保持应用网格，不打开任何应用）。
 
-    入口失败的根因是"点击被吞"，两处各有验证闭环：
-    1. pm clear 强杀商店后 launcher 恢复可点击有延迟（topResumedActivity
-       先变、触摸后灵），点分屏图标前先等桌面就绪，并以 SurfaceFlinger
-       图层确认 picker 真正打开，未打开则补点分屏图标；
+    上一周期收尾已点分屏图标平滑退出（见 exit_split），进场时桌面状态干净，
+    整流程重试由 3 次减为 2 次。入口失败的根因仍是"点击被吞"，验证闭环保留：
+    1. launcher 恢复可点击有延迟（topResumedActivity 先变、触摸后灵），
+       点分屏图标前先等桌面就绪，并以 SurfaceFlinger 图层确认 picker
+       真正打开，未打开则补点分屏图标；
     2. 商店冷启动停靠约 3 秒，点击被吞时以 pidof 判断并补点商店图标
        （见 wait_for_mode）。
-    BACK 只在第 2/3 轮整流程重试时作为升级恢复手段（桌面小组件页上按 BACK
-    会进入组件编辑/选中态，HOME 退不出）。整流程最多重试 3 次，仍失败则
-    截图留证。返回是否停靠成功。
+    BACK 只在第 2 轮整流程重试时作为升级恢复手段（桌面小组件页上按 BACK
+    会进入组件编辑/选中态，HOME 退不出）。两次仍失败则截图留证。返回是否
+    停靠成功。
     """
-    for attempt in range(3):
+    for attempt in range(2):
         if attempt > 0:
             run_adb(["shell", "input", "keyevent", "KEYCODE_BACK"], device=device, check=False)
             time.sleep(0.8)
@@ -571,15 +594,15 @@ def enter_split(device: str, task_index: str = "", output_dir: Optional[Path] = 
         run_adb(["shell", "logcat", "-c"], device=device, check=False)
         # 点分屏图标，picker 确认打开后右格才是可点的商店图标
         picker_open = False
-        for _ in range(3):
+        for _ in range(2):
             run_adb(["shell", SPLIT_ICON_TAP], device=device)
             if wait_split_picker(device, timeout=5.0):
                 picker_open = True
                 break
         if not picker_open:
             print("(分屏选择器未打开) ", end="", flush=True)
-            if attempt < 2:
-                print(f"(入口未停靠，整流程重试 {attempt + 1}/3) ", end="", flush=True)
+            if attempt < 1:
+                print(f"(入口未停靠，整流程重试 {attempt + 1}/2) ", end="", flush=True)
             continue
         time.sleep(1.0)  # picker 刚打开，右格网格渲染缓冲
         # 右格选商店，点击被吞时自动补点
@@ -587,9 +610,9 @@ def enter_split(device: str, task_index: str = "", output_dir: Optional[Path] = 
                          retap_cmd=STORE_ICON_TAP, retap_interval=2.0):
             time.sleep(1.0)  # 停靠后留出布局稳定时间
             return True
-        if attempt < 2:
-            print(f"(入口未停靠，整流程重试 {attempt + 1}/3) ", end="", flush=True)
-    # 三次都失败，截图留证
+        if attempt < 1:
+            print(f"(入口未停靠，整流程重试 {attempt + 1}/2) ", end="", flush=True)
+    # 两次都失败，截图留证
     if output_dir is not None:
         dbg = output_dir / f"_debug_enter_split_{task_index}.png"
         capture_screen(device, "/sdcard/enter_split_fail.png")
@@ -664,7 +687,7 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
     """在分屏内导航到目标页面（mode 决定坐标导航用的档位几何）。"""
     for step in group.nav_steps:
         if group.nav_clear_top and step.startswith("am start"):
-            # 重建 helper 单实例：既消掉上一档的弹窗/页面（不叠加），
+            # 重建 helper 单实例：既消掉上一档的页面（不叠加），
             # 又避免 BACK 导致窗格失去焦点
             step = step.replace("am start", "am start --activity-clear-top", 1)
         run_adb(["shell", step], device=device)
@@ -697,10 +720,12 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
 
 
 def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int, int]:
-    """执行一个页面周期：清数据 → 进一次分屏 → 导航 → 逐档拖拽并截图。
+    """执行一个页面周期：清数据 → 进一次分屏 → 导航 → 逐档拖拽并截图 → 平滑退出。
 
     组内档位在同一会话内连续截取，页面状态天然一致；拖拽失败则放弃本周期
-    剩余档位（下一个周期会重新清数据进场，自愈）。
+    剩余档位（下一个周期会重新清数据进场，自愈）。周期收尾点分屏图标退出
+    分屏，不再依赖下一周期强杀让分屏壳塌掉（黑屏来源），运行结束设备也
+    停留在干净桌面。
     """
     print(f"\n=== 周期[{group.base_name}] 进一次分屏，截 {len(group.tasks)} 个档位 ===", flush=True)
     tasks_by_mode = {t.mode: t for t in group.tasks}
@@ -708,6 +733,7 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
     results: Dict[str, bool] = {}
     suppressed_imes: List[str] = []
     suppressed_default_ime: Optional[str] = None
+    docked = False
     try:
         # 1. 清数据 + 设置场景（清 logcat，档位验证只看本周期产生的日志）
         clear_app(device)
@@ -724,11 +750,16 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
                 print(f"[{t.index}] {t.description} ... FAIL（商店未停靠）")
                 results[t.index] = False
             return _tally(group, results)
+        docked = True
 
-        # 3. 坐标导航页（首页/我的/设置）在初始 1/2 档导航一次；
-        #    am start 类页面（nav_per_mode）每档截图前单独导航
+        # 3. 非 nav_per_mode 页面在初始 1/2 档导航一次（弹窗只触发这一次，
+        #    档位切换时随分屏重建自动重新弹出）；详情/搜索每档截图前单独导航。
+        #    导航后必须等 wait_seconds 再截：首页无 nav_steps 也要等——周期开头
+        #    clear_app 强杀冷启动，停靠确认（width 日志）时首页仍在加载，
+        #    不等的话首张（停靠档 1/2）会截到"加载中"
         if not group.nav_per_mode:
             navigate_to_page(device, group, MODE_21)
+            wait_for_idle(group.wait_seconds)
 
         # 4. 逐档拖拽 + 截图
         cur = MODE_21
@@ -773,6 +804,10 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
             results.setdefault(t.index, False)
         return _tally(group, results)
     finally:
+        # 周期收尾：点分屏图标平滑退出分屏（强杀塌壳会黑屏，且让下一周期
+        # 干净进场、重试更少）；未停靠成功则跳过，下一周期 HOME 流程自愈
+        if docked:
+            exit_split(device)
         if suppressed_imes:
             restore_soft_keyboard(device, suppressed_imes, suppressed_default_ime)
 

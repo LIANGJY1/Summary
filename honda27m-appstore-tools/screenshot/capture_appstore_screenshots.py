@@ -51,7 +51,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
 # 每个模式独立输出子目录，互不覆盖；目录命名约定 <语言>_<昼夜>_<形态>，
 # 未登记在 VARIANTS 的自定义名称同样可用（自动落到 screenshots/<名称>/ 并自动建目录）。
-CURRENT_VARIANT = "en_dark_fullscreen"
+CURRENT_VARIANT = "en_day_fullscreen"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_<形态> 约定自动映射到其下子目录，
 # 实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；ref_dir 字段仅作手动覆盖用。
 UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"
@@ -141,7 +141,8 @@ CATEGORIES = {
 # 本次执行哪些截图任务；运行时按分类打印任务清单并标记本次执行项，再开始截图。
 # 写法（逗号分隔、可混用）：all=全部；分类号（清单中的 [n]，如 2）；
 # 分类名（如 search）；任务序号（如 013，优先于分类号解释，"013" 是任务、"1" 是分类号）。
-CURRENT_TASKS = "dialog"
+CURRENT_TASKS = "all"
+# CURRENT_TASKS = "023,"
 #
 # 任务速查（38 项全量；◆=已启用，○=已注释归档——在 build_tasks() 中取消注释即可恢复；
 # 括号内为对应 UI设计稿编号。本表为静态参考，运行时清单始终反映当前实际启用项）：
@@ -267,7 +268,6 @@ def burst_capture_pick(device: str, seconds: float = 8.0,
     import shutil
     import tempfile
     from PIL import Image
-    import numpy as np
 
     remote_dir = "/sdcard/burst_shots"
     run_adb(["shell", f"rm -rf {remote_dir}; mkdir -p {remote_dir}"], device=device, check=False)
@@ -283,8 +283,9 @@ def burst_capture_pick(device: str, seconds: float = 8.0,
     fallback = None
     for f in frames:
         try:
-            arr = np.array(Image.open(f).convert("L").crop(content_box))
-            bright = int((arr > 90).sum())
+            # histogram() 返回 256 个灰度级的像素计数，[91:] 即亮度 > 90 的像素数
+            hist = Image.open(f).convert("L").crop(content_box).histogram()
+            bright = sum(hist[91:])
         except Exception:
             continue
         if lo <= bright <= hi:
