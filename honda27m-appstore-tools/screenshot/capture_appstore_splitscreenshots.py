@@ -28,8 +28,11 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+from PIL import Image
 
 PACKAGE_NAME = "com.hynex.appstoreapp"
 SERVICE_PACKAGE = "com.hynex.appstoreservice"
@@ -43,7 +46,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
 # 分屏模式独立维护（与全屏脚本 VARIANTS 无关）；产物固定写入 screenshots/<模式>_split/，
 # 未登记在 SPLIT_VARIANTS 的自定义名称同样可用（自动落同名目录并自动建目录）。
-CURRENT_VARIANT = "zh_dark_split"
+CURRENT_VARIANT = "en_dark_split"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_split 约定自动映射到其下
 # 「分屏<cn|en>_<D|L>」子目录，实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；
 # ref_dir 字段仅作手动覆盖用。compare_split_report.py 按同一规则取 UI图。
@@ -69,12 +72,14 @@ SPLIT_VARIANTS = {
 
 # ========================= 任务分类配置区（分屏） =========================
 # 分屏截图任务分类元数据：key 对应 SplitScreenshotTask.category 字段（即页面周期所属分类），
-# value 用于清单展示与选择。与全屏脚本 CATEGORIES 保持同一套 key。
+# value 用于清单展示与选择。比全屏脚本 CATEGORIES 多一个 setting：
+# 分屏把「我的应用列表」与「设置页」拆成两类（全屏脚本两者均归 mine）。
 CATEGORIES = {
     "home": "首页 / Recommendation",
     "dialog": "弹窗 / Dialog",
     "search": "搜索 / Search",
     "mine": "我的应用 / Mine",
+    "setting": "设置 / Settings",
     "detail": "应用详情 / AppDetail",
     "restriction": "行驶限制 / Restriction",
 }
@@ -92,9 +97,10 @@ CATEGORIES = {
 #   005-008 预装组合包更新确认（1.2.2）<dialog>
 #   009-012 应用搜索（1.3.1）<search>
 #   013-016 我的应用列表-全部更新（2.1.2）<mine>
-#   017-020 设置页（2.2.1）<mine>
+#   017-020 设置页（2.2.1）<setting>
 #   021-024 应用详情-后装-可更新（3.1.1）<detail>
-CURRENT_TASKS = "home"
+# CURRENT_TASKS = "home,dialog,search,mine,setting,detail"
+CURRENT_TASKS = "all"
 
 
 def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
@@ -256,6 +262,45 @@ def pull_screenshot(device: str, remote_path: str, local_path: Path) -> None:
     run_adb(["pull", remote_path, str(local_path)], device=device)
 
 
+def screencap_image(device: str) -> Image.Image:
+    """exec-out screencap -p 取回 PNG 字节并解码为 PIL Image（不落盘）。"""
+    result = subprocess.run(["adb", "-s", device, "exec-out", "screencap", "-p"],
+                            capture_output=True, timeout=30)
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(f"screencap 失败: {(result.stderr or b'')[:200]!r}")
+    return Image.open(BytesIO(result.stdout)).convert("RGB")
+
+
+def is_sidebar_entry_active(img: Image.Image, mode: str, entry_y: int) -> bool:
+    """采样「我的」页侧栏入口行区域均值，判断是否处于紫色选中高亮态。
+
+    实测（zh_dark_split 1/2 档）：选中高亮块 B-R=37 / B-G=45，未选中行
+    B-R=12，首页内容区为暖色（B 通道最低）；阈值 25 居中可靠区分。
+    """
+    left = MODE_PANE_LEFT[mode]
+    region = img.crop((left + 40, entry_y - 40, left + 130, entry_y + 40))
+    pixels = list(region.getdata())
+    n = len(pixels)
+    mean = [sum(p[i] for p in pixels) / n for i in range(3)]
+    return (mean[2] - mean[0]) >= 25 and (mean[2] - mean[1]) >= 25
+
+
+def tap_until_active(device: str, mode: str, tap_x: int, tap_y: int,
+                     entry_y: int, attempts: int = 4) -> bool:
+    """点击坐标并以侧栏高亮像素校验选中态，未命中自动重试。
+
+    「我的」tab 旧坐标偏出触控区、且页面加载中的点击会被静默吞掉，
+    盲点无闭环不可靠；重试间隔 2s 顺带覆盖冷启动加载慢的时序。
+    """
+    for attempt in range(attempts):
+        run_adb(["shell", "input", "tap", str(tap_x), str(tap_y)], device=device)
+        time.sleep(2.0)
+        if is_sidebar_entry_active(screencap_image(device), mode, entry_y):
+            return True
+        print(f"(侧栏高亮未确认，重试 {attempt + 1}/{attempts}) ", end="", flush=True)
+    return False
+
+
 def clear_app(device: str) -> None:
     """强制停止 App 和 Service，并清空 Service 数据，避免旧 DB 版本号影响更新状态。"""
     run_adb(["shell", f"am force-stop {PACKAGE_NAME}"], device=device, check=False)
@@ -312,18 +357,25 @@ MODE_PANE_LEFT = {
     MODE_31: 1293,
 }
 
-# 「我的应用」页侧栏「设置」入口：跟随窗格左缘（左缘+93, y=470），实测校准。
-# 该页有下载进度动画，uiautomator 等不到 idle 无法 dump，只能用坐标。
+# 「我的应用」页侧栏入口（跟随窗格左缘；2026-09-03 实机截图重校准）：
+# 「应用管理」行中心 y=280（选中高亮块 232-320），「设置」行中心 y=380。
+# 旧值 y=470 落在设置行下方约 90px 的内容区，点击会误触列表卡片
+# （实测截到"组合包详情"页）。该页有下载进度动画，uiautomator 等不到
+# idle 无法 dump，只能用坐标 + 截图像素校验。
 SETTINGS_ENTRY_OFFSET_X = 93
-SETTINGS_ENTRY_Y = 470
+MINE_MGMT_ENTRY_Y = 280
+SETTINGS_ENTRY_Y = 380
 
-# 首页顶栏「我的」tab 坐标（实测校准，各档位窗格几何不同）。
-# uiautomator dump 在本机频繁 idle 超时不可用，导航一律用坐标。
+# 首页顶栏「我的」tab 坐标（2026-09-03 实测重校准，各档位窗格几何不同）。
+# 关键：y 必须落在 tab 文字行（y≈160）。旧值 y≈201 在文字行下方约 40px、
+# 不在 tab 触控区内，点击被静默吞掉（已加载页面上实测也不切换），导致
+# mine 周期全部截成首页。uiautomator dump 在本机频繁 idle 超时不可用，
+# 导航一律用坐标 + 截图像素校验。
 MY_TAB_COORDS = {
-    MODE_FULL: (1153, 203),
-    MODE_32: (1405, 203),
-    MODE_21: (1569, 201),
-    MODE_31: (1680, 205),
+    MODE_FULL: (1149, 161),
+    MODE_32: (1402, 161),
+    MODE_21: (1564, 161),
+    MODE_31: (1725, 161),
 }
 
 # 组内档位执行顺序：停靠即 1/2 档（零拖拽），再依次 2/3 → 全屏 → 1/3，
@@ -395,7 +447,9 @@ class PageGroup:
 def build_groups() -> List[PageGroup]:
     """构造6个页面周期，共24个分屏截图任务（6页面×4档位）。"""
     return [
-        PageGroup("home", "1.1.2 应用商店首页", wait_seconds=3.0),
+        # 冷启动后首页"加载中"实测可持续 4.5s 以上（clear 后停靠 +1s 时
+        # 必然还在加载），3s 不够会截到加载态；实测 +10s 已就绪，取 8s 留余量
+        PageGroup("home", "1.1.2 应用商店首页", wait_seconds=8.0),
         # 弹窗只触发一次：档位切换时 Activity 随分屏尺寸重建，弹窗自动重新弹出
         PageGroup("dialog", "1.2.2 预装组合包更新确认", nav_steps=[
             f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
@@ -409,7 +463,7 @@ def build_groups() -> List[PageGroup]:
            dismiss_before_drag=True),
         PageGroup("mine", "2.1.2 我的应用列表-全部更新",
                   scenario="mine_all_update", wait_seconds=3.0),
-        PageGroup("mine", "2.2.1 设置页", wait_seconds=3.0),
+        PageGroup("setting", "2.2.1 设置页", wait_seconds=3.0),
         PageGroup("detail", "3.1.1 应用详情-后装-可更新", nav_steps=[
             f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DETAIL "
             f"-e packageName com.netease.cloudmusic -e appName 网易云音乐 "
@@ -695,15 +749,17 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
         # （过短会导致 dismiss 键盘的 BACK 把还在启动的页面整个关掉）
         time.sleep(3.0)
 
-    # 设置页和我的应用：顶栏「我的」tab 与侧栏「设置」均用实测坐标
-    if group.category == "mine":
+    # 设置页和我的应用：顶栏「我的」tab 与侧栏「设置」均用实测坐标，
+    # 点击后以侧栏选中高亮像素校验，未命中重试（tab 坐标偏出触控区或
+    # 页面加载中点击被吞时，盲点会静默失败、整组截成首页）
+    if group.category in ("mine", "setting"):
         mx, my = MY_TAB_COORDS[mode]
-        run_adb(["shell", f"input tap {mx} {my}"], device=device)
-        time.sleep(1.5)
+        if not tap_until_active(device, mode, mx, my, MINE_MGMT_ENTRY_Y):
+            print("WARN: 我的应用页未确认 ", end="", flush=True)
         if "设置" in group.base_name:
             sx = MODE_PANE_LEFT[mode] + SETTINGS_ENTRY_OFFSET_X
-            run_adb(["shell", f"input tap {sx} {SETTINGS_ENTRY_Y}"], device=device)
-            time.sleep(1.5)
+            if not tap_until_active(device, mode, sx, SETTINGS_ENTRY_Y, SETTINGS_ENTRY_Y):
+                print("WARN: 设置页未确认 ", end="", flush=True)
 
     # 收键盘：仅在键盘确实弹出时发 BACK，否则 BACK 会退出目标页面
     if group.dismiss_keyboard:

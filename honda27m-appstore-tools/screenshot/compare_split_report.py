@@ -83,14 +83,21 @@ STATUS_LABEL = {
 
 
 def scan_indexed(directory: Path) -> dict:
-    """返回 {序号: 文件路径}，取每个序号最先匹配的一个。"""
+    """返回 {序号: 文件路径}；重复序号取最近修改的图片。
+
+    截图分类调整后旧目录可能仍保留同序号文件，例如 mine/017 与
+    setting/017。报告应采用最近一次生成的截图，而不是目录字典序靠前的旧图。
+    """
     found = {}
     if not directory.exists():
         return found
     for p in sorted(directory.rglob("*.png")):
         m = INDEX_RE.match(p.name)
         if m:
-            found.setdefault(m.group(1), p)
+            index = m.group(1)
+            current = found.get(index)
+            if current is None or p.stat().st_mtime_ns > current.stat().st_mtime_ns:
+                found[index] = p
     return found
 
 
@@ -98,8 +105,9 @@ def copy_asset(src: Path, assets_dir: Path, new_name: str) -> str:
     dest = assets_dir / new_name
     if not dest.parent.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
-    if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
-        shutil.copy2(src, dest)
+    # 报告生成时间可能晚于后来重新拉取但保留设备时间戳的截图，不能用 mtime
+    # 判断内容是否需要刷新。图片数量很少，每次同步可确保报告资产就是当前源图。
+    shutil.copy2(src, dest)
     return dest.name
 
 
