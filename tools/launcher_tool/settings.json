@@ -57,6 +57,10 @@
     {
       "name": "New Prompt 2",
       "content": ""
+    },
+    {
+      "name": "XML动态适配",
+      "content": "【分屏 XML 收编：基准布局 + 动态代码适配】\n\n目标：将 的多份分屏副本（layout-w627dp / layout-w630dp / layout-w951dp / layout-w1275dp 等）收编为只保留全屏基准，其余分屏差异全部通过代码动态适配实现，渲染效果与收编前完全一致。\n\n背景约定（必须遵守）：\n1. 全屏基准 = layout-w1920dp；layout/ 是基准的全量副本。两者都必须保留，且内容必须逐字节一致（md5 验证）。\n2. 分屏档位由 SplitScreenHelper.getScreenType() 定义：0=全屏(1920)、1=SPLIT_32(1275)、2=SPLIT_21(951)、3=SPLIT_31(627)、4=SPLIT_FULL(1782 满屏分屏)。\n3. 系统不会在代码里按窗口宽度自动划分分支，每一个动态适配点必须显式指明档位归属：\n   - 窄分屏判断统一用 SplitScreenHelper.isNarrowSplitScreen()（仅 type 1/2/3）；\n   - type 4 满屏分屏的行为与全屏一致（本页历史形态差异除外，须在代码处注明）；\n   - 禁止用 isAnySplitScreen() 把 type 4 隐式并入窄分屏逻辑；刻意包含 type 4 的判断点必须注明\"不可收窄\"及原因。\n4. 用户可能并行修改文件：每一步动手前先重新读取文件当前状态，不依赖历史读取结果。\n\n执行流程：\n1. 现状审计：md5 对比基准与各分屏副本。逐字节相同的副本直接删除；有差异的做空白/注释归一化后的语义 diff（按 android:id 对齐的属性级对比），把差异分类为：纯数值差异（padding/margin/宽度/行数）、控件类型差异、结构差异（节点增删/约束重排）。\n2. 控件类型冲突最先处理：同一 android:id 在不同目录使用了不同控件类时必须统一为一个（view binding 对同一 id 只生成一个字段类型，混用会导致字段降级为 View、编译失败或运行时 ClassCastException）。若该视图仅分屏形态显示，基准 XML 可直接采用分屏版控件和样式，全屏零影响。\n3. 差异逐点收归代码：\n   - 已有代码覆盖的差异（如宽度已在档位分支中设置）：直接删副本即可；\n   - 数值差异：全屏值保留在基准 XML，分屏值在对应 Activity/Fragment 的档位分支中动态设置，各分支互斥且恢复确定值；\n   - AAR 组件未暴露 setter 的 XML 属性（如 HCRecyclerView 的 app:visibleScrollBar）：新建受控的 *Compat 反射工具类（失败降级为无害跳过），禁止在业务代码散落反射；\n   - 结构级差异（约束重排/节点增删）：不做代码重排，保留唯一一份分屏变体（放在最小的 w627dp 目录），其余删除，利用资源回落覆盖更宽的分屏档位。\n4. 删除分屏副本：注意 git 暂存区残留（git status 出现 AM/AD 状态时先 git restore --staged 再删工作区文件），删除前说明资源回落落点并确认内容一致。\n5. 同步基准：layout/ 与 layout-w1920dp/ 重新全量复制并 md5 验证一致。\n6. 注释归属：每个动态判断点注明覆盖的 type 枚举（0/1/2/3/4）与行为来源（原分屏 XML / 与全屏一致 / 基准形态），保证后人可审计、不会误合并分支。\n7. 编译验证：JDK 17（JAVA_HOME=/tmp/jdk17）执行 ./gradlew :AppStoreApp:compileDebugJavaWithJavac；编译后确认重新生成的 ViewBinding 字段类型已回归目标控件类型（不再降级为 View）；最后提醒真机回归各分屏档位与全屏。\n\n输出要求：先给出\"档位归属审计表\"（每个适配点 × type 0/1/2/3/4 的行为对照），再实施修改，最后报告改动清单、回落分析和编译结果。"
     }
   ],
   "_schedules": [
