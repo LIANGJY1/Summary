@@ -1,0 +1,29 @@
+# 知识路由（ROUTING）
+
+> 沉淀一条知识前先查此表定**候选大类**；这条知识够不够格进它，以该大类头部「边界」与「规则」为准。
+> 维护者：执行沉淀的 skill（session-to-knowledge / source-annotator 等）——新立大类后必须回填本表（§规则）。
+
+## 主判据链
+
+1. 讲"怎么做"——与设计/构建 SDK 直接相关的模式与可执行做法 → [sdk-design.md](./sdk-design.md)
+2. 讲"怎么想"——核心矛盾、权衡、可迁移的思维方式 → [design-principles.md](./design-principles.md)
+3. 讲"怎么标注"——注释模式、结构组织、表达技巧等注解技术 → [annotation-techniques.md](./annotation-techniques.md)
+4. Android UI 域（组件运行期修改 / 资源变体 / 约束适配）"改不动、改不对"的坑与解法 → [android-ui.md](./android-ui.md)
+5. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
+
+## 路由表
+
+| 大类 | 维护者 | 一句话判据 | 主题相邻时去哪 |
+|---|---|---|---|
+| [sdk-design.md](./sdk-design.md) | source-annotator | SDK/组件设计模式与可执行做法（含代码实例） | 重在权衡与思维方式 → design-principles.md |
+| [design-principles.md](./design-principles.md) | source-annotator | 核心矛盾、权衡、可迁移的思考方式 | 重在做法与实例 → sdk-design.md |
+| [annotation-techniques.md](./annotation-techniques.md) | source-annotator | 怎么写好源码注释的技术与实例 | 具体库的标注成果 → 该库沉淀文档（不进知识库） |
+| [android-ui.md](./android-ui.md) | session-to-knowledge | Android UI 域踩坑与解法（跨同类项目仍成立） | 跨库可迁移的设计模式 → sdk-design.md |
+
+## 规则
+
+- 本表只答"候选是哪个大类"；**准入**（复习者测试、收/不收细则、条目格式、归并规则）一律以目标大类头部为准。
+- 同一条知识够格进多个大类时各写各的角度、互相不复制（细则见各大类头部「边界」）；只够格一份时只写一份。
+- 粒度相同的判据句子不得在本表与大类头部重复出现；发现重复即漂移，以头部为准修本表。
+- 本表不收：skill 级路由（在各 skill 的 description 里）、条目内容规范（在大类「规则」节）。
+- **回填**：新立大类完成判据之一 = 本表新增一行（大类 | 维护者 | 一句话判据 | 相邻去向）；大类废弃时删行并留一行说明去处。本表保持一屏内，超了先删后加。

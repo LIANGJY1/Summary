@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_KB = Path("/home/liang/Project/MyProject/Summary/project/knowledge-base")
-SKIP_FILES = {"CONTEXT.md", "README.md"}
+SKIP_FILES = {"CONTEXT.md", "README.md", "ROUTING.md"}
 STRUCTURAL = {"边界", "规则", "目录"}
 
 
