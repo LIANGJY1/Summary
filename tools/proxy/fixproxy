@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# fixproxy — 手机热点代理一键检测与同步
+# 场景: 手机开热点+代理(端口 7990),本机连热点;热点网段每次开启会变。
+# 流程: ① 检测网络与各配置通道现状 ② 对过期的通道逐一修复并验证 ③ 汇总结果
+# 用法: 连上热点后运行 `fixproxy`。已开着的程序(zcode/codex/浏览器)是启动时读一次代理,需重启才用上新值。
+#
+# 位置: 本体即本文件 /home/liang/Project/MyProject/Summary/tools/proxy/fixproxy
+#       ~/.local/bin/fixproxy 只是指向本体的软链接(为让 PATH 里能直接敲 fixproxy),
+#       通过软链接编辑等价于编辑本体,但请统一改这里,勿在其他位置另存副本。
+# 配套: 新终端的代理环境变量由 ~/.bashrc 的动态段(__PROXY_GW)负责,本脚本管不了环境变量,
+#       只负责 GNOME/codex/opencode/桌面启动器等静态通道 + 提示当前终端如何 export。
+#
+# 修改历史:
+#   2026-09-06  初版:探测网关:7990,一键同步 GNOME 系统代理 + ~/.codex/config.toml
+#               + chatgpt/trae-cn 桌面启动器,打印当前终端 export 提示
+#   2026-09-06  重构为四段式详细输出:检测网络 → 逐通道检测 → 修复并回读验证 → 汇总;
+#               网络检测含网关/TCP 端口/经代理访问外网三层,失败即中止不乱写配置;
+#               GNOME 通道补 ignore-hosts 的 192.168.0.0/16
+#   2026-09-06  新增 opencode 通道:其配置无 proxy 字段、走环境变量,故扫描
+#               opencode.json/oh-my-openagent.json 防写死旧地址,并检测当前终端
+#               环境变量是否仍指向旧地址(opencode/codex 会继承)
+#   2026-09-06  本体迁至 Project/MyProject/Summary/tools/proxy/,
+#               ~/.local/bin/fixproxy 改为软链接
+set -uo pipefail
+
+PORT=7990
+TEST_URL="https://www.google.com/generate_204"
+CODEX_CONF="$HOME/.codex/config.toml"
+# opencode 没有代理配置字段,走环境变量;扫描其配置文件以防有人往里写死了旧地址
+OPENCODE_CONFS=("$HOME/.config/opencode/opencode.json"
+                "$HOME/.config/opencode/oh-my-openagent.json")
+DESKTOPS=("$HOME/.local/share/applications/chatgpt.desktop"
+          "$HOME/.local/share/applications/trae-cn.desktop")
+CONFIG_FILES=("$CODEX_CONF" "${OPENCODE_CONFS[@]}" "${DESKTOPS[@]}")
+
+# ---------- 输出辅助(输出到非终端时自动去色) ----------
+if [ -t 1 ]; then G=$'\e[32m' R=$'\e[31m' Y=$'\e[33m' B=$'\e[1m' N=$'\e[0m'
+else G='' R='' Y='' B='' N=''; fi
+ok()   { printf '    %b✔%b %s\n' "$G" "$N" "$1"; }
+bad()  { printf '    %b✘%b %s\n' "$R" "$N" "$1"; }
+warn() { printf '    %b⚠%b %s\n' "$Y" "$N" "$1"; }
+item() { printf '  %b●%b %s\n' "$B" "$N" "$1"; }
+sec()  { printf '\n%b── %s ---%b\n' "$B" "$1" "$N"; }
+
+FAIL=0
+ANY_CHANGE=0
+
+# ========== ① 检测网络 ==========
+sec "一、检测网络"
+
+item "默认网关(手机热点 IP)"
+GW=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+if [ -n "$GW" ]; then ok "网关 = $GW"
+else bad "没有默认路由 —— 请先连接手机热点"; exit 1; fi
+
+item "代理端口 $GW:$PORT"
+if timeout 1 bash -c ": </dev/tcp/$GW/$PORT" 2>/dev/null; then
+    ok "TCP 可达 —— 手机代理在线"
+else
+    bad "端口不通 —— 检查手机代理是否开启、是否允许局域网连接"; exit 1
+fi
+
+item "外网连通性(经代理访问 $TEST_URL)"
+M=$(curl -sS -m 8 -x "http://$GW:$PORT" -o /dev/null -w '%{http_code} %{time_total}' "$TEST_URL" 2>/dev/null)
+CODE=${M%% *}; TT=${M#* }
+if [ "$CODE" = "204" ]; then
+    ok "HTTP 204,耗时 ${TT}s —— 代理出口正常"
+else
+    bad "HTTP ${CODE:-000} —— 端口通但出口异常(代理节点可能故障)"; FAIL=1
+fi
+NEW="http://$GW:$PORT"
+
+# ========== ② 检测各配置通道 ==========
+sec "二、检测各配置通道(目标: $NEW)"
+
+# --- GNOME 系统代理: 浏览器等 GUI 应用跟随 ---
+item "GNOME 系统代理"
+GNOME_RES='unavailable'
+if gsettings get org.gnome.system.proxy mode >/dev/null 2>&1; then
+    MODE=$(gsettings get org.gnome.system.proxy mode | tr -d "'")
+    GHOST=$(gsettings get org.gnome.system.proxy.http host | tr -d "'")
+    GPORT=$(gsettings get org.gnome.system.proxy.http port)
+    GNOME_OLD="http://$GHOST:$GPORT"
+    if [ "$MODE" = "manual" ] && [ "$GNOME_OLD" = "$NEW" ]; then
+        ok "已是最新 ($MODE $GNOME_OLD)"; GNOME_RES='ok'
+    else
+        warn "需更新: 当前 ${MODE:-未设置} ${GNOME_OLD:-空}"; GNOME_RES='fix'
+    fi
+else
+    warn "无法访问 gsettings —— 不在图形会话内(SSH?),跳过"
+fi
+
+# --- 静态配置文件: codex / opencode 配置 + 桌面启动器 ---
+declare -A F_RES F_OLD F_NEED F_TOTAL
+for f in "${CONFIG_FILES[@]}"; do
+    item "$(basename "$f")"
+    if [ ! -f "$f" ]; then
+        F_RES[$f]='skip'; F_OLD[$f]='(文件不存在)'
+        warn "文件不存在,跳过"; continue
+    fi
+    total=$(grep -oE "http://[0-9.]+:${PORT}" "$f" 2>/dev/null | wc -l)
+    if [ "$total" -eq 0 ]; then
+        F_RES[$f]='ok'; F_OLD[$f]=''
+        ok "无写死代理(走环境变量)"; continue
+    fi
+    F_TOTAL[$f]=$total
+    F_OLD[$f]=$(grep -oE "http://[0-9.]+:${PORT}" "$f" | sort -u | grep -vF "$NEW" | tr '\n' ' ')
+    need=$(( total - $(grep -oE "http://[0-9.]+:${PORT}" "$f" | grep -oF "$NEW" | wc -l) ))
+    F_NEED[$f]=$need
+    if [ "$need" -eq 0 ]; then
+        F_RES[$f]='ok'
+        ok "已是最新 (${total} 处)"
+    else
+        F_RES[$f]='fix'
+        warn "需更新: ${need}/${total} 处指向旧地址 ${F_OLD[$f]}"
+    fi
+done
+
+# ========== ③ 修复并验证 ==========
+sec "三、修复"
+
+# --- GNOME ---
+item "GNOME 系统代理"
+if [ "${GNOME_RES:-}" = 'fix' ]; then
+    gsettings set org.gnome.system.proxy mode 'manual'
+    gsettings set org.gnome.system.proxy.http host "$GW"
+    gsettings set org.gnome.system.proxy.http port "$PORT"
+    gsettings set org.gnome.system.proxy.https host "$GW"
+    gsettings set org.gnome.system.proxy.https port "$PORT"
+    # 局域网目标不走代理,与 shell 的 NO_PROXY 对齐
+    IGN=$(gsettings get org.gnome.system.proxy ignore-hosts)
+    if [ "$IGN" = "@as []" ]; then
+        gsettings set org.gnome.system.proxy ignore-hosts "['192.168.0.0/16']"
+    elif [[ "$IGN" != *"192.168.0.0/16"* ]]; then
+        gsettings set org.gnome.system.proxy ignore-hosts "${IGN%\]}, '192.168.0.0/16']"
+    fi
+    # 回读验证
+    VH=$(gsettings get org.gnome.system.proxy.http host | tr -d "'")
+    VP=$(gsettings get org.gnome.system.proxy.http port)
+    if [ "$VH" = "$GW" ] && [ "$VP" = "$PORT" ]; then
+        GNOME_RES='updated'; ANY_CHANGE=1
+        ok "已更新: $GNOME_OLD → $NEW"
+    else
+        GNOME_RES='err'; FAIL=1
+        bad "写入后回读不符($VH:$VP),请到「设置→网络→网络代理」手动检查"
+    fi
+elif [ "${GNOME_RES:-}" = 'ok' ]; then
+    ok "无需修改"
+fi
+
+# --- 静态文件 ---
+sync_file() {
+    local f=$1
+    item "$(basename "$f")"
+    case "${F_RES[$f]:-}" in
+        ok)   ok "无需修改"; return 0 ;;
+        skip) warn "已跳过"; return 0 ;;
+    esac
+    sed -i -E "s#http://[0-9.]+:${PORT}#${NEW}#g" "$f"
+    local left
+    left=$(grep -oE "http://[0-9.]+:${PORT}" "$f" | grep -cvF "$NEW")
+    if [ "${left:-0}" -eq 0 ]; then
+        F_RES[$f]='updated'; ANY_CHANGE=1
+        ok "已替换 ${F_NEED[$f]} 处: ${F_OLD[$f]}→ $NEW"
+    else
+        F_RES[$f]='err'; FAIL=1
+        bad "替换后仍有 ${left} 处旧地址,请手动检查"
+    fi
+}
+for f in "${CONFIG_FILES[@]}"; do sync_file "$f"; done
+
+# ========== ④ 汇总 ==========
+sec "四、结果汇总"
+label() { case "$1" in ok) printf '%b✔ 无需修改%b' "$G" "$N";;
+               updated) printf '%b✔ 已修复%b' "$G" "$N";;
+               err) printf '%b✘ 修复失败%b' "$R" "$N";;
+               *) printf '%b⚠ 已跳过%b' "$Y" "$N";; esac; }
+
+printf '  外网连通        %b✔ HTTP %s (%ss)%b\n' "$G" "$CODE" "$TT" "$N"
+printf '  GNOME 系统代理  %b(%b%s%b)%b\n' "$N" "$N" "$(label "$GNOME_RES")" "$N" "$N"
+for f in "${CONFIG_FILES[@]}"; do
+    printf '  %-15s %b(%b%s%b)%b\n' "$(basename "$f")" "$N" "$N" "$(label "${F_RES[$f]:-skip}")" "$N" "$N"
+done
+
+if grep -q '__PROXY_GW' "$HOME/.bashrc" 2>/dev/null; then
+    printf '  新终端环境变量  %b✔ .bashrc 动态检测已启用,自动生效%b\n' "$G" "$N"
+else
+    printf '  新终端环境变量  %b⚠ .bashrc 无动态检测逻辑,可能仍用旧代理%b\n' "$Y" "$N"
+fi
+
+# 当前终端已加载的代理变量: opencode/codex 等 CLI 只从环境变量继承代理
+ENV_STALE=''
+for v in http_proxy HTTP_PROXY; do
+    val=${!v:-}
+    if [ -n "$val" ] && [ "$val" != "$NEW" ]; then ENV_STALE="$val"; fi
+done
+if [ -n "$ENV_STALE" ]; then
+    printf '  当前终端环境变量 %b⚠ 仍指向旧地址 %s —— opencode/codex 会继承它,执行下方 export 后生效%b\n' "$Y" "$ENV_STALE" "$N"
+elif [ -n "${http_proxy:-}" ]; then
+    printf '  当前终端环境变量 %b✔ 已是新地址%b\n' "$G" "$N"
+else
+    printf '  当前终端环境变量 %b● 未设置(新终端将自动检测)%b\n' "$Y" "$N"
+fi
+
+echo
+if [ "$ANY_CHANGE" -eq 1 ] || [ -n "$ENV_STALE" ]; then
+    echo "当前终端立即生效,请执行(新开终端不用):"
+    echo "  export HTTP_PROXY=$NEW HTTPS_PROXY=$NEW http_proxy=$NEW https_proxy=$NEW ALL_PROXY=$NEW"
+    echo
+    [ "$ANY_CHANGE" -eq 1 ] && warn "已开着的程序(浏览器/zcode/codex/opencode)需重启才会用上新代理"
+else
+    echo "所有通道均为最新,无需重启任何程序。"
+fi
+exit "$FAIL"
