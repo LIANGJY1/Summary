@@ -6,7 +6,7 @@
 
 按记忆类型组织的四层：
 
-- **Semantic（事实知识）**：`android/` `language/` `网络/` `设计模式/` `密码/`（学习笔记）+ `project/knowledge-base/`（经验条目库）
+- **Semantic（事实知识）**：`android/` `网络/` `设计模式/` `密码/`（学习笔记）+ `project/knowledge-base/`（经验条目库，内含 `language/` 语言学习笔记）
 - **Procedural（怎么做）**：`skills/`（agent skills 镜像）+ `tools/`（自用工具）+ `ai/`（工具手册与工作流）+ `command/`
 - **Episodic（事件与项目）**：`issue/`（问题复盘）+ `project/hc` `yadi` `WMS Viewer`（项目资料）
 - **组织与索引**：`path/`（学习路径总纲）+ `juejin-articles-index.md`（文章索引）+ 本文件
@@ -15,11 +15,11 @@
 
 | 路径 | 是什么 | agent 何时读 | 怎么写入 |
 |---|---|---|---|
-| `project/knowledge-base/` | 会话经验条目库（唯一沉淀地，条条可复习） | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的同步时机；新条目过其头部规则 |
+| `project/knowledge-base/` | 会话经验条目库（唯一沉淀地，条条可复习）；内含 `language/` 子目录——编程语言相关知识先进此目录，再按语言分发 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的同步时机；新条目过其头部规则 |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
 | `skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后跑 `skills/sync-from-agents.sh` |
 | `path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |
-| `android/` `language/` `网络/` `设计模式/` `密码/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可沉淀的可迁移结论走 knowledge-base |
+| `android/` `网络/` `设计模式/` `密码/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可沉淀的可迁移结论走 knowledge-base |
 | `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
 | `issue/` | 问题复盘与交接 | 排查同类问题前先查 | 复盘流待建（暂手动，见 Roadmap） |
 | `ai/` | AI 工具手册与工作流（OpenCode、部署流程） | 使用/配置 AI 工具时 | 用户手动维护 |

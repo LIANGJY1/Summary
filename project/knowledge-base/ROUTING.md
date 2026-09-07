@@ -5,24 +5,29 @@
 
 ## 主判据链
 
-1. 讲"怎么做"——与设计/构建 SDK 直接相关的模式与可执行做法 → [sdk-design.md](./sdk-design.md)
-2. 讲"怎么想"——核心矛盾、权衡、可迁移的思维方式 → [design-principles.md](./design-principles.md)
-3. 讲"怎么标注"——注释模式、结构组织、表达技巧等注解技术 → [annotation-techniques.md](./annotation-techniques.md)
-4. Android UI 域（组件运行期修改 / 资源变体 / 约束适配）"改不动、改不对"的坑与解法 → [android-ui.md](./android-ui.md)
-5. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
+1. 讲"编程语言本身"——某门语言的语法、类型系统、集合、并发、反射等语言特性与用法 → 先入 [language/](./language/)，再按语言分发到子目录（`C++/` `java/` `kotlin/`；新语言建同级目录）
+2. 讲"怎么做"——与设计/构建 SDK 直接相关的模式与可执行做法 → [sdk-design.md](./sdk-design.md)
+3. 讲"怎么想"——核心矛盾、权衡、可迁移的思维方式 → [design-principles.md](./design-principles.md)
+4. 讲"怎么标注"——注释模式、结构组织、表达技巧等注解技术 → [annotation-techniques.md](./annotation-techniques.md)
+5. Android UI 域（组件运行期修改 / 资源变体 / 约束适配）"改不动、改不对"的坑与解法 → [android-ui.md](./android-ui.md)
+6. Android Provider 域（ContentProvider/系统级 Provider/ContentObserver 跨进程共享与监听）的机制事实与用法坑 → [android-provider.md](./android-provider.md)
+7. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
 
 ## 路由表
 
 | 大类 | 维护者 | 一句话判据 | 主题相邻时去哪 |
 |---|---|---|---|
+| [language/](./language/) | session-to-knowledge | 编程语言本身的知识（语法/类型/集合/并发/反射等特性与用法），先入本目录再按语言分发至子目录 | 语言无关的通用思想 → design-principles.md；SDK/组件设计 → sdk-design.md |
 | [sdk-design.md](./sdk-design.md) | source-annotator | SDK/组件设计模式与可执行做法（含代码实例） | 重在权衡与思维方式 → design-principles.md |
 | [design-principles.md](./design-principles.md) | source-annotator | 核心矛盾、权衡、可迁移的思考方式 | 重在做法与实例 → sdk-design.md |
 | [annotation-techniques.md](./annotation-techniques.md) | source-annotator | 怎么写好源码注释的技术与实例 | 具体库的标注成果 → 该库沉淀文档（不进知识库） |
 | [android-ui.md](./android-ui.md) | session-to-knowledge | Android UI 域踩坑与解法（跨同类项目仍成立） | 跨库可迁移的设计模式 → sdk-design.md |
+| [android-provider.md](./android-provider.md) | session-to-knowledge | 跨进程数据共享与监听（Provider/系统 Provider/Observer）的架构事实与踩坑 | UI 域坑 → android-ui.md；权衡思维 → design-principles.md |
 
 ## 规则
 
 - 本表只答"候选是哪个大类"；**准入**（复习者测试、收/不收细则、条目格式、归并规则）一律以目标大类头部为准。
+- `language/` 是目录型特例（按语言分子目录的学习笔记，非条目大类）：二级分发、新语言准入与文件归并以其 [README](./language/README.md) 为准；语言子目录变动只登记其「目录」节，无需回填本表。
 - 同一条知识够格进多个大类时各写各的角度、互相不复制（细则见各大类头部「边界」）；只够格一份时只写一份。
 - 粒度相同的判据句子不得在本表与大类头部重复出现；发现重复即漂移，以头部为准修本表。
 - 本表不收：skill 级路由（在各 skill 的 description 里）、条目内容规范（在大类「规则」节）。
