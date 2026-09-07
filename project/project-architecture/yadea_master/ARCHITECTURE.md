@@ -10,11 +10,15 @@
 | 文件 | 内容 | 何时读 |
 |---|---|---|
 | [Carlib.md](Carlib.md) | 车辆属性 SDK 深解码（全项目数据枢纽，模块卡片 + 6 张核心类深卡片 + 全类职责表） | 改任何车辆信号相关代码之前 |
-| SystemUI.md（批次 2 待产） | 壳应用、Actor 窗口、PageStateMachine 状态机、L2A 连携 | 改仪表形态/状态连携/通知/锁屏之前 |
-| Launcher.md（批次 2 待产） | 桌面、3D 车模渲染仲裁、应用列表 | 改桌面/车模/应用列表之前 |
-| BTPhone.md + BTMusic.md（批次 3 待产） | 蓝牙通话（HFP/PBAP）与媒体（A2DP/AVRCP） | 改蓝牙相关之前 |
-| Apps-业务集.md（批次 4 待产） | Setting / EnergyManagement / Vlog / AccountCenter（+ Weather、DebugTools 停用件） | 改对应业务之前 |
-| Build-工程化.md（批次 5 待产） | 构建体系、签名与 ROM 集成、质量工具链、Docs 工程实践 | 出包/加模块/接 CI 之前 |
+| [SystemUI.md](SystemUI.md) | 壳应用：Actor 窗口、PageStateMachine 状态机、L2A 网关、通知管线、锁屏与丢失模式（已产，类覆盖率 83.5%） | 改仪表形态/状态连携/通知/锁屏之前 |
+| [Launcher.md](Launcher.md) | 桌面：3D 车模渲染仲裁、信号命令表、整车通信、手车互联、应用列表（已产，类覆盖率 83%） | 改桌面/车模/应用列表之前 |
+| [BTPhone.md](BTPhone.md) | 蓝牙通话：Telecom/HFP 链路、PBAP 同步、16 态浮窗状态机、双屏悬浮窗（已产，类覆盖率 77%） | 改蓝牙通话/联系人同步/浮窗之前 |
+| [BTMusic.md](BTMusic.md) | 蓝牙音乐：AVRCP 经 MediaSession 镜像、进度外推、音源仲裁（已产，类覆盖率 96%） | 改蓝牙媒体/音源/通知之前 |
+| [Setting-AccountCenter.md](Setting-AccountCenter.md) | 车设中心 11 页与账户中心：信号网关、多用户隔离、扫码登录与 token 体系（已产，类覆盖率 91%/82%） | 改设置页/多用户/登录之前 |
+| [Energy-Vlog.md](Energy-Vlog.md) | 能量中心（39 监听器总线/巨石页）与 Vlog 相机遥控 + Weather/DebugTools 停用件影响面（已产，类覆盖率 100%/100%） | 改充电里程/相机/复活停用件之前 |
+| [Components-组件库.md](Components-组件库.md) | 六大组件库：CommonTools/Hardwarelibs/SystemUIService/Applib/AdaptApi/CarSettingLib（已产，含 AdaptApi 孤岛硬数据验证） | 改组件库/换肤/蓝牙栈之前 |
+| [Build-工程化.md](Build-工程化.md) | 构建体系：配置生效面清点表、签名与白名单、出包链、质量工具链断线点、工程实践画像（已产） | 出包/加模块/接 CI/动配置之前 |
+| [Cross-cutting-横向专题.md](Cross-cutting-横向专题.md) | 横向深挖：构建实测闭环、**AOSP testkey 实锤**、母题 git 考据、IPC 通道全景、地层残留、全项目问题总表 P0-P2（已产） | 做安全评估/排期整改/找"同款坑"之前 |
 
 ---
 
@@ -225,7 +229,7 @@ sequenceDiagram
 3. **Weather/DebugTools 注释停用而非删除**——SystemUI 的 AIDL 绑定仍存活（§3.1 第 2 条），保留目录便于功能回归；真正的问题是没在 SystemUI 侧同步摘除绑定或加开关。
 4. **大量"【】"式修复注释与 NOSONAR**（Setting 117 处）——缺陷驱动 + 无强制门禁环境下的补丁文化；是现实约束下的选择，但 NOSONAR 绕过而非修复确实在积累债。
 5. **两套"状态机"并存不统一**：SystemUI 的 PageStateMachine 是手写表驱动纯函数 FSM（交互决策），BTPhone 的 InCallUiStateMachine 直接继承 framework `com.android.internal.util.StateMachine`（消息驱动，1767 行）——两种场景两种范式，不是不一致，是选型不同。
-6. **config/ 大量上一代项目化石**（KC-2 邮件主题、Python 2 脚本、26 个不存在模块的版本表）——模板复刻式 OEM 交付的产物，代价是新人分不清哪些配置生效（批次 5 将给出"仍生效清单"）。
+6. **config/ 大量上一代项目化石**（KC-2 邮件主题、Python 2 脚本、26 个不存在模块的版本表）——模板复刻式 OEM 交付的产物，代价是新人分不清哪些配置生效（已由 [Build-工程化.md](Build-工程化.md) §3 的配置生效面清点表逐项判定：生效 9 项/半生效 7 项/化石 15 项）。
 7. **repository 巨石文件**（EnergyManagement VehicleService.java 3013 行、34 个 CopyOnWriteArraySet 监听器集合）——每信号一类监听器集合的"平铺"结构冗长但极度可预测，churn 高（22 次/年）说明改得多但没改崩；比抽象层过深更适合这种信号数量持续增长的业务。
 
 ## 9. 开放问题
@@ -238,4 +242,8 @@ sequenceDiagram
 - **Weather 是否回归**：SystemUI AIDL 绑定仍存活，功能是否已由车型配置裁掉？
 - **两个疑似协议 bug**（`TripData.kt:59`、`ProtocolUtil.kt` 注释不符）：代码与注释哪个对，需协议 owner 确认——本文档只记录现象不下结论。
 - **AccountCenter 安全基线**（签名密钥硬编码、IV 全零、token 明文存 Settings.Global 并打日志）：是车机内网信任模型的自觉选择还是疏忽？需安全负责人定性（本 skill 不出改造建议，仅记录）。
+- **⚠ 平台签名实为 AOSP 公开 testkey**（深挖轮实锤，见 [Cross-cutting-横向专题.md](Cross-cutting-横向专题.md) §1）：ROM system 分区是否也用 testkey 签？量产换签流程与 platform_chery.jks 的关系？——全项目最高优先级开放问题。
 - **本轮未深挖**（后续批次覆盖）：Applib/AdaptApi 24 域接口全集、Hardwarelibs WiFi/网络域细节、SystemUI 通知栈与锁屏细节、Kanzi 3D SDK（kzb/so 二进制）、Docs 评审记录内容、构建 config.xml 生效面清点。
+- **批次 2 新发现的需人确认点**（详见 SystemUI.md §7 / Launcher.md §6）：`isNeedStartNavi` 恒 false 使 B1↔B2 自动流转整体禁用、TBox `lost_mode` 线上值与常量方向相反、SystemUI 进程内三份独立 CarServiceManager 实例、`VehicleService` 绕过命令表直写 Kanzi、`ExitWithAnimatorReceiver` exported 无权限保护。
+- **批次 3 新发现的需人确认点**（详见 BTPhone.md §6 / BTMusic.md §6）：⚠ BTPhone 的 exported 浮窗广播在无通话时可**真实发起拨号**（FloatWindowBroadcastReceiver.java:121-126 已验证）；状态机两处 getPrimaryCall 未判空（疑似 SIR-5769 崩溃同源）；CAPP 电话策略 `mCAPPForward` 恒 null（调用即 NPE）；⚠ BTMusic 的 manifest `cmd_controller_callbacks` 指向不存在的 `com.neusoft.btmusic.*` 类（包名错配已验证）；音乐应用携带安装/卸载等无关权限。
+- **批次 4 新发现的需人确认点**（详见 Setting-AccountCenter.md §6 / Energy-Vlog.md §6）：⚠ Energy 的 manifest 两个 `cmd_controller_callbacks` 回调类全仓不存在（已验证值、grep 双查无类）；Weather 复活不会让 SystemUI 天气恢复——SystemUI 绑定的 `WeatherAidlService` 类在 Weather 源码中不存在；Vlog `NetworkManager.onLost` 清理分支写反（已验证）；AccountCenter 无 token 时回退**硬编码 JWT 字符串**且每请求打印 accessToken（已验证）；Weather `CacheApi:280` SQL 优先级 bug 使缓存失效（已验证）；Setting 侧约 2700 行三代旧档位控件成死代码。

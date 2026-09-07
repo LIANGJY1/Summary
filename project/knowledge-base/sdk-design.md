@@ -42,6 +42,7 @@
 - [早期调用入队，attach 时刻统一执行](#早期调用入队attach-时刻统一执行)
 - [账本操作与状态迁移分离](#账本操作与状态迁移分离)
 - [元操作双形态：执行时展开，持久化保持折叠](#元操作双形态执行时展开持久化保持折叠)
+- [探测、裁决、惩罚三层拆分 lint 架构](#探测裁决惩罚三层拆分-lint-架构)
 - [资源预算按相对单位计量](#资源预算按相对单位计量)
 - [日志先行做本地持久化的崩溃恢复](#日志先行做本地持久化的崩溃恢复)
 - [流程拆步进状态机，多触发点分片续跑](#流程拆步进状态机多触发点分片续跑)
@@ -1196,3 +1197,26 @@ public fun LifecycleResumeEffect(lifecycleOwner: ..., effects: ...): Unit = erro
 **SDK 设计启示**：
 - API 有"必填但类型系统表达不了"的参数时（vararg、可空透传、DSL 隐式参数），用 ERROR 级遮蔽重载替代运行时异常；适用条件：非法形态可被一个更窄签名枚举出来——非法形态发散（任意组合都非法）时只能靠 require 校验。
 - 遮蔽重载的废弃消息写成人话指南（本库常量 LifecycleResumeEffectNoParamError 同时充当运行时 error 文案），编译错误即文档。
+
+## 探测、裁决、惩罚三层拆分 lint 架构
+
+**一句话**：运行时 lint（StrictMode 类）把"发现问题"与"处置问题"拆成三层——埋点探测只报告、策略层只裁决、惩罚层只执行，新增检测项不动架构。
+
+**代码实例**（摘自 androidx/fragment `strictmode/FragmentStrictMode.kt`）：
+
+```kotlin
+// 探测点：主库在可疑调用处埋静态方法，只负责构造 Violation 并上交
+fun onFragmentReuse(fragment: Fragment, previousFragmentId: String) {
+    val violation = FragmentReuseViolation(fragment, previousFragmentId)
+    val policy = getNearestPolicy(fragment)          // 裁决：就近继承策略 + Flag + 白名单
+    if (policy.flags.contains(DETECT_FRAGMENT_REUSE) && shouldHandle(policy, ...)) {
+        handlePolicyViolation(policy, violation)      // 执行：log / listener / death 依次
+    }
+}
+```
+
+**为什么精妙**：误用检测的最大成本是"误报打搅正常用户"——三层拆分后，探测点全量埋、是否生效完全交给策略（默认 LAX 零打扰），惩罚从日志到崩溃渐进升级；allowViolation 按类名豁免让迁移期代码能渐进清理。
+
+**SDK 设计启示**：
+- 运行时诊断体系按"埋点全量、裁决集中、惩罚分层"组织；适用条件：检测项会持续增加且误报容忍度因接入方而异——一次性检查脚本或无策略需求的校验直接抛异常即可，不必三层。
+- 策略就近继承（最近祖先的 FragmentManager 策略优先，否则全局）让嵌套结构能局部收紧，是"作用域化配置"的轻量实现。
