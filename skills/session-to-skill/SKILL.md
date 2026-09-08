@@ -26,7 +26,7 @@ If the session's conclusions were already persisted (specs, ADRs, matrices, lear
 ## 3. Pick name and location
 
 - Name: lowercase kebab-case, 1–64 chars, matches the directory name.
-- Location: `<project>/.agents/skills/<name>/` if it only makes sense in this repo; `~/.agents/skills/<name>/` if the user wants it everywhere (default when unclear — check how the user phrased it).
+- Location: `<project>/.agents/skills/<name>/` if it only makes sense in this repo; `~/.agents/skills/<name>/` if the user wants it everywhere (default when unclear — check how the user phrased it). In the Summary repository, `skills/` is a mirror: write the selected source first, then run `skills/sync-from-agents.sh`; never hand-edit the mirror or leave source/mirror out of sync.
 
 ## 4. Write the SKILL.md
 
@@ -54,5 +54,6 @@ Structure example for the body's own template:
 ## 5. Verify and report
 
 - `name` matches directory name; description contains trigger phrasings including the user's language.
+- For a globally installed skill, verify the source under `~/.agents/skills/` and the Summary mirror after sync; a project-local `.agents/skills/` copy does not override the global source unless the user explicitly asks for a repository-only variant.
 - Body has at least one literal example; no content duplicated from on-disk docs.
 - Report to the user: installed path, skill type, trigger phrases, and 2–3 realistic test prompts (casual phrasing the user would actually type) to try in a fresh turn — per the skill-creator loop, iterate on those results if the trigger or output misses.

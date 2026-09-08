@@ -65,6 +65,36 @@ class CheckKbContractTests(unittest.TestCase):
             write_doc(Path(d), "target.md", "# target")
             self.assertEqual(check_kb.check_doc(path, profile="language"), [])
 
+    def test_fenced_heading_is_not_an_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = BASE.format(toc="- [命题](#命题)", title="命题")
+            body += "\n```markdown\n## 假标题\n```\n"
+            issues = check_kb.check_doc(write_doc(Path(d), "demo.md", body), profile="entry")
+            self.assertFalse(any("假标题" in issue for issue in issues))
+
+    def test_missing_path_is_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            missing = Path(d) / "missing.md"
+            self.assertEqual(check_kb.main([str(missing)]), 1)
+
+    def test_recursive_scan_and_profile_mismatch(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            language = root / "language" / "kotlin"
+            language.mkdir(parents=True)
+            write_doc(language, "note.md", "# 学习笔记")
+            docs, issues = check_kb._docs([root], "all", root)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(docs[0][1], "language")
+            _, mismatch = check_kb._docs([root], "entry", root)
+            self.assertTrue(any("不能检查 language" in issue for issue in mismatch))
+
+    def test_secret_pattern_is_reported_without_echoing(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = "# 学习笔记\napi_token: 1234567890abcdef"
+            issues = check_kb.check_doc(write_doc(Path(d), "note.md", body), profile="language")
+            self.assertTrue(any("敏感信息" in issue for issue in issues))
+
 
 if __name__ == "__main__":
     unittest.main()

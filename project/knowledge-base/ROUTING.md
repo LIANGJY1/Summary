@@ -13,6 +13,17 @@
 6. Android Provider 域（ContentProvider/系统级 Provider/ContentObserver 跨进程共享与监听）的机制事实与用法坑 → [android-provider.md](./android-provider.md)
 7. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
 
+## 重叠主题的裁决顺序
+
+当一条候选同时命中多个判据，不按维护者、文件名或示例语言猜，固定按以下顺序裁决：
+
+1. **知识内核**：语言机制优先 `language/`；具体 UI/Provider 运行期坑优先对应 Android 域。
+2. **主要复习动作**：读者要执行一套 SDK/组件做法 → `sdk-design.md`；要理解取舍/矛盾 → `design-principles.md`；要学习如何写注释 → `annotation-techniques.md`。
+3. **目标头部边界**：候选必须满足目标文档「边界」与「规则」；否则退回上一步继续判断。
+4. **仍无法唯一决定**：列出候选及差异，暂停写入并询问用户；不复制到多个文件解决不确定性。
+
+典型反例：Kotlin 示例讲“订阅后对账初值”时，知识内核是跨语言工程模式，去 `design-principles.md`，不进 `language/kotlin/`；Android View 的构造期属性未被 setter 重新消费时，知识内核是 UI 运行期坑，去 `android-ui.md`；同一条若另有可迁移设计权衡，只在 `design-principles.md` 写不同视角并互链。
+
 ## 路由表
 
 | 大类 | 维护者 | 一句话判据 | 主题相邻时去哪 |
