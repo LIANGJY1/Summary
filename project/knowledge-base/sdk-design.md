@@ -38,6 +38,10 @@
 - [确定性失败永久记忆，致命错误放行](#确定性失败永久记忆致命错误放行)
 - [错误数据化，成功失败同通道](#错误数据化成功失败同通道)
 - [通吃实现排链尾](#通吃实现排链尾)
+- [共享内存代数，缓存校验零跨进程](#共享内存代数缓存校验零跨进程)
+- [短锁快照、独立 IO 锁、防抖合并落盘](#短锁快照独立-io-锁防抖合并落盘)
+- [前缀树登记处 + 死亡通知自清理](#前缀树登记处--死亡通知自清理)
+- [通知按订阅方优先级分级派发](#通知按订阅方优先级分级派发)
 - [接口探测式能力协商](#接口探测式能力协商)
 - [早期调用入队，attach 时刻统一执行](#早期调用入队attach-时刻统一执行)
 - [账本操作与状态迁移分离](#账本操作与状态迁移分离)
@@ -48,6 +52,12 @@
 - [流程拆步进状态机，多触发点分片续跑](#流程拆步进状态机多触发点分片续跑)
 - [更新先入队，消费时机单一收口](#更新先入队消费时机单一收口)
 - [测量即布局反推，产物与尺寸一次成型](#测量即布局反推产物与尺寸一次成型)
+- [一次性强制标志堵轮询竞态窗口](#一次性强制标志堵轮询竞态窗口)
+- [注册中心自举出固定句柄](#注册中心自举出固定句柄)
+- [ABI 冻结接口配 AIDL 新接口加薄适配门面](#abi-冻结接口配-aidl-新接口加薄适配门面)
+- [跨边界引用做镜像计数](#跨边界引用做镜像计数)
+- [临时引用焊住跨边界记账窗口](#临时引用焊住跨边界记账窗口)
+- [读写合并单调用，阻塞语义统一](#读写合并单调用阻塞语义统一)
 - [缓存按匹配键放宽分级，查找沿代价升序](#缓存按匹配键放宽分级查找沿代价升序)
 - [投机工作带 deadline 与放弃语义](#投机工作带-deadline-与放弃语义)
 - [多源合并先建命名空间隔离](#多源合并先建命名空间隔离)
@@ -62,6 +72,9 @@
 - [描述符指纹分流，整值快路径绕过逐元素遍历](#描述符指纹分流整值快路径绕过逐元素遍历)
 - [双读默认值消歧，缺失与存值分开](#双读默认值消歧缺失与存值分开)
 - [注解当版本探针，反射兜底旧依赖](#注解当版本探针反射兜底旧依赖)
+- [多对一聚合订阅，一对多本地限流分发](#多对一聚合订阅一对多本地限流分发)
+- [错误定向回传最后写入者](#错误定向回传最后写入者)
+- [多源建议集中仲裁，来源只产信号不执行](#多源建议集中仲裁来源只产信号不执行)
 
 <!-- 条目模板：
 
@@ -939,7 +952,7 @@ internal class LifecycleCoroutineScopeImpl(...) : LifecycleCoroutineScope(), Lif
 }
 ```
 
-**为什么精妙**：靠使用方在 onDestroy 手动 cancel，Dialog/View 层等次级宿主极易漏接一处就泄漏；把取消挂进生命周期事件链后，宿主的终止信号天然全覆盖。同类做法还出现在 LifecycleController（销毁即取消 parentJob 并放行队列）。
+**为什么精妙**：靠使用方在 onDestroy 手动 cancel，Dialog/View 层等次级宿主极易漏接一处就泄漏；把取消挂进生命周期事件链后，宿主的终止信号天然全覆盖。同类做法还出现在 LifecycleController（销毁即取消 parentJob 并放行队列）。远端进程场景同理：AAOS13 CarPropertyService 的 Client 构造时 linkToDeath，binderDied 里复用人手退订的同一注销路径（unregisterListenerBinderForProps），死亡清理与正常清理共用一条代码路径，不漂移。
 
 **SDK 设计启示**：
 - 资源生命周期有宿主可依时，让资源实现观察者接口自行注册、自行清理，使用方只拿到一个"即用即走"的入口；适用条件：宿主有唯一可靠的终态事件且资源与宿主一一对应——全局单例资源没有终态信号，得另配显式关闭 API。
@@ -1220,3 +1233,347 @@ fun onFragmentReuse(fragment: Fragment, previousFragmentId: String) {
 **SDK 设计启示**：
 - 运行时诊断体系按"埋点全量、裁决集中、惩罚分层"组织；适用条件：检测项会持续增加且误报容忍度因接入方而异——一次性检查脚本或无策略需求的校验直接抛异常即可，不必三层。
 - 策略就近继承（最近祖先的 FragmentManager 策略优先，否则全局）让嵌套结构能局部收紧，是"作用域化配置"的轻量实现。
+
+## 一次性强制标志堵轮询竞态窗口
+
+**一句话**：轮询型监控系统里，"刚交付的资源"要用一次性强制标志钉住状态，不能信下一次采样——采样落后于事实。
+
+**代码实例**（摘自 frameworks/native `cmds/servicemanager/ServiceManager.cpp`）：
+
+```cpp
+// tryGetService 把 binder 交给客户端时：
+service->guaranteeClient = true;
+// 下一次 5 秒轮询检查时（handleServiceClientCallback）：
+if (service.guaranteeClient) {
+    if (!service.hasClients && !hasClients) {
+        sendClientCallbackNotifications(serviceName, true);  // 强制上报"有客户端"
+    }
+    service.guaranteeClient = false;   // 一次性，用完即清
+}
+```
+
+**为什么精妙**：客户端拿到 binder 到驱动引用计数真正增加之间有时间差，恰好落进轮询窗口就误报"无客户端"，lazy 服务端会自杀。强制标志把"事实已发生、计数未跟上"显式建模。
+
+**SDK 设计启示**：
+- 引用计数、存活探测等采样型机制，在资源交付点置一次性标志钉住最小正确状态；适用条件：交付与可观测之间存在延迟窗口、误判代价是资源被回收——采样即时可达（同步记账）的系统不需要。
+- 标志语义必须是"下一次采样生效一次"，置位点多（交付点）可以，复位点必须唯一（采样点），否则难以推理失效条件。
+
+## 注册中心自举出固定句柄
+
+**一句话**：注册中心自己也要能被找到——用协议层硬编码句柄（handle=0）+ 启动期自注册打破"找注册中心要先有注册中心"的递归。
+
+**代码实例**（摘自 frameworks/native `cmds/servicemanager/main.cpp`）：
+
+```cpp
+// 1. 向驱动登记：从此全系统对 handle=0 的请求都路由到本进程
+ps->becomeContextManager();
+// 2. 自注册：把自己当作普通服务放进自己的表
+manager->addService("manager", manager, false, IServiceManager::DUMP_FLAG_PRIORITY_DEFAULT);
+// 客户端侧零成本获取：BpBinder(0) 即注册中心代理
+```
+
+**为什么精妙**：分布式系统里"引导问题"（bootstrap problem）通常靠广播或配置文件，Binder 把答案压进协议常量——句柄 0 天然存在，谁注册成功谁就是中心，无需发现协议。
+
+**SDK 设计启示**：
+- 构建注册/发现类组件时先回答"指向自己的引用是什么"；有协议层可用就把入口压成常量句柄或保留路径；适用条件：系统内组件共享同一套底层寻址空间——跨网络、跨信任域时固定句柄要配选举与容错，不能只靠先到先得。
+- 自注册动作与普通服务走同一条 addService 路径（含权限检查），中心不给自己开后门，安全模型保持单一。
+
+## 共享内存代数，缓存校验零跨进程
+
+**一句话**：跨进程缓存的失效判定不放在服务端、也不靠通知，而是把一个"写计数"放进双方共享的内存，客户端读缓存前在本地读一下计数是否变了。
+
+**代码实例**（摘自 frameworks/base/packages/SettingsProvider `GenerationRegistry.java`）：
+
+```java
+// 服务端写路径：每次变更先自增共享内存里的代数槽位
+final int index = getKeyIndexLocked(key, mKeyToIndexMap, backingStore);
+backingStore.set(index, backingStore.get(index) + 1);
+// 读路径：把共享内存本体（ashmem 描述符）、槽位号、当前代数塞进返回 Bundle
+bundle.putParcelable(Settings.CALL_METHOD_TRACK_GENERATION_KEY, backingStore);
+bundle.putInt(Settings.CALL_METHOD_GENERATION_INDEX_KEY, index);
+// 客户端配对（Settings.java GenerationTracker/NameValueCache）：
+// isGenerationChanged() 本地读共享内存，与快照不等则清整表缓存
+```
+
+**为什么精妙**：缓存省下的跨进程调用若被"每次校验都要跨进程问一句"花回去就白省了——共享内存把校验降为一次进程内内存读，跨进程通知退化为丢了也无大碍的辅助信号。（客户端视角补充：失效粒度是表级清空而非键级，写路径完全不更新缓存，一致性全靠服务端涨代数。）
+
+**SDK 设计启示**：
+- 跨进程缓存把"有效性判定数据"与"值"分离：判定依据浓缩成一个计数器放共享内存，值仍在服务端；适用条件：读多写少、判定可浓缩为单个计数、双方同机可共享内存——跨设备、或判定依赖复杂结构时不成立。
+- 校验与通知解耦后，通知可以放心做"尽力而为"：丢了也只是推迟到下一次读时的本地校验发现失效，一致性不受损。
+
+## 短锁快照、独立 IO 锁、防抖合并落盘
+
+**一句话**：高频小状态落盘三件套——状态锁内只拍快照、IO 走独立的锁与线程、多次写按双阈值防抖合并成一次原子替换。
+
+**代码实例**（摘自 frameworks/base/packages/SettingsProvider `SettingsState.java`）：
+
+```java
+// 1) mLock 短锁拍快照并清脏标记；之后的新写入重新排程，不丢
+synchronized (mLock) {
+    settings = new ArrayMap<>(mSettings);
+    mDirty = false;
+    mWriteScheduled = false;
+}
+// 2) mWriteLock 串行 IO：AtomicFile 写临时文件，成功改名、失败回滚
+synchronized (mWriteLock) {
+    out = destination.startWrite();
+    // ... 序列化 ...
+    destination.finishWrite(out);   // 失败走 destination.failWrite(out)
+}
+```
+
+**为什么精妙**：状态变更与磁盘 IO 的耗时差几个数量级，同锁会拖死写路径、无锁会读到半成品——快照把两者解耦成"生产者短锁、消费者串行"。
+
+**SDK 设计启示**：
+- 持久化 API 只暴露"置脏 + 排程"（scheduleWriteIfNeededLocked），"何时真正写盘"收口在一个方法里，同步写、防抖、强制写都从它分叉；适用条件：写频高、单笔小、可容忍秒级延迟的键值型状态——事务性要求强的结构化数据应走数据库。
+- 落盘文件用 AtomicFile 三段式（startWrite/finishWrite/failWrite），保证盘上任一时刻都有完整可读副本，自建持久化不要手写"临时文件 + rename"。
+
+## 多对一聚合订阅，一对多本地限流分发
+
+**一句话**：进程内多个消费者共享一个昂贵的上游订阅时，用聚合器把 N 份订阅压缩成 1 份（按最苛刻需求取值），再把上游推来的数据流按各消费者自己的需求本地裁剪分发。
+
+**代码实例**（摘自 AAOS13 `packages/services/Car/car-lib/src/com/android/car/internal/CarPropertyEventCallbackController.java`）：
+
+```java
+// 注册方向：重算所有回调的最高频率，与已注册值相同就跳过 IPC
+newMaxUpdateRateHz = calculateMaxUpdateRateHzLocked();
+if (Objects.equals(mMaxUpdateRateHz, newMaxUpdateRateHz)) {
+    return true;   // 无实质变化，不打扰服务端
+}
+// 分发方向：按各回调声明的频率做本地限流
+if (carPropertyValue.getTimestamp() >= nextUpdateTimeNanos) { /* 放行并顺延 */ }
+```
+
+**为什么精妙**：每个模块各自向远端注册会让服务端与 HAL 收到 N 份重叠订阅、按最高频重复推送；聚合器对上游只呈现一份订阅、频率无实质变化不通信，对下游用"事件时间戳 + 1/各自频率"的顺延记账把同一股数据流裁剪成每人要的密度。
+
+**SDK 设计启示**：
+- 同一进程内多个消费者共享同一远端数据源时，按主题键（这里是 propertyId）建聚合器：上游订阅强度 = 消费者最大需求，需求变化才重新协商。适用条件：上游订阅/传输成本高、消费者需求异构——消费者少且需求一致时聚合器是纯开销。
+- 限流必须在本地分发层做且基于数据自带的时间戳，不能用本地定时器——时钟基准不同会造成限流漂移，事件稀疏时定时器还会空转。
+
+## 错误定向回传最后写入者
+
+**一句话**：异步写操作失败时，错误只回传给"最后一次写入的当事人"而非广播订阅者；为此在写入受理路径上顺手记账当事人。
+
+**代码实例**（摘自 AAOS13 `packages/services/Car/service/src/com/android/car/CarPropertyService.java`）：
+
+```java
+// set 受理后记录最后写入者：propId -> areaId -> Client
+updateSetOperationRecorderLocked(propId, prop.getAreaId(), client);
+// 写失败上行时查表定向派发
+lastOperatedClient = mSetOperationClientMap.get(property).get(areaId);
+```
+
+**为什么精妙**：写失败的错误只有发起者有上下文处理，广播给全部订阅者既浪费又让无辜者收到无法理解的错误；记账动作嵌在写入受理里，零额外协议，注销时随订阅表一并清理。
+
+**SDK 设计启示**：
+- 异步错误需要路由回发起者时，在受理点建"请求 → 当事人"映射，失败点查表定向派发。适用条件：错误语义与发起者强相关且存在多并发写入者——单写入者场景直接抛异常即可，硬件级故障类错误本该全员感知则应广播。
+
+## ABI 冻结接口配 AIDL 新接口加薄适配门面
+
+**一句话**：已发布接口的签名永久冻结，演进靠"新定义一套接口 + 一个薄适配器实现旧接口"，适配器只做类型翻译。
+
+**代码实例**（摘自 frameworks/native `libs/binder/IServiceManager.cpp`）：
+
+```cpp
+// 老接口（String16 签名，无数预编译代码依赖，不能改）
+class ServiceManagerShim : public IServiceManager {
+    sp<android::os::IServiceManager> mTheRealServiceManager;  // AIDL 新接口
+    sp<IBinder> checkService(const String16& name) const override {
+        sp<IBinder> ret;
+        // 适配器全部职责：String16 -> std::string 翻译 + 转发
+        if (!mTheRealServiceManager->checkService(String8(name).c_str(), &ret).isOk())
+            return nullptr;
+        return ret;
+    }
+```
+
+**为什么精妙**：接口迁移的最大阻力是存量二进制；双接口 + 薄适配让新旧世界各自干净——新接口可随意演进，老接口冻结不动，翻译成本集中在一个类里。
+
+**SDK 设计启示**：
+- 接口发布的瞬间就当它"冻结"，功能演进先想新接口而不是加重载；适用条件：接口有大量无法重新编译的使用方（系统库、跨语言绑定）——纯内部接口直接改签名成本更低。
+- 适配器要放在**依赖注入点**上（defaultServiceManager 单例内部），让所有调用方无感切换，各调用点零改动。
+
+## 跨边界引用做镜像计数
+
+**一句话**：跨进程/跨机引用一个远端对象时，本地每种引用（强/弱）都与远端计数一一配对增减，而不是靠"对象不要了通知对端"。
+
+**代码实例**（摘自 frameworks/native `libs/binder/BpBinder.cpp`）：
+
+```cpp
+BpBinder::BpBinder(...) { extendObjectLifetime(OBJECT_LIFETIME_WEAK); }
+// 构造：驱动弱引用+1（incWeakHandle，配对点）
+void BpBinder::onFirstRef()  { ipc->incStrongHandle(...); }   // 首个强引用配对
+void BpBinder::onLastStrongRef(...) { ipc->decStrongHandle(...); } // 末个强引用配对
+BpBinder::~BpBinder() { ipc->expungeHandle(...); ipc->decWeakHandle(...); }
+```
+
+**为什么精妙**：分布式对象生命周期的正确解法不是心跳或 GC，而是把本地引用计数的每次变化镜像到对象所属边界——本地进程随时崩溃，内核/远端靠镜像计数自动回收，无泄漏无悬挂。
+
+**SDK 设计启示**：
+- 资源跨边界时选"镜像计数"：每类本地引用各找一个确定性钩子配对，边界句柄的生命周期 = 弱镜像的生命周期；适用条件：引用方随时可能崩溃、远端无法主动探测引用方——同进程对象用 shared_ptr 即可，双计数是纯开销。
+- 弱镜像先行、强镜像随后（先保证句柄存在再表达使用意图），升级（promote）以远端强计数为准，天然获得"死对象不可复活"语义。
+
+## 多源建议集中仲裁，来源只产信号不执行
+
+**一句话**：多个可能互相矛盾的数据来源都只提交"建议"（带可换算基准的自描述信号），执行权收口到唯一仲裁者——统一校验、按优先级择优、单一出口执行。
+
+**代码实例**（摘自 Android 13 frameworks/base `services/core/java/com/android/server/timedetector/TimeDetectorStrategyImpl.java`）：
+
+```java
+// 五路来源（NITZ/NTP/GNSS/车端/手动）各自提交建议，仲裁者集中裁决：
+int[] originPriorities = mEnvironment.autoOriginPriorities();
+for (int origin : originPriorities) {          // 优先级短路：第一条有效即用
+    TimestampedValue<Long> newUnixEpochTime = findValidSuggestion(origin);
+    if (newUnixEpochTime != null) {
+        setSystemClockIfRequired(origin, newUnixEpochTime, cause);
+        return;
+    }
+}
+```
+
+**为什么精妙**：各来源若自行设钟，坏信号会直接污染系统状态且无从裁决；建议-仲裁结构把"信号质量"问题转化为仲裁器一处的排序与校验问题，任何单源出错都只是"一条建议"，影响被结构性限制。
+
+**SDK 设计启示**：
+- 多输入源汇聚到同一系统状态时，把接口设计成"suggestXxx + 内部策略"，来源按权限隔离、执行单点收口。适用条件：来源可信度不一且可能冲突、状态只能有一个真值——各来源天然互斥或代价相同时无需仲裁层。
+- 每条建议必须自带"时效与基准"（如 elapsedRealtime 锚点 + 统一过期上限），仲裁器才不依赖对来源的信任即可裁决。
+
+## 临时引用焊住跨边界记账窗口
+
+**一句话**：向远端记账系统（内核/服务端）发起增减引用的命令后、确认送达前，用本地临时引用垫住对象，确认后再释放——手工实现跨边界记账的原子性。
+
+**代码实例**（摘自 frameworks/native `libs/binder/IPCThreadState.cpp`）：
+
+```cpp
+void IPCThreadState::incStrongHandle(int32_t handle, BpBinder *proxy) {
+    mOut.writeInt32(BC_ACQUIRE);      // 命令只是入缓冲，未送达驱动
+    mOut.writeInt32(handle);
+    if (!flushIfNeeded()) {
+        // 立即送不到 → 用本地临时引用垫住，防对象在窗口期析构
+        proxy->incStrong(mProcess.get());
+        mPostWriteStrongDerefs.push(proxy);  // 写缓冲确认送达后再释放
+    }
+}
+```
+
+**为什么精妙**：本地引用计数与内核节点计数是两套独立账本，"发出命令"不等于"对方记账"，中间窗口的对象生死必须有人担保——临时引用 + 送达后释放把两个时刻焊死，无需任何分布式事务。
+
+**SDK 设计启示**：
+- 跨边界记账每步都要回答"发起生效到对方确认之间谁担保资源活着"；适用条件：远端无法回查、本地可能瞬间释放的计数系统——能同步等待确认的直接同步调用即可。
+- 释放点必须唯一且挂在"确认送达"事件上（本例 write_consumed 后统一处理），垫与放的配对逻辑集中一处，别散在调用点。
+
+## 读写合并单调用，阻塞语义统一
+
+**一句话**：双向命令通道的收发合并成一个系统调用（一次同时"交出写缓冲 + 领取读缓冲"），空闲阻塞自然落在该调用上，无需单独的等待/poll 通道。
+
+**代码实例**（摘自 frameworks/native `libs/binder/IPCThreadState.cpp` talkWithDriver）：
+
+```cpp
+binder_write_read bwr;
+bwr.write_size = mOut.dataSize();      // 要写的命令
+bwr.write_buffer = (uintptr_t)mOut.data();
+if (doReceive && needRead) {           // 有容量才申请读
+    bwr.read_size = mIn.dataCapacity();
+    bwr.read_buffer = (uintptr_t)mIn.data();
+}
+ioctl(mProcess->mDriverFD, BINDER_WRITE_READ, &bwr);  // 唯一收发点
+```
+
+**为什么精妙**：客户端线程和服务端线程用同一套交互原语——有写有读立即交换，无写有读则阻塞等待，空闲即睡眠在内核等待队列；不需要独立 poll 线程，也不需要自旋。
+
+**SDK 设计启示**：
+- 设计命令式 IPC/网络协议时优先"单调用交换读写"，配合"写缓冲攒批"（mOut 攒多条命令一次送）；适用条件：协议支持批量命令且对延迟不敏感到可以攒批——低延迟逐条确认的协议不适用。
+- 读缓冲必须显式腾空后才申请读（needRead 判定），防止旧命令被覆盖；这是合并读写最容易漏的防御点。
+
+## 前缀树登记处 + 死亡通知自清理
+
+**一句话**：跨进程"发布-订阅"注册表用 Uri 前缀树组织订阅者（按段挂载、按需生长），并用 Binder 死亡通知做自清理——订阅方进程崩溃不会留下幽灵订阅。
+
+**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java）：
+
+```java
+// 注册：沿 Uri 路径段下钻，缺节点则创建，叶节点挂 ObserverEntry
+node.addObserverLocked(uri, index + 1, observer, ...);
+// ObserverEntry 实现 IBinder.DeathRecipient：订阅方进程死亡自动摘除
+final int entries = sObserverDeathDispatcher.linkToDeath(observer, this);
+@Override public void binderDied() {
+    synchronized (observersLock) { removeObserverLocked(observer); }
+}
+// 摘除后空节点剪枝，树不被历史注册撑肥
+if (mChildren.size() == 0 && mObservers.size() == 0) { return true; }
+```
+
+**为什么精妙**：中心登记处最怕两件事——匹配慢（线性扫全部订阅者）与幽灵订阅（订阅方死了没人摘）。前缀树让匹配只走订阅路径那一支，死亡监听让清理不依赖订阅方自觉。
+
+**SDK 设计启示**：
+- 跨进程注册表以 Binder 句柄为凭证时，必须 linkToDeath 兜底自清理，再加"同句柄重复注册超阈值打 wtf"的软防线；适用条件：注册方与登记处分属两进程——同进程注册表用弱引用/生命周期钩子即可，死亡监听是多余开销。
+- 订阅键含层级语义（authority/路径/命名空间）时用前缀树组织，天然支持"监听子树"语义（notifyForDescendants = 非叶节点也收集）。
+
+## 通知按订阅方优先级分级派发
+
+**一句话**：事件分发方在派发前按订阅方的进程优先级分流——前台订阅者立即送达，后台订阅者延迟合并送达，用少量后台延迟换前台体验不被冲垮。
+
+**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java `ObserverCollector`）：
+
+```java
+// 同一订阅者的多个 Uri 先聚合成一次 onChangeEtc(Uri[]) 调用
+value.add(uri);
+// 前台立即发，后台 postDelayed 10 秒——onChangeEtc 是 oneway，写方永不阻塞
+if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || noDelay) {
+    task.run();
+} else {
+    BackgroundThread.getHandler().postDelayed(task, BACKGROUND_OBSERVER_DELAY);
+}
+```
+
+**为什么精妙**：通知风暴的伤害不对等——前台用户正在等结果，后台订阅者晚 10 秒无感。派发方拿得到订阅方进程状态（system_server 独有优势），就应该用它调度。
+
+**SDK 设计启示**：
+- 通知类 API 的"实时性"应该是分级的：前台即时、后台批量延迟，并给关键场景留 no-delay 逃生口（这里是 NOTIFY_NO_DELAY flag）；适用条件：派发方能廉价获取订阅方优先级、且订阅方对秒级延迟不敏感——硬实时链路不适用，要靠专用通道。
+- 聚合先于派发：同订阅者的多个变更合并成一次调用（Uri[]），Binder 往返次数与变更次数解耦。
+
+## 前缀树登记处 + 死亡通知自清理
+
+**一句话**：跨进程"发布-订阅"注册表用 Uri 前缀树组织订阅者（按段挂载、按需生长），并用 Binder 死亡通知做自清理——订阅方进程崩溃不会留下幽灵订阅。
+
+**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java）：
+
+```java
+// 注册：沿 Uri 路径段下钻，缺节点则创建，叶节点挂 ObserverEntry
+node.addObserverLocked(uri, index + 1, observer, ...);
+// ObserverEntry 实现 IBinder.DeathRecipient：订阅方进程死亡自动摘除
+final int entries = sObserverDeathDispatcher.linkToDeath(observer, this);
+@Override public void binderDied() {
+    synchronized (observersLock) { removeObserverLocked(observer); }
+}
+// 摘除后空节点剪枝，树不被历史注册撑肥
+if (mChildren.size() == 0 && mObservers.size() == 0) { return true; }
+```
+
+**为什么精妙**：中心登记处最怕两件事——匹配慢（线性扫全部订阅者）与幽灵订阅（订阅方死了没人摘）。前缀树让匹配只走订阅路径那一支，死亡监听让清理不依赖订阅方自觉。
+
+**SDK 设计启示**：
+- 跨进程注册表以 Binder 句柄为凭证时，必须 linkToDeath 兜底自清理，再加"同句柄重复注册超阈值打 wtf"的软防线；适用条件：注册方与登记处分属两进程——同进程注册表用弱引用/生命周期钩子即可，死亡监听是多余开销。
+- 订阅键含层级语义（authority/路径/命名空间）时用前缀树组织，天然支持"监听子树"语义（notifyForDescendants = 非叶节点也收集）。
+
+## 通知按订阅方优先级分级派发
+
+**一句话**：事件分发方在派发前按订阅方的进程优先级分流——前台订阅者立即送达，后台订阅者延迟合并送达，用少量后台延迟换前台体验不被冲垮。
+
+**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java `ObserverCollector`）：
+
+```java
+// 同一订阅者的多个 Uri 先聚合成一次 onChangeEtc(Uri[]) 调用
+value.add(uri);
+// 前台立即发，后台 postDelayed 10 秒——onChangeEtc 是 oneway，写方永不阻塞
+if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || noDelay) {
+    task.run();
+} else {
+    BackgroundThread.getHandler().postDelayed(task, BACKGROUND_OBSERVER_DELAY);
+}
+```
+
+**为什么精妙**：通知风暴的伤害不对等——前台用户正在等结果，后台订阅者晚 10 秒无感。派发方拿得到订阅方进程状态（system_server 独有优势），就应该用它调度。
+
+**SDK 设计启示**：
+- 通知类 API 的"实时性"应该是分级的：前台即时、后台批量延迟，并给关键场景留 no-delay 逃生口（这里是 NOTIFY_NO_DELAY flag）；适用条件：派发方能廉价获取订阅方优先级、且订阅方对秒级延迟不敏感——硬实时链路不适用，要靠专用通道。
+- 聚合先于派发：同订阅者的多个变更合并成一次调用（Uri[]），Binder 往返次数与变更次数解耦。

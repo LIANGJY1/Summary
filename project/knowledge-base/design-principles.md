@@ -33,10 +33,14 @@
 - [双自治实体靠对称收编维持一致](#双自治实体靠对称收编维持一致)
 - [可用性窗口用事件翻转的显式开关表达](#可用性窗口用事件翻转的显式开关表达)
 - [迟加入者补课到当下](#迟加入者补课到当下)
+- [正确性不依赖尽力而为的通知](#正确性不依赖尽力而为的通知)
 - [挂起与取消是两种资源语义](#挂起与取消是两种资源语义)
 - [资源启停收敛到活跃度翻转点](#资源启停收敛到活跃度翻转点)
 - [真值即时记账，广播延迟撤销](#真值即时记账广播延迟撤销)
 - [类型随模式走，负载归容器](#类型随模式走负载归容器)
+- [中心枢纽永不阻塞](#中心枢纽永不阻塞)
+- [校验逐层重申，信任边界止于本层](#校验逐层重申信任边界止于本层)
+- [跨时刻信号用单调钟锚定，不信任墙钟](#跨时刻信号用单调钟锚定不信任墙钟)
 
 <!-- 条目模板：
 
@@ -510,3 +514,88 @@ public void onDestroyView() {
 **思想提炼**：
 - 对称收编 + 回调时序约束（手动补发 onDismiss 保证先于 onDestroy）+ 幂等旗标（mDismissed）三件套缺一不可：只做单向同步会在"另一边先动"时翻车；适用条件：两个实体的状态机不能合并但必须最终一致——能合并成一个状态机的（如 View 与自身可见性）不要造两套。
 - 收编时"先摘对方的回调钩子再动作"，是打断回环（A 的消失触发 B，B 的处理又触发 A）的标准手法。
+
+## 中心枢纽永不阻塞
+
+**一句话**：系统里被所有人依赖的中心组件，必须从进程级禁止"等待任何外部方"，可用性比功能完整更优先。
+
+**核心矛盾**：中心节点越重要，它的每次阻塞被放大得越广——servicemanager 若等一个不响应的下游，全系统的服务发现同时冻结；但组件自身很难靠自觉保证每个调用点都非阻塞。
+
+**代码实例**（摘自 frameworks/native `cmds/servicemanager/main.cpp` + `libs/binder/IPCThreadState.cpp`）：
+
+```cpp
+// main.cpp：进程级硬约束
+ps->setCallRestriction(ProcessState::CallRestriction::FATAL_IF_NOT_ONEWAY);
+// IPCThreadState.cpp transact：本进程发起非 oneway 调用直接 FATAL
+if (UNLIKELY(mCallRestriction != CallRestriction::NONE)) {
+    LOG_ALWAYS_FATAL("Process may not make non-oneway calls (code: %u).", code);
+}
+```
+
+**思想提炼**：
+- 中心枢纽的"不阻塞"要下沉为基础设施硬约束（发出调用即崩溃），而不是代码规约靠 review 保证；适用条件：组件是扇入极大的单点、每毫秒阻塞都被全系统放大——普通业务组件模仿它反而让错误处理变僵硬。
+- 它对外的全部交互改用通知语义（oneway 回调），把"响应及时"与"依赖少"统一成一条约束。
+
+## 正确性不依赖尽力而为的通知
+
+**一句话**：跨进程"变更通知"只当加速器，不当正确性依据——数据一致性的兜底放在"读的时候自己验证"。
+
+**核心矛盾**：通知天然不可靠（可能丢、可能迟、且为省带宽通常不带新值），但依赖通知的消费方状态又必须一致；把一致性押在通知必达上，丢一次就是永久脏状态。
+
+**代码实例**（摘自 frameworks/base/packages/SettingsProvider `SettingsProvider.java`）：
+
+```java
+// notifyForSettingsChange：通知前先自增共享内存代数——校验依据先于通知就位
+mGenerationRegistry.incrementGeneration(key);
+// ... 之后才 notifyChange（尽力而为、不带值）
+// 客户端侧：读缓存前本地读代数，不匹配即失效重读；
+// 通知丢了也能在下一次读时自愈，注册竞态窗口靠"读初值 + 对齐沿"补
+```
+
+**思想提炼**：
+- 设计事件分发系统时先回答"通知丢了/迟了/不带数据时，消费方如何回到正确状态"——答案应是重读加版本比对这类拉式自愈，而不是更强的投递保证；适用条件：消费方能低成本重读源数据——重读代价高于通知本身时（大规模推送、不可重放流）才值得堆投递可靠性。
+- 关键子集反向破例：丢失代价大的极少数项（如 DEVICE_PROVISIONED）绕过防抖与异步，当场同步落盘——分级依据是"丢一次的代价"，不是发生频率。
+
+## 校验逐层重申，信任边界止于本层
+
+**一句话**：多层架构里，同一约束（参数越界、权限、归属校验）在每一层入口都重新校验——因为每层的调用来源不同，本层之外都按不可信处理。
+
+**核心矛盾**：直觉上"校验一次就够，层层重复是浪费"；但链路各层的调用方集合不同，上一层做过的校验拦不住从其他入口进来的同一份数据。
+
+**代码实例**（摘自 AAOS13 `packages/services/Car`）：
+
+```java
+// 采样率 clamp 在同一条订阅链上做了三次：
+// CarPropertyManager.registerCallback（App 进程入口）
+// PropertyHalService.subscribeProperty（服务端 HAL 适配层，第二道防线）
+if (rate > cfg.getMaxSampleRate()) {
+    rate = cfg.getMaxSampleRate();
+}
+// VehicleHal.subscribeProperty（再校验发起 HalService 是该属性的所有者）
+assertServiceOwnerLocked(service, property);
+```
+
+**思想提炼**：
+- 写每层代码时先问"这一层的调用方是谁"，只信任自己入口内完成的校验；同一约束在多个入口重复出现不是冗余，是各自信任边界的各自收口。适用条件：分层系统且各层有不同调用来源（公共 API 层尤其如此）——单一上游的纯内部调用链不必重复校验。
+- 重复校验的落点要错位互补而非简单复制：Manager 校验"属性存在 + 频率合法"，HAL 层校验"发起服务是否为属性属主"——每层收口自己独有的信任问题。
+
+## 跨时刻信号用单调钟锚定，不信任墙钟
+
+**一句话**：凡是"过去某时刻测得的值"要留到未来使用，附上单调时钟（elapsedRealtime 类）基准而非墙钟；换算到当下 = 值 + (当前单调钟 - 基准)。
+
+**核心矛盾**：墙钟（epoch 时间）人人能读，但它是可被修改、可回拨的变量——用它给信号记时，"信号是多久以前的"这个关键问题本身就不可靠。
+
+**代码实例**（摘自 Android 13 frameworks/base `services/core/java/com/android/server/timedetector/TimeDetectorStrategy.java`）：
+
+```java
+// 每条时间建议 = TimestampedValue(基准 elapsedRealtime, epoch 值)
+// 换算到当下：墙钟怎么被改都不影响时间差计算
+static long getTimeAt(TimestampedValue<Long> timeValue, long referenceClockMillisNow) {
+    return (referenceClockMillisNow - timeValue.getReferenceTimeMillis())
+            + timeValue.getValue();
+}
+```
+
+**思想提炼**：
+- 设计"信号/测量/建议"类数据结构时，把"何时测得"与"测得什么"绑在一起传递，且时间戳选单调钟——接收方才有能力独立评估时效。适用条件：信号会异步到达且存在陈旧风险的场景；信号即产即消（无跨时刻生命周期）时无需额外锚点。
+- 单调钟长期有漂移，给锚定信号配显式保质期（如 Android 时间建议统一 24 小时上限），陈旧即失效而非无限沿用。

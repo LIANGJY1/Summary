@@ -47,7 +47,7 @@ PREFIX_BY_EXT = {}
 for _e in (".java .kt .kts .scala .groovy .js .ts .tsx .jsx .c .h .cpp .hpp .cc .hh "
            ".go .rs .swift .cs .php").split():
     PREFIX_BY_EXT[_e] = "//"
-for _e in ".py .pyw .sh .bash .zsh .yaml .yml .toml .rb .pl .pm".split():
+for _e in ".py .pyw .sh .bash .zsh .yaml .yml .toml .rb .pl .pm .bp".split():
     PREFIX_BY_EXT[_e] = "#"
 for _e in ".sql .lua .hs".split():
     PREFIX_BY_EXT[_e] = "--"
