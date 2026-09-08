@@ -13,7 +13,8 @@
 **不收**（退回 ROUTING.md 判据链 2–6）：
 
 - 把语言名换掉结论仍成立的知识——通用设计思想 → design-principles.md；第三方框架/SDK 设计 → sdk-design.md；Android UI 坑 → android-ui.md
-- 同一主题两边都够格时各写各的角度、互相不复制（例：Kotlin 协程——学会用 → `kotlin/`；跨库并发设计思想条目 → sdk-design.md）
+- 业务逻辑与工程模式，**即使示例代码是本语言写的**：判定看知识内核，不看代码语言——如「订阅监听后必须对账初值」换任何语言都成立，属工程模式不属 Kotlin 语法，归宿是项目文档或 design-principles.md，不是本域
+- 同一主题两边都够格时各写各的角度、互相不复制（例：Kotlin 协程的挂起机制 → `kotlin/`；跨库并发设计思想条目 → sdk-design.md）
 
 ## 分发策略（三步判定，按序执行）
 

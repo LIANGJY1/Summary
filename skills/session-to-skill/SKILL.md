@@ -13,7 +13,7 @@ You are not summarizing for a human reader (that's `handoff`); you are writing a
 Mine the conversation for one of two shapes:
 
 - **Workflow skill** — the session showed a repeatable *process* (a sequence of steps, artifacts produced, feedback loops). The skill re-runs the process.
-- **Knowledge skill** — the session produced *decisions/constraints/domain knowledge* worth preserving verbatim (e.g. an arbitration rule table, a protocol). The skill re-delivers the knowledge at the right moment.
+- **Knowledge skill** — removed from this skill's output. Decisions, constraints, and domain knowledge are declarative assets: route them to the Summary knowledge-base or an ADR. A skill may reference those assets but must not duplicate them verbatim.
 
 If the session was a one-off (single bug fix, no repeated pattern, no reusable knowledge), say so and stop — forcing it into a skill produces noise. Offer `handoff` or a dated summary doc instead.
 

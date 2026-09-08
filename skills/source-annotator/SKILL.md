@@ -278,9 +278,9 @@ metadata:
 
 ### 跨库知识库（SDK 设计 + 设计思想 + 注解技术）
 
-目录固定：`/home/liang/Project/MyProject/Summary/project/knowledge-base/`（本机约定路径；换机使用时先问用户知识库放哪）。**沉淀前先读该目录根的 `ROUTING.md` 定目标大类**——候选与分流判据的单一事实源在那里（背景见其 `docs/adr/0005-two-level-knowledge-routing.md`）。本 skill 维护其中三个大类：`sdk-design.md`（怎么做）/ `design-principles.md`（怎么想）/ `annotation-techniques.md`（怎么标注）。
+目录固定：`/home/liang/Project/MyProject/Summary/project/knowledge-base/`（本机约定路径；换机使用时先问用户知识库放哪）。**沉淀前先读该目录根的 `ROUTING.md` 定目标大类**——候选与分流判据的单一事实源在那里。路由按知识主题唯一决定落点；大类中的维护者是责任/复核标记，不是另建近义文档的理由。
 
-**准入细则、条目模板、归并规则以目标大类头部"边界/规则"节为准**；同一条知识够格进多份文档时**各写各的角度，互相不复制**（细则在各大类头部），只够格一份时只写一份。同步时机：① 每落一处精妙设计（§3.3）→ 除源码注释里的"对 SDK 设计的启示是…"分点与库沉淀文档外，按 ROUTING.md 路由同步 `sdk-design.md` / `design-principles.md`；② 标注实践或源码原文注释中发现值得沉淀的注解技术（好范例、新技巧、验证有效的方法）→ 同步 `annotation-techniques.md`。目标文档不存在（含新机器）→ 先问用户知识库放哪，按其头部骨架创建后写入，**并回填 `ROUTING.md` 路由表**。
+**准入细则、条目模板、归并规则以目标大类头部"边界/规则"节为准**；同一条知识只有在各目标明确要求不同视角时才分别写入，且互相链接、不复制。同步时机：① 每落一处精妙设计（§3.3）→ 除源码注释里的"对 SDK 设计的启示是…"分点与库沉淀文档外，按 ROUTING.md 路由同步对应大类；② 标注实践或源码原文注释中发现值得沉淀的注解技术 → 按路由同步对应大类。所有写入遵守 session-to-knowledge 的共享 profile、证据、脱敏与 `check_kb.py` 契约；目标文档不存在（含新机器）→ 先问用户知识库放哪，**并回填 `ROUTING.md` 路由表**。
 
 ## 5. 输出格式（固定四段）
 

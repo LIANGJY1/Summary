@@ -10,7 +10,7 @@
 
 ## 规则
 
-- 复习者测试准入门槛起效；单次会话 ≤ 3 条，允许 0 条
+- 复习者测试准入门槛起效；不设单次条目数量上限
 - 踩坑类条目五段：**现象 → 原因 → 误区 → 解决方案 → 启示**；稳定事实类条目（架构事实/源码路径）用变体：**原理 → 优缺点 → 使用场景及用法 → 怎么验证 → 陷阱**，条目首行注明变体
 - 涉及代码行为附 ≤ 10 行最小示例并标来源项目与文件路径；验证命令给可直接执行的一行
 - 冷可读：专名首现带括注，删掉项目名仍能读懂；条目名是完整命题；正文 timeless，不写日期与元数据行
@@ -19,7 +19,7 @@
 ## 目录
 
 - [ContentObserver 监听设置项：通知不带值、注册不重放初值、注册窗口有竞态](#contentobserver-监听设置项通知不带值注册不重放初值注册窗口有竞态)
-- [SettingsProvider 寄宿 system_server，源码 8.0 起在 frameworks/base/packages/SettingsProvider](#settingsprovider-寄宿-system_server源码-80-起在-frameworksbasesettingsprovider)
+- [SettingsProvider 寄宿 system_server，源码 8.0 起在 frameworks/base/packages/SettingsProvider](#settingsprovider-寄宿-system_server源码-80-起在-frameworksbasepackagessettingsprovider)
 - [跨应用共享低频开关：用 Settings.Global 当总线，广播/SP/AIDL 各有坑](#跨应用共享低频开关用-settingsglobal-当总线广播spaidl-各有坑)
 
 <!-- 条目模板：

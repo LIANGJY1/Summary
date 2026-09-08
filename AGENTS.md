@@ -15,7 +15,7 @@
 
 | 路径 | 是什么 | agent 何时读 | 怎么写入 |
 |---|---|---|---|
-| `project/knowledge-base/` | 会话经验条目库（唯一沉淀地，条条可复习）；内含 `language/` 子目录——编程语言相关知识先进此目录，再按语言分发 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的同步时机；新条目过其头部规则 |
+| `project/knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；新内容先按 profile 与路由规则处理 |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
 | `skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后跑 `skills/sync-from-agents.sh` |
 | `path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |

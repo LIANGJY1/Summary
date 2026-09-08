@@ -19,7 +19,7 @@ REPO_ROOT="$(git -C "$DST" rev-parse --show-toplevel 2>/dev/null || dirname "$DS
 before=$(ls "$DST" | sort)
 echo "同步 $SRC → $DST"
 rsync -a --delete --itemize-changes \
-  --exclude="/$SELF" --exclude="/README*" --exclude="/全网高质量Skills调研与写作指南.md" --exclude=".git" \
+  --exclude="/$SELF" --exclude="/README*" --exclude="/全网高质量Skills调研与写作指南.md" --exclude=".git" --exclude="__pycache__" --exclude="*.pyc" \
   "$SRC/" "$DST/" > /tmp/sync-skills-itemize.txt
 
 after=$(ls "$DST" | sort)
