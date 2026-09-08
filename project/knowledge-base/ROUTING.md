@@ -11,7 +11,8 @@
 4. 讲"怎么标注"——注释模式、结构组织、表达技巧等注解技术 → [annotation-techniques.md](./annotation-techniques.md)
 5. Android UI 域（组件运行期修改 / 资源变体 / 约束适配）"改不动、改不对"的坑与解法 → [android-ui.md](./android-ui.md)
 6. Android Provider 域（ContentProvider/系统级 Provider/ContentObserver 跨进程共享与监听）的机制事实与用法坑 → [android-provider.md](./android-provider.md)
-7. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
+7. Android 音频域（音频焦点/播放配置/音源识别）的机制事实与踩坑 → [android-audio.md](./android-audio.md)
+8. 都不中 → 向用户提议新立大类（骨架与流程见 session-to-knowledge；引言 blockquote 标维护者、头部立「边界」）→ **建完回填本表**
 
 ## 重叠主题的裁决顺序
 
@@ -34,6 +35,7 @@
 | [annotation-techniques.md](./annotation-techniques.md) | source-annotator | 怎么写好源码注释的技术与实例 | 具体库的标注成果 → 该库沉淀文档（不进知识库） |
 | [android-ui.md](./android-ui.md) | session-to-knowledge | Android UI 域踩坑与解法（跨同类项目仍成立） | 跨库可迁移的设计模式 → sdk-design.md |
 | [android-provider.md](./android-provider.md) | session-to-knowledge | 跨进程数据共享与监听（Provider/系统 Provider/Observer）的架构事实与踩坑 | UI 域坑 → android-ui.md；权衡思维 → design-principles.md |
+| [android-audio.md](./android-audio.md) | session-to-knowledge | Android 音频域（焦点/播放配置/音源识别）的机制事实与踩坑 | Provider/Observer → android-provider.md；权衡思维 → design-principles.md |
 
 ## 规则
 
