@@ -70,6 +70,7 @@ readRaw()?.takeIf { (it == 1) != initial }        // ② 注册后立刻读现�
 **启示**：
 - 一切"变化通知"型 API（ContentObserver、广播、文件 watch）共性：通知只保证"发生过"，不保证"值是什么、你错过了什么"；正确性 = 回调内重读＋注册后快照对齐（适用：任何注册与通知分离的观察 API）
 - 通知是尽力而为，别当唯一真相源；真相在数据源里，监听方状态是可被对齐沿修正的缓存（适用：跨进程/跨端状态同步）
+- 注册与注销必须**成对**：observer 存成员字段、生命周期对端（onDestroy/release）`unregisterContentObserver`——局部变量注册后拿不到引用，ContentService 登记表持着它：对象泄漏、页面重建后二次注册变重复回调（适用：一切 register 型监听 API）
 
 ## SettingsProvider 寄宿 system_server，源码 8.0 起在 frameworks/base/packages/SettingsProvider
 

@@ -117,7 +117,7 @@ else
 fi
 NEW="http://$GW:$PORT"
 
-# --- Git 通道: HTTP 代理必须显式写入 Git;环境变量在不同 shell/GUI 中不可靠 ---
+# --- Git 通道: 清理固定代理,让 .bashrc 动态环境变量负责开关 ---
 GIT_PROXY_RES='unavailable'
 GIT_HTTPS_RES='skip'
 GIT_SSH_RES='skip'
@@ -132,12 +132,13 @@ fi
 
 item "Git HTTPS 代理配置"
 if command -v git >/dev/null 2>&1; then
-    if git config --global http.proxy "$NEW"; then
+    clear_git_proxy
+    if ! git config --global --get-all http.proxy >/dev/null 2>&1; then
         GIT_PROXY_RES='updated'
-        ok "已设置 http.proxy=$NEW"
+        ok "已清理固定 http.proxy (代理开时走环境变量,关闭时直连)"
     else
         GIT_PROXY_RES='err'; FAIL=1
-        bad "无法写入 Git 全局 http.proxy"
+        bad "无法清理 Git 全局 http.proxy"
     fi
 else
     bad "找不到 git"; GIT_PROXY_RES='err'; FAIL=1
