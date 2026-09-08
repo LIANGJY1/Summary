@@ -7,8 +7,8 @@
 # 位置: 本体即本文件 /home/liang/Project/MyProject/Summary/tools/proxy/fixproxy
 #       ~/.local/bin/fixproxy 只是指向本体的软链接(为让 PATH 里能直接敲 fixproxy),
 #       通过软链接编辑等价于编辑本体,但请统一改这里,勿在其他位置另存副本。
-# 配套: 新终端的代理环境变量由 ~/.bashrc 的动态段(__PROXY_GW)负责,本脚本管不了环境变量,
-#       只负责 GNOME/codex/opencode/桌面启动器等静态通道 + 提示当前终端如何 export。
+# 配套: 新终端的代理环境变量由 ~/.bashrc 的动态段(__PROXY_GW)负责;
+#       本脚本另外同步 Git HTTPS 代理与 GitHub SSH-443 配置,避免 Git 依赖当前 shell 状态。
 #
 # 修改历史:
 #   2026-09-06  初版:探测网关:7990,一键同步 GNOME 系统代理 + ~/.codex/config.toml
@@ -21,10 +21,17 @@
 #               环境变量是否仍指向旧地址(opencode/codex 会继承)
 #   2026-09-06  本体迁至 Project/MyProject/Summary/tools/proxy/,
 #               ~/.local/bin/fixproxy 改为软链接
+#   2026-09-08  新增真实 Git HTTPS/SSH-443 检测;同步 Git 代理与 ~/.ssh/config,
+#               修复“Google 可通但 git push 卡住”的误报
 set -uo pipefail
 
 PORT=7990
 TEST_URL="https://www.google.com/generate_204"
+GIT_TEST_TIMEOUT=15
+SSH_TEST_TIMEOUT=20
+SSH_CONFIG="$HOME/.ssh/config"
+SSH_BEGIN="# >>> FIXPROXY GITHUB SSH >>>"
+SSH_END="# <<< FIXPROXY GITHUB SSH <<<"
 CODEX_CONF="$HOME/.codex/config.toml"
 # opencode 没有代理配置字段,走环境变量;扫描其配置文件以防有人往里写死了旧地址
 OPENCODE_CONFS=("$HOME/.config/opencode/opencode.json"
@@ -32,6 +39,40 @@ OPENCODE_CONFS=("$HOME/.config/opencode/opencode.json"
 DESKTOPS=("$HOME/.local/share/applications/chatgpt.desktop"
           "$HOME/.local/share/applications/trae-cn.desktop")
 CONFIG_FILES=("$CODEX_CONF" "${OPENCODE_CONFS[@]}" "${DESKTOPS[@]}")
+
+print_ssh_config() {
+    local gw=$1
+    cat <<EOF
+$SSH_BEGIN
+Host github.com
+    HostName ssh.github.com
+    Port 443
+    User git
+    ProxyCommand nc -X connect -x ${gw}:${PORT} %h %p
+$SSH_END
+EOF
+}
+
+print_git_proxy() {
+    printf 'http://%s:%s\n' "$1" "$PORT"
+}
+
+clear_git_proxy() {
+    git config --global --unset-all http.proxy >/dev/null 2>&1 || true
+}
+
+if [ "${1:-}" = '--print-ssh-config' ]; then
+    print_ssh_config "${2:?gateway required}"
+    exit 0
+fi
+if [ "${1:-}" = '--print-git-proxy' ]; then
+    print_git_proxy "${2:?gateway required}"
+    exit 0
+fi
+if [ "${1:-}" = '--clear-git-proxy' ]; then
+    clear_git_proxy
+    exit 0
+fi
 
 # ---------- 输出辅助(输出到非终端时自动去色) ----------
 if [ -t 1 ]; then G=$'\e[32m' R=$'\e[31m' Y=$'\e[33m' B=$'\e[1m' N=$'\e[0m'
@@ -51,13 +92,19 @@ sec "一、检测网络"
 item "默认网关(手机热点 IP)"
 GW=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
 if [ -n "$GW" ]; then ok "网关 = $GW"
-else bad "没有默认路由 —— 请先连接手机热点"; exit 1; fi
+else
+    bad "没有默认路由 —— 请先连接手机热点"
+    clear_git_proxy
+    exit 1
+fi
 
 item "代理端口 $GW:$PORT"
 if timeout 1 bash -c ": </dev/tcp/$GW/$PORT" 2>/dev/null; then
     ok "TCP 可达 —— 手机代理在线"
 else
-    bad "端口不通 —— 检查手机代理是否开启、是否允许局域网连接"; exit 1
+    bad "端口不通 —— 检查手机代理是否开启、是否允许局域网连接"
+    clear_git_proxy
+    exit 1
 fi
 
 item "外网连通性(经代理访问 $TEST_URL)"
@@ -69,6 +116,83 @@ else
     bad "HTTP ${CODE:-000} —— 端口通但出口异常(代理节点可能故障)"; FAIL=1
 fi
 NEW="http://$GW:$PORT"
+
+# --- Git 通道: HTTP 代理必须显式写入 Git;环境变量在不同 shell/GUI 中不可靠 ---
+GIT_PROXY_RES='unavailable'
+GIT_HTTPS_RES='skip'
+GIT_SSH_RES='skip'
+GIT_REMOTE=$(git remote get-url origin 2>/dev/null || true)
+GIT_HTTPS_REMOTE="$GIT_REMOTE"
+GIT_SSH_REMOTE="$GIT_REMOTE"
+if [[ "$GIT_REMOTE" =~ ^git@github\.com:(.+)$ ]]; then
+    GIT_HTTPS_REMOTE="https://github.com/${BASH_REMATCH[1]}"
+elif [[ "$GIT_REMOTE" =~ ^https://github\.com/(.+)$ ]]; then
+    GIT_SSH_REMOTE="git@github.com:${BASH_REMATCH[1]}"
+fi
+
+item "Git HTTPS 代理配置"
+if command -v git >/dev/null 2>&1; then
+    if git config --global http.proxy "$NEW"; then
+        GIT_PROXY_RES='updated'
+        ok "已设置 http.proxy=$NEW"
+    else
+        GIT_PROXY_RES='err'; FAIL=1
+        bad "无法写入 Git 全局 http.proxy"
+    fi
+else
+    bad "找不到 git"; GIT_PROXY_RES='err'; FAIL=1
+fi
+
+item "GitHub SSH-443 配置"
+if command -v nc >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$SSH_CONFIG")"
+    SSH_TMP=$(mktemp "${SSH_CONFIG}.fixproxy.XXXXXX")
+    if [ -f "$SSH_CONFIG" ]; then
+        awk -v begin="$SSH_BEGIN" -v end="$SSH_END" \
+            '$0 == begin {skip=1; next} $0 == end {skip=0; next} !skip {print}' \
+            "$SSH_CONFIG" > "$SSH_TMP"
+    fi
+    print_ssh_config "$GW" >> "$SSH_TMP"
+    chmod 600 "$SSH_TMP"
+    if mv "$SSH_TMP" "$SSH_CONFIG"; then
+        ok "已同步 $SSH_CONFIG (github.com → ssh.github.com:443, HTTP CONNECT)"
+    else
+        rm -f "$SSH_TMP"
+        bad "无法更新 $SSH_CONFIG"; FAIL=1
+    fi
+else
+    warn "找不到 nc,跳过 SSH-443 配置"; GIT_SSH_RES='err'; FAIL=1
+fi
+
+item "真实 Git HTTPS 通道"
+if [ -n "$GIT_HTTPS_REMOTE" ]; then
+    if timeout "$GIT_TEST_TIMEOUT" env GIT_TERMINAL_PROMPT=0 \
+        git -c http.proxy="$NEW" -c http.version=HTTP/1.1 \
+        ls-remote "$GIT_HTTPS_REMOTE" HEAD >/dev/null 2>&1; then
+        GIT_HTTPS_RES='ok'
+        ok "ls-remote 成功 (代理实际可用)"
+    else
+        GIT_HTTPS_RES='err'; FAIL=1
+        bad "ls-remote 失败/超时 —— Git HTTPS 仍不可用"
+    fi
+else
+    warn "没有 origin,跳过 Git HTTPS 检测"
+fi
+
+item "真实 Git SSH-443 通道"
+if [ -n "$GIT_SSH_REMOTE" ] && [ -f "$SSH_CONFIG" ]; then
+    SSH_CMD='ssh -o BatchMode=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o StrictHostKeyChecking=accept-new'
+    if timeout "$SSH_TEST_TIMEOUT" env GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="$SSH_CMD" \
+        git ls-remote "$GIT_SSH_REMOTE" HEAD >/dev/null 2>&1; then
+        GIT_SSH_RES='ok'
+        ok "ls-remote 成功 (SSH 经代理走 443)"
+    else
+        GIT_SSH_RES='err'; FAIL=1
+        bad "ls-remote 失败/超时 —— SSH-443 或 GitHub 密钥不可用"
+    fi
+else
+    warn "没有可测试的 SSH origin,跳过 Git SSH 检测"
+fi
 
 # ========== ② 检测各配置通道 ==========
 sec "二、检测各配置通道(目标: $NEW)"
@@ -181,6 +305,9 @@ printf '  GNOME 系统代理  %b(%b%s%b)%b\n' "$N" "$N" "$(label "$GNOME_RES")" 
 for f in "${CONFIG_FILES[@]}"; do
     printf '  %-15s %b(%b%s%b)%b\n' "$(basename "$f")" "$N" "$N" "$(label "${F_RES[$f]:-skip}")" "$N" "$N"
 done
+printf '  Git HTTPS 代理  %b(%b%s%b)%b\n' "$N" "$N" "$(label "$GIT_PROXY_RES")" "$N" "$N"
+printf '  Git HTTPS 通道   %b(%b%s%b)%b\n' "$N" "$N" "$(label "$GIT_HTTPS_RES")" "$N" "$N"
+printf '  Git SSH-443 通道  %b(%b%s%b)%b\n' "$N" "$N" "$(label "$GIT_SSH_RES")" "$N" "$N"
 
 if grep -q '__PROXY_GW' "$HOME/.bashrc" 2>/dev/null; then
     printf '  新终端环境变量  %b✔ .bashrc 动态检测已启用,自动生效%b\n' "$G" "$N"
@@ -204,7 +331,7 @@ fi
 
 echo
 if [ "$ANY_CHANGE" -eq 1 ] || [ -n "$ENV_STALE" ]; then
-    echo "当前终端立即生效,请执行(新开终端不用):"
+    echo "当前终端环境变量仍需执行(新开终端不用):"
     echo "  export HTTP_PROXY=$NEW HTTPS_PROXY=$NEW http_proxy=$NEW https_proxy=$NEW ALL_PROXY=$NEW"
     echo
     [ "$ANY_CHANGE" -eq 1 ] && warn "已开着的程序(浏览器/zcode/codex/opencode)需重启才会用上新代理"
