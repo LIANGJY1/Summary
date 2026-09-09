@@ -58,6 +58,9 @@
 - [跨边界引用做镜像计数](#跨边界引用做镜像计数)
 - [临时引用焊住跨边界记账窗口](#临时引用焊住跨边界记账窗口)
 - [读写合并单调用，阻塞语义统一](#读写合并单调用阻塞语义统一)
+- [包装层垫引用，两种归还路径都要定义](#包装层垫引用两种归还路径都要定义)
+- [发布后配置冻结做成硬防线](#发布后配置冻结做成硬防线)
+- [旁路账本做可信锚，数据区不可自证](#旁路账本做可信锚数据区不可自证)
 - [缓存按匹配键放宽分级，查找沿代价升序](#缓存按匹配键放宽分级查找沿代价升序)
 - [投机工作带 deadline 与放弃语义](#投机工作带-deadline-与放弃语义)
 - [多源合并先建命名空间隔离](#多源合并先建命名空间隔离)
@@ -75,6 +78,7 @@
 - [多对一聚合订阅，一对多本地限流分发](#多对一聚合订阅一对多本地限流分发)
 - [错误定向回传最后写入者](#错误定向回传最后写入者)
 - [多源建议集中仲裁，来源只产信号不执行](#多源建议集中仲裁来源只产信号不执行)
+- [三值谓词链组合过滤，全弃权默认放行](#三值谓词链组合过滤全弃权默认放行)
 
 <!-- 条目模板：
 
@@ -1328,6 +1332,8 @@ synchronized (mWriteLock) {
 - 持久化 API 只暴露"置脏 + 排程"（scheduleWriteIfNeededLocked），"何时真正写盘"收口在一个方法里，同步写、防抖、强制写都从它分叉；适用条件：写频高、单笔小、可容忍秒级延迟的键值型状态——事务性要求强的结构化数据应走数据库。
 - 落盘文件用 AtomicFile 三段式（startWrite/finishWrite/failWrite），保证盘上任一时刻都有完整可读副本，自建持久化不要手写"临时文件 + rename"。
 
+**并列实例·两种合并策略**（frameworks/base/core/java/android/app/SharedPreferencesImpl.java）：SharedPreferences 的 apply 用"双代数"合并——内存代数每次提交自增、盘代数随写盘推进，写盘前发现内存代数已被更新的提交推进就放弃本次写（合并发生在写前，不靠延迟排程）。两种策略按"写盘调度权在谁手里"选择：有专用落盘线程用延迟排程，写盘任务可能被并发提交则用代数判让。
+
 ## 多对一聚合订阅，一对多本地限流分发
 
 **一句话**：进程内多个消费者共享一个昂贵的上游订阅时，用聚合器把 N 份订阅压缩成 1 份（按最苛刻需求取值），再把上游推来的数据流按各消费者自己的需求本地裁剪分发。
@@ -1577,3 +1583,96 @@ if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || noDelay) 
 **SDK 设计启示**：
 - 通知类 API 的"实时性"应该是分级的：前台即时、后台批量延迟，并给关键场景留 no-delay 逃生口（这里是 NOTIFY_NO_DELAY flag）；适用条件：派发方能廉价获取订阅方优先级、且订阅方对秒级延迟不敏感——硬实时链路不适用，要靠专用通道。
 - 聚合先于派发：同订阅者的多个变更合并成一次调用（Uri[]），Binder 往返次数与变更次数解耦。
+
+## 包装层垫引用，两种归还路径都要定义
+
+**一句话**：包装对象（代理壳）替底层资源先垫住引用时，"被使用的归还路径"与"从未被使用的归还路径"必须同时定义，缺一即泄漏。
+
+**代码实例**（摘自 frameworks/native `libs/binder/Binder.cpp` BpRefBase）：
+
+```cpp
+BpRefBase::BpRefBase(const sp<IBinder>& o) {
+    extendObjectLifetime(OBJECT_LIFETIME_WEAK);
+    mRemote->incStrong(this);           // 垫住：替"未来的主人"持有
+    mRefs = mRemote->createWeak(this);  // 终生死引用，保 mRemote 检查不悬挂
+}
+void BpRefBase::onFirstRef() {          // 被 sp 接住：所有权转移给主人
+    mState.fetch_or(kRemoteAcquired);
+}
+BpRefBase::~BpRefBase() {
+    if (!(mState & kRemoteAcquired)) mRemote->decStrong(this);  // 从未被用：自己归还
+    mRefs->decWeak(this);
+}
+```
+
+**为什么精妙**：壳是弱生命周期对象——构造引用的"应还人"取决于壳后来有没有主人，kRemoteAcquired 一个标志位把两种命运分开，onLastStrongRef 与析构各走各的归还，零泄漏零重复释放。
+
+**SDK 设计启示**：
+- 包装层垫引用的每一步都要画"归还决策树"：谁垫、谁还、何时不还（已转移）；适用条件：包装对象生命周期与资源不同步（弱生命周期壳、懒加载持有者）——壳与资源严格同生共死时直接持有即可。
+- 状态标志用一次性置位（fetch_or），语义是"所有权已转移、不可逆"，天然幂等。
+
+## 发布后配置冻结做成硬防线
+
+**一句话**：对象一旦"发布"（发给其他进程/子系统），配置类 setter 全部拒绝调用并 FATAL，把"发布后不可变"从文档约定变成代码防线。
+
+**代码实例**（摘自 frameworks/native `libs/binder/Binder.cpp` BBinder）：
+
+```cpp
+void BBinder::setRequestingSid(bool requestingSid) {
+    LOG_ALWAYS_FATAL_IF(mParceled,           // 发给远端后 mParceled=true
+        "setRequestingSid() should not be called after a binder object "
+        "is parceled/sent to another process");
+    ...
+}
+```
+
+**为什么精妙**：远端已按发布时的配置建立预期，事后改配置 = 跨进程行为不一致且极难复现——FATAL 让问题在开发期第一现场爆炸，而不是变成线上玄学。
+
+**SDK 设计启示**：
+- 有"发布/初始化完成"时刻的对象，所有影响行为的 setter 统一挂冻结断言；适用条件：配置会被远端缓存或依赖（跨进程服务、序列化后分发的对象）——纯本地对象不必，断言本身有成本。
+- 冻结状态由资源流转自动置位（parceled 时驱动流程标记），不依赖使用者记得调 freeze()。
+
+## 三值谓词链组合过滤，全弃权默认放行
+
+**一句话**：多条过滤规则各自实现成"true 必须处理 / false 必须丢弃 / null 无意见"的三值谓词，链式执行、首个有态度者生效，全部弃权则走默认放行。
+
+**代码实例**（摘自 Android 13 frameworks/opt/telephony `src/java/com/android/internal/telephony/nitz/NitzSignalInputFilterPredicateFactory.java`）：
+
+```java
+TrivalentPredicate[] components = new TrivalentPredicate[] {
+        createIgnoreNitzPropertyCheck(deviceState),   // 总开关：false 或 null
+        createBogusElapsedRealtimeCheck(context,..),  // 坏基准剔除：false 或 null
+        createNoOldSignalCheck(),                     // 无历史必处理：true 或 null
+        createRateLimitCheck(deviceState),            // 限频：true 或 false（末位裁决）
+};
+// 链式执行：首个非 null 结果即生效，全 null 默认 true
+```
+
+**为什么精妙**：把 N 条过滤规则写成一坨嵌套 if 时，规则间耦合"判断顺序 + 判断逻辑"，删改一条要通读全部；三值链让每条规则只回答自己有资格回答的问题，规则可独立测试、可任意增删排序。
+
+**SDK 设计启示**：
+- 过滤/校验规则集合会持续增长时，用三值谓词链替代布尔与或组合，并按"成本从低到高"排列（便宜的总开关在前、逐字段比较在后）。适用条件：规则各自独立、存在"无意见"空间、默认行为可明确——规则间必须全序裁决（先到先得）且无全局最优诉求时不适用。
+- 默认值（全弃权时的行为）是链的契约的一部分，必须显式声明并写进接口文档，否则增删规则会静默改变兜底行为。
+
+## 旁路账本做可信锚，数据区不可自证
+
+**一句话**：反序列化不可信来源的数据时，"这段内容是合法对象"的判断依据放在独立维护的旁路账本里，数据区自身的结构再像也不算数。
+
+**代码实例**（摘自 frameworks/native `libs/binder/Parcel.cpp`）：
+
+```cpp
+// 读特殊对象前必须验证：当前位置登记在偏移表里（驱动改写过的才可信）
+const flat_binder_object* Parcel::readObject(bool nullMetaData) const {
+    ...
+    if (OBJS[opos] == DPOS) {       // 偏移表命中 → 驱动背书，可信
+        mNextObjectHint = opos+1;
+        return obj;
+    }
+    ALOGW("Attempt to read object ... not in the object list");  // 未登记 → 拒绝
+```
+
+**为什么精妙**：恶意对端可以在数据区伪造任意 flat_binder_object（塞 handle 骗代理、塞 fd 骗文件），数据自证清白不可能；偏移表由驱动按真实写入维护、随事务一起送达，伪造者碰不到它。
+
+**SDK 设计启示**：
+- 处理外部输入中的"指针/句柄/引用"类内容时，配一条独立通道的可信清单（伴随元数据、Merkle 证明、内核记账），消费前先对账；适用条件：内容可被伪造且误信后果是越权——纯展示数据或已有外层鉴权时不必双账本。
+- 账本查询按消费顺序缓存游标（mNextObjectHint），顺序读摊薄为近似 O(1)。
