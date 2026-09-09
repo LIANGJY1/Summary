@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {"id": "object-expression", "decision": "include", "source": "user"},
+    {"id": "object-declaration-difference", "decision": "merge", "source": "user"},
+    {"id": "object-supertype-syntax", "decision": "include", "source": "user"},
+    {"id": "java-sam-conversion", "decision": "include", "source": "user"},
+    {"id": "run-catching-on-failure", "decision": "include", "source": "user"},
+    {"id": "expression-body-and-java-class", "decision": "include", "source": "user"},
+    {"id": "vehicle-service-naming", "decision": "merge", "source": "user"},
+    {"id": "not-null-assertion", "decision": "include", "source": "user"},
+    {"id": "foreach-safe-let", "decision": "include", "source": "user"},
+    {"id": "getter-lazy-tour", "decision": "reject", "source": "assistant-only"},
+    {"id": "scope-functions-tour", "decision": "reject", "source": "assistant-only"},
+    {"id": "base-manager-singleton", "decision": "reject", "source": "assistant-only"},
+    {"id": "when-branch", "decision": "reject", "source": "absent"},
+    {"id": "default-arguments", "decision": "reject", "source": "absent"},
+    {"id": "safe-cast-guard", "decision": "reject", "source": "absent"}
+  ]
+}

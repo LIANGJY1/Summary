@@ -882,6 +882,8 @@ class ScriptRunner:
         self.process = None
         self.running = False
         self._thread = None
+        # 一次运行的结束回调：on_finish(status, message)，触发一次后自动置空
+        self.on_finish = None
 
     def execute(self, script: ScriptConfig, base_dir: Path, params: dict = None):
         if self.running:
@@ -965,14 +967,27 @@ class ScriptRunner:
             if self.running:
                 if self.process.returncode == 0:
                     self.output_queue.put(('success', f'\n✓ Completed (exit code 0)\n'))
+                    self._finish('success', 'Completed (exit code 0)')
                 else:
                     self.output_queue.put(('error', f'\n✗ Failed (exit code {self.process.returncode})\n'))
+                    self._finish('failed', f'Failed (exit code {self.process.returncode})')
+            else:
+                self._finish('stopped', 'Stopped by user')
 
         except Exception as e:
             self.output_queue.put(('error', f'\n✗ Error: {e}\n'))
+            self._finish('failed', f'Error: {e}')
         finally:
             self.running = False
             self.process = None
+
+    def _finish(self, status: str, message: str):
+        callback, self.on_finish = self.on_finish, None
+        if callback:
+            try:
+                callback(status, message)
+            except Exception:
+                pass
 
     def pause(self):
         if self.process and self.running:
@@ -2581,6 +2596,10 @@ class Scheduler:
                 last = datetime.datetime.strptime(schedule.last_run, '%Y-%m-%d %H:%M:%S')
                 if (last.year, last.month, last.day, last.hour, last.minute) == (now.year, now.month, now.day, now.hour, now.minute):
                     return False
+                # once 任务按"本次安排是否已执行过去重"：last_run 已落在安排时间之后即不再触发。
+                # 否则 60 秒触发窗口跨到下一分钟时（如 19:36:53 的任务在 19:37:00）会二次执行
+                if schedule.repeat == 'once' and last >= base:
+                    return False
             except Exception:
                 pass
 
@@ -3633,6 +3652,8 @@ class LauncherApp:
         else:
             self.output_panel.hide_logcat_bar()
         
+        # 手动运行不写调度日志
+        self.runner.on_finish = None
         self.runner.execute(script, self.base_dir, params)
 
     def _stop_script(self):
@@ -3704,12 +3725,16 @@ class LauncherApp:
                 break
 
         if not script:
+            if self.schedules_panel:
+                self.schedules_panel.add_log(schedule.name, 'failed', 'script not found')
             self.output_panel.append(
                 f"[Scheduler] '{schedule.name}' failed: script not found\n", 'error'
             )
             return
 
         if self.runner.running:
+            if self.schedules_panel:
+                self.schedules_panel.add_log(schedule.name, 'failed', 'skipped: another script is running')
             self.output_panel.append(
                 f"[Scheduler] '{schedule.name}' skipped: another script is running\n", 'warning'
             )
@@ -3719,6 +3744,8 @@ class LauncherApp:
         for param in script.parameters:
             value = self.settings.get(script.id, param.name, param.default)
             if param.required and not value:
+                if self.schedules_panel:
+                    self.schedules_panel.add_log(schedule.name, 'failed', f'missing {param.label}')
                 self.output_panel.append(
                     f"[Scheduler] '{schedule.name}' failed: missing {param.label}\n", 'error'
                 )
@@ -3739,6 +3766,11 @@ class LauncherApp:
         if self.schedules_panel:
             self.schedules_panel.add_log(schedule.name, 'running', f"Triggered: {script.name}")
 
+        # 结束后把结果写进调度日志（回调在 runner 线程触发，转回主线程操作 UI）
+        self.runner.on_finish = lambda status, message, name=schedule.name: (
+            self.root.after(0, self._on_scheduled_finish, name, status, message)
+        )
+
         if 'logcat' in script.command.lower():
             self.output_panel.show_logcat_bar()
             self.output_panel._clear_device_logcat()
@@ -3746,6 +3778,10 @@ class LauncherApp:
             self.output_panel.hide_logcat_bar()
 
         self.runner.execute(script, self.base_dir, params)
+
+    def _on_scheduled_finish(self, name: str, status: str, message: str):
+        if self.schedules_panel:
+            self.schedules_panel.add_log(name, status, message)
 
     def _show_about(self):
         messagebox.showinfo(
@@ -3815,7 +3851,110 @@ def check_single_instance():
     return lock_file
 
 
+def _mask_sensitive(command: str, script: ScriptConfig, params: dict) -> str:
+    """把 PIN/密码类参数的值打码，用于 dry-run 展示"""
+    masked = command
+    for p in script.parameters:
+        if re.search(r'pin|password|passwd|token|secret', p.name, re.IGNORECASE):
+            value = params.get(p.name, '')
+            if value:
+                masked = masked.replace(value, '****')
+    return masked
+
+
+def run_script_blocking(script: ScriptConfig, base_dir: Path, params: dict) -> int:
+    """无 GUI 阻塞执行脚本（CLI 用），输出直通终端"""
+    command = script.command
+    if params:
+        for name, value in params.items():
+            command = command.replace(f"${{{name}}}", value)
+
+    if script.working_dir:
+        wd = Path(script.working_dir)
+        cwd = wd if wd.is_absolute() else base_dir / wd
+    else:
+        cwd = base_dir
+
+    env = os.environ.copy()
+    if script.env:
+        env.update(script.env)
+
+    process = subprocess.Popen(command, shell=True, cwd=str(cwd), env=env)
+    try:
+        return process.wait()
+    except KeyboardInterrupt:
+        process.terminate()
+        return 130
+
+
+def run_cli(args: list):
+    """headless 模式：--list 列出脚本，--run <id> 按 GUI/调度器同一套参数解析直接执行"""
+    config_path = Path(__file__).parent / 'config.json'
+    if '--config' in args:
+        i = args.index('--config')
+        if i + 1 < len(args):
+            config_path = Path(args[i + 1])
+    if not Path(config_path).exists():
+        print(f"Error: Config file not found: {config_path}")
+        sys.exit(1)
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = AppConfig(json.load(f))
+    settings = SettingsManager(config_path.parent / 'settings.json')
+
+    if args[0] == '--list':
+        print(f"{'ID':<24} {'STATE':<6} NAME")
+        for s in config.scripts:
+            enabled = settings.get_enabled(s.id, s.enabled)
+            print(f"{s.id:<24} {'on' if enabled else 'off':<6} {s.name}")
+        return
+
+    if args[0] == '--run':
+        if len(args) < 2:
+            print("Usage: launcher_tool.py --run <script_id> [--dry-run]")
+            sys.exit(1)
+        script = next((s for s in config.scripts if s.id == args[1]), None)
+        if not script:
+            print(f"Error: script not found: {args[1]}")
+            print("Available IDs: " + ", ".join(s.id for s in config.scripts))
+            sys.exit(1)
+
+        missing = [p.label for p in script.parameters
+                   if p.required and not settings.get(script.id, p.name, p.default)]
+        if missing:
+            print(f"Error: missing required parameters: {', '.join(missing)}")
+            print("Configure them in the launcher GUI first (saved to settings.json).")
+            sys.exit(1)
+        params = {p.name: settings.get(script.id, p.name, p.default) for p in script.parameters}
+
+        if not settings.get_enabled(script.id, script.enabled):
+            print(f"Note: '{script.id}' is disabled in the launcher UI; running anyway.")
+
+        if '--dry-run' in args:
+            command = script.command
+            for name, value in params.items():
+                command = command.replace(f"${{{name}}}", value)
+            print(f"[dry-run] {script.name}")
+            print(f"[dry-run] {_mask_sensitive(command, script, params)}")
+            return
+
+        print(f">>> {script.name}")
+        print('-' * 60)
+        code = run_script_blocking(script, config_path.parent, params)
+        print('-' * 60)
+        print('✓ Completed (exit code 0)' if code == 0 else f'✗ Failed (exit code {code})')
+        sys.exit(0 if code == 0 else 1)
+
+    print("Usage: launcher_tool.py --list | --run <script_id> [--dry-run] | [config.json]")
+    sys.exit(1)
+
+
 def main():
+    # CLI 模式：不创建 Tk 实例，也不做单实例锁，可与 GUI 共存
+    if sys.argv[1:2] and sys.argv[1] in ('--list', '--run'):
+        run_cli(sys.argv[1:])
+        return
+
     lock_file = check_single_instance()
     
     try:
