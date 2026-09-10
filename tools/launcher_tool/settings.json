@@ -68,7 +68,7 @@
     },
     {
       "name": "萌宠服务QA",
-      "content": "1. 动作前置条件，当前处于驻车桌面（P档）\n\n\nSRS_PetService_002，"
+      "content": "1. 开机动画大概多长时间，开机动画之后会给回调0。"
     }
   ],
   "_schedules": [

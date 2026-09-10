@@ -21,6 +21,8 @@
 - [ContentObserver 监听设置项：通知不带值、注册不重放初值、注册窗口有竞态](#contentobserver-监听设置项通知不带值注册不重放初值注册窗口有竞态)
 - [SettingsProvider 寄宿 system_server，源码 8.0 起在 frameworks/base/packages/SettingsProvider](#settingsprovider-寄宿-system_server源码-80-起在-frameworksbasepackagessettingsprovider)
 - [跨应用共享低频开关：用 Settings.Global 当总线，广播/SP/AIDL 各有坑](#跨应用共享低频开关用-settingsglobal-当总线广播spaidl-各有坑)
+- [车辆信号 SDK 的回调事件按映射表重贴别名键：按原始键过滤收不到事件，未映射键注册被静默跳过](#车辆信号-sdk-的回调事件按映射表重贴别名键按原始键过滤收不到事件未映射键注册被静默跳过)
+- [系统服务一次性就绪信号：握手沿可能先于订阅到达，监听注册要做粘性补发](#系统服务一次性就绪信号握手沿可能先于订阅到达监听注册要做粘性补发)
 
 <!-- 条目模板：
 
@@ -105,3 +107,51 @@ readRaw()?.takeIf { (it == 1) != initial }        // ② 注册后立刻读现�
 **启示**：
 - 选型先数需求件数：持久化/一对多/实时通知/权限闸门，Global 一次给齐；任何一件不要或数据形态不符（高频/大/结构化）才换方案（适用：系统签名应用间共享低频配置态）
 - 事件与状态语义别混用：拿事件流（广播）当状态总线，等于在流上重造状态查询；直接选状态型存储更省（适用：任何"开关/配置"类共享的选型）
+
+## 车辆信号 SDK 的回调事件按映射表重贴别名键：按原始键过滤收不到事件，未映射键注册被静默跳过
+
+**现象**：两个症状独立出现：① 订阅了某车辆信号——键在键表里有定义、注释也齐全——真机上回调永远不来；换成同一车端信号的另一个键，事件立刻就到了。② 注册时拼错/漏映射一个键，不报错、不抛异常，只是这个键从此静默失效，排查时极易当作"信号没发"。
+
+**原因**：Carlib（Neusoft 车辆信号封装库）在注册与回调两端各过一次键翻译，翻译表是同一张合并映射表（能量族＋自定义按键＋车设族＋数字族＋3D 车模族按序合并）：
+
+- 注册端 `PropertyManager.registerPropertyCallbacks` 用 `getRecIdByKey(key)` 把逻辑键翻译成车端属性 ID，**映射表查无的键直接被过滤跳过**（不注册、不告警）；
+- 回调端 `CarServiceManager.convertPropertyId` 用 `getKeyByRecId(recId)` 按**合并表首个匹配键**把车端 ID 换回逻辑键再分发给订阅者——同一车端信号存在多个逻辑键别名时，事件永远以排最前的族别名下发，其他别名形同虚设。
+
+**误区**：以为"订阅用什么键、回调就带什么键"——两端各翻译一次且查表方向相反，订阅键只决定注册哪个车端信号，回调键由映射表顺序决定；以为映射缺失会显式报错——实际是静默过滤，绿灯测试掩盖一切（纯逻辑层单测碰不到这层）；排查映射表时用数字字面量 grep——表里写的是常量名，搜不到就误下"没有映射"的结论。
+
+**解决方案**：订阅键必须从"回调实际会下发的别名族"取（即合并表里排最前的族）；三步排查口诀——①按常量名查注册/映射两表确认键存在；②确认事件回调侧的首匹配键别名与过滤键一致；③拿捏不准就在回调里先打印 propertyId 实测定键。来源：雅迪车机 Launcher `application/Launcher/src/main/java/com/yadea/launcher/pet/`（PetSources 按原始键过滤收不到事件后改用能量族别名）；Carlib `component/Carlib/src/main/java/com/neusoft/libcar/`（`manager/CarServiceManager.kt` 的 convertPropertyId、`manager/PropertyManager.kt` 的注册过滤、`map/CarPropertyMapping.kt` 的合并表）。
+
+**怎么验证**：`grep -n "getKeyByRecId\|getRecIdByKey" component/Carlib/src/main/java/com/neusoft/libcar/manager/CarServiceManager.kt component/Carlib/src/main/java/com/neusoft/libcar/manager/PropertyManager.kt`——确认两端各查一次映射表；再看 `map/CarPropertyMapping.kt` 的 `carPropertyIdMap` 合并顺序定"首匹配族"。
+
+**启示**：
+- 事件键≠订阅键：凡"注册时做键翻译、回调时做反向翻译"的封装，消费方过滤/分发必须用回调侧键（适用：任何带 ID 映射层的封装库，车机信号库、协议栈、配置中心同构）
+- 映射缺失＝静默失效：这类 SDK 的错误策略是"查无即跳过"，联调时信号收不到先查映射表再怀疑信号源（适用：一切表驱动翻译层）
+- 搜配置表用常量名搜、并打开文件确认条目存在——用字面量 grep 得出"不存在"的结论前必须打开表文件人工复核（适用：一切键表类配置的排查）
+
+## 系统服务一次性就绪信号：握手沿可能先于订阅到达，监听注册要做粘性补发
+
+**现象**：就绪信号是"上游握手成功那一拍发一次"的沿（如车载 IVI 与座舱域控的握手回执，确认后正常不再重复）。订阅者注册晚于这一拍时错过该沿，且没有任何机会再收到——下游把"没收到"当成"没就绪"，依赖它的分支永远不触发。冷启动联调偶然能通过（上游就绪慢、订阅赶在前面），换个时序就复现不了回调，极难定位。
+
+**原因**：一次性沿没有"当前状态"可查：生产者只通知登记表里的在册订阅者，而"注册生效"与"信号发出"之间没有任何先后保证——宿主进程重启后上游早已就绪、组件晚初始化、系统负载拖慢注册，都会让信号落在订阅之前。与常驻状态型信号不同，错过沿＝错过全部信息，消费方无从对账。
+
+**误区**：以为"只要订阅了就一定能等到"——把一次性沿当状态型信号对待；以为冷启动偶然通过证明无竞态——竞态只在就绪快于订阅的时序里出现；为补救而在消费方另起一条轮询/对账链路——绕开了信号源本可一句话解决的补发。
+
+**解决方案**：信号源做粘性标记＋迟到补发（来源：雅迪车机 Launcher `application/Launcher/src/main/java/com/yadea/launcher/services/VehicleService.java`）：
+
+```java
+private volatile boolean mIviReady = false;   // 握手确认后置位并保持进程生命周期
+
+public void addOnIviReadyListener(OnIviReadyListener l) {
+    mIviReadyListeners.add(l);
+    if (mIviReady) l.onIviReady();            // 迟到者立即补发
+}
+// 握手 ack 处：mIviReady = true; 再遍历通知在册订阅者
+```
+
+补发多一次无害的前提是下游自带幂等护栏（一次性动作有"本周期已消耗"标记，重复沿直接忽略）；休眠唤醒等会重新握手的场景也由同一护栏吸收，粘性补发不引入新语义。
+
+**启示**：
+- 一次性沿与状态型信号处理方式分叉：状态型"注册后读现值对账"，一次性沿靠源头粘性补发或消费方查询已发生标记（适用：握手/回执/一次性通知型监听）
+- 补发放信号源的注册入口（addXxxListener 里）比放消费方好：语义就是"这个事实成立过"，所有迟到者统一受益，消费方零改动（适用：自己维护监听登记表的系统服务/进程内单例）
+- 幂等护栏先行：下游对重复沿无副作用，才允许源头做补发/重放（适用：一切带补发语义的事件设计）
+- 抽象原则同源：[design-principles「迟加入者补课到当下」](design-principles.md#迟加入者补课到当下)——本文是其单布尔状态的最简重放形态
