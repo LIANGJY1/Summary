@@ -19,7 +19,7 @@
 
 - SRS_001~012 全部定稿；阶段 1~3（开关显隐／出场／常驻循环／点击）已实施，场景表 25 行全绿（未提交，工作区待审）。
 - 双版本入口开关（D003）：`Myapplication.USE_NEW_PET_SERVICE=false`＝展车版默认；**正式投入前 main 行为＝展车版**。
-- 待办：真机冒烟（出场/循环/点击/插枪）；BMS_RealSOC 信号号（填 `PetConfig.PROP_BATTERY_SOC`）；下一步开发＝阶段 4 音乐联动（SRS_005）。
+- 待办：**D005 前台化改造**（式样已改待审；代码把档位判定换成 Render 沿，接线点＝KanziDataSourceManager setRenderStart/Stop）；真机冒烟（出场/循环/点击/插枪）；BMS_RealSOC 信号号（填 `PetConfig.PROP_BATTERY_SOC`）；下一步开发＝阶段 4 音乐联动（SRS_005）。
 - 悬置项一览：01 §6（跨条目）＋各条目档案"开放点"（目录见 03）。
 
 ## 维护规则（4 条）

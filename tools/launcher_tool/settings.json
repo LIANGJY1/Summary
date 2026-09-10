@@ -65,6 +65,10 @@
     {
       "name": "代办任务",
       "content": "Android SharedPreferences 源码深入解读分析，进行注释"
+    },
+    {
+      "name": "萌宠服务QA",
+      "content": "1. 动作前置条件，当前处于驻车桌面（P档）\n\n\nSRS_PetService_002，"
     }
   ],
   "_schedules": [
