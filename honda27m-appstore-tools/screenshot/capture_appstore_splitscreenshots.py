@@ -100,7 +100,7 @@ CATEGORIES = {
 #   017-020 设置页（2.2.1）<setting>
 #   021-024 应用详情-后装-可更新（3.1.1）<detail>
 # CURRENT_TASKS = "home,dialog,search,mine,setting,detail"
-CURRENT_TASKS = "all"
+CURRENT_TASKS = "detail"
 
 
 def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
@@ -333,7 +333,7 @@ if COORDS_PATH.exists():
     COORDS = json.loads(COORDS_PATH.read_text(encoding="utf-8"))
 
 SPLIT_ICON_TAP = COORDS.get("split_icon", "input tap 1746 1032")
-STORE_ICON_TAP = COORDS.get("store_icon_right", "input tap 1350 690")
+STORE_ICON_TAP = COORDS.get("store_icon_right", "input tap 1551 670")
 DRAG_DURATION = COORDS.get("drag_duration_ms", 900)
 
 # 屏占比模式定义（与 SplitScreenTestController / UI图 一致）
@@ -436,11 +436,16 @@ class PageGroup:
     #   --activity-clear-top 重建单实例（实测单实例、焦点保持、拖拽正常）
     # - 搜索（dismiss_before_drag）：先 BACK 关掉搜索页回首页再拖——搜索页
     #   内容会吞掉拖拽手势，且对已运行的搜索页重复 am start 会被重置回热门推荐
-    # 其余页面（首页/我的/设置/弹窗）只导航一次：弹窗 Activity 随档位切换的
-    # 尺寸变化自动重建、弹窗重新弹出，切换分屏时无需任何补操作
+    # 其余页面（首页/我的/设置）只导航一次
     nav_per_mode: bool = False
     nav_clear_top: bool = False
     dismiss_before_drag: bool = False
+    # 每档位独立小周期：清数据 → 进分屏 → 先拖到目标档位 → 再导航 → 截图 →
+    # 退出。弹窗专用：实测档位切换时弹窗 Activity 重建后旧弹窗不消失（App 端
+    # 行为），一次进场连拖 4 档会逐档叠一层弹窗蒙层（2026-09-11 实测同一按钮
+    # 亮度 55→27→17→19 单调变暗，1/3 档还可见上一档的大卡片残影）；改为每档
+    # 先拖到位再触发一次弹窗，保证每张图恰好一个弹窗、零叠加
+    fresh_entry_per_mode: bool = False
     tasks: List[SplitScreenshotTask] = field(default_factory=list)
 
 
@@ -450,13 +455,13 @@ def build_groups() -> List[PageGroup]:
         # 冷启动后首页"加载中"实测可持续 4.5s 以上（clear 后停靠 +1s 时
         # 必然还在加载），3s 不够会截到加载态；实测 +10s 已就绪，取 8s 留余量
         PageGroup("home", "1.1.2 应用商店首页", wait_seconds=8.0),
-        # 弹窗只触发一次：档位切换时 Activity 随分屏尺寸重建，弹窗自动重新弹出
+        # 弹窗叠加问题见 fresh_entry_per_mode 注释：每档独立进场，先拖到位再触发一次
         PageGroup("dialog", "1.2.2 预装组合包更新确认", nav_steps=[
             f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
-            f"--ei appType 3 -e appName '应用组合包' -e apkSize '320MB' "
+            f"--ei appType 3 -e appName '应用组合包' -e apkSize '10MB' "
             f"-e preAppName '高德地图,QQ音乐' -e preServiceName '语音服务' "
             f"-n {ACTIVITY_DEBUG_HELPER}",
-        ], wait_seconds=1.5),
+        ], fresh_entry_per_mode=True, wait_seconds=1.5),
         PageGroup("search", "1.3.1 应用搜索", nav_steps=[
             f"am start -n {ACTIVITY_SEARCH} -e caller screenshot",
         ], scenario="search_default", nav_per_mode=True,
@@ -775,14 +780,64 @@ def navigate_to_page(device: str, group: PageGroup, mode: str) -> None:
         print("WARN: SearchAppActivity 不在前台 ", end="", flush=True)
 
 
+def execute_group_fresh_per_mode(device: str, group: PageGroup, output_dir: Path) -> Tuple[int, int]:
+    """执行 fresh_entry_per_mode 周期：每个档位独立走完整小周期。
+
+    清数据 → 进分屏（停靠即 1/2 档）→ 先拖到目标档位 → 再导航触发一次弹窗
+    → 截图 → 平滑退出。弹窗从未在拖拽前触发，拖拽途经档位也不会残留弹窗，
+    故每张图恰好一个弹窗；档位间互不污染，单档失败不影响后续档位，
+    代价是 4 次进场，比单次进场慢约 1 分钟。
+    """
+    print(f"\n=== 周期[{group.base_name}] 每档位独立进场，截 {len(group.tasks)} 个档位 ===", flush=True)
+    ok = bad = 0
+    for task in group.tasks:
+        print(f"[{task.index}] {task.description} ...", end=" ", flush=True)
+        docked = False
+        try:
+            clear_app(device)
+            set_mock_scenario(device, group.scenario)
+            run_adb(["shell", "logcat", "-c"], device=device, check=False)
+            if not enter_split(device, task_index=task.index, output_dir=output_dir):
+                print("FAIL（商店未停靠）")
+                bad += 1
+                continue
+            docked = True
+            if task.mode != MODE_21:
+                if not drag_to_mode(device, MODE_21, task.mode):
+                    print(f"FAIL（未进入 {task.mode}）")
+                    bad += 1
+                    continue
+                time.sleep(1.8)  # 拖拽后布局重排
+            navigate_to_page(device, group, task.mode)
+            wait_for_idle(group.wait_seconds)
+            local_path = output_dir / task.category / task.filename
+            remote_path = f"{REMOTE_SCREENSHOT_DIR}/{task.index}.png"
+            capture_screen(device, remote_path)
+            pull_screenshot(device, remote_path, local_path)
+            print("OK")
+            ok += 1
+        except subprocess.CalledProcessError as e:
+            print(f"FAIL: {e.stderr or e.stdout}")
+            bad += 1
+        finally:
+            # 单档收尾同 execute_group：平滑退出防塌壳黑屏，未停靠则跳过
+            # （下一档 enter_split 的 HOME 流程自愈）
+            if docked:
+                exit_split(device)
+    return ok, bad
+
+
 def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int, int]:
     """执行一个页面周期：清数据 → 进一次分屏 → 导航 → 逐档拖拽并截图 → 平滑退出。
 
     组内档位在同一会话内连续截取，页面状态天然一致；拖拽失败则放弃本周期
     剩余档位（下一个周期会重新清数据进场，自愈）。周期收尾点分屏图标退出
     分屏，不再依赖下一周期强杀让分屏壳塌掉（黑屏来源），运行结束设备也
-    停留在干净桌面。
+    停留在干净桌面。弹窗周期（fresh_entry_per_mode）不走本流程，
+    见 execute_group_fresh_per_mode。
     """
+    if group.fresh_entry_per_mode:
+        return execute_group_fresh_per_mode(device, group, output_dir)
     print(f"\n=== 周期[{group.base_name}] 进一次分屏，截 {len(group.tasks)} 个档位 ===", flush=True)
     tasks_by_mode = {t.mode: t for t in group.tasks}
     capture_seq = [m for m in CAPTURE_ORDER if m in tasks_by_mode]
@@ -808,8 +863,8 @@ def execute_group(device: str, group: PageGroup, output_dir: Path) -> Tuple[int,
             return _tally(group, results)
         docked = True
 
-        # 3. 非 nav_per_mode 页面在初始 1/2 档导航一次（弹窗只触发这一次，
-        #    档位切换时随分屏重建自动重新弹出）；详情/搜索每档截图前单独导航。
+        # 3. 非 nav_per_mode 页面（首页/我的/设置）在初始 1/2 档导航一次；
+        #    详情/搜索每档截图前单独导航。
         #    导航后必须等 wait_seconds 再截：首页无 nav_steps 也要等——周期开头
         #    clear_app 强杀冷启动，停靠确认（width 日志）时首页仍在加载，
         #    不等的话首张（停靠档 1/2）会截到"加载中"

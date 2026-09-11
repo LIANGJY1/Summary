@@ -51,7 +51,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
 # 每个模式独立输出子目录，互不覆盖；目录命名约定 <语言>_<昼夜>_<形态>，
 # 未登记在 VARIANTS 的自定义名称同样可用（自动落到 screenshots/<名称>/ 并自动建目录）。
-CURRENT_VARIANT = "en_dark_fullscreen"
+CURRENT_VARIANT = "en_day_fullscreen"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_<形态> 约定自动映射到其下子目录，
 # 实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；ref_dir 字段仅作手动覆盖用。
 UI_REF_ROOT = Path.home() / "Documents/HC/UI/extracted_images"
@@ -141,7 +141,7 @@ CATEGORIES = {
 # 本次执行哪些截图任务；运行时按分类打印任务清单并标记本次执行项，再开始截图。
 # 写法（逗号分隔、可混用）：all=全部；分类号（清单中的 [n]，如 2）；
 # 分类名（如 search）；任务序号（如 013，优先于分类号解释，"013" 是任务、"1" 是分类号）。
-CURRENT_TASKS = "027"
+CURRENT_TASKS = "026"
 # CURRENT_TASKS = "023,"
 #
 # 任务速查（38 项全量；◆=已启用，○=已注释归档——在 build_tasks() 中取消注释即可恢复；
@@ -660,7 +660,7 @@ def build_tasks() -> List[ScreenshotTask]:
                 f"am start -a {PACKAGE_NAME}.screenshot.SHOW_DIALOG_PRE_APP_UPDATE "
                 f"--ei appType 3 "
                 f"-e appName '应用组合包' "
-                f"-e apkSize '320MB' "
+                f"-e apkSize '10MB' "
                 f"-e preAppName '高德地图,QQ音乐' "
                 f"-e preServiceName '语音服务' "
                 f"-n {ACTIVITY_DEBUG_HELPER}",

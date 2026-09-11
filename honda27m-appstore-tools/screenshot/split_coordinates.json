@@ -1,6 +1,6 @@
 {
   "split_icon": "input tap 1746 1032",
-  "store_icon_right": "input tap 1350 690",
+  "store_icon_right": "input tap 1551 670",
   "divider_grab_x_initial": 960,
   "divider_grab_y": 540,
   "divider_initial_center": 960,
@@ -29,5 +29,6 @@
     "SPLIT_31": [1381, 470]
   },
   "note_uiautomator": "本机 uiautomator dump 频繁 idle 超时（mock 首页/我的应用页有持续动画），导航一律用实测坐标",
+  "note_store_icon": "右格应用商店图标 1551,670（2026-09-10 实测重校准）：应用列表顺序变动后应用商店从第2列移到第3列，旧值 1350,690 实点中'个人中心'导致商店永不停靠",
   "note_dock_signal": "商店停靠确认轮询 logcat SplitScreenClient 'width is 951'；档位日志只在切换瞬间与动画期间产生，验证前清 logcat、验证中只读不清"
 }
