@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""source-annotator 注释校验脚本 v2（skill v1.23 §3.4 校验闭环用）。
+"""source-annotator 注释校验脚本 v2.3（skill v1.26 §3.4 校验闭环用）。
 
 用法:
     python3 check_annotations.py <仓库根> <文件1> <文件2> ... [--fix] [--max-width N]
+                                [--fast] [--mirror <副本目录>]
     python3 check_annotations.py --self-test
+
+--fast: 跳过第 10 项专名回查——纯格式修正迭代轮用（修正标点不产生新符号），
+        避免每轮迭代都付一次全仓 grep；交付前必须跑一次不带 --fast 的全量。
+专名缓存: 已核验存在的符号按 仓库+HEAD 提交 缓存在系统临时目录，重复校验零 grep；
+        HEAD 变化自动失效，只缓存"存在"结果（缺失符号每次重查，防漏报）。
 
 九项检查:
   1. 代码序列与 HEAD 一致(过滤本语言行注释与空行后逐行比对;行尾注释先剥离再比对,
@@ -14,12 +20,19 @@
   5. 行宽超上限——上限自适应 = max(130, 该文件 HEAD 既有行最大显示列),--max-width 覆盖;
      只查新增行与中文批注行(上游存量行不查);分割线放行
   6. 圈号列表编号残留(①②③…已废弃,有序列表统一 1. 2. 3.;句中"阶段①"类引用放行)
-  7. 行尾缺标点(中文批注行)——默认 FAIL 并提示按语义断点重排;--fix 自动补句号写盘
-     (已知副作用:会把无标点续行在句中切成病句,优先人工重排而非 --fix)
+  7. 行尾缺标点(只查含真汉字的中文批注行;纯 ASCII 示例代码行豁免——格式卡「使用示例块」
+     承诺"无 CJK 示例行不参与行尾标点检查",v2.2 修正脚本与文档不一致)——默认 FAIL 并提示
+     按语义断点重排;--fix 自动补句号写盘(已知副作用:会把无标点续行切成病句,慎用)
   8. 上游英文注释保护:HEAD 中的英文散文注释行(无 CJK、长度>15、含词间空格、非分割线、
      无 →/【)被删除或改写 → FAIL——四检范围仅限此前轮次的中文学习批注
   9. 未带标签的新注释块 / 新行标签出现在块中段 → ? WARN(不影响退出码;确认属类头总论/
      方法头则罢,否则补【标签】;空注释行是块分隔符)
+  10. 专名回查(WARN):新增中文批注里的 类::方法 / 驼峰标识 / 常量名 / .java|.cpp|.h 文件名,
+     一次 git grep 全仓核验存在性;带 [inferred] 的行跳过;WARN 不阻塞但须逐条复核——
+     把语义门的"专名回查"机械化(跨层签名论断如 返回值/出参 只能靠人,见 SKILL.md §6)
+
+另: --mirror <目录> 校验权威源与本副本逐文件一致(服务 MAINTENANCE.md 的同步约定,
+    不一致即 FAIL)。源=本脚本所在 skill 目录。
 
 注释前缀按扩展名:`//`(java/kt/scala/js/ts/c/cpp/go/rs/swift/cs/php…)、
 `#`(py/sh/yaml/toml/rb/pl…)、`--`(sql/lua/hs)。
@@ -43,11 +56,132 @@ END_PUNCT = set("。？！，,.?!;；、：:）)】］\"'*…—/")
 DIVIDER_CHARS = set("─━-=_·•*~ ")
 DEFAULT_CAP = 130
 
+# 10 专名回查:模式与噪声控制
+RE_CLASS_METHOD = re.compile(r"([A-Z][A-Za-z0-9_]*::[a-zA-Z_][A-Za-z0-9_]{1,})")
+RE_CAMEL = re.compile(r"\b([a-z][a-z0-9]*[A-Z][A-Za-z0-9_]{2,})\b")
+RE_CONST = re.compile(r"\b([A-Z][A-Z0-9_]{4,})\b")
+RE_SRC_FILE = re.compile(r"\b([A-Za-z0-9_\-]+\.(?:java|kt|cpp|h|cc))\b")
+STOPWORDS = {"Android", "Java", "Kotlin"}
+INFERRED = "[inferred]"
+
+
+def extract_symbols(body: str):
+    """从一行中文批注提取待核验专名: [(完整串, 回退串或 None)]。
+
+    回退串:类::方法 找不到时退回裸方法名(方法可能在头文件里不带类前缀出现)。
+    """
+    syms = []
+    for m in RE_CLASS_METHOD.finditer(body):
+        full = m.group(1)
+        syms.append((full, full.split("::", 1)[1]))
+    for m in RE_CAMEL.finditer(body):
+        syms.append((m.group(1), None))
+    for m in RE_CONST.finditer(body):
+        syms.append((m.group(1), None))
+    for m in RE_SRC_FILE.finditer(body):
+        syms.append((m.group(1), None))
+    # 去重保序 + 停用词
+    seen, out = set(), []
+    for full, fb in syms:
+        if full in seen or full in STOPWORDS or full in ALLOWED_TAGS:
+            continue
+        seen.add(full)
+        out.append((full, fb))
+    return out
+
+
+def _xref_cache_path(repo: str):
+    import hashlib
+    import os
+    import tempfile
+    key = hashlib.sha1(os.path.abspath(repo).encode()).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), f"source_annotator_xref_{key}.json")
+
+
+def _xref_load_cache(repo: str):
+    """读缓存 {head, found:[已核验存在的符号]};HEAD 不一致即失效。只缓存正向结果。"""
+    import json
+    import os
+    import subprocess
+    r = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"],
+                       capture_output=True, text=True)
+    head = r.stdout.strip() if r.returncode == 0 else ""
+    if not head:
+        return head, set()
+    try:
+        with open(_xref_cache_path(repo), encoding="utf-8") as fh:
+            data = json.load(fh)
+        if data.get("head") == head:
+            return head, set(data.get("found", []))
+    except (OSError, ValueError):
+        pass
+    return head, set()
+
+
+def _xref_save_cache(repo: str, head: str, found):
+    import json
+    try:
+        with open(_xref_cache_path(repo), "w", encoding="utf-8") as fh:
+            json.dump({"head": head, "found": sorted(found)}, fh)
+    except OSError:
+        pass  # 缓存写失败不影响校验结果
+
+
+def xref_missing(repo: str, syms, use_cache: bool = True):
+    """核验专名在**已提交树(HEAD)**中是否存在;返回找不到的 [(完整串, 回退串)]。
+
+    搜 HEAD 而非工作区是关键:未提交的批注文本会"自证"幽灵符号
+    (真实事故:标注里写的 ghostHelper 被自己的注释行命中,漏报)。
+    两遍式:先一次 `git grep -oI -F -e … HEAD` 大扫描拿候选集(-o 输出
+    path:match,按首个冒号切分);候选集未命中的再逐个 `git grep -Fq` 精确确认。
+    缓存:命中过的符号记入 仓库+HEAD 级缓存,重复校验零 grep;HEAD 变化自动失效。
+    git 不可用/空仓时返回 [](核验不了就不拦,语义门仍有人工回查兜底)。
+    """
+    head, cached_found = _xref_load_cache(repo) if use_cache else ("", set())
+    uniq = {}
+    for full, fb in syms:
+        uniq.setdefault(full, fb)
+    if not uniq:
+        return []
+    # 缓存命中的符号直接视为存在,只对未缓存符号做扫描/探测
+    todo = {full: fb for full, fb in uniq.items()
+            if full not in cached_found and not (fb and fb in cached_found)}
+    missing = []
+    newly = []
+    if todo:
+        cmd = ["git", "-C", repo, "grep", "-oI", "-F"]
+        for full in todo:
+            cmd += ["-e", full]
+        r = subprocess.run(cmd + ["HEAD", "--"], capture_output=True, text=True)
+        if r.returncode not in (0, 1):
+            return []
+        candidates = {line.split(":", 1)[-1]
+                      for line in r.stdout.splitlines() if ":" in line}
+        for full, fb in todo.items():
+            if full in candidates or (fb and fb in candidates):
+                newly.append(full)
+                continue
+            probe = subprocess.run(["git", "-C", repo, "grep", "-qF", "-e", full, "HEAD", "--"],
+                                   capture_output=True, text=True)
+            if probe.returncode == 0:
+                newly.append(full)
+                continue
+            if fb:
+                probe = subprocess.run(["git", "-C", repo, "grep", "-qF", "-e", fb, "HEAD", "--"],
+                                       capture_output=True, text=True)
+                if probe.returncode == 0:
+                    newly.append(full)
+                    continue
+            missing.append((full, fb))
+    if use_cache and head and newly:
+        _xref_save_cache(repo, head, cached_found | set(newly))
+    return missing
+
 PREFIX_BY_EXT = {}
 for _e in (".java .kt .kts .scala .groovy .js .ts .tsx .jsx .c .h .cpp .hpp .cc .hh "
            ".go .rs .swift .cs .php").split():
     PREFIX_BY_EXT[_e] = "//"
-for _e in ".py .pyw .sh .bash .zsh .yaml .yml .toml .rb .pl .pm .bp".split():
+for _e in ".py .pyw .sh .bash .zsh .yaml .yml .toml .rb .pl .pm .bp .rc".split():
     PREFIX_BY_EXT[_e] = "#"
 for _e in ".sql .lua .hs".split():
     PREFIX_BY_EXT[_e] = "--"
@@ -59,6 +193,16 @@ def display_width(s: str) -> int:
 
 def has_cjk(s: str) -> bool:
     return any(ord(c) > 0x2E80 for c in s)
+
+
+def has_ideograph(s: str) -> bool:
+    """是否含 CJK 汉字(0x4E00+)——区分中文批注与含假名/符号的英文注释。
+
+    ord>0x2E80 会把假名(如颜文字里的 ツ 0x30C4)也算进来,导致上游英文注释
+    被当作中文批注检查(行宽/标点),且上游只读无法修复。存量行只在含真汉字时
+    才视为中文批注;新增行一律检查(新增的必为本轮批注)。
+    """
+    return any(0x4E00 <= ord(c) <= 0x9FFF for c in s)
 
 
 def prefix_for(path: str) -> str:
@@ -125,11 +269,12 @@ def check_file(repo: str, path: str, fix: bool = False, max_width=None):
     """返回 (problems, warns, fixes, new_lines)。problems/warns/fixes 均为字符串列表。"""
     prefix = prefix_for(path)
     problems, warns, fixes = [], [], []
+    file_syms = []  # (符号, 回退串, 行号)
     try:
         with open(f"{repo}/{path}", encoding="utf-8") as fh:
             new_lines = fh.read().splitlines()
     except OSError as e:
-        return [f"无法读取: {e}"], [], [], None
+        return [f"无法读取: {e}"], [], [], None, []
 
     old = head_lines(repo, path)
     old_set = set()
@@ -177,22 +322,25 @@ def check_file(repo: str, path: str, fix: bool = False, max_width=None):
         # 4 旧 `注：` 前缀
         if OLD_NOTE.match(body):
             problems.append(f"L{i} 旧 `注：` 前缀残留")
-        # 5 行宽(新增行或中文批注行;分割线放行)
-        if (is_new or has_cjk(s)) and not is_divider(body):
+        # 5 行宽(新增行,或含真汉字的存量中文批注行;分割线放行)
+        if (is_new or has_ideograph(body)) and not is_divider(body):
             w = display_width(l.rstrip())
             if w > cap:
                 problems.append(f"L{i} 行宽 {w} > {cap}")
         # 6 圈号(只看行首行尾,句中"阶段①"类引用放行)
         if body and (body[0] in CIRCLED or body[-1] in CIRCLED):
             problems.append(f"L{i} 圈号列表编号残留(用 1. 2. 3.): {body[:40]}")
-        # 7 行尾标点(中文批注行;分割线放行)
-        if has_cjk(s) and body and not is_divider(body) and s[-1] not in END_PUNCT:
+        # 7 行尾标点(含真汉字的中文批注行;纯 ASCII 示例代码行豁免;分割线放行)
+        if has_ideograph(body) and body and not is_divider(body) and s[-1] not in END_PUNCT:
             if s.count("（") > s.count("）"):
                 problems.append(f"L{i} 括号内折行,需人工重排断点: …{s[-14:]}")
             elif fix:
                 fixes.append((i, f"L{i} 补行尾句号(可能切病句,建议按语义断点人工重排)"))
             else:
                 problems.append(f"L{i} 行尾缺标点(按语义断点重排;或 --fix 自动补,有切病句副作用): …{s[-14:]}")
+        # 10 专名提取(只查新增中文批注行;[inferred] 行整行豁免)
+        if is_new and has_ideograph(body) and INFERRED not in body:
+            file_syms.extend((sym, fb, i) for sym, fb in extract_symbols(body))
         # 9 未带标签的新块 / 块中段标签
         if is_new and body and not is_divider(body):
             if i == block_start[i] and not body.startswith("【"):
@@ -202,7 +350,7 @@ def check_file(repo: str, path: str, fix: bool = False, max_width=None):
 
     if old is not None and code_sequence(old, prefix) != code_sequence(new_lines, prefix):
         problems.append("代码序列与 HEAD 不一致!(注释改动碰到了代码,立即检查)")
-    return problems, warns, fixes, new_lines
+    return problems, warns, fixes, new_lines, file_syms
 
 
 def apply_fixes(repo: str, path: str, fixes, new_lines):
@@ -274,6 +422,11 @@ def self_test() -> int:
              old="SELECT 1;\n",
              new="-- 【注意事项】该查询会全表扫描，先确认索引。\nSELECT 1;\n",
              must=[]),
+        dict(name="纯 ASCII 示例代码行豁免行尾标点", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【关键细节】接入方式如下，直接照抄即可。\n"
+                 "//   obj.register(listener); // 尾注释也不查\n}\n",
+             must=[]),
         dict(name="圈号残留被抓", ext=".java",
              old="class A {\n}\n", new="class A {\n// ①第一点：初始化顺序不可交换。\n}\n",
              must=["圈号"]),
@@ -293,7 +446,7 @@ def self_test() -> int:
             subprocess.run(["git", "-C", tmp, "commit", "-qm", "old"], check=True)
             with open(f"{tmp}/{path}", "w", encoding="utf-8") as fh:
                 fh.write(fx["new"])
-            problems, warns, _fixes, _nl = check_file(tmp, path)
+            problems, warns, _fixes, _nl, _syms = check_file(tmp, path)
             ok = all(any(m in p for p in problems) for m in fx.get("must", []))
             ok &= not any(any(m in p for p in problems) for m in fx.get("must_not", []))
             if "warn_contains" in fx:
@@ -302,6 +455,33 @@ def self_test() -> int:
             if not ok:
                 failures.append(fx["name"])
                 print(f"     problems={problems}\n     warns={warns}")
+
+    # 专名回查专测(extract_symbols + xref_missing,函数级)
+    with tempfile.TemporaryDirectory() as tmp:
+        subprocess.run(["git", "init", "-q", tmp], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+        with open(f"{tmp}/A.java", "w", encoding="utf-8") as fh:
+            fh.write("class A {\n  static final int MAX_POINTERS = 16;\n"
+                     "  void bar() { } // 定义点,调用处 a.bar()\n}\n")
+        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", tmp, "commit", "-qm", "old"], check=True)
+
+        syms = extract_symbols("由 A 协作、事件经 A::bar 转发，处理走 eventHubHelper 与 MAX_POINTERS。")
+        miss = xref_missing(tmp, syms)
+        miss_names = {m[0] for m in miss}
+        ok = "eventHubHelper" in miss_names and "A::bar" not in miss_names \
+            and "MAX_POINTERS" not in miss_names and "A::bar" in {s0 for s0, _ in syms}
+        # 回退串:Foo::bar 回退到裸方法名 bar,仓内存在 → 放行;nope 无处存在 → 上报
+        miss2 = xref_missing(tmp, [("Foo::bar", "bar")])
+        ok &= not miss2
+        miss3 = xref_missing(tmp, [("Foo::nope", "nope")])
+        ok &= bool(miss3)
+        # [inferred] 豁免在 check_file 调用点(见主流程第 10 项),函数层不重复过滤
+        print(f"{'PASS' if ok else 'FAIL'} 夹具: 专名回查(提取/存在放行/缺失告警/回退串/[inferred]豁免)")
+        if not ok:
+            failures.append("专名回查")
+            print(f"     syms={syms}\n     miss={miss} miss2={miss2} miss3={miss3}")
 
     # --fix 写盘
     with tempfile.TemporaryDirectory() as tmp:
@@ -315,7 +495,7 @@ def self_test() -> int:
         subprocess.run(["git", "-C", tmp, "commit", "-qm", "old"], check=True)
         with open(f"{tmp}/src/a.java", "w", encoding="utf-8") as fh:
             fh.write("class A {\n// 【关键细节】缺行尾标点\n}\n")
-        problems, _w, fixes, nl = check_file(tmp, "src/a.java", fix=True)
+        problems, _w, fixes, nl, _syms = check_file(tmp, "src/a.java", fix=True)
         apply_fixes(tmp, "src/a.java", fixes, nl)
         content = open(f"{tmp}/src/a.java", encoding="utf-8").read()
         ok = bool(fixes) and "缺行尾标点。" in content
@@ -325,7 +505,7 @@ def self_test() -> int:
 
     # 无法读取不崩溃
     with tempfile.TemporaryDirectory() as tmp:
-        problems, _w, _f, _nl = check_file(tmp, "src/nope.java")
+        problems, _w, _f, _nl, _syms = check_file(tmp, "src/nope.java")
         ok = any("无法读取" in p for p in problems)
         print(f"{'PASS' if ok else 'FAIL'} 夹具: 不存在的文件不崩溃")
         if not ok:
@@ -335,12 +515,44 @@ def self_test() -> int:
     return 0 if not failures else 1
 
 
+def mirror_diff(src_dir: str, mirror_dir: str):
+    """对比源 skill 目录与副本:返回差异清单(仅副本有/仅源有/内容不同)。"""
+    import os
+
+    def snapshot(root):
+        files = {}
+        for base, _dirs, names in os.walk(root):
+            _dirs[:] = [d for d in _dirs if d != ".git"]
+            for n in names:
+                full = os.path.join(base, n)
+                rel = os.path.relpath(full, root)
+                try:
+                    with open(full, "rb") as fh:
+                        files[rel] = fh.read()
+                except OSError:
+                    files[rel] = b"<unreadable>"
+        return files
+
+    a, b = snapshot(src_dir), snapshot(mirror_dir)
+    diffs = []
+    for rel in sorted(set(a) - set(b)):
+        diffs.append(f"仅源有: {rel}")
+    for rel in sorted(set(b) - set(a)):
+        diffs.append(f"仅副本有: {rel}")
+    for rel in sorted(set(a) & set(b)):
+        if a[rel] != b[rel]:
+            diffs.append(f"内容不同: {rel}")
+    return diffs
+
+
 def main(argv) -> int:
     args = list(argv[1:])
     if "--self-test" in args:
         return self_test()
     fix = "--fix" in args
+    fast = "--fast" in args
     max_width = None
+    mirror = None
     if "--max-width" in args:
         k = args.index("--max-width")
         try:
@@ -349,25 +561,67 @@ def main(argv) -> int:
             print("--max-width 需要整数参数", file=sys.stderr)
             return 2
         del args[k:k + 2]
+    if "--mirror" in args:
+        k = args.index("--mirror")
+        if k + 1 >= len(args):
+            print("--mirror 需要副本目录参数", file=sys.stderr)
+            return 2
+        mirror = args[k + 1]
+        del args[k:k + 2]
     files = [a for a in args[1:] if not a.startswith("--")]
     if len(args) < 2 or not files:
         print(__doc__)
         return 2
     repo = args[0]
+
     all_ok = True
+    per_file = {}   # f -> (problems, warns, fixes, file_syms)
     for f in files:
-        problems, warns, fixes, new_lines = check_file(repo, f, fix, max_width)
+        problems, warns, fixes, new_lines, file_syms = check_file(repo, f, fix, max_width)
+        per_file[f] = (problems, warns, fixes, file_syms)
         if fix and fixes and new_lines is not None and not any("代码序列" in p for p in problems):
             apply_fixes(repo, f, fixes, new_lines)
+
+    # 10 专名回查:全量汇总 → 一次全仓 grep → 按文件分发 WARN(WARN 不改退出码)
+    all_syms = [(sym, fb) for (_p, _w, _fx, syms) in per_file.values() for sym, fb, _i in syms]
+    missing = [] if fast else xref_missing(repo, all_syms)
+    miss_set = {full for full, _fb in missing}
+    line_by_sym = {}
+    for f in files:
+        for sym, fb, line_no in per_file[f][3]:
+            if sym in miss_set:
+                line_by_sym.setdefault((f, sym, fb), []).append(line_no)
+
+    for f in files:
+        problems, warns, fixes, _syms = per_file[f]
+        xref_warns = [f"L{ln} 专名全仓未找到(回退串也无): {sym}"
+                      for (sf, sym, _fb), lns in sorted(line_by_sym.items())
+                      if sf == f
+                      for ln in lns]
         ok = not problems
         all_ok &= ok
         print(f"{'PASS' if ok else 'FAIL'} {f}")
         for p in problems:
             print(f"     - {p}")
-        for w in warns:
+        for w in warns + xref_warns:
             print(f"     ? {w}")
         for _i, msg in fixes:
             print(f"     + {msg}")
+
+    if mirror:
+        import os
+        src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        diffs = mirror_diff(src_dir, mirror)
+        if diffs:
+            all_ok = False
+            print(f"FAIL mirror 副本不一致(源={src_dir} 副本={mirror}):")
+            for d in diffs:
+                print(f"     - {d}")
+        else:
+            print(f"PASS mirror 副本一致: {mirror}")
+
+    if missing:
+        print(f"专名回查 WARN 共 {len(missing)} 个符号待复核(不影响退出码,但须逐条确认或标 [inferred])")
     print("总体:", "ALL PASS" if all_ok else "FAIL")
     return 0 if all_ok else 1
 

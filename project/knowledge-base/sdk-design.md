@@ -79,6 +79,21 @@
 - [错误定向回传最后写入者](#错误定向回传最后写入者)
 - [多源建议集中仲裁，来源只产信号不执行](#多源建议集中仲裁来源只产信号不执行)
 - [三值谓词链组合过滤，全弃权默认放行](#三值谓词链组合过滤全弃权默认放行)
+- [递归注册表构建期剪环，而非禁止委托](#递归注册表构建期剪环而非禁止委托)
+- [平台行为缺陷在框架层收口](#平台行为缺陷在框架层收口)
+- [诊断设施双实现，生产路径零开销](#诊断设施双实现生产路径零开销)
+- [耗时阈值当负载探针，大批量自发工作指数退避让路](#耗时阈值当负载探针大批量自发工作指数退避让路)
+- [多等待来源统一成 fd，单点多路复用收口](#多等待来源统一成-fd单点多路复用收口)
+- [持锁登记命令，放锁统一执行](#持锁登记命令放锁统一执行)
+- [双队列加回执做按连接背压](#双队列加回执做按连接背压)
+- [机制做解释器，变化外化为剧本数据](#机制做解释器变化外化为剧本数据)
+- [信任域切换用 exec 接力](#信任域切换用-exec-接力)
+- [不可复制资源推迟到复制完成后初始化](#不可复制资源推迟到复制完成后初始化)
+- [跨 fork 资源靠继承交接，顺序约束用管道握手](#跨-fork-资源靠继承交接顺序约束用管道握手)
+- [看护主循环单命令分片](#看护主循环单命令分片)
+- [强依赖排序装配，弱依赖阶段广播](#强依赖排序装配弱依赖阶段广播)
+- [框架留时序骨架，业务装可更新容器](#框架留时序骨架业务装可更新容器)
+- [定制点建在依赖图根，换根不换源](#定制点建在依赖图根换根不换源)
 
 <!-- 条目模板：
 
@@ -1537,53 +1552,6 @@ if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || noDelay) 
 - 通知类 API 的"实时性"应该是分级的：前台即时、后台批量延迟，并给关键场景留 no-delay 逃生口（这里是 NOTIFY_NO_DELAY flag）；适用条件：派发方能廉价获取订阅方优先级、且订阅方对秒级延迟不敏感——硬实时链路不适用，要靠专用通道。
 - 聚合先于派发：同订阅者的多个变更合并成一次调用（Uri[]），Binder 往返次数与变更次数解耦。
 
-## 前缀树登记处 + 死亡通知自清理
-
-**一句话**：跨进程"发布-订阅"注册表用 Uri 前缀树组织订阅者（按段挂载、按需生长），并用 Binder 死亡通知做自清理——订阅方进程崩溃不会留下幽灵订阅。
-
-**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java）：
-
-```java
-// 注册：沿 Uri 路径段下钻，缺节点则创建，叶节点挂 ObserverEntry
-node.addObserverLocked(uri, index + 1, observer, ...);
-// ObserverEntry 实现 IBinder.DeathRecipient：订阅方进程死亡自动摘除
-final int entries = sObserverDeathDispatcher.linkToDeath(observer, this);
-@Override public void binderDied() {
-    synchronized (observersLock) { removeObserverLocked(observer); }
-}
-// 摘除后空节点剪枝，树不被历史注册撑肥
-if (mChildren.size() == 0 && mObservers.size() == 0) { return true; }
-```
-
-**为什么精妙**：中心登记处最怕两件事——匹配慢（线性扫全部订阅者）与幽灵订阅（订阅方死了没人摘）。前缀树让匹配只走订阅路径那一支，死亡监听让清理不依赖订阅方自觉。
-
-**SDK 设计启示**：
-- 跨进程注册表以 Binder 句柄为凭证时，必须 linkToDeath 兜底自清理，再加"同句柄重复注册超阈值打 wtf"的软防线；适用条件：注册方与登记处分属两进程——同进程注册表用弱引用/生命周期钩子即可，死亡监听是多余开销。
-- 订阅键含层级语义（authority/路径/命名空间）时用前缀树组织，天然支持"监听子树"语义（notifyForDescendants = 非叶节点也收集）。
-
-## 通知按订阅方优先级分级派发
-
-**一句话**：事件分发方在派发前按订阅方的进程优先级分流——前台订阅者立即送达，后台订阅者延迟合并送达，用少量后台延迟换前台体验不被冲垮。
-
-**代码实例**（摘自 frameworks/base/services/core/java/com/android/server/content/ContentService.java `ObserverCollector`）：
-
-```java
-// 同一订阅者的多个 Uri 先聚合成一次 onChangeEtc(Uri[]) 调用
-value.add(uri);
-// 前台立即发，后台 postDelayed 10 秒——onChangeEtc 是 oneway，写方永不阻塞
-if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || noDelay) {
-    task.run();
-} else {
-    BackgroundThread.getHandler().postDelayed(task, BACKGROUND_OBSERVER_DELAY);
-}
-```
-
-**为什么精妙**：通知风暴的伤害不对等——前台用户正在等结果，后台订阅者晚 10 秒无感。派发方拿得到订阅方进程状态（system_server 独有优势），就应该用它调度。
-
-**SDK 设计启示**：
-- 通知类 API 的"实时性"应该是分级的：前台即时、后台批量延迟，并给关键场景留 no-delay 逃生口（这里是 NOTIFY_NO_DELAY flag）；适用条件：派发方能廉价获取订阅方优先级、且订阅方对秒级延迟不敏感——硬实时链路不适用，要靠专用通道。
-- 聚合先于派发：同订阅者的多个变更合并成一次调用（Uri[]），Binder 往返次数与变更次数解耦。
-
 ## 包装层垫引用，两种归还路径都要定义
 
 **一句话**：包装对象（代理壳）替底层资源先垫住引用时，"被使用的归还路径"与"从未被使用的归还路径"必须同时定义，缺一即泄漏。
@@ -1676,3 +1644,224 @@ const flat_binder_object* Parcel::readObject(bool nullMetaData) const {
 **SDK 设计启示**：
 - 处理外部输入中的"指针/句柄/引用"类内容时，配一条独立通道的可信清单（伴随元数据、Merkle 证明、内核记账），消费前先对账；适用条件：内容可被伪造且误信后果是越权——纯展示数据或已有外层鉴权时不必双账本。
 - 账本查询按消费顺序缓存游标（mNextObjectHint），顺序读摊薄为近似 O(1)。
+
+## 多等待来源统一成 fd，单点多路复用收口
+
+**一句话**：把异构的等待来源（设备数据、目录变化、外部唤醒）都抽象成"可读的 fd"，汇入同一个 epoll，由一个消费线程阻塞等齐。
+
+**代码实例**（摘自 Android 13 `frameworks/native/services/inputflinger/reader/EventHub.cpp`）：
+
+```cpp
+// 三路 fd 注册进同一个 epoll 实例：设备数据、inotify 热插拔、唤醒管道
+mEpollFd = epoll_create1(EPOLL_CLOEXEC);
+inotify_add_watch(mINotifyFd, DEVICE_INPUT_PATH, IN_DELETE | IN_CREATE);
+epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mINotifyFd, &eventItem);
+pipe2(wakeFds, O_CLOEXEC);   // wake() 写一个字节即打断 epoll_wait
+epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mWakeReadPipeFd, &eventItem);
+```
+
+**为什么精妙**：单消费线程要同时等三种异构事件——轮询加时延与功耗，多线程要付锁与全局排序的代价；fd 抽象让一次 epoll_wait 全覆盖，空闲零 CPU、事件到达即时唤醒。
+
+**SDK 设计启示**：
+- 长驻消费线程的等待来源是个位数 fd 时，统一抽象成 fd 后单点收口，外部唤醒用非阻塞管道写一字节实现；适用条件：来源是 OS 可表达为 fd 的事件且时延敏感——来源成百上千或多为内存消息时改消息队列分层，硬套 fd 会造出假的文件描述符。
+
+## 持锁登记命令，放锁统一执行
+
+**一句话**：锁内需要调用"可能阻塞或重入"的外部回调时，只把回调登记进命令队列，回到持有者主循环再统一放锁执行。
+
+**代码实例**（摘自 Android 13 `frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp`）：
+
+```cpp
+// 锁内：只登记，不执行
+auto command = [this, connection, seq, handled]() REQUIRES(mLock) {
+    doDispatchCycleFinishedCommand(...);   // 命令体内自行放锁后回调 policy
+};
+postCommandLocked(std::move(command));
+// 主循环：清空命令队列，跑过命令则把下次唤醒提前到"立即"
+if (runCommandsLockedInterruptable()) { nextWakeupTime = LONG_LONG_MIN; }
+```
+
+**为什么精妙**：policy 回调可能阻塞或反过来抢锁重入（类注释明言"持锁绝不调 policy"），这条纪律靠 review 守不住；命令队列把纪律变成数据结构——锁内天然只剩登记一种动作。
+
+**SDK 设计启示**：
+- 回调可能重入锁持有者时，把执行推迟到持锁方自己的主循环串行做，锁内只留登记；适用条件：调用方与回调方共享锁且回调方不可信（可能阻塞、可能回调回来）——确定轻量的只读回调不必绕队列，白白增加延迟。
+
+## 双队列加回执做按连接背压
+
+**一句话**：一对多投递系统给每条连接配 outbound（待发送）与 wait（已发未确认）两队列，对端缓冲写满就停在当前周期，慢消费者只堵自己不堵别人。
+
+**代码实例**（摘自 Android 13 `frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp`）：
+
+```cpp
+status = connection->inputPublisher.publishKeyEvent(...);   // 写 socket
+if (status == WOULD_BLOCK && !connection->waitQueue.empty()) {
+    return;    // 对端没消费完：就地停下等 ack，不是错误
+}
+connection->waitQueue.push_back(dispatchEntry);
+mAnrTracker.insert(dispatchEntry->timeoutTime, token);      // 超时按连接计时
+// 应用回 ack → waitQueue 出队 → startDispatchCycleLocked 启动下一周期
+```
+
+**为什么精妙**：全局节流会让一个慢窗口卡死所有窗口；per-connection 双队列把阻塞面收窄到单条连接，超时（ANR）也按连接归因，对端 socket 缓冲（32KB）就是天然的背压边界。
+
+**SDK 设计启示**：
+- 对多消费者的扇出投递，流控与超时都按连接记账：写满即停视为正常背压而非故障，超时即归因到该连接；适用条件：消费者互不依赖、允许各自落后——消费者间有顺序约束时需另加同步层，双队列会掩盖失序。
+
+## 机制做解释器，变化外化为剧本数据
+
+**一句话**：平台代码只实现通用机制（解析/匹配/调度），把"何时做什么"全部外化为声明式配置数据，机制稳定、剧本多变的控制权分离。
+
+**代码实例**（摘自 Android 13 `system/core/init/init.cpp` + `system/core/rootdir/init.rc`）：
+
+```java
+// init 核心不认识任何具体服务，只提供三节解析 + 事件匹配 + 命令执行
+parser.AddSectionParser("service", std::make_unique<ServiceParser>(...));
+parser.AddSectionParser("on", std::make_unique<ActionParser>(...));
+parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
+// "启动什么、按什么顺序"全在 rc 里：on late-init → trigger post-fs / zygote-start / boot
+```
+
+**为什么精妙**：启动流程的演进（加服务、改顺序、分区分工）全落在 rc 文件里，vendor/odm 各分区自治声明服务，init 二进制数年不动——改剧本不用改演员。
+
+**SDK 设计启示**：
+- 变化频繁的"何时/做什么"组合外化成声明式配置，宿主只留稳定机制层；适用条件：变化集中在配置项组合、逻辑无复杂分支循环——需要条件分支/循环的编排表达力超出配置语言时，应上移回代码层（Android 后续让 Java 层接管复杂编排正是此因）。
+
+## 信任域切换用 exec 接力
+
+**一句话**：同一程序的不同阶段需要不同安全域时，用 exec 重新执行自己并带阶段参数完成切换，信任边界由内核在 exec 时保证，而非进程内代码自觉。
+
+**代码实例**（摘自 Android 13 `system/core/init/main.cpp` + `first_stage_init.cpp`）：
+
+```cpp
+// main() 按参数分发阶段：FirstStageMain → SetupSelinux → SecondStageMain
+if (!strcmp(argv[1], "selinux_setup")) { return SetupSelinux(argv); }
+if (!strcmp(argv[1], "second_stage"))  { return SecondStageMain(argc, argv); }
+// 每阶段末尾 execv 自己接力——SELinux 域转换只发生在 exec 时
+execv("/system/bin/init", const_cast<char**>(args));  // args = {"init", "selinux_setup"}
+```
+
+**为什么精妙**：域内降级/升级都无法真正收窄已获得的权限，只有 exec 能让内核强制执行域切换；三次 exec 用同一个二进制实现了三个信任等级。
+
+**SDK 设计启示**：
+- 阶段间存在硬信任边界（域切换、能力丢弃）时用 exec 接力表达，边界由内核兜底；适用条件：确实需要内核保证的权限断崖——纯逻辑分阶段用函数调用即可，exec 接力徒增进程映像重建与调试成本。
+
+## 不可复制资源推迟到复制完成后初始化
+
+**一句话**：以"模板进程 fork 派生子进程"为架构的系统，线程/锁等 fork 无法正确复制的资源必须推迟到派生路径里初始化，模板进程本体绝不持有。
+
+**代码实例**（摘自 Android 13 `frameworks/base/core/java/com/android/internal/os/ZygoteInit.java`）：
+
+```java
+ZygoteHooks.startZygoteNoThreadCreation();  // preload 期间禁止建线程
+preload(bootTimingsTraceLog);               // 只装载可安全复制的东西：类/资源/驱动
+// ...
+// Binder 线程池在子进程 specialize 通道里才起（ZygoteInit.zygoteInit → nativeZygoteInit）
+```
+
+**为什么精妙**：多线程进程 fork 只复制当前线程，其余线程在子进程里是"本该存在却不在"的幽灵——它们持有的锁永远无人释放。zygote 把这条物理约束变成了流程铁律。
+
+**SDK 设计启示**：
+- 模板进程 + 派生进程架构里，把资源按"可 fork 复制与否"分类：不可复制的（线程、锁、连接池）推迟到派生之后的 specialize 通道；适用条件：一个模板派生 N 个子进程——任何"顺手提前"的多线程初始化都会污染全部后代，且故障呈现为随机死锁，极难归因。
+
+## 跨 fork 资源靠继承交接，顺序约束用管道握手
+
+**一句话**：父子进程间的资源传递优先用 fd 继承（fork 即交付，零传输），父子初始化的顺序依赖用管道字节握手表达——父建好资源写 1 放行，子读到才继续。
+
+**代码实例**（摘自 Android 13 `system/core/init/service.cpp` Service::Start/RunService）：
+
+```cpp
+pipe(pipefd->data());                    // fork 前建管道，双方天然持有
+if (pid == 0) {                          // 子进程路径：
+    RunService(..., std::move(pipefd));  //   RunService 内 read((*pipefd)[0],&byte,1) 阻塞
+}                                        //   等"cgroup 已建好"通知，才继续 exec 二进制
+errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
+if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) { ... }  // 父进程建好 cgroup 后放行
+// init 预建的监听 socket 同理：fork zygote 时 fd 继承，环境变量只传 fd 编号
+```
+
+**为什么精妙**：socket/cgroup 等资源若在子进程里创建，存在"父进程还不知道子 pid"的时序缺口；继承 + 握手把交接与顺序一次性解决，没有任何跨进程 fd 传输协议。
+
+**SDK 设计启示**：
+- 有亲缘关系的进程体系内，资源交接用继承、顺序用握手，不要发明传递协议；适用条件：存在明确 fork 顺序的父子体系——无亲缘进程仍需 SCM_RIGHTS，无真实顺序依赖时握手是多余同步。
+
+## 看护主循环单命令分片
+
+**一句话**：常驻看护进程把任务执行切成单片——每轮循环只执行一条命令，片与片之间固定处理事件源（信号/消息/定时），让任何长任务都拖不住事件响应。
+
+**代码实例**（摘自 Android 13 `system/core/init/init.cpp` SecondStageMain 主循环）：
+
+```cpp
+while (true) {
+    HandlePowerctlMessage(...);                    // 1. 关机请求先于一切命令
+    am.ExecuteOneCommand();                        // 2. 只执行一条命令（队列驱动）
+    HandleProcessActions();                        // 3. 服务超时/重启维护，算出下次唤醒点
+    epoll.Wait(epoll_timeout);                     // 4. 有事件先收割子进程再执行回调
+    if (am.HasMoreCommands()) epoll_timeout = 0ms; // 还有活 → 立即再来一轮
+}
+```
+
+**为什么精妙**：成串执行命令会让 SIGCHLD 收割、ctl 控制消息排到整个队列之后——服务都死了还没人收割。单命令分片让响应延迟有确定上界，代价只是总吞吐略降。
+
+**SDK 设计启示**：
+- 管理型常驻进程的"任务执行"与"事件响应"分片交错，宁慢勿堵；适用条件：事件实时性（关机、崩溃收割）优先的看护者——吞吐型 worker 不适用，分片调度的开销是纯损耗。
+
+## 强依赖排序装配，弱依赖阶段广播
+
+**一句话**：系统初始化中真正的硬依赖用显式排序表达，其余服务不互相等待，而是订阅启动阶段（BootPhase）广播，在自己关心的阶段做自己的事。
+
+**代码实例**（摘自 Android 13 `frameworks/base/services/java/com/android/server/SystemServer.java` + `SystemService.java`）：
+
+```java
+startBootstrapServices(t);   // 硬依赖波：AMS→PMS→WMS 的顺序手排，倒一个全盘倒
+startCoreServices(t);
+startOtherServices(t);       // 其余服务不互等，靠阶段对齐：
+mSystemServiceManager.startBootPhase(t, SystemService.PHASE_WAIT_FOR_SENSOR_SERVICE);
+// PHASE 100→200→480→500→520→550→600→1000 逐级广播，服务在 onBootPhase(phase) 就位
+```
+
+**为什么精妙**：把"服务 A 必须在服务 B 前就绪"从网状依赖简化为"都等 PHASE_XXX"——新服务只需声明阶段，不需要知道谁先谁后，装配顺序从 O(n²) 关系降为一条时间线。
+
+**SDK 设计启示**：
+- 初始化能划分客观阶段的系统：强依赖用排序、弱依赖用阶段事件；适用条件：阶段边界有客观语义（显示就绪/传感器就绪/三方应用可启动）——无阶段可分的强网状依赖只能全序手排，硬造阶段只会把依赖关系藏进更难查的地方。
+
+## 框架留时序骨架，业务装可更新容器
+
+**一句话**：宿主框架只保留不可变的启动时序与安全骨架（谁在何时拉起、绑定、校验），演进频繁的领域业务装进可独立更新的容器（APK/插件），两者之间用稳定的 Binder 契约隔离。
+
+**代码实例**（摘自 Android 13 `SystemServer.java` + `packages/services/Car/.../CarServiceImpl.java`）：
+
+```java
+// 框架侧只有时序骨架：systemReady 回调里按特性拉起宿主服务
+private static final String CAR_SERVICE_HELPER_SERVICE_CLASS =
+        "com.android.internal.car.CarServiceHelperService";
+// 车机业务全在可更新 APK 里：onCreate 连 VHAL → init 子服务 → 注册 car_service
+ServiceManagerHelper.addService("car_service", mICarImpl);
+```
+
+**为什么精妙**：车辆业务按 OEM/地区高速迭代，而框架升级要整机 OTA；把两者拆开后业务侧可独立灰度更新，框架侧的启动/绑定/安全时序保持代码级稳定。
+
+**SDK 设计启示**：
+- 领域逻辑的演进速度与宿主不一致时，拆成可更新容器 + 稳定契约；适用条件：领域边界清晰且 Binder/API 契约可长期稳定——契约本身频繁变化时，同步两边的成本会吞掉可更新性收益（需配套 API 版本纪律）。
+
+## 定制点建在依赖图根，换根不换源
+
+**一句话**：已依赖注入化的系统，把 OEM/场景定制收敛为"替换依赖图的根组件"——经组件工厂在进程创建时换掉整棵图，宿主源码零修改。
+
+**代码实例**（摘自 Android 13 `packages/apps/Car/SystemUI`）：
+
+```xml
+<!-- AndroidManifest.xml：进程创建时的替换入口 -->
+android:appComponentFactory="com.android.systemui.CarSystemUIAppComponentFactory"
+```
+
+```java
+// CarSystemUIInitializer：把根组件换成车机版，原生启动编排原样复用
+protected GlobalRootComponent.Builder getGlobalRootComponentBuilder() {
+    return DaggerCarGlobalRootComponent.builder();
+}
+```
+
+**为什么精妙**：SystemUI 与车机差异（多屏/仪表）巨大，但原生代码一行不改——所有差异收在 CarSystemUI 包内的新依赖图里，宿主升级与车机定制互不踩踏。
+
+**SDK 设计启示**：
+- 定制点优先建在依赖注入的根组件上（换根），而不是继承/复制宿主类；适用条件：目标已组件化（DI 图边界清晰）——未做依赖倒置的代码换不了根，硬造工厂层反而多一套并行维护的实现。

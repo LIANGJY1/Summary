@@ -43,6 +43,8 @@
 - [跨时刻信号用单调钟锚定，不信任墙钟](#跨时刻信号用单调钟锚定不信任墙钟)
 - [边沿申请被拒不等于条件消失，状态型行为靠重算点自愈](#边沿申请被拒不等于条件消失状态型行为靠重算点自愈)
 - [异步的代价挂到生命周期关口偿还](#异步的代价挂到生命周期关口偿还)
+- [数据源头失效宁可整体重生](#数据源头失效宁可整体重生)
+- [分发依据与呈现真值同源](#分发依据与呈现真值同源)
 
 <!-- 条目模板：
 
@@ -646,3 +648,47 @@ QueuedWork.waitToFinish();
 **思想提炼**：
 - 提供"延迟满足"型 API 时，成对设计偿还机制：任务可排队，但要有办法在正确时机强制收敛（这里是 finisher 登记表 + waitToFinish）；适用条件：任务可延迟、丢代价随时间上升、且存在明确的"安全时点"（进程将要进入不可中断/可能被杀的状态）——没有安全时点的长驻进程不适用，得靠定期主动 flush。
 - 偿还的成本要显式计量并告警（waitToFinish 超 512ms 打直方图），否则异步化只是把卡顿从调用点搬到了生命周期点，变得更难归因。
+
+## 分发依据与呈现真值同源
+
+**一句话**：凡"投给谁/落在哪"的裁决，依据应从呈现真值（实际合成到屏上的层级）推导，而不是维护第二套可能漂移的账本。
+
+**核心矛盾**：窗口系统有两棵树——WMS 的决策树（焦点/层级语义）与 SurfaceFlinger 的合成树（真实上屏）；若输入目标按 WMS 账本分发而屏幕按 SF 合成，两账本瞬时不一致时就会"点 A 出 B"。
+
+**代码实例**（摘自 Android 13 `frameworks/base/services/core/java/com/android/server/wm/InputMonitor.java` + `frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp`）：
+
+```java
+// WMS 把窗口的 InputWindowHandle 写进 SurfaceControl 事务（与合成同通道）
+setInputWindowInfoIfNeeded(mInputTransaction, sc, inputWindowHandle);
+```
+
+```cpp
+// Dispatcher 不再直收 WMS 账本，改为监听 SF 推送的 WindowInfos
+SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowInfoListener);
+```
+
+**思想提炼**：
+- 存在两个权威会漂移时，让下游只认"与呈现同通道"的那份数据，一致性由通道本身的顺序性免费保证；适用条件：裁决结果用户可见、不一致即事故——两套账本由同一事务原子提交、或不一致无用户可感知后果时，不值得引入中转层。
+- 遗留直连接口保留为兼容路径时必须挂显式退役标记（InputDispatcher::setInputWindows 带 TODO(b/198444055)），否则双路径迟早只有一条被测试覆盖。
+
+## 数据源头失效宁可整体重生
+
+**一句话**：当失效的是"一切决策所依赖的数据源头"而非某个局部能力时，与其带着失效源继续跑，不如整体重启回到已知好状态——完整性优先于可用性。
+
+**核心矛盾**：数据源头（如车机的 Vehicle HAL）死了之后，每个后续决策都可能建立在过期值上；但"带着坏源头降级运行"要为每个消费方补失效检测与降级逻辑，实现复杂度和出错面反而远大于一次重启。
+
+**代码实例**（摘自 Android 13 `packages/services/Car/service/src/com/android/car/CarServiceImpl.java`）：
+
+```java
+private static class VehicleDeathRecipient implements IVehicleDeathRecipient {
+    @Override
+    public void serviceDied(long cookie) {
+        Slogf.wtf(CarLog.TAG_SERVICE, "***Vehicle HAL died. Car service will restart***");
+        Process.killProcess(Process.myPid());  // VHAL 死 → 杀整个 CarService 进程，
+    }                                          // 由上游绑定者重新拉起、重新 init 全部子服务
+}
+```
+
+**思想提炼**：
+- 先判断失效的"影响半径"再选策略：全局真值单点失效（消费方无法自检新鲜度）选重启回已知态；局部/可缓存失效选降级隔离；适用条件：源头是单点真值、失效可被明确检测（死亡通知/心跳）——影响半径小或可自愈的组件照搬它会牺牲不必要的可用性。
+- 重生策略成立的前提是"重启路径本身可靠"（上游有绑定重拉机制、init critical 看护），否则宁可降级也不要一个回不来的重启。
