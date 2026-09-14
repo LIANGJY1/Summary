@@ -94,6 +94,11 @@
 - [强依赖排序装配，弱依赖阶段广播](#强依赖排序装配弱依赖阶段广播)
 - [框架留时序骨架，业务装可更新容器](#框架留时序骨架业务装可更新容器)
 - [定制点建在依赖图根，换根不换源](#定制点建在依赖图根换根不换源)
+- [探针只管可达，超时由观察者计时](#探针只管可达超时由观察者计时)
+- [判定方可错，执行必须稳](#判定方可错执行必须稳)
+- [采集调度与数据加工用插件契约分离](#采集调度与数据加工用插件契约分离)
+- [配额超限整数倍记账，处置后从原谅点续计](#配额超限整数倍记账处置后从原谅点续计)
+- [缓解动作先询价后执行，次数带降级窗口](#缓解动作先询价后执行次数带降级窗口)
 
 <!-- 条目模板：
 
@@ -1865,3 +1870,107 @@ protected GlobalRootComponent.Builder getGlobalRootComponentBuilder() {
 
 **SDK 设计启示**：
 - 定制点优先建在依赖注入的根组件上（换根），而不是继承/复制宿主类；适用条件：目标已组件化（DI 图边界清晰）——未做依赖倒置的代码换不了根，硬造工厂层反而多一套并行维护的实现。
+
+## 探针只管可达，超时由观察者计时
+
+**一句话**：健康检查的探针只负责"能被目标线程执行到"，超时判定由观察者自己的时钟独立完成——"没消息"本身就是信号，不依赖被监控方的任何回调。
+
+**代码实例**（摘自 Android 13 `frameworks/base/services/core/java/com/android/server/Watchdog.java`）：
+
+```java
+// 探针被 post 到目标线程队列前端；线程活着就会执行它并置 mCompleted
+mHandler.postAtFrontOfQueue(this);
+// watchdog 线程不等任何回调，只按自己记录的起点算迟到程度
+long latency = SystemClock.uptimeMillis() - mStartTime;
+if (latency < mWaitMax/2) {
+    return WAITING;
+}
+```
+
+**为什么精妙**：靠探针回调"我还活着"的方案，探针自身卡死等于监控失明；观察者计时让"沉默"成为可判定的信号，全部服务线程死锁时看门狗依然能醒。
+
+**SDK 设计启示**：
+- 监控/超时系统的判定信号优先取"预期事件的缺席"而非"主动报平安"；适用条件：观察者可单方计时或双方共享单调时钟——时钟不可信的分布式场景改用带序号的心跳。
+- 探针路径上绝不持监控者自己的锁（本类 monitor() 回调全程锁外执行），否则目标线程的锁争用会反锁探针；适用条件：探针要调用被监控方代码的一切场合。
+
+## 判定方可错，执行必须稳
+
+**一句话**：超时杀类系统把"判定"与"执行"拆开后，执行侧要独立补三道防线——身份复核、环境豁免、最小缓刑；容忍误判重判，不容忍错杀。
+
+**代码实例**（摘自 Android 13 `frameworks/opt/car/services/builtInServices/src/com/android/internal/car/CarServiceHelperService.java`）：
+
+```java
+// 杀前用 /proc/[pid]/stat 的真实启动时刻复核上报值，防 pid 复用杀错对象
+if (!processInfo.doMatch(processIdentifier.pid,
+        processIdentifier.startTimeMillis)) {
+    return;
+}
+// dump 与 kill 之间保底 1s：trace 先落盘，给客户端收尾机会
+if (dumpTime < ONE_SECOND_MS) { /* 延时补足 1s 再 kill */ }
+```
+
+**为什么精妙**：判定链（pid、超时结论）每一环都可能因并发而过期，执行是不可逆动作；三道防线让"判错"止步于多等一轮而不是造成事故。
+
+**SDK 设计启示**：
+- 不可逆动作执行前，用与判定通道独立的第二来源复核关键身份（本例 /proc 直读 vs 上报值，还含方向性校验"真实值 ≤ 上报值"）；适用条件：动作不可逆且判定与执行间存在时间差——同步紧邻调用不值得复核。
+- 执行侧维护自己的环境豁免清单（如 sys.powerctl 关机中跳过杀进程），豁免条件属于执行语境、判定方不该越俎代庖；适用条件：豁免状态只有执行方可见时。
+
+## 采集调度与数据加工用插件契约分离
+
+**一句话**：采集器只按事件节奏采样（开机密采/周期/定制）并把数据交给 DataProcessor 插件，判定逻辑全部外置；插件还能经回调反向控制调度，请求提前插一轮采集。
+
+**代码实例**（摘自 Android 13 `packages/services/Car/cpp/watchdog/server/src/WatchdogPerfService.cpp`）：
+
+```cpp
+// 消费插件回调带"请求器"：发现系统级写盘速率异常时，请求立刻插一轮采集
+if (const auto result = processor->onPeriodicMonitor(now, mProcDiskStatsCollector,
+        requestCollection);
+    !result.ok()) {
+    return Error() << processor->name() << " failed on " << ...;
+}
+```
+
+**为什么精妙**：采集节奏稳定而判定逻辑多变（新增资源类型/阈值策略），插件化让两者独立演进；"发现异常的"与"负责采集的"解耦，却仍能经 requestCollection 协同加速响应。
+
+**SDK 设计启示**：
+- 生产者与消费者之间定义窄回调接口（一组 on* 事件），新增语义零改调度器；适用条件：采集/生产节奏稳定而加工逻辑预期多变——一次性管线硬拆插件只增间接层。
+- 消费方需要影响生产节奏时，给回调传"请求器"而非暴露调度内部，并在调度侧限流（本例间隔小于 1s 的插队请求被忽略）；适用条件：消费方的请求可能高频或风暴时。
+
+## 配额超限整数倍记账，处置后从原谅点续计
+
+**一句话**：超限次数按"已用量 ÷ 阈值"整数记账，整数倍阈值记为"已原谅"字节，处置后从原谅点重新累计——同一份配额不被重复处置，也不一次超限终身追责。
+
+**代码实例**（摘自 Android 13 `packages/services/Car/cpp/watchdog/server/src/IoOveruseMonitor.cpp`）：
+
+```cpp
+// 超限次数 = 已写量 ÷ 阈值（整数除法；零阈值记 1 次）
+int32_t foregroundOveruses = div(writtenBytes.foregroundBytes, threshold.foregroundBytes);
+// forgiven = 次数 × 阈值：处置后有效用量 = written - forgiven，从原谅点续计
+forgivenWriteBytes.foregroundBytes = mul(foregroundOveruses, threshold.foregroundBytes);
+```
+
+**为什么精妙**：不设原谅点的累计口径会让"被禁用后恢复的应用"因历史用量仍在而立刻再次超限——原谅点让配额语义在处置之后依然成立，处罚与配额互不腐蚀。
+
+**SDK 设计启示**：
+- 配额/限流系统的处罚要定义"计费起点重置"语义（整数倍阈值或时间窗），并保证口径跨重启持久化一致（本例每日账本入库）；适用条件：处罚后允许继续使用同一资源——一次性封禁场景不需要。
+
+## 缓解动作先询价后执行，次数带降级窗口
+
+**一句话**：多种处置手段并存时，先让提供方报价（自评用户影响档位）再由账本持有者选最小执行；同一对象的执行次数在滑动窗口内计数并随执行传回，作为重试上限的依据。
+
+**代码实例**（摘自 Android 13 `frameworks/base/services/core/java/com/android/server/PackageWatchdog.java`）：
+
+```java
+// 两阶段：onHealthCheckFailed 只报价（USER_IMPACT_*），execute 才真正动作
+int impact = registeredObserver.onHealthCheckFailed(
+        versionedPackage, failureReason, mitigationCount);
+if (impact != PackageHealthObserverImpact.USER_IMPACT_NONE
+        && impact < currentObserverImpact) { /* 记录最小者 */ }
+currentObserverToNotify.execute(versionedPackage, failureReason, mitigationCount);
+```
+
+**为什么精妙**：选择逻辑不认识任何具体缓解手段，新增手段零改选择代码；mitigationCount（1 小时滑窗内的执行次数）让"回滚失败两次就别再试"这类重试上限成为观察者的自觉，机制无需硬编码。
+
+**SDK 设计启示**：
+- 处置手段以"报价-执行"插件接入，仲裁只看报价与历史次数；适用条件：手段的用户代价可比、且提供方比仲裁方更了解自己的代价——代价同质时直接定序即可。
+- 重试上限不要硬编码在仲裁方，把计数传给执行方自行决定放弃；适用条件：不同手段的合理重试次数不同（回滚重试与清缓存重试的容忍度天然不同）。

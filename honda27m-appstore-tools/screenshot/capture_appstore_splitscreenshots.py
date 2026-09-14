@@ -46,7 +46,7 @@ REMOTE_SCREENSHOT_DIR = "/sdcard/AppStoreScreenshots"
 #     python3 honda27m-appstore-tools/screenshot/capture_appstore_splitscreenshots.py
 # 分屏模式独立维护（与全屏脚本 VARIANTS 无关）；产物固定写入 screenshots/<模式>_split/，
 # 未登记在 SPLIT_VARIANTS 的自定义名称同样可用（自动落同名目录并自动建目录）。
-CURRENT_VARIANT = "en_dark_split"
+CURRENT_VARIANT = "en_day_split"
 # UE 设计稿（UI图）根目录：模式名按 <语言>_<昼夜>_split 约定自动映射到其下
 # 「分屏<cn|en>_<D|L>」子目录，实现 实机图目录 ↔ UI图目录 一一对应（见 resolve_ref_dir）；
 # ref_dir 字段仅作手动覆盖用。compare_split_report.py 按同一规则取 UI图。
@@ -100,7 +100,7 @@ CATEGORIES = {
 #   017-020 设置页（2.2.1）<setting>
 #   021-024 应用详情-后装-可更新（3.1.1）<detail>
 # CURRENT_TASKS = "home,dialog,search,mine,setting,detail"
-CURRENT_TASKS = "detail"
+CURRENT_TASKS = "008"
 
 
 def resolve_output_dir(output_arg: Optional[str], variant: str) -> Path:
