@@ -48,6 +48,11 @@
 - [分发依据与呈现真值同源](#分发依据与呈现真值同源)
 - [自愈要有识别自愈失效的第二层](#自愈要有识别自愈失效的第二层)
 - [三类失败分通道，HTTP 错误不是异常](#三类失败分通道http-错误不是异常)
+- [安全默认全程同向](#安全默认全程同向)
+- [推断按证据强度分档缺证保守不猜](#推断按证据强度分档缺证保守不猜)
+- [专用屏安全边界三件套钉屏单焦点易主清场](#专用屏安全边界三件套钉屏单焦点易主清场)
+- [授权链以用户动作为锚](#授权链以用户动作为锚)
+- [常驻组件轻量分工敏感副作用框架兜底](#常驻组件轻量分工敏感副作用框架兜底)
 
 <!-- 条目模板：
 
@@ -362,6 +367,8 @@ while (statefulObserver.state < targetState && observerMap.contains(observer)) {
 }
 ```
 
+**第二代码来源**（摘自 packages/services/Car `service/src/com/android/car/CarDrivingStateService.java`）：on-change 属性（挡位/手刹/速度）在 HU 行车中重启后不会重播事件，推断器 `updateVehiclePropertiesIfNeededLocked` 发现时间戳为 NOT_RECEIVED 就向 VHAL 主动拉一次现值补账——迟到者以"查询当下快照"补课，与注册时重放事件同属补齐语义，对应本条提炼中"只能补最新快照"的变体。
+
 **思想提炼**：
 - 设计事件/状态 API 时自问"第 N 个订阅者知道前 N-1 次发生了什么吗"：答案必须是"能补齐"，实现是注册时沿状态图逐级重放到当下；适用条件：历史可压缩为状态重放（生命周期、配置、连接状态这类单调状态机）——事件流本身携带不可重放的载荷（如消息推送）时只能补"最新快照"不能补全历史。
 - 补课与移除的语义要成对设计：补课发"真实发生过的"事件，移除不发"没发生过的"事件（removeObserver 不补发 ON_DESTROY）——一致性建立在"事件=事实"上，不建立在"对称美"上。
@@ -404,6 +411,8 @@ protected void onInactive() { }  // 1→0：最后一个活跃订阅者离开
 //   CoroutineLiveData.onActive → 启动 block 协程；onInactive → 延迟 5s 取消
 //   ComputableLiveData.onActive → 执行重算
 ```
+
+**第二代码来源**（摘自 packages/services/Car `service/src/com/android/car/OccupantAwarenessService.java`）：同一翻转点契约的车的形态——视觉检测管线（摄像头/NPU，功耗不小）只在首个订阅者注册时 `startDetectionGraph()`，最后一个断开（含 binder 死亡回调 `handleClientDisconnected`）才 `stopDetectionGraph()`；启停完全由客户端进出驱动，服务不自建定时开关。
 
 **思想提炼**：
 - 给生态定扩展面时，先找"最小稳定事件集"——翻转点比逐订阅者事件稳定得多（订阅者抖动被计数吸收，只剩净变化）；适用条件：存在明确的"被使用中"二元状态且翻转频率可控——资源启动代价极低时直接每次订阅都新建、不做过界收敛更简单。
@@ -753,3 +762,109 @@ if (!Build.IS_USER && isCrashLoopFound()
 **思想提炼**：
 - 设计回调/返回契约时先给失败分类，分类标准是"调用方下一步动作不同"：要重试的走异常通道、要读错误体的走数据通道、要改代码的走 unchecked；retrofit 的分配是传输故障=onFailure(IOException)、HTTP 错误=onResponse(errorBody)、数据不符=unchecked 异常（enqueue 路径也进 onFailure，execute 路径直接抛）。
 - 通道分配必须配一条机械分界线（这里_checked/unchecked 与回调参数就是分界线），否则分类学只活在文档里，实现者各凭心情归类。
+
+## 安全默认全程同向
+
+**一句话**：fail-secure 不是单点兜底而是方向约束——查询兜底、信息缺失拒判、全限制枚举集合，所有失败路径都朝同一个保守方向（宁可多锁不可误放）。
+
+**核心矛盾**：驾驶限制系统里"锁"与"放"的代价不对称：误放（行驶中放开视频）伤安全，误锁只是体验损失；但失败路径很多（查不到配置、拿不到车速、新增限制位），任何一处兜底朝反方向，整条防线的方向就破了。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/CarUxRestrictionsManagerService.java` + `car-lib/src/android/car/drivingstate/CarUxRestrictions.java`）：
+
+```java
+// 查不到端口配置 → 兜底"全限制"而不是"不限制"
+restrictions = createFullyRestrictedRestrictions();
+// MOVING 态拿不到车速 → 拒绝求值、维持旧限制，不按 0 速解除
+Slogf.e(TAG, "Unexpected: Speed null when driving state is: " + drivingState);
+// 方向锚点 = 全部限制位的并集；新增位漏并即破坏方向
+public static final int UX_RESTRICTIONS_FULLY_RESTRICTED = NO_DIALPAD | ... | NO_VOICE_TRANSCRIPTION;
+```
+
+**思想提炼**：
+- 设计安全相关系统时先声明"保守方向"是什么，再逐条失败路径核对默认值方向是否一致——审计对象是方向的全序一致性，不是单个默认值；适用条件：两侧代价明确不对称且"保守"是可定义的静止态（维持现状/全限制）——代价对称时退化为普通容错。
+- 全限制/全允许这类方向锚点应是枚举组合而非独立常量，新增能力时同步并入否则静默破坏承诺；不适用：方向本身会翻转的场景（锁与放交替合理）没有单一保守方向。
+
+## 推断按证据强度分档缺证保守不猜
+
+**一句话**：从多信号推断状态时按证据强度分层——强证据直达结论、弱证据在限定条件下生效、证据缺失输出 UNKNOWN 而不是猜。
+
+**核心矛盾**：行车状态由挡位/手刹/速度共同决定，但可信度不同：P 挡几乎必然停车，手刹在自动挡等红灯时也拉，速度缺失可能是传感器故障——等权对待任何一路都会在边缘场景给出错误且危险的状态。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/CarDrivingStateService.java`）：
+
+```java
+if (mLastGearTimestamp != NOT_RECEIVED && mLastGear == VehicleGear.GEAR_PARK) {
+    return true;    // 强证据：P 挡直接判定停车
+} else if (mLastParkingBrakeTimestamp != NOT_RECEIVED) {
+    if (isCarManualTransmissionTypeLocked()) {
+        return mLastParkingBrakeState;  // 弱证据：仅无 P 挡（手动挡）时手刹才算
+    }
+}
+return false;           // 证据不足：宁说"不知道"
+```
+
+**思想提炼**：
+- 多信号推断先给每路信号定证据等级与生效前置条件（手刹的前置是"无 P 挡"），推断树把等级编码进分支顺序；适用条件：信号与目标状态的因果强度可离线论证——强度靠在线统计得出来的场景改用加权模型而不是硬分档。
+- "未知"必须是合法输出且下游有配套语义（UNKNOWN → 维持限制），否则推断器会被逼着瞎猜；不适用：下游无法处理 UNKNOWN 的系统，要先补下游语义再做推断。
+
+## 专用屏安全边界三件套钉屏单焦点易主清场
+
+**一句话**：仪表这类安全屏的防护不靠权限清单，靠三条运行期机制组合：钉屏保证屏不被抢占、焦点单 owner 保证内容来源唯一、易主清场保证残留立即消失。
+
+**核心矛盾**：安全屏显示错误内容的后果由车内所有人承担，但内容供给方（导航应用）是普通三方应用——既要允许它们供给内容，又不能把屏的可用性交给它们的进程质量与生命周期。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/cluster/ClusterHomeService.java`）：
+
+```java
+// 钉屏：fixed mode 启动，崩溃/包更新/外部启动都抢不走这块屏
+mFixedActivityService.startFixedActivityModeForDisplayAndUser(...);
+// 易主清场：导航焦点 owner 变更立即下发空 NavigationStateProto 清掉旧箭头
+NavigationStateProto emptyProto = NavigationStateProto.newBuilder()
+        .setServiceStatus(NavigationStateProto.ServiceStatus.NORMAL).build();
+sendNavigationState(emptyProto.toByteArray());
+```
+
+**思想提炼**：
+- 安全面设计时把"谁承载"与"显示什么"拆开：承载者被钉死，内容供给者经单焦点竞争；适用条件：屏的失败代价远大于内容多样性收益——内容型副驾屏不需要这么强，钉屏反而伤害体验。
+- 焦点易主瞬间先发清场信号再等新内容，把"旧内容残留"当成必须显式处理的状态而不是自然的过渡帧；不适用：新旧内容可无缝衔接（同应用刷新）时清场帧反而闪烁。
+
+## 授权链以用户动作为锚
+
+**一句话**：设备关联/敏感授权的效力锚在"用户在确认 UI 上的一次动作"：不确认即无特权；授权与能力分离、可单独撤销；进程死亡不清账，用户撤销才清账。
+
+**核心矛盾**：互联应用要的特权（后台运行、读通知）对用户是风险、对应用是刚需——系统凭连接事实自动授权，任何接近过的设备都获得特权；完全不授权，功能做不成。
+
+**代码实例**（摘自 frameworks/base `core/java/android/companion/CompanionDeviceManager.java`）：
+
+```java
+// 三段式：应用发过滤器 → 系统发现后 onAssociationPending 给确认 UI 的 IntentSender
+//   → 用户批准后 onAssociationCreated 交付 AssociationInfo；拒绝/超时走 onFailure
+// 关联 ≠ 通知授权：通知访问在关联之上单独请求、可单独撤销
+public void requestNotificationAccess(ComponentName component) { ... }
+```
+
+**思想提炼**：
+- 特权系统的信任根放在用户的一次显式动作上，之后的一切（持久化、跨进程传递）都是这次动作的传递，不叠加隐式授权；适用条件：特权有用户可感知的受益方（手表/车机配对）——受益方用户看不见（后台组件）时确认会沦为盲点。
+- 授权与具体能力分开授予（关联 ≠ 通知访问），撤销粒度跟着能力走；不适用：能力与关联天然一体、无独立撤销意义时，拆分只增加步骤。
+
+## 常驻组件轻量分工敏感副作用框架兜底
+
+**一句话**：常驻服务只保留"必须常驻的最小职责"（挂监听），UI 与重活外移到按需组件；它持有的敏感资源（麦克风）由框架在生命周期关口无条件回收，不信任实现方记得清理。
+
+**核心矛盾**：语音助手必须常驻才能听唤醒词，但常驻进程一旦装下 UI、会话就会拖累整机；而"停止录音"这类清理若只依赖实现方自觉，换助手/服务崩溃时麦克风就悬着。
+
+**代码实例**（摘自 frameworks/base `core/java/android/service/voice/VoiceInteractionService.java`）：
+
+```java
+private void onShutdownInternal() {
+    onShutdown();
+    // Stop any active recognitions when shutting down.
+    // This ensures that if implementations forget to stop any active recognition,
+    // It's still guaranteed to have been stopped.
+    safelyShutdownAllHotwordDetectors();
+}
+```
+
+**思想提炼**：
+- 常驻组件的 API 面按"每毫秒都在付的成本"裁剪：能外移的（UI、会话、解码）全部外移到按需组件，常驻面只剩监听注册；适用条件：常驻的理由是"响应必须零启动延迟"——可容忍启动延迟的能力直接做成按需服务。
+- 定义常驻契约时同步定义框架侧关停兜底：生命周期关口（shutdown/换人/注销）由框架无条件回收敏感资源，实现方的清理只是优化；不适用：资源状态在框架侧不可见（实现方私有）时只能靠契约与审计。

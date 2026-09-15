@@ -58,6 +58,12 @@
 - [ABI 冻结接口配 AIDL 新接口加薄适配门面](#abi-冻结接口配-aidl-新接口加薄适配门面)
 - [跨边界引用做镜像计数](#跨边界引用做镜像计数)
 - [临时引用焊住跨边界记账窗口](#临时引用焊住跨边界记账窗口)
+- [逻辑编号锚定易变资源](#逻辑编号锚定易变资源)
+- [历史即兜底链](#历史即兜底链)
+- [访客数据零落盘](#访客数据零落盘)
+- [敏感输入按键按注册位图并集让渡](#敏感输入按键按注册位图并集让渡)
+- [崩溃重试预算与遗忘期](#崩溃重试预算与遗忘期)
+- [状态同步整表重发不做增量差](#状态同步整表重发不做增量差)
 - [读写合并单调用，阻塞语义统一](#读写合并单调用阻塞语义统一)
 - [包装层垫引用，两种归还路径都要定义](#包装层垫引用两种归还路径都要定义)
 - [发布后配置冻结做成硬防线](#发布后配置冻结做成硬防线)
@@ -1998,3 +2004,140 @@ currentObserverToNotify.execute(versionedPackage, failureReason, mitigationCount
 **SDK 设计启示**：
 - 处置手段以"报价-执行"插件接入，仲裁只看报价与历史次数；适用条件：手段的用户代价可比、且提供方比仲裁方更了解自己的代价——代价同质时直接定序即可。
 - 重试上限不要硬编码在仲裁方，把计数传给执行方自行决定放弃；适用条件：不同手段的合理重试次数不同（回滚重试与清缓存重试的容忍度天然不同）。
+
+## 逻辑编号锚定易变资源
+
+**一句话**：为会重排/漂移的物理资源（屏、设备、用户绑定）配一个配置期固定、运行期不变的逻辑编号，跨进程 API 全部以编号为主键。
+
+**代码实例**（摘自 packages/services/Car `car-lib/src/android/car/CarOccupantZoneManager.java` + `frameworks/base/core/java/android/companion/CompanionDeviceManager.java`）：
+
+```java
+// zoneId：跨用户切换/屏幕热插拔保持不变（javadoc 承诺），displayId/userId 都会漂移
+/** This id will remain the same for the same zone across configuration changes ... */
+public int zoneId;
+// 伴随设备关联句柄从 MAC 地址演进为稳定 associationId，旧 MAC 句柄路径整体废弃
+@Deprecated
+public void disassociate(@NonNull String deviceMacAddress) { ... }
+public void disassociate(int associationId) { ... }
+```
+
+**为什么精妙**：屏会热插拔、用户会切换、MAC 会随机化——若 API 以物理标识为主键，每次物理变化都迫使全部客户端迁移；编号不变，物理绑定关系集中在一个服务里维护更新。
+
+**SDK 设计启示**：
+- 多屏/多设备/多用户类 API 设计时先找"唯一不随环境变化的那一维"做主键，客户端缓存编号而非物理 id；适用条件：存在配置期即可枚举的稳定实体集合——实体本身动态生成（临时任务、临时会话）时编号反而成了需要回收的资源。
+- 编号到物理资源的绑定关系收敛到唯一服务维护并对外只读，否则各客户端自持的映射会各自漂移；不适用：点对点拓扑没有中心服务时，改为周期广播全量映射。
+
+## 历史即兜底链
+
+**一句话**：把"最近使用历史"直接建成恢复时的回退链——读取时从头找第一个当前可用的项，链尾默认值兜底；换应用自动跟随、卸载自动回退共用同一条遍历路径。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/CarMediaService.java`）：
+
+```java
+// 保存：MRU 序列，先删再加队首
+componentNames.remove(componentName);
+componentNames.addFirst(componentName);
+// 读取：从头找第一个仍装有 MediaBrowseService 的源，链尾兜底默认源
+for (String name : getComponentNameList(serialized)) {
+    ComponentName componentName = ComponentName.unflattenFromString(name);
+    if (isMediaService(componentName)) { return componentName; }
+}
+return getDefaultMediaSource();
+```
+
+**为什么精妙**：历史（记录用户偏好）与恢复（容错回退）本是两个需求，通常做成两套数据；一份 MRU 列表同时服务两者，卸载、换源、默认值三种异常没有各自的恢复代码。
+
+**SDK 设计启示**：
+- 设计"记住用户选择"类状态时同时回答"首选不可用时退到哪"——让历史序本身承担回退优先序；适用条件：偏好项有廉价的可用性判定（组件在否、设备在否），且历史顺序与偏好顺序一致。
+- 兜底默认值放链尾而不是独立配置，保证"全部失效"仍是同一条代码路径；不适用：回退需要不同策略（卸载后要提示而非自动换源）时，链条表达力不够。
+
+## 访客数据零落盘
+
+**一句话**：临时身份（访客/代客）的数据隔离不做专门子系统，而是让每个持久化点检查身份的 ephemeral 属性并跳过写入，配合"登出即销毁"的用户类型贯穿全链路。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/CarMediaService.java`）：
+
+```java
+// initUser：访客选默认源，不读历史
+mPrimaryMediaComponents[MEDIA_SOURCE_MODE_PLAYBACK] = isCurrentUserEphemeral()
+        ? getDefaultMediaSource() : getLastMediaSource(MEDIA_SOURCE_MODE_PLAYBACK);
+// 换源不写历史
+if (!isCurrentUserEphemeral()) { saveLastMediaSource(...); }
+// 播放状态不落盘
+if (isCurrentUserEphemeral()) { return; }
+```
+
+**为什么精妙**：访客模式的难点不在"建访客"，而在"访客痕迹泄漏在互不相关的持久化点"；判定收敛为同一个 isEphemeralUser 谓词后，各服务零协调地形成全链路无痕迹。
+
+**SDK 设计启示**：
+- 多身份系统的持久化写入点统一过身份谓词门，而不是建独立的访客存储；适用条件：身份属性可从进程上下文廉价查询——判定昂贵的系统宁可走独立存储空间。
+- "零落盘"是三个以上写入点的系统属性，靠约定写不齐，要在持久化工具层或 review 清单里显式列点核对。
+
+## 敏感输入按键按注册位图并集让渡
+
+**一句话**：系统按键（如语音键）临时让渡给外部应用时，只拦截所有注册者声明位图的并集，无任何注册者时注销拦截句柄——平时不占用、让渡期不越权。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/CarProjectionService.java`）：
+
+```java
+// 并集：各投影应用注册自己要处理的按键位图
+BitSet newEvents = computeHandledEventsLocked();
+if (!newEvents.isEmpty()) {
+    mCarInputService.setProjectionKeyEventHandler(this, newEvents);
+} else {
+    mCarInputService.setProjectionKeyEventHandler(null, null); // 无注册即注销
+}
+// 分发时再按各自位图过滤
+if (eventHandler.canHandleEvent(keyEvent)) { ... }
+```
+
+**为什么精妙**：按"有投影应用"做粗粒度开关，投影应用没声明的按键也会被抢走；位图并集拦截 + 逐注册者过滤，两层都取最小集。
+
+**SDK 设计启示**：
+- 系统资源临时让渡采用申报制：拦截范围 = 注册者声明之和，注册清零即自动归还；适用条件：资源是可枚举的离散类型集合（按键/事件）——连续资源（麦克风、摄像头）只能整体让渡，需另配使用指示器。
+- 让渡通道与普通通道保持同一拦截点，而不是为让渡方另开输入通路；不适用：让渡方语义与原通道差异过大时，同点拦截反而造成耦合。
+
+## 崩溃重试预算与遗忘期
+
+**一句话**：自动重启常驻/钉屏应用时给重试设三参数预算——重试间隔、连续上限、遗忘期（存活超过即计数清零）——应用"修好了"自动恢复，"一直崩"安静放弃。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/am/FixedActivityService.java`）：
+
+```java
+if (activityInfo.consecutiveRetries > 0
+        && timeSinceLastLaunchMs < RECHECK_INTERVAL_MS) {
+    continue;   // 未到重试间隔
+}
+if (timeSinceLastLaunchMs >= CRASH_FORGET_INTERVAL_MS) {
+    activityInfo.consecutiveRetries = 0;   // 遗忘期清零，修好了自动恢复
+}
+if (activityInfo.consecutiveRetries >= MAX_NUMBER_OF_CONSECUTIVE_CRASH_RETRY) {
+    continue;   // 达上限安静放弃，只记一次日志（failureLogged 防刷）
+}
+```
+
+**为什么精妙**：无预算的自动重启会把仪表屏变成 crash 循环，硬放弃又让"修好的应用永远回不来"；遗忘期让"持续存活"本身成为恢复凭证，预算成为自愈的一部分而不是放弃宣告。
+
+**SDK 设计启示**：
+- 看护类组件的重启策略必须是三参数组（间隔/上限/遗忘期），无限重试或硬放弃单独都不可用；适用条件：崩溃可自愈（包更新、资源恢复）且重启代价可控——整机级重启代价时改为告警加人工介入。
+- 被动退避（被顶到后台）不计入失败计数，预算只惩罚"真的没起来"；不适用：无法区分"没起来"与"被顶走"的系统只能保守全计。
+
+## 状态同步整表重发不做增量差
+
+**一句话**：跨进程的状态同步（如静音信息）每次变化都全量重算并整表下发，接收方以最后一次为准——不做增量 diff，一致性靠"重算加覆盖"而不是"记账"。
+
+**代码实例**（摘自 packages/services/Car `service/src/com/android/car/audio/CarVolumeGroupMuting.java`）：
+
+```java
+public void carMuteChanged() {
+    List<MutingInfo> mutingInfo = generateMutingInfo();      // 每次全量重算各音区
+    setLastMutingInfo(mutingInfo);
+    mAudioControlWrapper.onDevicesToMuteChange(mutingInfo);  // 整表下发
+}
+```
+
+**为什么精妙**：静音有多个来源（用户、电源策略、HAL），增量同步要维护"谁改了哪条"的账，漏一条就永久漂移；全量重算把多源合并收敛在一次遍历里，任何时刻状态都等于"按当前事实重算的结果"。
+
+**SDK 设计启示**：
+- 多来源共同决定的状态，同步协议选整表重发而不是变更事件——来源合并逻辑只写一遍，不散落在每个来源的处理分支里；适用条件：全表体积小、重算廉价、下发频率低——大表或高频场景改版本号加增量。
+- 接收方按"最后一次为准"的幂等覆盖设计，不假设收齐每种变更；不适用：状态本身有历史语义（事件流、审计）时不能覆盖。
