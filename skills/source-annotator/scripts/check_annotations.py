@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""source-annotator 注释校验脚本 v2.3（skill v1.26 §3.4 校验闭环用）。
+"""source-annotator 注释校验脚本 v2.3（skill v1.29 §3.4 校验闭环用）。
 
 用法:
     python3 check_annotations.py <仓库根> <文件1> <文件2> ... [--fix] [--max-width N]
@@ -11,10 +11,10 @@
 专名缓存: 已核验存在的符号按 仓库+HEAD 提交 缓存在系统临时目录，重复校验零 grep；
         HEAD 变化自动失效，只缓存"存在"结果（缺失符号每次重查，防漏报）。
 
-九项检查:
+十项检查:
   1. 代码序列与 HEAD 一致(过滤本语言行注释与空行后逐行比对;行尾注释先剥离再比对,
      "x = 1; // 改注释"不再误报。注释改动不允许碰代码/Javadoc/文档字符串)
-  2. 体系外【标签】(不在 16 标签白名单内)
+  2. 体系外【标签】(不在 17 标签白名单内)
   3. 冒号式伪标签(目的:/收益:/替代:/实现:/启示:/根因:/防线检查:,仅行首引导形态)
   4. 旧 `注：` 前缀残留(//、#、-- 任意前缀形态)
   5. 行宽超上限——上限自适应 = max(130, 该文件 HEAD 既有行最大显示列),--max-width 覆盖;
@@ -31,8 +31,8 @@
      一次 git grep 全仓核验存在性;带 [inferred] 的行跳过;WARN 不阻塞但须逐条复核——
      把语义门的"专名回查"机械化(跨层签名论断如 返回值/出参 只能靠人,见 SKILL.md §6)
 
-另: --mirror <目录> 校验权威源与本副本逐文件一致(服务 MAINTENANCE.md 的同步约定,
-    不一致即 FAIL)。源=本脚本所在 skill 目录。
+另: --mirror <目录> 校验权威源与本副本逐文件一致（忽略 archive 与 Python 缓存，
+    不一致即 FAIL）。源=本脚本所在 skill 目录。
 
 注释前缀按扩展名:`//`(java/kt/scala/js/ts/c/cpp/go/rs/swift/cs/php…)、
 `#`(py/sh/yaml/toml/rb/pl…)、`--`(sql/lua/hs)。
@@ -47,9 +47,11 @@ import sys
 ALLOWED_TAGS = {
     "设计思想", "核心流程", "调用关系", "数据流", "执行时机", "生命周期",
     "线程模型", "状态管理", "为什么", "关键细节", "性能考虑", "安全考虑",
-    "兼容性", "注意事项", "关联代码", "TODO",
+    "兼容性", "注意事项", "关联代码", "TODO", "面试高频",
 }
-PSEUDO_LABEL = re.compile(r"(目的|实现|收益|替代|启示|根因|防线检查)：")
+PSEUDO_LABEL = re.compile(
+    r"^(?:(?:[-*])|(?:\d+[.)、]))?\s*(目的|实现|收益|替代|启示|根因|防线检查)："
+)
 OLD_NOTE = re.compile(r"^注：")
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭"
 END_PUNCT = set("。？！，,.?!;；、：:）)】］\"'*…—/")
@@ -183,6 +185,8 @@ for _e in (".java .kt .kts .scala .groovy .js .ts .tsx .jsx .c .h .cpp .hpp .cc 
     PREFIX_BY_EXT[_e] = "//"
 for _e in ".py .pyw .sh .bash .zsh .yaml .yml .toml .rb .pl .pm .bp .rc".split():
     PREFIX_BY_EXT[_e] = "#"
+for _e in ".mk .te .contexts .ini .cfg .conf .properties".split():
+    PREFIX_BY_EXT[_e] = "#"
 for _e in ".sql .lua .hs".split():
     PREFIX_BY_EXT[_e] = "--"
 
@@ -205,9 +209,19 @@ def has_ideograph(s: str) -> bool:
     return any(0x4E00 <= ord(c) <= 0x9FFF for c in s)
 
 
+HASH_CONTEXT_BASENAMES = {
+    "seapp_contexts", "file_contexts", "property_contexts", "service_contexts",
+    "vndservice_contexts", "hwservice_contexts", "keystore2_contexts",
+    "keystore2_keys_contexts", "audio_policy_configuration_contexts",
+}
+
+
 def prefix_for(path: str) -> str:
-    dot = path.rfind(".")
-    return PREFIX_BY_EXT.get(path[dot:] if dot >= 0 else "", "//")
+    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+    if base in HASH_CONTEXT_BASENAMES:
+        return "#"
+    dot = base.rfind(".")
+    return PREFIX_BY_EXT.get(base[dot:] if dot >= 0 else "", "//")
 
 
 def split_comment(line: str, prefix: str):
@@ -292,12 +306,12 @@ def check_file(repo: str, path: str, fix: bool = False, max_width=None):
             if ic and is_upstream_prose(body) and l.strip() not in new_stripped:
                 problems.append(f"上游英文注释被删/改(上游只读;四检限中文学习批注): {l.strip()[:44]}")
 
-    # 块结构:块首 = 上一行非注释的注释行;空注释行是块内分隔符,不切断块
+    # 块结构:块首 = 上一行不是非空注释的注释行;空注释行切分相邻标签块
     block_start = {}
     cur_start, prev_comment = None, False
     for i, l in enumerate(new_lines, 1):
-        ic, _ = split_comment(l, prefix)
-        if not ic:
+        ic, body = split_comment(l, prefix)
+        if not ic or not body:
             prev_comment = False
             continue
         if not prev_comment:
@@ -401,9 +415,25 @@ def self_test() -> int:
              old="def f():\n    pass\n",
              new="def f():\n    # 目的：测试伪标签检测。\n    pass\n",
              must=["伪标签"]),
+        dict(name="列表式伪标签被抓", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【设计思想】设计取舍如下。\n// - 目的：减少重复分配。\n}\n",
+             must=["伪标签"]),
+        dict(name="字段档案合法引导词放行", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【关键细节】字段档案。\n// - 是什么：当前连接的只读快照。\n}\n",
+             must_not=["伪标签"]),
+        dict(name="空注释行切分标签块", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【核心流程】先建立请求。\n//\n// 【线程模型】回调在线程池执行。\n}\n",
+             must=[], warn_not_contains="标签出现在块中段"),
         dict(name="python 标签批注合规", ext=".py",
              old="def f():\n    pass\n",
              new="def f():\n    # 【关键细节】仅首次调用时初始化，后续直接复用。\n    pass\n",
+             must=[]),
+        dict(name="面试高频标签合规", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【面试高频】这里考查状态转移的不变量。\n}\n",
              must=[]),
         dict(name="分割线放行", ext=".java",
              old="class A {\n}\n", new="class A {\n// ───\n}\n",
@@ -451,6 +481,8 @@ def self_test() -> int:
             ok &= not any(any(m in p for p in problems) for m in fx.get("must_not", []))
             if "warn_contains" in fx:
                 ok &= any(fx["warn_contains"] in w for w in warns)
+            if "warn_not_contains" in fx:
+                ok &= not any(fx["warn_not_contains"] in w for w in warns)
             print(f"{'PASS' if ok else 'FAIL'} 夹具: {fx['name']}")
             if not ok:
                 failures.append(fx["name"])
@@ -511,6 +543,23 @@ def self_test() -> int:
         if not ok:
             failures.append("无法读取")
 
+    # mirror 只比较运行时文件,发布副本可额外携带 archive 和 Python 缓存
+    with tempfile.TemporaryDirectory() as tmp:
+        src_dir = f"{tmp}/src"
+        mirror_dir = f"{tmp}/mirror"
+        os.makedirs(src_dir, exist_ok=True)
+        os.makedirs(f"{mirror_dir}/archive", exist_ok=True)
+        with open(f"{src_dir}/SKILL.md", "w", encoding="utf-8") as fh:
+            fh.write("runtime")
+        with open(f"{mirror_dir}/SKILL.md", "w", encoding="utf-8") as fh:
+            fh.write("runtime")
+        with open(f"{mirror_dir}/archive/old.md", "w", encoding="utf-8") as fh:
+            fh.write("history")
+        ok = not mirror_diff(src_dir, mirror_dir)
+        print(f"{'PASS' if ok else 'FAIL'} 夹具: mirror 忽略发布归档")
+        if not ok:
+            failures.append("mirror 归档")
+
     print("自测总体:", "ALL PASS" if not failures else f"FAIL {failures}")
     return 0 if not failures else 1
 
@@ -522,7 +571,7 @@ def mirror_diff(src_dir: str, mirror_dir: str):
     def snapshot(root):
         files = {}
         for base, _dirs, names in os.walk(root):
-            _dirs[:] = [d for d in _dirs if d != ".git"]
+            _dirs[:] = [d for d in _dirs if d not in {".git", "archive", "__pycache__"}]
             for n in names:
                 full = os.path.join(base, n)
                 rel = os.path.relpath(full, root)

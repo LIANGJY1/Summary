@@ -48,6 +48,7 @@
 - [元操作双形态：执行时展开，持久化保持折叠](#元操作双形态执行时展开持久化保持折叠)
 - [探测、裁决、惩罚三层拆分 lint 架构](#探测裁决惩罚三层拆分-lint-架构)
 - [资源预算按相对单位计量](#资源预算按相对单位计量)
+- [广播前快照，遍历全程放锁](#广播前快照遍历全程放锁)
 - [日志先行做本地持久化的崩溃恢复](#日志先行做本地持久化的崩溃恢复)
 - [流程拆步进状态机，多触发点分片续跑](#流程拆步进状态机多触发点分片续跑)
 - [更新先入队，消费时机单一收口](#更新先入队消费时机单一收口)
@@ -1533,6 +1534,29 @@ if (mChildren.size() == 0 && mObservers.size() == 0) { return true; }
 **SDK 设计启示**：
 - 跨进程注册表以 Binder 句柄为凭证时，必须 linkToDeath 兜底自清理，再加"同句柄重复注册超阈值打 wtf"的软防线；适用条件：注册方与登记处分属两进程——同进程注册表用弱引用/生命周期钩子即可，死亡监听是多余开销。
 - 订阅键含层级语义（authority/路径/命名空间）时用前缀树组织，天然支持"监听子树"语义（notifyForDescendants = 非叶节点也收集）。
+- 并列来源：frameworks/base/core/java/android/os/RemoteCallbackList.java——内部类 Callback 实现
+  IBinder.DeathRecipient，binderDied 摘表后回调 onCallbackDied；身份键取 asBinder() 的 IBinder，
+  同一 Binder 重复注册只算一个（注册不计数）。
+
+## 广播前快照，遍历全程放锁
+
+**一句话**：向一组回调广播时，先在锁内把注册表拷成快照，再在锁外逐个调用——遍历稳定性与注册吞吐解耦，回调体再慢、再重入都不炸表、不拖累注册方。
+
+**代码实例**（摘自 frameworks/base/core/java/android/os/RemoteCallbackList.java beginBroadcast）：
+
+```java
+// 锁内：把注册表拷进 mActiveBroadcast 快照数组，随即出锁
+synchronized (mCallbacks) {
+    final int N = mBroadcastCount = mCallbacks.size();
+    mActiveBroadcast = mCallbacks.keySet().toArray(mActiveBroadcast);
+}
+// getBroadcastItem 全程无锁读快照；finishBroadcast 清场
+```
+
+**为什么精妙**：回调体不可控（可能再触发注册/注销改表，锁内遍历直接撞并发修改），锁内回调又会让最慢的客户端卡死注册方——快照把"遍历稳定"与"注册并发"拆成两个互不拖累的临界区。
+
+**SDK 设计启示**：遍历前拷贝、遍历中放锁；适用条件是回调体不可控、可能重入注册表的场景（广播中再注册/注销），回调短且可控时锁内直遍更简单——快照的拷贝与 GC 成本反成负担。
+
 
 ## 通知按订阅方优先级分级派发
 
