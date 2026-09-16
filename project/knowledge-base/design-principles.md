@@ -38,6 +38,23 @@
 - [资源启停收敛到活跃度翻转点](#资源启停收敛到活跃度翻转点)
 - [真值即时记账，广播延迟撤销](#真值即时记账广播延迟撤销)
 - [类型随模式走，负载归容器](#类型随模式走负载归容器)
+- [所有权先交内容后交](#所有权先交内容后交)
+- [跳帧优先于排队](#跳帧优先于排队)
+- [顺序即语义](#顺序即语义)
+- [流程与规则分离](#流程与规则分离)
+- [采集与崩溃隔离](#采集与崩溃隔离)
+- [丢帧保节奏](#丢帧保节奏)
+- [旁路取证不改主流程语义](#旁路取证不改主流程语义)
+- [平台差异点最小化且可检索](#平台差异点最小化且可检索)
+- [焦点是礼貌协议](#焦点是礼貌协议)
+- [设备即路由](#设备即路由)
+- [两段式状态广播](#两段式状态广播)
+- [身份权限前置定级](#身份权限前置定级)
+- [打扰权分级](#打扰权分级)
+- [单主时钟](#单主时钟)
+- [事实与视图分离](#事实与视图分离)
+- [欠载即降级](#欠载即降级)
+- [硬件边界是协商不是命令](#硬件边界是协商不是命令)
 - [跨边界引用是镜像计数，不是通知式回收](#跨边界引用是镜像计数不是通知式回收)
 - [中心枢纽永不阻塞](#中心枢纽永不阻塞)
 - [校验逐层重申，信任边界止于本层](#校验逐层重申信任边界止于本层)
@@ -53,6 +70,8 @@
 - [专用屏安全边界三件套钉屏单焦点易主清场](#专用屏安全边界三件套钉屏单焦点易主清场)
 - [授权链以用户动作为锚](#授权链以用户动作为锚)
 - [常驻组件轻量分工敏感副作用框架兜底](#常驻组件轻量分工敏感副作用框架兜底)
+- [打扰权只减不增用户参与即锁定](#打扰权只减不增用户参与即锁定)
+- [关键广播前先同步执行面](#关键广播前先同步执行面)
 
 <!-- 条目模板：
 
@@ -868,3 +887,238 @@ private void onShutdownInternal() {
 **思想提炼**：
 - 常驻组件的 API 面按"每毫秒都在付的成本"裁剪：能外移的（UI、会话、解码）全部外移到按需组件，常驻面只剩监听注册；适用条件：常驻的理由是"响应必须零启动延迟"——可容忍启动延迟的能力直接做成按需服务。
 - 定义常驻契约时同步定义框架侧关停兜底：生命周期关口（shutdown/换人/注销）由框架无条件回收敏感资源，实现方的清理只是优化；不适用：资源状态在框架侧不可见（实现方私有）时只能靠契约与审计。
+
+## 所有权先交内容后交
+
+- **一句话**：共享资源的所有权在账面上即时翻转，内容使用权靠 fence 承诺延迟交接。
+- **核心矛盾**：GPU 工作异步完成，但账本不能等——等就串行化，不等就撕裂。
+- **代码实例**（AAOS13 `frameworks/native/libs/gui/BufferSlot.h`）：
+```cpp
+// mFence 是"上一任持有者留给下一任的完工承诺"
+// 槽位状态 CPU 侧即时翻转，新任持有者须等 fence 信号才能碰内容
+```
+- **思想提炼**：把"所有权"与"可用性"拆成两个时间轴，状态机在 CPU 走、数据在硬件走；适用条件是交接双方能共享同一种完成原语（fence/回调/完成队列），没有完成原语就退回同步拷贝。
+
+## 跳帧优先于排队
+
+- **一句话**：过载时宁可整帧放弃也不积压排队——把过载转化为单帧延迟抖动，而非无限增长的队列。
+- **核心矛盾**：生产持续快于消费时，排队只会让每一帧都迟到，延迟单调恶化。
+- **代码实例**（AAOS13 `frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp` commit）：
+```cpp
+if (framePending) {            // 上一帧 present fence 未信号
+    scheduleCommit(FrameHint::kNone);
+    return false;              // 本帧放弃
+}
+```
+- **思想提炼**：过载场景下"丢弃"比"缓冲"更能保住体验下限；适用条件是消费方有周期性重调度点（vsync/timer）可依托，无重调度的长任务流不适用。
+
+## 顺序即语义
+
+- **一句话**：当多个提供者可回应同一个名字时，把它们排成一张有序查找表，优先级问题就变成了表顺序问题。
+- **核心矛盾**：同符号/同资源有多个实现，逐个写裁决分支不可枚举且随实现增长爆炸。
+- **代码实例**（AAOS13 `bionic/linker/linker_soinfo.cpp`）：
+```cpp
+// SymbolLookupList：槽 0 DT_SYMBOLIC 自查 → 全局组（LD_PRELOAD）→ 局部组
+// 排在前面的同名符号赢——LD_PRELOAD 换实现、DT_SYMBOLIC 自封闭皆由此来
+```
+- **思想提炼**：把"谁赢"编码进数据顺序而非代码分支，新增实现零主干改动；适用条件是裁决规则能归约为单一全序，且默认序可被显式机制（如预加载表）安全前插。
+
+## 流程与规则分离
+
+- **一句话**：流程骨架（何时问、按什么顺序问、怎么缓存）与规则本体（每个输入回答什么）拆成两层，规则可整体替换。
+- **核心矛盾**：平台默认规则与产品定制规则（如车载音频的乘员区策略）写在一起，定制一次改一片。
+- **代码实例**（AAOS13 `frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.cpp` getNewOutputDevices）：
+```cpp
+// APM 管流程与缓存，"属性→设备"的规则本体在 Engine
+// 命中后真正算设备的是引擎：mEngine->getOutputDevicesForAttributes(attr)
+```
+- **思想提炼**：定制需求频繁的域，把规则抽成可整类替换的策略对象，流程层只持接口；适用条件是规则输入输出形状稳定，规则本身高频演进。
+
+## 采集与崩溃隔离
+
+- **一句话**：主体已不可信（崩溃中）时，取证逻辑必须跑在独立的干净进程里，主体只做最小安全动作。
+- **核心矛盾**：崩溃进程的内存、堆、锁全部不可信，但恰恰要在这里采到最完整的现场。
+- **代码实例**（AAOS13 `system/core/debuggerd/crash_dump.cpp`）：
+```cpp
+// crash_dump：由崩溃进程的伪线程 exec 出来的采集进程
+// ptrace 附身目标进程，停住全部线程后读取寄存器/回栈/内存映射
+```
+- **思想提炼**：诊断与被诊断者分离——"现场勘查员不能是死者本人"；适用条件是存在可附身的观测通道（ptrace/日志/快照），且采集进程自身足够简单不会被同一故障波及。
+
+## 丢帧保节奏
+
+- **一句话**：渲染类消费方对迟到内容的正确处置是丢弃并维持节拍，而不是减速等它。
+- **核心矛盾**：画面越追越慢的根源是消费端允许"晚到的也画"，节奏被最慢帧拖垮。
+- **代码实例**（AAOS13 `frameworks/av/media/libmediaplayerservice/nuplayer/NuPlayerRenderer.cpp` onDrainVideoQueue）：
+```cpp
+tooLate = (mVideoLateByUs > 40000);
+if (!tooLate) { /* 上屏 */ }  // 太迟的帧直接丢弃
+```
+- **思想提炼**：把"延迟"与"节奏"当成两个独立预算——保延迟靠加速，保节奏靠丢弃；适用条件是内容有明确呈现时刻（deadline），且旧内容被新内容替代后无副作用。
+
+## 旁路取证不改主流程语义
+
+- **一句话**：为失败/异常路径加的旁路工具（取证/日志/追踪），只采集不改变主流程的最终语义与命运。
+- **核心矛盾**：崩溃进程的现场必须死后即散，取证动作本身又有干扰主流程的风险。
+- **代码实例**（AAOS13 `system/core/debuggerd/handler/debuggerd_handler.cpp`）：
+```cpp
+// 采集完成后 resend_signal 重发致命信号——进程按默认处置死亡
+// debuggerd 只是旁路取证者，不改变崩溃进程的最终命运
+```
+- **思想提炼**：旁路设施的输出（tombstone/日志/trace）可以丰富，但入口拦截、出口放行必须与原语义逐位对齐；适用条件是主流程语义有明确的"默认处置"可退回。
+
+## 平台差异点最小化且可检索
+
+- **一句话**：平台/形态差异（手机 vs 车机）的代码分支收敛为可枚举、可 grep 的少数哨兵，重策略下沉到平台层整体替换。
+- **核心矛盾**：一份代码服务多形态，差异散落各处会让每次平台适配都变成全库审计。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java` buzzBeepBlinkLocked）：
+```java
+if (mIsAutomotive && !mNotificationEffectsEnabledForAutomotive) return 0;
+// 阈值更严：车机要求 importance > DEFAULT（手机是 >= DEFAULT）
+```
+- **思想提炼**：差异点数量与检索性是设计指标——"grep 一个哨兵词得全貌"应成为多形态代码的验收标准；适用条件是差异可归约为少数行为开关，且重逻辑能下沉到平台包整体替换。
+
+## 焦点是礼貌协议
+
+- **一句话**：并发使用稀缺体验资源时，框架只派发"让位通知"，静音与否靠占用者自觉响应。
+- **核心矛盾**：强制静音需要框架理解所有媒体语义（不可行），放任自流又会打架。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/audio/MediaFocusControl.java`）：
+```java
+// mFocusStack 压栈 + 向被抢占者派发 LOSS/LOSS_TRANSIENT/CAN_DUCK
+// 系统不强制静音（DUCK 提示由框架代发）
+```
+- **思想提炼**：合作生态内用通知代替强制可大幅简化框架；适用条件是参与者大多守约、且存在可信裁决方可整体替换策略（车机 CarAudioFocus）。
+
+## 设备即路由
+
+- **一句话**：把物理输出端口抽象成可枚举的设备对象，"声音去哪"就归约为设备集合的增删与选择。
+- **核心矛盾**：声音目的地千差万别（喇叭/耳机/HDMI/车身功放），逐端口写路由逻辑不可维护。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/audio/AudioService.java`）：
+```java
+// setWiredDeviceConnectionState → AudioDeviceBroker → AudioDeviceInventory
+// → AudioSystem native 通知 audio HAL 重新计算路由
+```
+- **思想提炼**：能力建模成"设备集合"后，插拔/切换/多区分配全是集合运算；车机把功放端口建模为设备即可复用整套 framework 路由，这是抽象层的胜利。
+
+## 两段式状态广播
+
+- **一句话**：全局状态迁移时，开始时发"早通知"让系统各域先行调整，事实完成后才发正式广播，中间冻结等所有接收者就位。
+- **核心矛盾**：亮灭屏是瞬时事实，但依赖它的十几个子系统各自有准备动作，一步到位必然有人看到中间态。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/power/Notifier.java`）：
+```cpp
+// onWakefulnessChangeStarted: 早通知 AMS/输入/电池统计
+// 完成后: SCREEN_ON/OFF 正式广播（SendWakeUpBroadcast/GoToSleep）
+```
+- **思想提炼**：把"状态变更通知"拆成意图通知与事实通知两段，接收者按需选择订阅哪段；适用条件是状态迁移有明确的物理完成点（fence/回调），且中间态可被冻结。
+
+## 身份权限前置定级
+
+- **一句话**：调用方身份与权限级别在注册/接入时一次核定并存档，数据面热路径只查档不重验。
+- **核心矛盾**：定位这类高频派发服务若每次回调都重验权限，开销线性放大。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/location/LocationManagerService.java`）：
+```java
+int permissionLevel = LocationPermissions.getPermissionLevel(...);  // 注册时核定
+// 数据面派发只按存档级别过滤，不再重验
+```
+- **思想提炼**：冷路径做重活（核定并存档），热路径只查档；适用条件是权限级别在连接生命周期内不变，或变更会走重建通道。
+
+## 打扰权分级
+
+- **一句话**：用户可见性资源（通知/提醒）的打断能力由应用通过渠道声明、用户授予且只能降不能升。
+- **核心矛盾**：应用天然倾向最大化打扰，框架无法逐条判断"值不值得打断用户"。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java`）：
+```java
+// channel.importance 由应用声明、用户可降不可升
+// 车机更严：mIsAutomotive 时 importance > DEFAULT 才允许声音/振动
+```
+- **思想提炼**：把主观判断（"值不值得打扰"）转成显式声明的等级 + 用户授权的调节，框架只做等级比较；车机叠加"等级阈值更严"的平台差异化，属于在同一模型上调参而非另起炉灶。
+
+## 单主时钟
+
+- **一句话**：多流同步时指定唯一主时钟（音频），其余流全部参照它换算呈现时刻。
+- **核心矛盾**：音视频各有自己的节拍源，互相同步会振荡收敛不住。
+- **代码实例**（AAOS13 `frameworks/av/media/libmediaplayerservice/nuplayer/NuPlayerRenderer.cpp`）：
+```java
+// 音频 PTS 周期性写入 MediaClock 锚点；视频经 mMediaClock 换算渲染时刻
+mMediaClock->updateAnchor(nowMediaUs, nowUs, mediaTimeUs);
+```
+- **思想提炼**：同步问题先定主从再谈机制，主时钟选"节奏最稳定、中断最刺眼"的流；适用条件是各流时间可映射到同一媒体时间轴。
+
+## 事实与视图分离
+
+- **一句话**：硬件事实（物理屏）与上层视图（逻辑 display/含覆写的信息）分层持有，策略只改视图不改事实。
+- **核心矛盾**：旋转/镜像/熄屏若直接操作硬件，多视图需求（镜像=多逻辑屏共享一设备）无从表达。
+- **代码实例**（AAOS13 `frameworks/av/services/camera/libcameraservice/../../display/LogicalDisplay.java`）：
+```java
+// displayId(应用所见) ↔ layerStack(SF 合成组) ↔ DisplayDevice
+// 熄屏 = layerStack 置 -1，SF 不再往这块屏落层
+```
+- **思想提炼**：找到"最小可变维度"（layerStack 一个整数）承载全部策略（多屏/镜像/熄屏）；适用条件是事实层稳定、策略变化可归约为视图映射的改写。
+
+## 欠载即降级
+
+- **一句话**：实时消费方供数不足时，不做异常处理而是把轨迹自动降级（重试递减→暂停→移除），供数契约由消费端单方面执行。
+- **核心矛盾**：应用供数时快时慢不可控，实时线程不能等也不能崩。
+- **代码实例**（AAOS13 `frameworks/av/services/audioflinger/Threads.cpp` prepareTracks_l）：
+```cpp
+if (recentUnderruns == 0) break;      // 无欠载保持活跃
+// 有欠载：重试递减，耗尽后自动暂停并通知
+```
+- **思想提炼**：把"对方违约"设计成本方的状态降级阶梯而非错误上报；适用条件是降级可逆（供数恢复即自动回位），且每级降级都有明确通知。
+
+## 硬件边界是协商不是命令
+
+- **一句话**：向硬件下发配置后以硬件返回的最终参数为准回填，框架视图与硬件事实保持一致。
+- **核心矛盾**：框架按理论能力组装配置，HAL/设备可能因约束回改（裁剪/降速率/改用途位）。
+- **代码实例**（AAOS13 `frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp`）：
+```cpp
+// mInterface->configureStreams(...) 与 HAL 协商
+// HAL 可回改流参数（usage/maxBuffers），框架以 HAL 返回为准回填各流
+```
+- **思想提炼**：跨硬件边界的"写"操作都要按"提案-回应"建模，回应即真值；适用条件是硬件返回结构化可读的最终配置，且框架不依赖被回改前的假设。
+
+## 打扰权只减不增用户参与即锁定
+
+**一句话**：应用对用户注意力的索取权（通知重要度）在授予后只允许下调；用户一旦手动调整过，相关字段对应用即刻锁定。
+
+**核心矛盾**：应用有动机放大打扰（重要度=曝光），用户有最终决定权但不会反复与应用博弈——若应用可随时改回，用户的每次下调都只是暂时的，博弈成本全部落在用户身上。
+
+**代码实例**（packages/services/Car `service/src/com/android/car/notification` 相关 + `PreferencesHelper.java`）：
+
+```java
+// 应用下调 importance 仅当用户从未改过该 channel（无锁定字段）
+if (existing.getUserLockedFields() == 0 &&
+        channel.getImportance() < existing.getImportance()) {
+    existing.setImportance(channel.getImportance());
+}
+// 用户设置界面的变更把差异字段记入 USER_LOCKED_*，此后应用不可再改
+if (original.getImportance() != update.getImportance()) {
+    update.lockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+}
+```
+
+**思想提炼**：
+- "用户授予的权限"要配"用户参与的持久化证据"：锁字段让系统记得"这条是用户定的"，应用更新时逐字段绕开；适用条件：权限有清晰的单向价值梯度（高打扰=高曝光价值）——无梯度的配置加锁反而碍事。
+- 只减不增靠"路径不存在"实现而不是"拦截违规"：上调路径根本没写，让违约状态不可表达比事后校验更可靠。
+
+## 关键广播前先同步执行面
+
+**一句话**：向观察者广播"配置已变化"之前，必须先把执行面（系统侧的启动约束/allowlist）同步到新状态——否则观察者按新配置行动时会被旧约束拦截。
+
+**核心矛盾**：配置变化有两个受影响面——决策面（客户端读配置做决策）与执行面（系统侧施加约束），广播唤醒的是决策面；若执行面同步排在广播之后，存在"新决策撞旧约束"的窗口，且窗口内的失败会被误判为配置错误。
+
+**代码实例**（packages/services/Car `service/src/com/android/car/CarOccupantZoneService.java`）：
+
+```java
+private void sendConfigChangeEvent(int changeFlags) {
+    // 先同步 AMS：passenger displays 与每用户 display allowlist
+    doSyncWithCarServiceHelper(/*helper=*/ null, updateDisplay, updateUser, ...);
+    // 再广播客户端
+    mClientCallbacks.beginBroadcast();
+    ...callback.onOccupantZoneConfigChanged(changeFlags)...
+}
+```
+
+**思想提炼**：
+- 广播是"可以行动了"的信号，发信号前执行面必须已就位——顺序约束写死在广播函数里，不寄望每个观察者自觉；适用条件：执行面同步是原子且快速的——同步本身耗时时要改成"广播携带完整状态"或两阶段提交。
+- 系统的责任是让"广播时全局已一致"成为真命题，观察者放心假设即可；不适用：观察者各自关注不同面且相互独立时，强制全局顺序是过度设计。

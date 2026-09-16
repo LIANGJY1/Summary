@@ -48,6 +48,19 @@
 - [元操作双形态：执行时展开，持久化保持折叠](#元操作双形态执行时展开持久化保持折叠)
 - [探测、裁决、惩罚三层拆分 lint 架构](#探测裁决惩罚三层拆分-lint-架构)
 - [资源预算按相对单位计量](#资源预算按相对单位计量)
+- [槽号即句柄：单点账本双端镜像](#槽号即句柄单点账本双端镜像)
+- [锁内领票锁外兑现的回调保序](#锁内领票锁外兑现的回调保序)
+- [世代号队列：过期消息一票否决](#世代号队列过期消息一票否决)
+- [快慢双车道分离延迟需求](#快慢双车道分离延迟需求)
+- [打分竞选替代分发表](#打分竞选替代分发表)
+- [登记与生效分离，增删合并一次下发](#登记与生效分离增删合并一次下发)
+- [申报-领取-路由三段式的域服务契约](#申报-领取-路由三段式的域服务契约)
+- [多证据融合压低误杀率](#多证据融合压低误杀率)
+- [配置即接口：能力目录先行](#配置即接口能力目录先行)
+- [长多行锚点的行索引修复法](#长多行锚点的行索引修复法)
+- [重配置前的在途资产排空配对](#重配置前的在途资产排空配对)
+- [三张清单声明式治理](#三张清单声明式治理)
+- [协商式流配置接口](#协商式流配置接口)
 - [广播前快照，遍历全程放锁](#广播前快照遍历全程放锁)
 - [日志先行做本地持久化的崩溃恢复](#日志先行做本地持久化的崩溃恢复)
 - [流程拆步进状态机，多触发点分片续跑](#流程拆步进状态机多触发点分片续跑)
@@ -64,6 +77,8 @@
 - [敏感输入按键按注册位图并集让渡](#敏感输入按键按注册位图并集让渡)
 - [崩溃重试预算与遗忘期](#崩溃重试预算与遗忘期)
 - [状态同步整表重发不做增量差](#状态同步整表重发不做增量差)
+- [限制消费按自然重绑降级](#限制消费按自然重绑降级)
+- [抑制凭证绑定调用进程生命周期](#抑制凭证绑定调用进程生命周期)
 - [读写合并单调用，阻塞语义统一](#读写合并单调用阻塞语义统一)
 - [包装层垫引用，两种归还路径都要定义](#包装层垫引用两种归还路径都要定义)
 - [发布后配置冻结做成硬防线](#发布后配置冻结做成硬防线)
@@ -2141,3 +2156,197 @@ public void carMuteChanged() {
 **SDK 设计启示**：
 - 多来源共同决定的状态，同步协议选整表重发而不是变更事件——来源合并逻辑只写一遍，不散落在每个来源的处理分支里；适用条件：全表体积小、重算廉价、下发频率低——大表或高频场景改版本号加增量。
 - 接收方按"最后一次为准"的幂等覆盖设计，不假设收齐每种变更；不适用：状态本身有历史语义（事件流、审计）时不能覆盖。
+
+## 槽号即句柄：单点账本双端镜像
+
+- **一句话**：跨进程复用大块资源时，真正状态只存一份（账本），双方各自镜像一张"槽号→资源"表，每帧交互只传槽号。
+- **代码实例**（AAOS13 `frameworks/native/libs/gui/BufferQueueCore.h`）：
+```cpp
+BufferQueueDefs::SlotsType mSlots;  // 64 槽单点账本
+// 真缓冲仅在 requestBuffer 时跨进程传一次；之后每帧复用只传槽号与 fence
+```
+- **为什么精妙**：图形缓冲大且不可复制，按值传输不可行；把"传输物"降维成 int，配合代数校验（frame number）防旧句柄误用。
+- **SDK 设计启示**：资源句柄化适用于"两端可各自维护可信镜像且有代数校验兜底"的场合；若镜像可能长期失同步且无校验位，句柄化会把 bug 变成错位渲染，此时应退回按值传输。
+
+## 锁内领票锁外兑现的回调保序
+
+- **一句话**：回调可能反抢主锁时，在锁内按序领票、释放锁后按票号排队兑现，保序与不持锁回调兼得。
+- **代码实例**（AAOS13 `frameworks/native/libs/gui/BufferQueueProducer.cpp` queueBuffer）：
+```cpp
+callbackTicket = mNextCallbackTicket++;   // 锁内领票
+// ... 释放 mCore->mMutex ...
+while (callbackTicket != mCurrentCallbackTicket) mCallbackCondition.wait(lock);  // 锁外按票兑现
+```
+- **为什么精妙**：持锁回调会死锁（回调可能反手抢同一把锁），但先解锁又会让并发生产者的回调乱序；票据把"序"从锁上解耦出来。
+- **SDK 设计启示**：适用条件是回调体内可能反抢主锁；若无锁竞争，直接锁内同步回调更简单，票据机制反而多一次唤醒往返。
+
+## 世代号队列：过期消息一票否决
+
+- **一句话**：可重建子组件的消息带世代号，每次重建自增，消费侧发现世代不符直接丢弃。
+- **代码实例**（AAOS13 `frameworks/av/media/libmediaplayerservice/nuplayer/NuPlayer.cpp` kWhatScanSources）：
+```cpp
+int32_t generation;
+CHECK(msg->findInt32("generation", &generation));
+if (generation != mScanSourcesGeneration) break;  // 过期消息作废
+```
+- **为什么精妙**：异步组件树里旧组件的迟到消息无法撤回，世代号用一次比较完成"撤回"，比逐对象判活简单可靠。
+- **SDK 设计启示**：适用条件是"子组件可重建、消息会跨重建周期滞留"；对不可重建组件无意义。
+
+## 快慢双车道分离延迟需求
+
+- **一句话**：同一硬件路径为低延迟与普通流量各建一条车道：快车道无锁固定周期直写硬件，慢车道功能齐全但延迟高。
+- **代码实例**（AAOS13 `frameworks/av/services/audioflinger/FastMixer.cpp`）：
+```cpp
+// FastMixer：无锁状态队列交换快轨道数据，固定周期混音直写 HAL
+// 规则：threadLoop 内除已知安全点外禁用库与系统调用
+```
+- **为什么精妙**：延迟是架构属性不是参数，单实现调参无法同时满足两种延迟预算；分车道让各自规则极端化。
+- **SDK 设计启示**：当两条路径的延迟预算差一个量级且流量可静态分类时分离车道；流量不可预分类时不适用。
+
+## 打分竞选替代分发表
+
+- **一句话**：新增实现不加分发分支，而是注册工厂对输入自报匹配分，最高分者中标，零分落默认实现。
+- **代码实例**（AAOS13 `frameworks/av/media/libmediaplayerservice/MediaPlayerFactory.cpp`）：
+```cpp
+thisScore = v->scoreFactory(a, bestScore);
+if (thisScore > bestScore) { ret = sFactoryMap.keyAt(i); bestScore = thisScore; }
+if (0.0 == bestScore) { ret = getDefaultPlayerType(); }
+```
+- **为什么精妙**：分发表的增删都改主干；竞选把"擅长什么"下放到各实现自述，主干只剩通用的比较循环。
+- **SDK 设计启示**：适用条件是实现族会持续增长、匹配度可量化；分支少且稳定时直接 if-else 更直白。
+
+## 登记与生效分离，增删合并一次下发
+
+- **一句话**：重开销的"生效"操作（下发硬件/重配置）与轻量的"登记"分离，增删先记账，攒批后一次下发。
+- **代码实例**（AAOS13 `frameworks/av/services/camera/libcameraservice/api2/CameraDeviceClient.cpp` createStream）：
+```cpp
+mStreamMap.add(binder, StreamSurfaceId(streamId, surfaceIds[i]));
+mConfiguredOutputs.add(streamId, outputConfiguration);
+// 流"已登记未生效"——真正下发 HAL 在下一轮 configureStreams
+```
+- **为什么精妙**：每次登记都触发硬件重配置会让成本爆炸；分离后多次增删合并成一次重配置，与事务攒批同构。
+- **SDK 设计启示**：适用条件是"生效动作有高固定开销且可批量"；生效不可延迟（如强一致需求）时不可用。
+
+## 申报-领取-路由三段式的域服务契约
+
+- **一句话**：多域服务的域空间（如整车 HAL 上百个属性）按"子服务静态申报能力 → 中枢按设备实配下发子集 → 运行期按属性 ID 路由事件"三段协作。
+- **代码实例**（AAOS13 `packages/services/Car/service/src/com/android/car/hal/HalServiceBase.java`）：
+```java
+public abstract int[] getAllSupportedProperties();          // 申报
+public void takeProperties(Collection<HalPropConfig> p);    // 领取设备支持子集
+public void onHalEvents(List<HalPropValue> values);         // 按 propId 路由
+```
+- **为什么精妙**：中枢零业务逻辑，新增域能力 = 新建子服务 + 注册，不改骨架；空申报即"万能兜底服务"。
+- **SDK 设计启示**：适用于能力可静态枚举且按域正交切分的系统；能力无法静态枚举时，允许空申报 + isSupportedProperty 逐个问作为逃生口。
+
+## 多证据融合压低误杀率
+
+- **一句话**：高代价动作（如杀进程）的触发裁决融合多路独立证据（颠簸率/回收水位/swap 余量），各证据换算成同一条"允许烈度"分数线再取严。
+- **代码实例**（AAOS13 `system/memory/lmkd/lmkd.cpp` mp_event_psi → find_and_kill_process）：
+```cpp
+// PSI 失速 + workingset refault 增长 + swap 余量 → min_score_adj
+// 从 OOM_SCORE_ADJ_MAX 向 min_score_adj 逐档选杀，杀到释放量够即收手
+```
+- **为什么精妙**：单一信号在异构设备上噪声极大，多证据取严把"误杀"概率压到最低，代价只是偶尔晚杀。
+- **SDK 设计启示**：破坏性自动动作（回收/降级/熔断）应有≥2 个独立证据且取最严值；证据源要覆盖不同失效模式（性能/容量/水位）。
+
+## 配置即接口：能力目录先行
+
+- **一句话**：设备能力用一张静态配置目录声明（读写性/上报模式/采样区间/分区配置），读取方先查目录再操作。
+- **代码实例**（AAOS13 `hardware/interfaces/automotive/vehicle/aidl/impl/default_config/include/DefaultConfig.h`）：
+```cpp
+{.config = {.prop = toInt(VehicleProperty::PERF_VEHICLE_SPEED),
+            .access = READ, .changeMode = CONTINUOUS,
+            .minSampleRate = 1.0f, .maxSampleRate = 10.0f}, ...}
+```
+- **为什么精妙**：把"设备支持什么"从探测式编程变成目录查询，换硬件 = 换表，上层零改动。
+- **SDK 设计启示**：能力目录要有"分区配置"维度（同一属性多实例各有取值域），并允许框架层包装复合能力（CompositeStream 式）；配置错误要在注册期校验报错而非运行期沉默。
+
+## 长多行锚点的行索引修复法
+
+- **一句话**：多行字符串锚点（含缩进/引号/断行差异）插入后造成的代码粘连，用"内容定位 + 行索引"修复，禁再用长多行匹配。
+- **代码实例**（AAOS13 `frameworks/av/services/audioflinger/Threads.cpp` 修复现场）：
+```python
+i=[k for k,l in enumerate(lines) if '自愈循环' in l][0]  # 短内容定位
+lines[i+1] = '        // （-EWOULDBLOCK，…）都会再次投递本消息重试；'
+```
+- **为什么精妙**：长锚点的失败是静默的（引号字形、缩进差一个空格即不匹配），行索引 + 短内容断言让失败显式且定位精确。
+- **SDK 设计启示**：改代码的脚本优先用"单行锚点插入 + 立即 diff 复核"；多行匹配仅用于修复，修复时断言必须覆盖所有被影响行。
+
+## 重配置前的在途资产排空配对
+
+- **一句话**：整机重配置前，对持有在途资产的子系统先发"强制闲置"请求、等确认，重配置完成后调用配对的"恢复"方法。
+- **代码实例**（AAOS13 `frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp`）：
+```cpp
+mNextRequests[0].captureRequest->mInputStream->forceToIdle();
+// ... reconfigureCamera ...
+mNextRequests[0].captureRequest->mInputStream->restoreConfiguredState();
+```
+- **为什么精妙**：重配置会废弃在途缓冲的归属，先排空再重建避免资产悬空；force/restore 成对出现让"临时状态"有明确边界。
+- **SDK 设计启示**：凡重配置可能波及他方持有的资产，必须设计成对的"请求闲置/恢复"接口且带确认；不适用场景是资产可无损丢弃（此时直接作废更简单）。
+
+## 三张清单声明式治理
+
+- **一句话**：域服务的能力治理拆成三张静态清单——支持什么（SUPPORTED）、何时启用（CORE 门槛）、订阅什么（SUBSCRIBABLE），中枢零逻辑组合。
+- **代码实例**（AAOS13 `packages/services/Car/service/src/com/android/car/hal/ClusterHalService.java`）：
+```java
+private static final int[] SUPPORTED_PROPERTIES = {CLUSTER_SWITCH_UI, ...};
+private static final int[] CORE_PROPERTIES = {CLUSTER_SWITCH_UI, ...};      // 四件套齐才启用
+private static final int[] SUBSCRIBABLE_PROPERTIES = {CLUSTER_SWITCH_UI, ...};
+```
+- **为什么精妙**：能力、门槛、订阅三个正交决策各自成表，读代码即读治理规则，改行为改表不改逻辑。
+- **SDK 设计启示**：子系统能力声明拆成多个正交清单（能力/启用/订阅）优于单一布尔开关；适用条件是三类决策确实独立，否则清单间隐式耦合会成为坑。
+
+## 协商式流配置接口
+
+- **一句话**：向硬件下发流配置的接口设计成"提交配置草案、收回最终配置"，调用方以返回值刷新本地视图。
+- **代码实例**（AAOS13 `frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp` configureStreamsLocked）：
+```cpp
+res = mInterface->configureStreams(sessionBuffer, &config, bufferSizes);
+// HAL 可回改 usage/maxBuffers 等，框架以 config 返回为准回填各流
+```
+- **为什么精妙**：硬件约束（对齐/缓冲数/组合限制）只有设备自己知道，协商式接口让"框架认为"自动收敛到"设备实际"。
+- **SDK 设计启示**：跨硬件边界的配置接口返回值必须携带最终参数并要求调用方回填；不适用场景是配置纯软件、返回值可预测时直接断言更早暴露问题。
+
+## 限制消费按自然重绑降级
+
+**一句话**：能力限制（如驾驶分心限制）的消费方把"限制位集合"折算成自己的布尔缓存，变化时不清 UI 不弹窗，界面在下一次自然重绑时静默降级。
+
+**代码实例**（packages/apps/Car `Notification/.../CarHeadsUpNotificationManager.java`）：
+
+```java
+@Override
+public void onUxRestrictionsChanged(CarUxRestrictions restrictions) {
+    // 只把 NO_TEXT_MESSAGE 折算成布尔缓存
+    mShouldRestrictMessagePreview =
+            (restrictions.getActiveRestrictions()
+                    & CarUxRestrictions.UX_RESTRICTIONS_NO_TEXT_MESSAGE) != 0;
+}
+// 真正的消费在 bind 时：MESSAGE 类型且限制中 → bindRestricted 隐藏消息内容
+```
+
+**为什么精妙**：限制生效的时机与 UI 重建的时机天然不同步；若在限制回调里强行改 UI，要处理"回调时 UI 不存在/正在动画"等所有边界——推迟到自然重绑，这些边界整体消失。
+
+**SDK 设计启示**：
+- 全局约束类状态（权限/限制/模式）的消费用"缓存谓词 + 消费点检查"而不是"变更即重排 UI"；适用条件：约束只影响"下次渲染的内容"而不影响"正在进行的交互"——进行中的事务（如正在播的视频）需要即时停止时必须另加强制路径。
+- 回调只做"折算"，不做"执行"：让限制回调保持薄，执行点永远在常规渲染路径上。
+
+## 抑制凭证绑定调用进程生命周期
+
+**一句话**：临时性系统特权（抑制蓝牙路由、独占按键）以调用方传入的 IBinder token 为凭证并 linkToDeath——进程死亡特权自动解除，无泄漏路径。
+
+**代码实例**（packages/services/Car `CarProjectionService.java` + `bluetooth/BluetoothProfileInhibitManager.java`）：
+
+```java
+// 请求抑制 A2DP（投影期间媒体让路），token 作身份
+public boolean requestBluetoothProfileInhibit(
+        BluetoothDevice device, int profile, IBinder token) { ... }
+// 管理器侧：token 死亡即自动解除抑制
+record.getToken().linkToDeath(record, 0);
+```
+
+**为什么精妙**：特权若靠调用方主动释放，崩溃/被杀即泄漏；binder 死亡通知是内核保证的——把"释放责任"从调用方约定升级为系统机制，SDK 的承诺不再依赖使用方自觉。
+
+**SDK 设计启示**：
+- 跨进程临时授权一律要求传 IBinder 身份并 linkToDeath，把生命周期钩子内置进授权本身；适用条件：特权语义就是"持有者活着才有效"——需要"死后仍生效"的持久授权（配对、订阅）不能这样设计。
+- 主动释放 API 仍要提供：主动释放走优雅路径（可恢复状态），死亡释放是兜底，两者并存而不是二选一。
