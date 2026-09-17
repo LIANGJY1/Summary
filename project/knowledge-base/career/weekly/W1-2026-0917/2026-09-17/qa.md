@@ -1,0 +1,198 @@
+# 基线练习 · 2026-09-17（W1 冲刺第 1 周）
+
+> 闭卷作答。原答案逐字保留，批改追加在原答案后，不改不删原文；不打分。
+
+## Java / Kotlin / 手写
+
+### 01　线程池的 7 个参数分别解决什么问题？为什么先入队再扩容？
+
+原答案：我不知道参数都有什么；是为了节省内存，具体原理就是初始化内存占用小，按需扩容。
+
+**批改**
+- 问题：核心结论错——线程池不是为了省内存，7 个参数一个未答。
+- 标准答案：7 参数 = corePoolSize（常驻线程）、maximumPoolSize（上限）、keepAliveTime+unit（非核心线程空闲回收）、workQueue（任务队列）、threadFactory（创建与命名）、handler（拒绝策略）。提交顺序：核心线程 → 队列 → 非核心线程 → 拒绝；先入队是因为新建线程成本高且需回收，队列满才扩。高概率追问：无界队列会让 maxPoolSize 永不触发并有 OOM 风险。源码：JDK `ThreadPoolExecutor.execute()`/`addWorker()`。
+- 复盘：概念空白。09-18 闭卷重答。
+
+### 02　`volatile` 能保证什么，不能保证什么？
+
+原答案：多线程操作同一变量时，一个线程修改完变量，能保证立刻同步至其他线程，其他线程看到的变量就是最新变量。
+
+**批改**
+- 问题：只答出可见性；缺有序性；"不能保证什么"（原子性）没答。
+- 标准答案：保证可见性（写立即刷主存、读失效缓存）+ 有序性（内存屏障禁重排）；不保证原子性——`i++` 是读改写三步仍丢更新。验证：两线程各 `i++` 10000 次，结果 < 20000。
+- 复盘：机制不完整。09-18 重答，必须带原子性反例。
+
+### 03　`synchronized`、`ReentrantLock`、CAS 如何选择？
+
+原答案：存在并发风险，无脑选synchronized。
+
+**批改**
+- 问题：知道名词，选型结论错误。
+- 标准答案：默认 synchronized（JVM 锁升级优化，简单互斥够用）；需要公平、可中断、超时、多条件队列时用 ReentrantLock；无锁计数、低冲突用 CAS，注意 ABA 与自旋开销。追问：锁升级过程（偏向→轻量级→重量级）。
+- 复盘：选型逻辑空。09-18 重答。
+
+### 04　手写双重检查锁单例，并解释 `volatile` 的必要性。
+
+原答案：未作答。
+
+**处理**：W2 学 Java 并发后限时重写；对照 `hands-on/SingletonDCL.java`。
+
+### 05　手写生产者消费者，为什么 `wait` 要放在 `while`？
+
+原答案：未作答。
+
+**处理**：W2 重写；对照 `hands-on/ProducerConsumer.java`。
+
+### 06　`HashMap` 为什么要求容量为 2 的幂？
+
+原答案：计算机的计算单位为2的幂。
+
+**批改**
+- 问题：答非所问。
+- 标准答案：索引计算 `hash & (n-1)` 等价取模且位运算快；n 为 2 的幂时 n-1 全 1，散列均匀；扩容翻倍时元素只留原位或原位+oldCap，rehash 无需重算。追问：hash 为什么高 16 位异或低 16 位。源码：JDK `HashMap.hash()`/`resize()`。
+- 复盘：概念空白。09-18 闭卷重答。
+
+### 07　`ConcurrentHashMap` 1.7 和 1.8 的实现有什么差异？
+
+原答案：未作答。**处理**：W3 学集合后重答。
+
+### 08　Android `LruCache` 与 `LinkedHashMap` 有什么关系？
+
+原答案：未作答。**处理**：W3 重答；对照 `hands-on/LruCacheHandwritten.java`。
+
+### 09　`suspend` 函数编译后大致变成什么？
+
+原答案：未作答。**处理**：W4 学协程后重答。
+
+### 10　`StateFlow` 和 `SharedFlow` 如何选择？
+
+原答案：未作答。**处理**：W4 学 Flow 后重答。
+
+## Android Framework
+
+### 11　从开机到桌面，`init`、Zygote、`SystemServer` 分别做什么？
+
+原答案：init 第一个进程；zygote第二个；systemserver 最后，启动各种系统服务，比如wms等。
+
+**批改**
+- 问题：主链顺序对；缺 init 具体职责、Zygote 预加载与 fork、服务次序。
+- 标准答案：init（PID 1：解析 init.rc、挂载分区、拉守护进程）→ 拉起 Zygote（app_process；预加载类与资源，fork SystemServer）→ SystemServer 依次启动 AMS/ATMS/PMS/WMS 等上百服务 → Launcher 就绪。追问：Zygote 为什么用 fork（共享预加载资源、写时复制）。锚点：AAOS13_study `init/main.cpp`、`ZygoteInit.java`、`SystemServer.java`。
+- 复盘：主链在、细节缺。补 init.rc 与 fork 细节后 7 天内限时复述。
+
+### 12　Binder 调用的用户态、内核态和服务端线程分别在哪里？
+
+原答案：未作答。**处理**：W2 学 Binder 线程模型后重答。
+
+### 13　Binder "一次拷贝"是什么意思？
+
+原答案：mmap
+
+**批改**
+- 问题：只有名词，未解释"一次拷贝"本身。
+- 标准答案：传统 IPC 两次拷贝（发送方用户态→内核→接收方用户态）；Binder 把接收进程的用户空间缓冲区 mmap 到内核，发送方 `copy_from_user` 一次即写入接收方可读内存。追问：为什么不能零次拷贝。锚点：内核 `binder.c` 的 `binder_mmap`。
+- 复盘：名词在、机制缺。09-18 重答。
+
+### 14　Binder 线程池为什么会耗尽？如何排查？
+
+原答案：有数量限制
+
+**批改**
+- 问题：缺上限数值、耗尽原因与排查动作。
+- 标准答案：默认 16 个 binder 线程（`ProcessState` 可调）；耗尽多因 binder 线程做同步慢操作或等锁，现象是对端 ANR、watchdog。排查：ANR trace 中 blocked 在 binder 事务的线程、binder transaction 日志、Perfetto。
+- 复盘：补三个排查动作后 09-18 重答。
+
+### 15　`Handler`、`Looper`、`MessageQueue`、`epoll` 有什么关系？
+
+原答案：Handler 是消息循环机制，Looper循环从MessageQueue中取消息，MessageQueue中没有消息的时候，epoll阻塞等待message再唤醒。
+
+**批改**
+- 问题：主链对，本卷最完整答案；但"Handler 是消息循环机制"不准确（循环是 Looper），缺 native 唤醒细节。
+- 标准答案：Handler 负责发送与处理消息；Looper 绑定线程，`loop()` 循环取消息分发；MessageQueue 空时 `nativePollOnce` 走 epoll 等待，新消息经 eventfd 写入唤醒。追问：IdleHandler、postSyncBarrier。锚点：`MessageQueue.java`、`Looper.java`。
+- 复盘：纠正 Handler 定位表述，7 天内复述。
+
+### 16　同步屏障解决什么问题？
+
+原答案：阻塞消息执行
+
+**批改**
+- 问题：结论相反——屏障不阻塞，而是让异步消息插队。
+- 标准答案：同步屏障挡住普通同步消息，使 target 为 null 的消息优先出队；典型用途是 vsync 到来时优先执行绘制消息（`ViewRootImpl.scheduleTraversals`）。追问：消息如何设为异步（`setAsynchronous(true)`）。锚点：`MessageQueue.next()` 屏障分支。
+- 复盘：概念颠倒。09-18 闭卷重答。
+
+### 17　`Activity` 冷启动有哪些关键阶段？如何测量？
+
+原答案：onCreate
+
+**批改**
+- 问题：只有 onCreate 一个名词，无阶段链、无测量。
+- 标准答案：点击 → Launcher IPC → AMS → Zygote fork → ActivityThread.main → Application.attach → onCreate → onResume → 首帧渲染上屏。测量：`adb shell am start -W`、Perfetto、`reportFullyDrawn`。锚点：`ActivityThread.handleLaunchActivity`。
+- 复盘：W5 学启动链后闭卷重答。
+
+### 18　AMS/ATMS 与 WMS 分别负责什么？
+
+原答案：AMS/ATMS 主演负责 activity 相关。wms 主要负责窗口相关
+
+**批改**
+- 问题：分工方向对但单薄。
+- 标准答案：AMS 管四大组件生命周期与进程；ATMS 管 Activity 启动决策与 task/栈（13 从 AMS 拆出）；WMS 管窗口层级、布局、动画、输入通道。追问：为什么拆出 ATMS（模块解耦，应对多屏复杂度）。锚点：`SystemServer.java` `startBootstrapServices()`。
+- 复盘：7 天内复述，加 ATMS 拆分原因。
+
+### 19　触摸事件从输入设备到 View 的链路是什么？
+
+原答案：未作答。**处理**：W5 学输入链后重答。
+
+### 20　一帧从 `doFrame` 到 SurfaceFlinger 的链路是什么？
+
+原答案：未作答。**处理**：W11 学一帧上屏后重答。
+
+## AAOS / 性能 / 场景
+
+### 21　Java OOM、内存泄漏、`lmkd` 杀进程如何区分？
+
+原答案：未作答。**处理**：W12 学内存专题后重答。
+
+### 22　`CarService`、`CarPropertyManager`、VHAL 如何连接？
+
+原答案：HIDL
+
+**批改**
+- 问题：只有 HIDL 一个名词，无连接链。
+- 标准答案：App → CarPropertyManager（car-lib）→ Binder → CarPropertyService（CarService 内）→ VehicleHal → VHAL 进程（13 为 HIDL IVehicle，14+ 迁 AIDL）→ 车辆总线。追问：属性订阅、错误回调、死亡清理。锚点：`packages/services/Car` 的 `CarPropertyService.java`、`IVehicle.hal`。
+- 复盘：W6 学 VHAL 主链后闭卷重答。
+
+### 23　如何新增或验证一个 Vehicle Property？
+
+原答案：未作答。**处理**：W6 学 Vehicle Property 后重答。
+
+### 24　车机多音区为什么需要独立焦点栈？
+
+原答案：未作答。**处理**：W9 学多音区后重答。
+
+### 25　Occupant Zone 与 Display 的关系是什么？
+
+原答案：未作答。**处理**：W9 学多屏后重答。
+
+### 26　UxRestrictions 如何影响应用行为？
+
+原答案：看需求
+
+**批改**
+- 问题："看需求"不是机制回答。
+- 标准答案：行车分心限制机制——系统根据车速/档位给出限制级别（限制视频、键盘输入、长文本），应用监听 `CarUxRestrictionsManager.onUxRestrictionsChanged` 回调降级 UI。追问：限制何时解除（驻车/档位变化）。锚点：car-lib `CarUxRestrictionsManager`。
+- 复盘：W9 场景周重答。
+
+### 27　priv-app、平台签名、SELinux 分别解决什么问题？
+
+原答案：未作答。**处理**：W8 学系统应用与 SELinux 后重答。
+
+### 28　副屏启动 Activity 如何避免落错屏？
+
+原答案：未作答。**处理**：W9 学多屏后重答。
+
+### 29　车机黑屏或触摸失效，前三个排查动作是什么？
+
+原答案：未作答。**处理**：W9 场景排查周重答。
+
+### 30　没有量产经验，为什么仍然值得录用为资深方向候选人？
+
+原答案：未作答。**处理**：W18 简历与包装周书面作答。

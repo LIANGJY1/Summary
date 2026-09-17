@@ -6,18 +6,18 @@
 
 | 文件/目录 | 用途 |
 |---|---|
-| [plans/](./plans/README.md) | 计划唯一入口：总路线（方向/Gate/周主题）、周计划、周复盘 |
-| [01-interview-practice.md](./01-interview-practice.md) | 30 题题库、限时作答与判分闭环 |
-| [02-market-and-sources.md](./02-market-and-sources.md) | 岗位研究记录、官方来源、结论变更日志 |
-| [03-career-assets.md](./03-career-assets.md) | 启动记录、简历原则、投递漏斗、Offer 比较 |
+| [plans/](./plans/roadmaps/) | 总路线（方向、Gate、周主题、优先级、时间基线） |
+| [rules.md](./weekly/rules.md) | 作答与批改规则（唯一落点，在 weekly/ 内） |
+| [plans/market/](./plans/market/research.md) | 岗位研究：逐条 JD 明细、聚合页速览、横向结论、官方来源 |
+| [weekly/](./weekly/) | 每日练习（`<周>/<日期>/qa.md`，含原题、原答案与批改）与每周记录（`<周>/record.md`） |
 | [hands-on/](./hands-on/) | 限时手写题代码与追问 |
 | [work-project-analysis/](./work-project-analysis/README.md) | 三个真实项目的事实分析（只读源码，入口在此） |
 
-当前进度：**W0 启动周（2026-W38）**。本周动作只看总路线的 W0 节和 [plans/weekly/2026-W38.md](./plans/weekly/2026-W38.md)，不要从头通读本目录。
+当前进度：**W1 启动周（W1-2026-0917：09-17 ~ 09-27，11 天）**。本周动作只看总路线的 W1 节；练习在 [weekly/W1-2026-0917/](./weekly/W1-2026-0917/)，不要从头通读本目录。
 
 ## 规则
 
-- 五条轨道并行：Java/Kotlin、Framework、AAOS、源码/实践、面试/复习。优先级、阶段 Gate、每周配额和时间基线的唯一落点在[总路线](./plans/roadmaps/01-six-month-roadmap.md)，本文件不重复。
+- 五条轨道并行：Java/Kotlin、Framework、AAOS、源码/实践、面试/复习。优先级、阶段 Gate、每周配额和时间基线的唯一落点在[总路线](./plans/roadmaps/six-month-roadmap.md)，本文件不重复。
 - 通用知识一律查父目录（见下表）；本目录只放面试化表达、项目证据、进度和复盘，不复制知识正文。
 - 源码边界：`AAOS13_study` 是可修改的学习副本；三个真实项目目录只读。路径与读写规则的唯一落点在 [work-project-analysis/README.md](./work-project-analysis/README.md)。
 - 证据措辞：区分"实际参与 / 代码观察 / 学习验证"，不能确认的一律降级，不包装成量产经验。

@@ -17,7 +17,7 @@
 |---|---|---|---|
 | `project/knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；新内容先按 profile 与路由规则处理 |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
-| `project/knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、面试、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 计划按 `plans/roadmaps`、`weekly`、`reviews` 分层；通用知识引用父目录，外部真实项目默认只读 |
+| `project/knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、`weekly/`、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 总路线在 `plans/roadmaps/`，每日练习与作答规则在 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
 | `skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后跑 `skills/sync-from-agents.sh` |
 | `path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |
 | `android/` `网络/` `设计模式/` `密码/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可沉淀的可迁移结论走 knowledge-base |
