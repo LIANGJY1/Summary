@@ -121,6 +121,147 @@
 - [采集调度与数据加工用插件契约分离](#采集调度与数据加工用插件契约分离)
 - [配额超限整数倍记账，处置后从原谅点续计](#配额超限整数倍记账处置后从原谅点续计)
 - [缓解动作先询价后执行，次数带降级窗口](#缓解动作先询价后执行次数带降级窗口)
+- [目标版本分档门禁：新码拒绝，存量警告](#目标版本分档门禁新码拒绝存量警告)
+- [聚合体定形前不落元素地址，先收集后回填](#聚合体定形前不落元素地址先收集后回填)
+- [装载先校验后落位，半校验状态不出手](#装载先校验后落位半校验状态不出手)
+- [关键账本页运行期只读，写访问收敛到明示临界区](#关键账本页运行期只读写访问收敛到明示临界区)
+- [先全量析构，再统一回收](#先全量析构再统一回收)
+
+## 目标版本分档门禁：新码拒绝，存量警告
+
+**一句话**：平台收紧格式/行为校验时按调用方申报的目标 SDK 版本分档——新申报版本直接拒绝，存量版本降级为可见警告并记档，随生态迁移自然完成收紧。
+
+**代码实例**（bionic/linker `linker_phdr.cpp`，同模式见 `linker_main.cpp` 段保护、`VerifyElfHeader`）：
+
+```cpp
+if (header_.e_shentsize != sizeof(ElfW(Shdr))) {
+    // Fail if app is targeting Android O or above
+    if (get_application_target_sdk_version() >= 26) {
+      DL_ERR_AND_LOG("\"%s\" has unsupported e_shentsize: ...");   // 新应用：拒绝装载
+      return false;
+    }
+    DL_WARN_documented_change(26, "invalid-elf-header_section-headers-...",
+                              "\"%s\" has unsupported e_shentsize ...");  // 老应用：警告
+    add_dlwarning(name_.c_str(), "has invalid ELF header");           // 并留档可查
+}
+```
+
+**为什么精妙**：平台想收紧但一次全网拒绝会砸掉海量存量应用；把"是否容忍旧格式"的裁判权交给调用方自己申报的目标版本——新代码零容忍、存量给缓冲期，且警告带文档锚点（DL_WARN_documented_change 的 URL 片段）可被开发者检索到。
+
+**SDK 设计启示**：
+- 校验与行为变更按调用方申报的目标版本分档施压，同一处代码同时承载"拒绝"与"警告"两档；适用条件：能读到调用方申报版本、且警告有稳定出口（logcat/专档）让开发者可发现——读不到申报版本的纯内部模块只能全量同档。
+- 分档门槛一旦发布就是承诺：警告档要有移除计划（跟随最低支持版本抬升），否则双档长期并存会腐蚀"新版本即新契约"的语义。
+
+## 聚合体定形前不落元素地址，先收集后回填
+
+**一句话**：要把"容器元素的地址"写进别处时，若容器仍会增长，先只记下标、待容器定形后统一回填真实地址——扩容搬移不会留下悬垂指针。
+
+**代码实例**（bionic/linker `linker_relocate.cpp`）：
+
+```cpp
+// 收集段：vector 可能扩容搬移元素，此刻不能写元素地址——只记（描述符, 下标）
+relocator.tlsdesc_args->push_back({ .generation = ..., .index.module_id = ... });
+relocator.deferred_tlsdesc_relocs.push_back({ desc, relocator.tlsdesc_args->size() - 1 });
+// 回填段：relocate() 末尾 vector 定形，元素地址永久稳定，统一写入
+desc->func = tlsdesc_resolver_dynamic;
+desc->arg = reinterpret_cast<size_t>(&tlsdesc_args_[pair.second]);
+```
+
+**为什么精妙**："往增长容器里放对象，再引用对象地址"天然自相矛盾；把引用延迟到"不再增长"这个明确时点，矛盾就地消解，容器保持最简单的连续内存布局（零开销随机访问）。
+
+**SDK 设计启示**：
+- 消费方需要元素稳定地址时，把"收集"与"回填"拆成两阶段，中间用（目标, 下标）对过渡；适用条件：存在明确的定形时点（装载结束/构建完成/事务提交）——容器永不定形时改用稳定地址容器（deque/对象池+槽号）而不是硬等。
+- 两阶段的次序约束要写在收口处（本例回填固定在 relocate() 末尾），让阅读者一处即可确认"不会提前落地址"。
+
+## 装载先校验后落位，半校验状态不出手
+
+**一句话**：把外部输入的装载拆成校验段与落位段，校验链全部通过才置位进入落位段——绝不带着部分校验过的状态去动地址空间等昂贵资源。
+
+**代码实例**（bionic/linker `linker_phdr.cpp`）：
+
+```cpp
+bool ElfReader::Read(...) {   // 校验段：五步串联，全过才置 did_read_
+  if (ReadElfHeader() && VerifyElfHeader() && ReadProgramHeaders() &&
+      ReadSectionHeaders() && ReadDynamicSection()) {
+    did_read_ = true;
+  }
+  return did_read_;
+}
+bool ElfReader::Load(...) {   // 落位段：mmap/地址空间等昂贵操作，进门先验校验已完成
+  CHECK(did_read_);
+  if (ReserveAddressSpace(address_space) && LoadSegments() && FindPhdr() && ...) {
+    did_load_ = true;
+  }
+  return did_load_;
+}
+```
+
+**为什么精妙**：校验与落位的资源画像相反（校验廉价可失败、落位昂贵难回滚），混在一步里要么重复校验要么带病提交；两段式让"文件不可信"的攻击面全部消解在花出任何资源之前。
+
+**SDK 设计启示**：
+- 接受外部输入（文件/网络/跨进程）的装载 API 内部按"校验段 → 落位段"分章，落位段入口用断言（CHECK/require）锁住"校验已完成"前置；适用条件：校验廉价且能整体预判、落位昂贵或回滚代价高——流式场景无法整体预校验，退化为分块校验+可回滚提交。
+- 校验段的状态用显式布尔（did_read_/did_load_）而非"没抛异常就算过"来表达，调用方与断言都有可检查的凭据。
+
+
+## 关键账本页运行期只读，写访问收敛到明示临界区
+
+**一句话**：进程级的核心账本（模块表、成员表）平时整页 mprotect 只读，所有合法写操作收敛进一个显式守卫临界区——运行期野指针写账本直接段错误，而不是悄悄腐蚀状态。
+
+**代码实例**（bionic/linker `linker.cpp`）：
+
+```cpp
+ProtectedDataGuard::ProtectedDataGuard() {
+  if (ref_count_++ == 0) {                      // 嵌套只在最外层切换保护
+    protect_data(PROT_READ | PROT_WRITE);       // soinfo/namespace 四个分配器页开写
+  }
+  ...
+}
+ProtectedDataGuard::~ProtectedDataGuard() {
+  if (--ref_count_ == 0) {
+    protect_data(PROT_READ);                    // 退出临界区即恢复只读
+  }
+}
+```
+
+**代码实例二**（bionic/linker `linker_cfi.cpp` ShadowWrite——更进一步的变体）：
+
+```cpp
+// CFI 影子页连"临界区开写"都不给：写时在匿名临时页旁路备好数据（原页保持只读），
+// 析构时临时页转只读并 mremap 原地换入——写窗口缩为零，换入是原子的
+~ShadowWrite() {
+  mprotect(tmp_start, size, PROT_READ);
+  mremap(tmp_start, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, aligned_start);
+}
+```
+
+**为什么精妙**：账本一旦被静默写坏，故障会漂移到与成因无关的位置，排查代价极高；把"账本不可变"做成硬件保证（页保护），写坏立即爆炸在写点——用一层 mprotect 把整类"谁改了我的表"问题变成当场崩溃。ShadowWrite 变体进一步把写窗口压到零：连守卫期间都不开写，杜绝"守卫内的写原语被劫持"。
+
+**SDK 设计启示**：
+- 高价值低频写的账本用"默认只读 + RAII 守卫开写"的临界区模式；适用条件：写操作低频且集中在明确入口（dlopen/dlclose）、账本有独立分配器或独立页——账本与热数据混页时 mprotect 粒度不够，只能覆盖独立区域。
+- 安全等级更高时升级为"旁路准备 + 原子换入"，写窗口为零；适用条件：改动可整体在旁路准备完成（表可重建/改动可预算）——高频增量写每次换页的成本不可接受，仍应走守卫开写。
+- 守卫要支持重入（引用计数），否则"临界区内再入临界区"（如构造函数递归 dlopen）会自我死锁或提前恢复只读。
+
+## 先全量析构，再统一回收
+
+**一句话**：批量销毁一组相互依赖的对象时，先把整组的析构函数全部跑完，再统一释放资源——析构器在此期间可以安全引用同批尚未释放的兄弟对象。
+
+**代码实例**（bionic/linker `linker.cpp` `soinfo_unload_impl`）：
+
+```cpp
+// 段1：向下收集待卸载集合（local + external 两个列表）
+local_unload_list.push_back(si); ...
+// 段2：集中析构——集合内全部 FINI 跑完，此时所有库都还在
+local_unload_list.for_each([](soinfo* si) { si->call_destructors(); });
+// 段3：逐个回收——通知 gdb、注销 TLS、soinfo_free（munmap）
+while ((si = local_unload_list.pop_front()) != nullptr) { ... soinfo_free(si); }
+```
+
+**为什么精妙**：析构与释放混做时，先析构的库可能还调用后析构库的函数（代码即将被 munmap）；把"析构阶段"与"回收阶段"切开，析构器看到的 world 与正常运行时完全一致——正确性不依赖析构顺序的巧合。
+
+**SDK 设计启示**：
+- 卸载/关闭一组相互引用的资源时按"收集 → 全量析构 → 逐个回收"三段走；适用条件：析构器可能调用同批其他对象的代码或数据（回调、注册表反查）——析构器保证不触兄弟对象时，一段式直接释放更简单。
+- 收集阶段就要确定边界（哪些随组卸载、哪些只摘边不卸载），把跨组依赖剥到"external 列表"单独递归处理，避免回收阶段再做图遍历决策。
+
 
 <!-- 条目模板：
 

@@ -2,6 +2,10 @@
 
 把跨会话仍可复用的结论固化为可检索知识资产的体系。知识库固定位于 `Summary/project/knowledge-base/`，按知识主题路由；写入者不改变知识的主题归属。
 
+## 与 career 的关系
+
+`Summary/project/knowledge-base/career/` 是 Android 车机求职和真实项目复盘的应用层入口：它可以引用本库的通用知识，但不复制正文。求职过程中形成、且换项目仍成立的结论，按 `ROUTING.md` 沉淀回本库；只对当前岗位、简历或某个项目有效的内容留在 `career/`。
+
 ## Language
 
 **知识库 (knowledge-base)**:

@@ -72,6 +72,9 @@
 - [常驻组件轻量分工敏感副作用框架兜底](#常驻组件轻量分工敏感副作用框架兜底)
 - [打扰权只减不增用户参与即锁定](#打扰权只减不增用户参与即锁定)
 - [关键广播前先同步执行面](#关键广播前先同步执行面)
+- [隐私面在采集口收窄，而非出口过滤](#隐私面在采集口收窄而非出口过滤)
+- [越权控制静默拒绝，不向调用方泄露存在性](#越权控制静默拒绝不向调用方泄露存在性)
+- [特权参数的高频改写是攻击面，限频即防线](#特权参数的高频改写是攻击面限频即防线)
 
 <!-- 条目模板：
 
@@ -933,6 +936,51 @@ if (framePending) {            // 上一帧 present fence 未信号
 // 命中后真正算设备的是引擎：mEngine->getOutputDevicesForAttributes(attr)
 ```
 - **思想提炼**：定制需求频繁的域，把规则抽成可整类替换的策略对象，流程层只持接口；适用条件是规则输入输出形状稳定，规则本身高频演进。
+
+## 隐私面在采集口收窄，而非出口过滤
+
+- **一句话**：可能被上传/聚合的数据，最小化决策必须做在采集口——该不采的直接不采，而不是采下来再在展示层过滤。
+- **核心矛盾**：诊断数据越全越利于排查，但采集方无法控制数据落盘后的流向（上传、聚合、被第三方读取）；出口过滤挡不住已经发生的采集。
+- **代码实例**（AAOS13 `system/core/debuggerd/libdebuggerd/tombstone_proto.cpp`）：
+```cpp
+// tombstone 会随 bugreport 上传聚合，用户版（非 debuggable）干脆不采 logcat——
+// 日志可能携带其他应用的用户数据
+if (android::base::GetBoolProperty("ro.debuggable", false)) {
+  dump_logcat(&result, main_thread.pid);
+}
+```
+- **思想提炼**：数据的隐私属性在采集瞬间就定型了——一旦落盘，后续所有过滤都是可被绕过的约定而非保证；适用条件：数据存在体外流转（上传/共享/备份）的可能，且缺失部分不影响核心功能（崩溃归因靠信号与栈，logcat 是锦上添花）。若数据只在本地展示且用户可控，出口过滤即可。
+
+## 越权控制静默拒绝，不向调用方泄露存在性
+
+- **一句话**：跨应用的控制类操作（切走/释放别人的会话、连接）越权时只记服务端日志、不向调用方回执失败——静默吞掉，防止用"失败回执"当探测器。
+- **核心矛盾**：安全上希望调用方什么都探测不到，可用性上希望调用方知道"为什么没生效"——回执越详细，越权探测的信息通道越宽。
+- **代码实例**（AAOS13 `frameworks/base/services/core/java/com/android/server/media/MediaRouter2ServiceImpl.java`）：
+```java
+// 会话归属账本：控制请求必须与创建时的归属严格匹配（引用比较）
+RouterRecord matchingRecord = mSessionToRouterMap.get(uniqueSessionId);
+if (matchingRecord != routerRecord) {
+    Slog.w(TAG, "Ignoring selecting route from non-matching router. ...");
+    return;   // 仅服务端日志，无回执——调用方无从得知该会话是否存在
+}
+```
+- **思想提炼**：对"探测型"失败（对象存在与否本身是信息）用静默拒绝，对"执行型"失败（发起方自己的参数错误）才回执；适用条件：操作对象跨应用、且存在枚举/探测攻击面——纯应用内错误处理不要静默，可调试性优先。
+
+## 特权参数的高频改写是攻击面，限频即防线
+
+- **一句话**：能影响生死/钱/安全等高危决策的参数，其"设置接口"必须限频——高频改写本身就是一种攻击（DoS 或反复收紧保护边界），而不只是性能问题。
+- **核心矛盾**：参数理应随时可调（灵活性），但每次改写都会立即生效到高危决策上——不受限的改写频率等于把决策权暴露给时序攻击。
+- **代码实例**（AAOS13 `system/memory/lmkd/lmkd.cpp`）：
+```cpp
+// minfree/adj 水位决定"内存剩多少杀谁"
+// Ratelimit minfree updates to once per TARGET_UPDATE_MIN_INTERVAL_MS
+// to prevent DoS attacks
+if (get_time_diff_ms(&last_req_tm, &curr_tm) < TARGET_UPDATE_MIN_INTERVAL_MS) {
+    ALOGE("Ignoring frequent updated to lmkd limits");
+    return;   // 单位时间只接受一次，超频直接丢弃
+}
+```
+- **思想提炼**：给高危参数的设置接口加"最小间隔"，把改写频率当攻击面治理——丢弃即防线，无需复杂协商；适用条件：参数影响高危决策且改写成本不对称（攻击者改写极廉价、系统执行极昂贵）——普通业务配置不要照搬，会伤正常重试。
 
 ## 采集与崩溃隔离
 
