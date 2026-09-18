@@ -19,7 +19,7 @@
 
 - 五条轨道并行：Java/Kotlin、Framework、AAOS、源码/实践、面试/复习。优先级、阶段 Gate、每周配额和时间基线的唯一落点在[总路线](./plans/roadmaps/six-month-roadmap.md)，本文件不重复。
 - 通用知识一律查父目录（见下表）；本目录只放面试化表达、项目证据、进度和复盘，不复制知识正文。
-- 源码边界：`AAOS13_study` 是可修改的学习副本；三个真实项目目录只读。路径与读写规则的唯一落点在 [work-project-analysis/README.md](./work-project-analysis/README.md)。
+- 源码边界：`AAOS13_study` 是可修改的学习副本（Framework/AAOS）；`AndroidLibs`（`/home/liang/Project/MyProject/AndroidLibs`）是可修改的应用层库源码标注仓库（glide / retrofit / androidx / corretto-17 JDK 17 java.base），供"源码/实践"轨道和库类面试题标注学习，规则见其 `CONTEXT.md`；三个真实项目目录只读。真实项目路径与读写规则的唯一落点在 [work-project-analysis/README.md](./work-project-analysis/README.md)。
 - 证据措辞：区分"实际参与 / 代码观察 / 学习验证"，不能确认的一律降级，不包装成量产经验。
 
 ## Knowledge Base 对照

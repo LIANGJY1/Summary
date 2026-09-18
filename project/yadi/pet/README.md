@@ -1,9 +1,9 @@
 # 萌宠服务 — 需求与设计工作区
 
 雅迪车机「萌宠」功能：Kanzi 渲染、Launcher 集成、与 3D 车模共享渲染画布。
-代码仓库：`/home/liang/Project/Reachauto/YaDi/yadea_master`（模块 `application:Launcher`，包 `com.yadea.launcher.pet`）。
+代码仓库：`/home/liang/Project/Reachauto/YaDi/yadea_master`。萌宠实现位于 `application:Launcher`；对外 AAR 由 Android Library 模块 `component:LauncherLib` 产出。
 
-## 文件（6 个，各司其职、互不复述）
+## 文档导航
 
 | 文件 | 职责 |
 |---|---|
@@ -13,18 +13,20 @@
 | entries/SRS_001~012.md | **条目全息档案（条目级唯一权威）**：事实＋问答＋开放点，一条目一文件 |
 | [04-代码方案.md](./04-代码方案.md) | 开发基准：架构／测试／编码规范／收敛表／阶段 |
 | [05-萌宠开发学习总结.md](./05-萌宠开发学习总结.md) | 个人知识卡片（追加不重排） |
+| [06-智能推荐接口设计.md](./06-智能推荐接口设计.md) | `LauncherLib` 的 pet 接口规格（DEP-8）：全局 `LauncherService` 分发、pet 业务适配层、事件码与回传契约 |
+| [07-阶段7实现计划.md](./07-阶段7实现计划.md) | SRS_010/011/012 实施记录与验收项；SRS_007 暂缓 |
 | archive/ | 历史存档（旧 demo 记录、已删版本可查 git） |
 
-## 当前状态（2026-09-16）
+## 当前状态（2026-09-18）
 
-- SRS_001~012 全部定稿；阶段 1~6（开关显隐／出场／常驻循环／点击／音乐联动／语音交互／低电量＋充电）已实施；竞合矩阵**定版（2026-09-16 PP0 锁版）已落代码**（PetArbiter 角色规则表逐格对照 02；含优先级顺序与连续动作打断不恢复）。场景表 73 行全绿（未提交，工作区待审）。
-- 双版本入口开关（D003）：`Myapplication.USE_NEW_PET_SERVICE=false`＝展车版默认；**正式投入前 main 行为＝展车版**；阶段 4~6 仅动新版包，展车版与共享设施零改动。
-- 待办：真机冒烟（出场/循环/点击/音乐联动/语音交互/低电量/充电＋前台切换 Render 沿）；电量信号已接入（`ENERGY_DISPSOC` 显示电量，口径见 SRS_008）；下一步开发＝阶段 7 彩蛋组（SRS_007/010/011/012，前置＝各 stub）。
+- SRS_001~006、008~012 已编码；SRS_007 因需求大变更暂停，以 [SRS_007 条目](./entries/SRS_007.md) 的新结论为准。阶段 7 的生日、天气、节日链路已落代码；萌宠场景表 85 行，另有天气码与推荐事件映射测试。
+- 双版本入口开关（D003）：`Myapplication.USE_NEW_PET_SERVICE=false`，当前默认仍运行展车版；新版代码编译通过不等于已在车机启用。`LauncherLib` 是已注册的 Android Library Gradle 模块（`com.android.library`），不是 Java Library 或普通目录；它交付 AAR，不包含 Launcher 进程内的业务实现。模块构建与交付见代码仓库的 `component/LauncherLib/README.md`。
+- 待办：推荐方接口联签、天气与 Kanzi 真机联调、节日正式音效资源替换；新版入口启用需按 D003 单独安排。电量信号已接入（`ENERGY_DISPSOC` 显示电量，口径见 SRS_008）。
 - 悬置项一览：01 §6（跨条目）＋各条目档案"开放点"（目录见 03）。
 
 ## 维护规则（4 条）
 
-1. 需求来→改 entries/ 对应条目档案（全局性的改 01，状态变了顺手更新 03 索引行）→代码只动 PetConfig／对应 Source／Arbiter 规则行→同步场景行。
+1. 需求来→改 entries/ 对应条目档案（全局性的改 01，状态变了同步 03 索引行）→按职责修改对应代码与测试；对外接口变更同步 `component:LauncherLib` 和 06。
 2. 竞合规则变更只改 02。
 3. 跨文件只写"编号＋指针"，禁止复述内容；发现复述即收敛回唯一权威。
 4. 结论必须落盘；历史过程不进正文（git 有史）。

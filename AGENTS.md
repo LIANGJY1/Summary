@@ -24,6 +24,7 @@
 | `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
 | `issue/` | 问题复盘与交接 | 排查同类问题前先查 | 复盘流待建（暂手动，见 Roadmap） |
 | `/home/liang/Project/MyProject/AAOS13_study` | AAOS 13 源码学习副本：源码批注、实验修改、机制验证和学习记录 | Android Framework/AAOS 源码学习时 | **允许修改**；不得把学习副本改动表述为量产项目成果 |
+| `/home/liang/Project/MyProject/AndroidLibs` | 应用层库源码标注学习仓库：glide / retrofit / androidx / corretto-17（JDK 17 java.base），规则见其 `CONTEXT.md` | 求职"源码/实践"轨道、Glide/Retrofit/androidx/JDK 面试主题、找 SDK 设计启示时 | **允许修改**（源码标注学习）；可迁移结论按其词条沉淀 knowledge-base 三文档；面试化表达写回 `career/` |
 | `/home/liang/Project/Reachauto/YaDi/yadi_android` `/home/liang/Project/Reachauto/YaDi/yadea_master` | Android/车机实际项目经验源 | 车机求职、项目复盘、源码对照时只读参考 | **严禁修改**源码、配置、构建脚本、生成物和提交历史；产出只写回 Summary 或独立 Demo |
 | `ai/` | AI 工具手册与工作流（OpenCode、部署流程） | 使用/配置 AI 工具时 | 用户手动维护 |
 | `project/hc` `yadi` `WMS Viewer` | 项目资料与设计文档 | 做对应项目任务时 | 项目内沉淀 |
