@@ -126,6 +126,7 @@
 - [装载先校验后落位，半校验状态不出手](#装载先校验后落位半校验状态不出手)
 - [关键账本页运行期只读，写访问收敛到明示临界区](#关键账本页运行期只读写访问收敛到明示临界区)
 - [先全量析构，再统一回收](#先全量析构再统一回收)
+- [指令录制与执行分线程，属性单列免重录](#指令录制与执行分线程属性单列免重录)
 
 ## 目标版本分档门禁：新码拒绝，存量警告
 
@@ -2491,3 +2492,27 @@ record.getToken().linkToDeath(record, 0);
 **SDK 设计启示**：
 - 跨进程临时授权一律要求传 IBinder 身份并 linkToDeath，把生命周期钩子内置进授权本身；适用条件：特权语义就是"持有者活着才有效"——需要"死后仍生效"的持久授权（配对、订阅）不能这样设计。
 - 主动释放 API 仍要提供：主动释放走优雅路径（可恢复状态），死亡释放是兜底，两者并存而不是二选一。
+
+## 指令录制与执行分线程，属性单列免重录
+
+**一句话**：把"生成绘制指令"与"执行绘制指令"拆成两个线程、用不可变指令列表衔接；可属性化的状态（位置/透明度/变换）不烘进指令、单列在节点属性上，让"改属性"与"重录指令"成为两档成本。
+
+**代码实例**（frameworks/base/core/java/android/view/View.java updateDisplayListIfDirty）：
+
+```java
+if (renderNode.hasDisplayList() && !mRecreateDisplayList) {
+    mPrivateFlags |= PFLAG_DRAWN | PFLAG_DRAWING_CACHE_VALID;
+    dispatchGetDisplayList();      // 自身指令仍有效 → 只让脏孩子各自重录
+    return renderNode;
+}
+mRecreateDisplayList = true;
+final RecordingCanvas canvas = renderNode.beginRecording(width, height);
+try { draw(canvas); }             // UI 线程只录指令
+finally { renderNode.endRecording(); } // RenderThread 异步消费不可变指令列表
+```
+
+**为什么精妙**：录制远快于执行，UI 线程的卡顿不再拖死渲染、渲染耗时也不再卡 UI；增量重录靠有效性标志逐节点判定（父有效子脏时只重录子），是列表滚动只重录变动项的基础——而位置/变换是 RenderNode 属性而非指令，动画只改属性即可重放同一份指令。
+
+**SDK 设计启示**：
+- 高成本产出物（指令列表/编译产物/查询计划）按"有效性标志 + 局部重建"管理，失效粒度与状态分解粒度对齐；适用条件：产出物生成远快于执行且状态可分解到节点——状态全局耦合时局部重建退化为全量，直接做全量重建更简单。
+- 可属性化的状态不烘进产物：把"频繁改的少量状态"与"低频变的大量产物"分层存放，改属性走廉价路径；适用条件：执行端能解释属性语义——执行端不认识的属性只能烘进产物，强行单列会变成两头维护。

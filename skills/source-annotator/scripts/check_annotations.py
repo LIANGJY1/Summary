@@ -25,8 +25,9 @@
      按语义断点重排;--fix 自动补句号写盘(已知副作用:会把无标点续行切成病句,慎用)
   8. 上游英文注释保护:HEAD 中的英文散文注释行(无 CJK、长度>15、含词间空格、非分割线、
      无 →/【)被删除或改写 → FAIL——四检范围仅限此前轮次的中文学习批注
-  9. 未带标签的新注释块 / 新行标签出现在块中段 → ? WARN(不影响退出码;确认属类头总论/
-     方法头则罢,否则补【标签】;空注释行是块分隔符)
+  9. 未带标签的新注释块 → ? WARN(类头总论/方法头则罢,否则补【标签】)；
+     新行标签出现在块中段 → FAIL(标签堆叠,必须用空注释行 // 分块)
+  11. 列表串行:一行内"；N. 汉字"塞多个编号项 → FAIL(一项必须独占一行)
   10. 专名回查(WARN):新增中文批注里的 类::方法 / 驼峰标识 / 常量名 / .java|.cpp|.h 文件名,
      一次 git grep 全仓核验存在性;带 [inferred] 的行跳过;WARN 不阻塞但须逐条复核——
      把语义门的"专名回查"机械化(跨层签名论断如 返回值/出参 只能靠人,见 SKILL.md §6)
@@ -355,12 +356,16 @@ def check_file(repo: str, path: str, fix: bool = False, max_width=None):
         # 10 专名提取(只查新增中文批注行;[inferred] 行整行豁免)
         if is_new and has_ideograph(body) and INFERRED not in body:
             file_syms.extend((sym, fb, i) for sym, fb in extract_symbols(body))
-        # 9 未带标签的新块 / 块中段标签
+        # 9 未带标签的新块 / 块中段标签(堆叠=格式违规,FAIL)
         if is_new and body and not is_divider(body):
             if i == block_start[i] and not body.startswith("【"):
                 warns.append(f"L{i} 未带标签的新注释块(类头总论/方法头则罢,否则补【标签】)")
             if i != block_start[i] and body.startswith("【"):
-                warns.append(f"L{i} 标签出现在块中段(块应以【标签】开头,块间用空注释行)")
+                problems.append(f"L{i} 标签堆叠(前块未用空注释行分隔,每块只许一个标签,"
+                                f"块间插入空注释行 //): {body[:30]}")
+            # 11 列表串行:一行塞多个编号项(一项一行是硬规则)
+            if re.search(r"；\s*\d+\.\s*[\u4e00-\u9fff]", body):
+                problems.append(f"L{i} 列表串行(多个编号项挤在一行,一项必须独占一行): {body[:36]}")
 
     if old is not None and code_sequence(old, prefix) != code_sequence(new_lines, prefix):
         problems.append("代码序列与 HEAD 不一致!(注释改动碰到了代码,立即检查)")
@@ -426,7 +431,19 @@ def self_test() -> int:
         dict(name="空注释行切分标签块", ext=".java",
              old="class A {\n}\n",
              new="class A {\n// 【核心流程】先建立请求。\n//\n// 【线程模型】回调在线程池执行。\n}\n",
-             must=[], warn_not_contains="标签出现在块中段"),
+             must=[], warn_not_contains="标签堆叠"),
+        dict(name="块中段标签堆叠 FAIL", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【核心流程】先建立请求。\n// 【线程模型】回调在线程池执行。\n}\n",
+             must=["标签堆叠"]),
+        dict(name="列表串行 FAIL", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【核心流程】三步：\n// 1. 校验参数；2. 入队等待；\n}\n",
+             must=["列表串行"]),
+        dict(name="一行一项放行", ext=".java",
+             old="class A {\n}\n",
+             new="class A {\n// 【核心流程】三步：\n// 1. 校验参数；\n// 2. 入队等待；\n}\n",
+             must_not=["列表串行"]),
         dict(name="python 标签批注合规", ext=".py",
              old="def f():\n    pass\n",
              new="def f():\n    # 【关键细节】仅首次调用时初始化，后续直接复用。\n    pass\n",
