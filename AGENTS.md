@@ -8,8 +8,8 @@
 
 - **Semantic（事实知识）**：`android/` `网络/` `设计模式/` `密码/`（学习笔记）+ `project/knowledge-base/`（经验条目库，内含 `language/` 语言学习笔记）
 - **Procedural（怎么做）**：`skills/`（agent skills 镜像）+ `tools/`（自用工具）+ `ai/`（工具手册与工作流）+ `command/`
-- **Episodic（事件与项目）**：`issue/`（问题复盘）+ `project/knowledge-base/career/work-project-analysis/`（真实工作项目分析）+ `project/hc` `yadi` `WMS Viewer`（其他项目资料）
-- **组织与索引**：`path/`（学习路径总纲）+ `juejin-articles-index.md`（文章索引）+ 本文件
+- **Episodic（事件与项目）**：`issue/`（问题复盘）+ `project/knowledge-base/career/work-project-analysis/`（真实工作项目分析）+ `project/hc` `yadi` `WMS Viewer`（其他项目资料）+ `atlas/`（AI 成长工作站产品项目，根目录）
+- **组织与索引**：`path/`（学习路径总纲）+ `research/`（调研归档）+ `juejin-articles-index.md`（文章索引）+ 本文件
 
 ## 知识地图（先查这里，再进目录）
 
@@ -23,11 +23,13 @@
 | `android/` `网络/` `设计模式/` `密码/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可沉淀的可迁移结论走 knowledge-base |
 | `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
 | `issue/` | 问题复盘与交接 | 排查同类问题前先查 | 复盘流待建（暂手动，见 Roadmap） |
+| `research/` | 深度调研归档（库级通用主题）：`skill-research/`（Skills 生态调研 + 知识库总体建造方案）。注：atlas 项目相关调研已移至 `atlas/research/` | 需要某主题的调研结论、数据或项目盘点时 | 调研完成后整目录归档于此；新主题先建子目录并在此登记 |
 | `/home/liang/Project/MyProject/AAOS13_study` | AAOS 13 源码学习副本：源码批注、实验修改、机制验证和学习记录 | Android Framework/AAOS 源码学习时 | **允许修改**；不得把学习副本改动表述为量产项目成果 |
 | `/home/liang/Project/MyProject/AndroidLibs` | 应用层库源码标注学习仓库：glide / retrofit / androidx / corretto-17（JDK 17 java.base），规则见其 `CONTEXT.md` | 求职"源码/实践"轨道、Glide/Retrofit/androidx/JDK 面试主题、找 SDK 设计启示时 | **允许修改**（源码标注学习）；可迁移结论按其词条沉淀 knowledge-base 三文档；面试化表达写回 `career/` |
 | `/home/liang/Project/Reachauto/YaDi/yadi_android` `/home/liang/Project/Reachauto/YaDi/yadea_master` | Android/车机实际项目经验源 | 车机求职、项目复盘、源码对照时只读参考 | **严禁修改**源码、配置、构建脚本、生成物和提交历史；产出只写回 Summary 或独立 Demo |
-| `ai/` | AI 工具手册与工作流（OpenCode、部署流程） | 使用/配置 AI 工具时 | 用户手动维护 |
+| `ai/` | AI 工具手册与工作流（OpenCode、部署流程）+ Claude Code/Skills 官方文档摘存（`claude-code/`） | 使用/配置 AI 工具时 | 用户手动维护 |
 | `project/hc` `yadi` `WMS Viewer` | 项目资料与设计文档 | 做对应项目任务时 | 项目内沉淀 |
+| `atlas/` | AI 成长工作站产品项目（Linux 桌面端知识库+学习闭环应用，代号 atlas，**根目录级**）：单一 `PRD.md` 承载定位/需求/里程碑；`research/` 子目录存放其上游证据调研（ai-era-programmer、linux-desktop-ai-apps）；**MVP 代码在同级 `atlas-app/`**（Kotlin/Compose Desktop，gradle 工程，纳入本仓 git 管理） | 做该产品任何工作（设计/开发/发布）前，先读其 PRD.md | 直接更新 PRD.md，变更记其变更日志；代码改动走 `atlas-app/` 内常规工程流程 |
 | `tools/` | 自用工具源码 | 改工具前 | 工具内自有规则 |
 | `juejin-articles-index.md` | 博客文章总索引 | 写作找历史文章/选题时 | 发文后手动登记 |
 
