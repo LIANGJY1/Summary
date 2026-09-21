@@ -399,7 +399,7 @@ src/test 32 类 / 156 @Test：厚覆盖 `AppManagerTest`(14)、`AppsManagementFr
 ## 9. 相邻产物
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md)：全项目地图与 IPC 边界——本文只管 UI 进程内部。
-- `Summary/project/knowledge-base/android-ui.md`：HCTabBar setter 失效、dimen 分桶、布局副本 Binding NPE 三条本项目踩坑，读 §8 反射条目前先看它。
+- `Summary/knowledge-base/android-ui.md`：HCTabBar setter 失效、dimen 分桶、布局副本 Binding NPE 三条本项目踩坑，读 §8 反射条目前先看它。
 - `Summary/project/project-architecture/fragment/`：androidx.fragment 解码（fragmentation_core 的底座，非同一库）。
 
 ## 10. 开放问题

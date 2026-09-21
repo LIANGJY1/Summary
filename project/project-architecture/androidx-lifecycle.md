@@ -345,7 +345,7 @@ sequenceDiagram
 ## 9. 相邻产物
 
 - 源码仓 [Lifecycle.md](/home/liang/Project/MyProject/AndroidLibs/androidx/lifecycle/Lifecycle.md)（source-annotator 沉淀文档）：九个机制的**三问结论/代码链路/设计思想/易错点**详解层——读完本架构文档想深入某个机制时读它；它不回答"30 个模块怎么组织"（本文职责），本文不复述机制细节。
-- 知识库（Summary/project/knowledge-base/）sdk-design.md / design-principles.md 已收 7 条 lifecycle 相关条目（资源自清、有序登记表、版本号对账、活跃度翻转点、真值广播、恢复账本、ERROR 遮蔽重载）。
+- 知识库（Summary/knowledge-base/）sdk-design.md / design-principles.md 已收 7 条 lifecycle 相关条目（资源自清、有序登记表、版本号对账、活跃度翻转点、真值广播、恢复账本、ERROR 遮蔽重载）。
 
 ## 10. 开放问题
 

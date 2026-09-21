@@ -274,7 +274,7 @@ metadata:
 
 ### 跨库知识库（SDK 设计 + 设计思想 + 注解技术）
 
-目录固定：`/home/liang/Project/MyProject/Summary/project/knowledge-base/`（本机约定路径；换机使用时先问用户知识库放哪），含三份文档（**各自的边界、条目模板、归并规则以其头部"边界/规则"节为准**，文档即唯一事实源）：
+目录固定：`/home/liang/Project/MyProject/Summary/knowledge-base/`（本机约定路径；换机使用时先问用户知识库放哪），含三份文档（**各自的边界、条目模板、归并规则以其头部"边界/规则"节为准**，文档即唯一事实源）：
 
 - `sdk-design.md`：收"**怎么做**"——SDK 设计模式与可执行做法；只收与设计/构建 SDK 直接相关的内容，库用法技巧、业务知识、无迁移价值的实现细节一律不进。
 - `design-principles.md`：收"**怎么想**"——核心矛盾、权衡、可迁移的思维方式。

@@ -183,7 +183,7 @@ Service 侧下载/安装推进（第二批深读）
 ## 9. 相邻产物
 
 - `Summary/project/project-architecture/fragment/ARCHITECTURE.md`：**androidx.fragment** 库的架构解码——本仓 `fragmentation_core`（me.yokeyword Fragmentation）是**另一个库**（构建于 androidx.fragment 之上的 show/hide 导航框架），读 AppStoreApp 的壳导航前先分清两者；fragmentation_core 本体的解码在第三批。
-- `Summary/project/knowledge-base/android-ui.md`：已沉淀本项目的 HCTabBar 反射失效、dimen 分桶不生效、布局副本 Binding 字段 NPE 三条 UI 踩坑，与本文 `HCTabBarCompat`/`HCRecyclerViewCompat`、§8 布局桶发现互为印证。
+- `Summary/knowledge-base/android-ui.md`：已沉淀本项目的 HCTabBar 反射失效、dimen 分桶不生效、布局副本 Binding 字段 NPE 三条 UI 踩坑，与本文 `HCTabBarCompat`/`HCRecyclerViewCompat`、§8 布局桶发现互为印证。
 
 ## 10. 开放问题
 

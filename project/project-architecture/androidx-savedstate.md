@@ -222,7 +222,7 @@ ktx 与 testing 是**占位空壳**：ktx 无任何源码（历史 API surface �
 
 - 源码仓沉淀文档 [`androidx/savedstate/SavedState.md`](../../../AndroidLibs/androidx/savedstate/SavedState.md)（source-annotator 产物）：机制三问/代码链路/设计思想/易错点的详解层。**何时读它**：想看某个机制（消费即删、三层分发、根扁平化、反射协商）怎么一步步走、为什么这样设计时。本架构文档只管宏观组织，两相不重复。
 - [`androidx-lifecycle.md`](./androidx-lifecycle.md)：SavedStateHandle / SavedStateViewModelFactory 在 lifecycle 侧的完整解码，及 SSH → SavedStateReg 跨库边的生命周期视角。**何时读它**：顺着 §4 主链走到 SavedStateHandle 想继续深入时。
-- 知识库（`Summary/project/knowledge-base/`）：本库贡献的 sdk-design 条目「整包状态按 key 分发」「错误校验前移到登记入口」「描述符指纹分流」「双读默认值消歧」「注解当版本探针」与 design-principles 条目「可用性窗口用事件翻转的显式开关表达」「类型随模式走，负载归容器」。
+- 知识库（`Summary/knowledge-base/`）：本库贡献的 sdk-design 条目「整包状态按 key 分发」「错误校验前移到登记入口」「描述符指纹分流」「双读默认值消歧」「注解当版本探针」与 design-principles 条目「可用性窗口用事件翻转的显式开关表达」「类型随模式走，负载归容器」。
 
 ## 10. 开放问题
 
