@@ -29,6 +29,7 @@ import atlas.core.MdStores.CardEntry
 /** 复习子页（「学习」页默认节）：卡组侧栏 + Anki 键位翻卡 */
 @Composable
 fun ReviewSection(store: AppStore) {
+    val ui = atlasUiTokens()
     var showAdd by remember { mutableStateOf(false) }
     var showBrowse by remember { mutableStateOf(false) }
     val deck = store.reviewDeckFilter
@@ -45,8 +46,8 @@ fun ReviewSection(store: AppStore) {
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
                 .padding(16.dp),
         ) {
-            Text("复习卡组", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("选择一个范围开始复习", fontSize = 11.sp, color = Theme.Muted)
+            Text("复习卡组", style = ui.typography.sectionTitle)
+            Text("选择一个范围开始复习", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.height(14.dp))
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 decks.forEach { d ->
@@ -86,7 +87,7 @@ fun ReviewSection(store: AppStore) {
             OutlinedButton(onClick = { Log.d("打开浏览卡片"); showBrowse = true }, Modifier.fillMaxWidth()) { Text("管理闪卡") }
         }
 
-        Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 28.dp, vertical = 20.dp)) {
+        Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = ui.spacing.page, vertical = 20.dp)) {
             val total = store.dueQueue.size
             if (card == null) {
                 ReviewDonePanel(store)
@@ -95,7 +96,7 @@ fun ReviewSection(store: AppStore) {
                 val progress = if (total == 0) 0f else position.toFloat() / total.toFloat()
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("复习", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("复习", style = ui.typography.pageTitle)
                         Text("${card.deck} · ${reviewProgressLabel(position, total)}", fontSize = 12.sp, color = Theme.Muted)
                     }
                     StatusChip("$total 张待复习", Theme.Accent)
@@ -129,9 +130,9 @@ fun ReviewSection(store: AppStore) {
                         Spacer(Modifier.height(22.dp))
                         VDivider()
                         Spacer(Modifier.height(20.dp))
-                        Text("参考答案", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.OkGreen)
+                        Text("参考答案", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.Accent)
                         Spacer(Modifier.height(8.dp))
-                        MarkdownText(card.back)
+                        MarkdownText(card.back, style = store.settings.markdownStyle)
                     } else {
                         Spacer(Modifier.height(22.dp))
                         Text(answerPromptLabel(), fontSize = 13.sp, color = Theme.Muted)

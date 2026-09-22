@@ -3,6 +3,7 @@ package atlas.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,6 +33,7 @@ data class IndexerHit(val path: String, val section: String, val snippet: String
  */
 @Composable
 fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
+    val ui = atlasUiTokens()
     val note = store.notes.firstOrNull { it.relPath == relPath }
     var text by remember(relPath) { mutableStateOf("") }
     LaunchedEffect(relPath) {
@@ -46,9 +48,11 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
             Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f),
             shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp,
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(ui.spacing.page), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(relPath, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+                    SelectionContainer(Modifier.weight(1f)) {
+                        Text(relPath, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+                    }
                     if (note?.tier == Tier.LOCAL_ONLY) StatusChip("仅本地 🔒", Theme.WarnOrange)
                     OutlinedButton(onClick = {
                         Log.i("系统编辑器打开 $relPath")
@@ -67,7 +71,9 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
                     }
                 }
                 VDivider()
-                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) { MarkdownText(text) }
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    MarkdownText(text, style = store.settings.markdownStyle)
+                }
             }
         }
     }

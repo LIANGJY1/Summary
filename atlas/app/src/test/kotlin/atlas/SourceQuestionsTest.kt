@@ -105,4 +105,24 @@ class SourceQuestionsTest {
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/docs/面试.md", configured))
         assertTrue(!SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-语法基础.md", configured))
     }
+
+    @Test
+    fun `题库目录只保留配置文档和目录下的 Markdown`() {
+        val documents = listOf(
+            "knowledge-base/language/java/01-基础.md",
+            "knowledge-base/language/java/02-集合.md",
+            "knowledge-base/language/kotlin/01-语法基础.md",
+            "knowledge-base/docs/面试.md",
+        )
+        val configured = listOf("knowledge-base/language/java/", "knowledge-base/docs/面试.md")
+
+        assertEquals(
+            listOf(
+                "knowledge-base/docs/面试.md",
+                "knowledge-base/language/java/01-基础.md",
+                "knowledge-base/language/java/02-集合.md",
+            ),
+            SourceQuestions.supportedDocuments(documents, configured),
+        )
+    }
 }

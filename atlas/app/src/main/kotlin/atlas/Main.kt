@@ -44,6 +44,7 @@ import atlas.ui.SettingsView
 import atlas.ui.Theme
 import atlas.ui.TodayView
 import atlas.ui.VDivider
+import atlas.ui.atlasUiTokens
 import atlas.ui.settingsTabLabel
 import atlas.ui.topLevelTabs
 import kotlinx.coroutines.delay
@@ -80,6 +81,7 @@ fun main() {
 
 @Composable
 fun AppRoot(store: AppStore) {
+    val ui = atlasUiTokens()
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
     }
@@ -112,24 +114,42 @@ fun AppRoot(store: AppStore) {
     ) {
         // 顶栏
         Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                .padding(horizontal = ui.spacing.page, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Theme.Accent)
             topLevelTabs().forEach { t ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        t,
-                        Modifier.clickable { Log.i("页签切换 → $t"); tab = t },
-                        fontWeight = if (tab == t) FontWeight.Bold else FontWeight.Normal,
-                        color = if (tab == t) Theme.Accent else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                    )
-                    when (t) {
-                        "工作台" -> if (inbox > 0) NavBadge("$inbox 待确认", Theme.WarnOrange)
-                        "题库" -> if (store.sourceQuestions.isNotEmpty()) NavBadge("${store.sourceQuestions.size} 题", Theme.Accent)
+                val active = tab == t
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        Modifier
+                            .clickable { Log.i("页签切换 → $t"); tab = t }
+                            .background(
+                                if (active) Theme.Accent.copy(alpha = 0.12f) else Color.Transparent,
+                                MaterialTheme.shapes.small,
+                            )
+                            .padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Text(
+                            t,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                            color = if (active) Theme.Accent else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                        )
+                        when (t) {
+                            "工作台" -> if (inbox > 0) NavBadge("$inbox", Theme.WarnOrange)
+                            "题库" -> if (store.sourceQuestions.isNotEmpty()) NavBadge("${store.sourceQuestions.size}", Theme.Accent)
+                        }
                     }
+                    Box(
+                        Modifier.padding(top = 3.dp).width(24.dp).height(2.dp)
+                            .background(if (active) Theme.Accent else Color.Transparent, MaterialTheme.shapes.small),
+                    )
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -161,7 +181,9 @@ fun AppRoot(store: AppStore) {
         }
         // 状态栏
         Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 12.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                .padding(horizontal = ui.spacing.page, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("条目 ${store.notes.size}", fontSize = 11.sp, color = Theme.Muted)

@@ -16,20 +16,21 @@ import atlas.AppStore
 /** 工作台：只保留需要处理的事项，不承担统计看板或内容浏览。 */
 @Composable
 fun TodayView(store: AppStore, onNavigate: (String) -> Unit) {
+    val ui = atlasUiTokens()
     val untested = store.sourceQuestions.size
     val retest = 0
     val inbox = store.candidates.size
     val actions = workbenchActions(0, untested, retest, inbox)
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ui.spacing.page),
+        verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
     ) {
         // 摘要区和详情区共用同一个页面滚动容器。
-            Text("工作台", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("只显示现在需要处理的事项。", fontSize = 12.sp, color = Theme.Muted)
+            Text("工作台", style = ui.typography.pageTitle)
+            Text("只显示现在需要处理的事项。", style = ui.typography.secondary, color = Theme.Muted)
             if (actions.isEmpty()) {
-                Text("没有待处理事项。", fontSize = 14.sp, color = Theme.Muted)
+                Text("没有待处理事项。", style = ui.typography.body, color = Theme.Muted)
             } else {
                 actions.forEach { item ->
                     WorkbenchRow(item) { onNavigate(item.target) }
@@ -45,9 +46,19 @@ fun TodayView(store: AppStore, onNavigate: (String) -> Unit) {
 
 @Composable
 private fun WorkbenchRow(item: WorkbenchAction, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(item.label, Modifier.weight(1f), fontSize = 14.sp)
-        StatusChip("${item.count}", if (item.target == "题库") Theme.Accent else Theme.WarnOrange)
-        OutlinedButton(onClick = onClick) { Text(item.action) }
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(item.label, Modifier.weight(1f), fontSize = 14.sp)
+            StatusChip("${item.count}", if (item.target == "题库") Theme.Accent else Theme.WarnOrange)
+            OutlinedButton(onClick = onClick) { Text(item.action) }
+        }
     }
 }

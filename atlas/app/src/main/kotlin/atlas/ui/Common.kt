@@ -7,9 +7,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -20,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
@@ -29,6 +36,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -37,6 +45,54 @@ data class AtlasPalette(
     val accent: Color, val okGreen: Color, val warnOrange: Color,
     val badRed: Color, val muted: Color, val codeBg: Color,
 )
+
+/** 页面级视觉规范，避免每个页面自行散落字号和间距常量。 */
+data class AtlasSpacing(
+    val page: androidx.compose.ui.unit.Dp,
+    val section: androidx.compose.ui.unit.Dp,
+    val card: androidx.compose.ui.unit.Dp,
+    val item: androidx.compose.ui.unit.Dp,
+    val control: androidx.compose.ui.unit.Dp,
+)
+
+data class AtlasTypography(
+    val pageTitle: TextStyle,
+    val sectionTitle: TextStyle,
+    val itemTitle: TextStyle,
+    val body: TextStyle,
+    val secondary: TextStyle,
+    val caption: TextStyle,
+)
+
+data class AtlasUiTokens(
+    val spacing: AtlasSpacing,
+    val typography: AtlasTypography,
+) {
+    companion object {
+        fun forTheme(dark: Boolean): AtlasUiTokens = AtlasUiTokens(
+            spacing = AtlasSpacing(
+                page = 16.dp,
+                section = 12.dp,
+                card = 14.dp,
+                item = 8.dp,
+                control = 40.dp,
+            ),
+            typography = AtlasTypography(
+                pageTitle = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
+                sectionTitle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+                itemTitle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+                body = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
+                secondary = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                caption = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
+            ),
+        )
+    }
+}
+
+val LocalAtlasUiTokens = staticCompositionLocalOf { AtlasUiTokens.forTheme(dark = true) }
+
+@Composable
+fun atlasUiTokens(): AtlasUiTokens = LocalAtlasUiTokens.current
 
 internal data class MarkdownTable(
     val headers: List<String>,
@@ -106,9 +162,10 @@ fun AtlasTheme(dark: Boolean, fontScale: Float = 1f, content: @Composable () -> 
     SideEffect { Theme.apply(dark) }
     CompositionLocalProvider(
         LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density, safeFontScale),
+        LocalAtlasUiTokens provides AtlasUiTokens.forTheme(dark),
     ) {
         MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
-            Surface(Modifier.fillMaxWidth()) { content() }
+            Surface(Modifier.fillMaxSize()) { content() }
         }
     }
 }
@@ -179,15 +236,106 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
  * 代码块/分隔线/行内标记；复杂 GFM 交给「用系统编辑器打开」）
  */
 @Composable
-fun MarkdownText(md: String, modifier: Modifier = Modifier) {
+fun MarkdownText(md: String, modifier: Modifier = Modifier, style: String = "reader") {
+    if (style == "classic") ClassicMarkdownText(md, modifier) else ReaderMarkdownText(md, modifier)
+}
+
+@Composable
+private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
+    val ui = atlasUiTokens()
     val lines = md.lines()
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
             when {
                 parseMarkdownTable(lines, i)?.let { table ->
-                    MarkdownTableView(table)
+                    ReaderMarkdownTableView(table)
+                    i = table.endExclusive - 1
+                    true
+                } == true -> Unit
+                line.trimStart().startsWith("```") -> {
+                    val lang = line.trimStart().removePrefix("```").trim()
+                    val buf = ArrayList<String>()
+                    i++
+                    while (i < lines.size && !lines[i].trimStart().startsWith("```")) { buf.add(lines[i]); i++ }
+                    i++
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Theme.CodeBg,
+                        tonalElevation = 1.dp,
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                            if (lang.isNotBlank()) {
+                                Text(lang.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Theme.Muted)
+                                Spacer(Modifier.height(7.dp))
+                            }
+                            buf.forEach { code ->
+                                Text(code, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+                line.startsWith("### ") -> Text(
+                    renderInline(line.removePrefix("### ")),
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 23.sp),
+                )
+                line.startsWith("## ") -> Text(
+                    renderInline(line.removePrefix("## ")),
+                    modifier = Modifier.padding(top = 12.dp),
+                    style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 27.sp),
+                )
+                line.startsWith("# ") -> Text(
+                    renderInline(line.removePrefix("# ")),
+                    modifier = Modifier.padding(top = 14.dp),
+                    style = ui.typography.pageTitle.copy(fontSize = 24.sp, lineHeight = 32.sp),
+                )
+                line.startsWith("> ") -> Row(Modifier.fillMaxWidth()) {
+                    Box(Modifier.width(3.dp).height(22.dp).background(Theme.Accent, RoundedCornerShape(2.dp)))
+                    Text(
+                        renderInline(line.removePrefix("> ")),
+                        Modifier.padding(start = 12.dp).fillMaxWidth(),
+                        color = Theme.Muted,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp,
+                    )
+                }
+                line.trim() == "---" -> VDivider()
+                Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
+                    Text("•", color = Theme.Accent, fontSize = 15.sp)
+                    Text(
+                        renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")),
+                        Modifier.padding(start = 10.dp),
+                        style = ui.typography.body,
+                    )
+                }
+                Regex("^\\s*[0-9]+[.、)] ").containsMatchIn(line) -> Text(
+                    renderInline(line.trim()),
+                    style = ui.typography.body,
+                    modifier = Modifier.padding(start = 18.dp),
+                )
+                line.isBlank() -> Spacer(Modifier.height(4.dp))
+                else -> Text(renderInline(line), style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)))
+            }
+            i++
+        }
+    }
+}
+
+@Composable
+private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
+    val ui = atlasUiTokens()
+    val lines = md.lines()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(ui.spacing.item)) {
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            when {
+                parseMarkdownTable(lines, i)?.let { table ->
+                    ClassicMarkdownTableView(table)
                     i = table.endExclusive - 1
                     true
                 } == true -> Unit
@@ -215,11 +363,11 @@ fun MarkdownText(md: String, modifier: Modifier = Modifier) {
                 line.trim() == "---" -> VDivider()
                 Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth()) {
                     Text("•  ", color = Theme.Muted)
-                    Text(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), fontSize = 14.sp, lineHeight = 20.sp)
+                    Text(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), style = ui.typography.body)
                 }
-                Regex("^\\s*[0-9]+[.、)] ").containsMatchIn(line) -> Text(renderInline(line.trim()), fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(start = 6.dp))
+                Regex("^\\s*[0-9]+[.、)] ").containsMatchIn(line) -> Text(renderInline(line.trim()), style = ui.typography.body, modifier = Modifier.padding(start = 6.dp))
                 line.isBlank() -> {}
-                else -> Text(renderInline(line), fontSize = 14.sp, lineHeight = 20.sp)
+                else -> Text(renderInline(line), style = ui.typography.body)
             }
             i++
         }
@@ -227,13 +375,46 @@ fun MarkdownText(md: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun MarkdownTableView(table: MarkdownTable) {
-    Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
-    ) {
-        MarkdownTableRow(table.headers, header = true)
-        table.rows.forEach { MarkdownTableRow(it, header = false, columnCount = table.headers.size) }
+private fun ReaderMarkdownTableView(table: MarkdownTable) {
+    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Column(Modifier.widthIn(min = (table.headers.size * 150).dp)) {
+            ReaderMarkdownTableRow(table.headers, header = true)
+            table.rows.forEach { ReaderMarkdownTableRow(it, header = false, columnCount = table.headers.size) }
+        }
+    }
+}
+
+@Composable
+private fun ReaderMarkdownTableRow(cells: List<String>, header: Boolean, columnCount: Int = cells.size) {
+    Row(Modifier.fillMaxWidth()) {
+        repeat(columnCount) { index ->
+            Text(
+                renderInline(cells.getOrNull(index).orEmpty()),
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (header) 0.8f else 0.4f))
+                    .background(if (header) Theme.Accent.copy(alpha = 0.12f) else Color.Transparent)
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClassicMarkdownTableView(table: MarkdownTable) {
+    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Column(
+            Modifier.widthIn(min = (table.headers.size * 150).dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            MarkdownTableRow(table.headers, header = true)
+            table.rows.forEach { MarkdownTableRow(it, header = false, columnCount = table.headers.size) }
+        }
     }
 }
 

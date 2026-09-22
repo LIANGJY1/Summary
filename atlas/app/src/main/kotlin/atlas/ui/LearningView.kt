@@ -1,22 +1,44 @@
 package atlas.ui
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.window.DialogProperties
 import atlas.AppStore
 import atlas.core.KnowledgeTree
 import atlas.core.KnowledgeTreeNode
@@ -238,10 +260,16 @@ private fun LegacyQuestionSection(store: AppStore) {
                                 color = Theme.OkGreen.copy(alpha = 0.08f),
                             ) {
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.OkGreen)
+                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
                                     Spacer(Modifier.height(4.dp))
-                                    CompositionLocalProvider(LocalContentColor provides Theme.OkGreen.copy(alpha = 0.92f)) {
-                                        MarkdownText(q.answer)
+                                    CompositionLocalProvider(
+                                        LocalContentColor provides if (store.settings.markdownStyle == "classic") {
+                                            Theme.OkGreen.copy(alpha = 0.92f)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    ) {
+                                        MarkdownText(q.answer, style = store.settings.markdownStyle)
                                     }
                                 }
                             }
@@ -294,36 +322,78 @@ private enum class QuestionSearchScope(val label: String) {
     ALL("整个目录树"),
 }
 
+/** 列表 key 必须区分同一源文件中重复题号的不同题目。 */
+internal fun sourceQuestionKey(entry: SourceQuestions.Entry): String =
+    "${entry.sourcePath}#${entry.startOffset}"
+
+internal fun adjacentQuestionIndex(currentIndex: Int, total: Int, delta: Int): Int? {
+    val next = currentIndex + delta
+    return next.takeIf { total > 0 && it in 0 until total }
+}
+
+internal fun safeQuestionIndex(currentIndex: Int, total: Int): Int? =
+    currentIndex.takeIf { total > 0 }?.coerceIn(0, total - 1)
+
+internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, total: Int): Boolean =
+    !isSaving && targetIndex in 0 until total
+
 @Composable
 fun QuestionSection(store: AppStore) {
+    val ui = atlasUiTokens()
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
-    var editing by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
+    var renameTarget by remember { mutableStateOf<KnowledgeTreeNode?>(null) }
+    var editingEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
+    var showCreateSingle by remember { mutableStateOf(false) }
+    var showCreateBatch by remember { mutableStateOf(false) }
+    var showMoreActions by remember { mutableStateOf(false) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
+    var reorderMode by remember { mutableStateOf(false) }
+    var draggingKey by remember { mutableStateOf<String?>(null) }
+    var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
+    var dragPointerY by remember { mutableStateOf(0f) }
+    var dragGrabOffset by remember { mutableStateOf(0f) }
+    val cardTops = remember { mutableStateMapOf<String, Float>() }
     val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else store.sourceQuestions
     val visible = if (query.isBlank()) store.sourceQuestions else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
+    val renderedQuestions = if (reorderMode && draggingKey != null && query.isBlank()) {
+        val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
+        val to = dragTargetIndex
+        if (from >= 0 && to != null && to in visible.indices && from != to) {
+            visible.toMutableList().apply { add(to, removeAt(from)) }
+        } else visible
+    } else visible
     val documentItems = buildList<SourceDocumentItem> {
-        visible.forEach { add(SourceDocumentItem.Question(it)) }
-        if (query.isBlank()) store.sourceSections.forEach { add(SourceDocumentItem.Section(it)) }
+        renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
+        if (query.isBlank() && !(reorderMode && draggingKey != null)) {
+            store.sourceSections.forEach { add(SourceDocumentItem.Section(it)) }
+        }
     }.sortedBy { it.startOffset }
-    val knowledgeTree = remember(store.knowledgeDocuments.toList()) {
-        KnowledgeTree.build(store.knowledgeDocuments)
+    val mappedDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
+        SourceQuestions.supportedDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
     }
+    val knowledgeTree = remember(mappedDocuments) {
+        KnowledgeTree.build(mappedDocuments)
+    }
+    val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
 
     fun locateSource(path: String) {
         expandedDirs = expandedDirs + setOf("knowledge-base") + KnowledgeTree.ancestorPaths(path)
         store.selectSourceDocument(path)
     }
 
-    LaunchedEffect(store.selectedSourcePath, store.knowledgeDocuments.toList()) {
+    LaunchedEffect(store.selectedSourcePath, mappedDocuments) {
         expandedDirs = expandedDirs + KnowledgeTree.ancestorPaths(store.selectedSourcePath)
     }
 
-    Row(Modifier.fillMaxSize().padding(8.dp)) {
+    Row(Modifier.fillMaxSize().padding(ui.spacing.page)) {
         Column(Modifier.width(270.dp).fillMaxHeight()) {
             Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.Accent)
-            Text("knowledge-base · ${store.knowledgeDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
+            Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
+            if (mappedDocuments.isEmpty()) {
+                Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
+            }
             Spacer(Modifier.height(10.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 item(key = knowledgeTree.path) {
@@ -340,6 +410,7 @@ fun QuestionSection(store: AppStore) {
                             query = ""
                             locateSource(path)
                         },
+                        onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
                     )
                 }
             }
@@ -347,7 +418,10 @@ fun QuestionSection(store: AppStore) {
         Spacer(Modifier.width(10.dp))
         Box(Modifier.fillMaxHeight().width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f).fillMaxHeight()) {
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            Column(
+                Modifier.fillMaxSize().widthIn(max = 1440.dp).align(Alignment.Center),
+            ) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -357,7 +431,7 @@ fun QuestionSection(store: AppStore) {
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("搜索范围", fontSize = 12.sp, color = Theme.Muted)
+            Text("搜索范围", style = ui.typography.secondary, color = Theme.Muted)
             QuestionSearchScope.entries.forEach { scope ->
                 val active = searchScope == scope
                 Text(
@@ -366,7 +440,7 @@ fun QuestionSection(store: AppStore) {
                         .clickable { searchScope = scope }
                         .background(if (active) Theme.Accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
+                    fontSize = ui.typography.secondary.fontSize,
                     color = if (active) Theme.Accent else Theme.Muted,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                 )
@@ -374,14 +448,56 @@ fun QuestionSection(store: AppStore) {
         }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("同源题库", fontWeight = FontWeight.Bold, color = Theme.Accent)
-            Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", fontSize = 11.sp, color = Theme.Muted)
+            Text("同源题库", style = ui.typography.sectionTitle, color = Theme.Accent)
+            Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
-            Text("${store.selectedSourcePath} · 文件即题库", fontSize = 10.sp, color = Theme.Muted, maxLines = 1)
+            if (query.isBlank()) {
+                OutlinedButton(
+                    onClick = {
+                        reorderMode = !reorderMode
+                        draggingKey = null
+                        dragTargetIndex = null
+                        dragPointerY = 0f
+                        dragGrabOffset = 0f
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text(if (reorderMode) "完成排序" else "调整顺序", fontSize = 12.sp)
+                }
+            }
+            Box {
+                OutlinedButton(
+                    onClick = { showMoreActions = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                ) { Text("更多", fontSize = 12.sp) }
+                DropdownMenu(
+                    expanded = showMoreActions,
+                    onDismissRequest = { showMoreActions = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("新建单个题目") },
+                        onClick = { showMoreActions = false; showCreateSingle = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("批量新建题目") },
+                        onClick = { showMoreActions = false; showCreateBatch = true },
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            SelectionContainer {
+                Text("${store.selectedSourcePath} · 文件即题库", style = ui.typography.caption, color = Theme.Muted, maxLines = 1)
+            }
         }
         Spacer(Modifier.height(6.dp))
         if (SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
-            Text("点击题目显示答案；编辑会直接写回源 Markdown。", fontSize = 11.sp, color = Theme.Muted)
+            Text(
+                if (reorderMode) "排序模式：按住任意题目卡片拖动换位，松开后自动保存并重新编号。"
+                else if (query.isBlank()) "点击题目显示答案；需要调整顺序时点击右上角「调整顺序」。"
+                else "点击题目显示答案；搜索结果仅供查看，清空搜索后可调整顺序。",
+                fontSize = 11.sp,
+                color = Theme.Muted,
+            )
         } else {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
@@ -390,7 +506,7 @@ fun QuestionSection(store: AppStore) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
             items(documentItems, key = { item ->
                 when (item) {
-                    is SourceDocumentItem.Question -> item.entry.id
+                    is SourceDocumentItem.Question -> sourceQuestionKey(item.entry)
                     is SourceDocumentItem.Section -> "section:${item.heading.startOffset}"
                 }
             }) { item ->
@@ -408,60 +524,227 @@ fun QuestionSection(store: AppStore) {
                     return@items
                 }
                 val entry = (item as SourceDocumentItem.Question).entry
-                val isExpanded = entry.id in expanded
+                val entryKey = sourceQuestionKey(entry)
+                val questionIndex = store.sourceQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
+                val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
+                val isExpanded = entryKey in expanded
+                val isDragging = draggingKey == entryKey
+                val canReorder = reorderMode && query.isBlank() && questionIndex >= 0 && visible.size == store.sourceQuestions.size
+                val cardElevation by animateDpAsState(
+                    targetValue = if (isDragging) 12.dp else 0.dp,
+                    animationSpec = tween(180),
+                    label = "question-card-elevation",
+                )
+                val cardScale by animateFloatAsState(
+                    targetValue = if (isDragging) 1.015f else 1f,
+                    animationSpec = tween(180),
+                    label = "question-card-scale",
+                )
+                val cardTop = cardTops[entryKey] ?: 0f
                 Column(
                     Modifier.fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            cardTops[entryKey] = coordinates.positionInParent().y
+                        }
+                        .zIndex(if (isDragging) 2f else 0f)
+                        .graphicsLayer {
+                            scaleX = cardScale
+                            scaleY = cardScale
+                            translationY = if (isDragging) dragPointerY - dragGrabOffset - cardTop else 0f
+                        }
+                        .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
                             if (isExpanded) Theme.Accent.copy(alpha = 0.08f)
                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             MaterialTheme.shapes.small,
                         )
-                        .clickable {
-                            locateSource(entry.sourcePath)
-                            expanded = if (isExpanded) expanded - entry.id else expanded + entry.id
-                        }
-                        .padding(10.dp),
+                        .border(
+                            1.dp,
+                            if (isDragging) Theme.Accent
+                            else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
+                            else if (isExpanded) Theme.Accent.copy(alpha = 0.42f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
+                            MaterialTheme.shapes.small,
+                        )
+                        .padding(ui.spacing.card)
+                        .pointerInput(entryKey, canReorder) {
+                            if (!canReorder) return@pointerInput
+                            var accumulatedDistance = 0f
+                            detectDragGestures(
+                                onDragStart = {
+                                    draggingKey = entryKey
+                                    dragTargetIndex = questionIndex
+                                    dragGrabOffset = it.y
+                                    dragPointerY = cardTop + it.y
+                                },
+                                onDragEnd = {
+                                    val target = dragTargetIndex
+                                    val from = questionIndex
+                                    if (target != null && target != from) {
+                                        store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
+                                    }
+                                    draggingKey = null
+                                    dragTargetIndex = null
+                                    dragPointerY = 0f
+                                    dragGrabOffset = 0f
+                                },
+                                onDragCancel = {
+                                    draggingKey = null
+                                    dragTargetIndex = null
+                                    dragPointerY = 0f
+                                    dragGrabOffset = 0f
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    var target = dragTargetIndex ?: questionIndex
+                                    dragPointerY = (cardTops[entryKey] ?: cardTop) + change.position.y
+                                    accumulatedDistance += dragAmount.y
+                                    while (accumulatedDistance > 36f && target < store.sourceQuestions.lastIndex) {
+                                        target++
+                                        accumulatedDistance -= 36f
+                                    }
+                                    while (accumulatedDistance < -36f && target > 0) {
+                                        target--
+                                        accumulatedDistance += 36f
+                                    }
+                                    if (target != dragTargetIndex) dragTargetIndex = target
+                                },
+                            )
+                        },
                 ) {
-                    Text("Q${entry.number}", fontSize = 11.sp, color = Theme.Muted)
-                    Spacer(Modifier.height(2.dp))
-                    Text(entry.question, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
-                        Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (reorderMode) {
+                            Surface(
+                                color = if (isDragging) Theme.Accent.copy(alpha = 0.22f) else Theme.Accent.copy(alpha = 0.10f),
+                                shape = MaterialTheme.shapes.small,
+                            ) {
+                                Text(
+                                    "${displayIndex + 1}",
+                                    Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                    color = Theme.Accent,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Column(
+                            Modifier.weight(1f).singleClickWithoutConsumingSelection {
+                                locateSource(entry.sourcePath)
+                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                            },
+                        ) {
+                            Text("Q${entry.number}", fontSize = 11.sp, color = Theme.Muted)
+                            Spacer(Modifier.height(2.dp))
+                            SelectionContainer {
+                                Text(entry.question, style = ui.typography.itemTitle)
+                            }
+                            if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
+                                Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                            }
+                        }
                     }
                     if (isExpanded) {
-                        Text("源文件已定位：${entry.sourcePath}", fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
-                        Spacer(Modifier.height(8.dp))
-                        VDivider()
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
                         if (entry.answer.isBlank()) {
                             Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
                         } else {
                             Surface(
-                                Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .singleClickWithoutConsumingSelection {
+                                        if (store.settings.clickAnswerToEdit) editingEntry = entry
+                                    },
                                 shape = MaterialTheme.shapes.small,
-                                color = Theme.OkGreen.copy(alpha = 0.08f),
+                                color = if (store.settings.markdownStyle == "classic") {
+                                    Theme.OkGreen.copy(alpha = 0.10f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                },
                             ) {
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.OkGreen)
+                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
                                     Spacer(Modifier.height(4.dp))
-                                    CompositionLocalProvider(LocalContentColor provides Theme.OkGreen.copy(alpha = 0.92f)) {
-                                        MarkdownText(entry.answer)
+                                    CompositionLocalProvider(
+                                        LocalContentColor provides if (store.settings.markdownStyle == "classic") {
+                                            Theme.OkGreen.copy(alpha = 0.92f)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    ) {
+                                        SelectionContainer {
+                                            MarkdownText(entry.answer, style = store.settings.markdownStyle)
+                                        }
                                     }
                                 }
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Text("编辑", Modifier.clickable { editing = entry }, fontSize = 13.sp, color = Theme.Accent)
+                        Spacer(Modifier.height(7.dp))
+                        Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                    }
+                }
+                if (canReorder && dragTargetIndex == questionIndex && draggingKey != null && questionIndex == store.sourceQuestions.lastIndex) {
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .height(3.dp)
+                            .background(Theme.Accent, MaterialTheme.shapes.small),
+                    )
+                }
+            }
+        }
+        }
+    }
+        }
+    renameTarget?.let { node ->
+        RenameKnowledgeNodeDialog(store, node) { renameTarget = null }
+    }
+    if (showCreateSingle) {
+        CreateSourceQuestionDialog(store, selectedMappedDocument) { showCreateSingle = false }
+    }
+    if (showCreateBatch) {
+        BatchCreateSourceQuestionsDialog(store, selectedMappedDocument) { showCreateBatch = false }
+    }
+    editingEntry?.let { entry ->
+        EditSourceQuestionDialog(
+            store = store,
+            entries = visible,
+            initialIndex = visible.indexOfFirst { sourceQuestionKey(it) == sourceQuestionKey(entry) },
+            onDismiss = { editingEntry = null },
+        )
+    }
+}
+
+/** 单击打开编辑，拖动时把鼠标事件留给 SelectionContainer 做划词。 */
+private fun Modifier.singleClickWithoutConsumingSelection(onClick: () -> Unit): Modifier =
+    pointerInput(onClick) {
+        awaitPointerEventScope {
+            var pressed = false
+            var moved = false
+            var downX = 0f
+            var downY = 0f
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull() ?: continue
+                when (event.type) {
+                    PointerEventType.Press -> {
+                        pressed = true
+                        moved = false
+                        downX = change.position.x
+                        downY = change.position.y
+                    }
+                    PointerEventType.Move -> if (pressed && ((change.position.x - downX) * (change.position.x - downX) + (change.position.y - downY) * (change.position.y - downY) > 36f)) moved = true
+                    PointerEventType.Release -> {
+                        if (pressed && !moved) onClick()
+                        pressed = false
                     }
                 }
             }
         }
     }
-    }
-    editing?.let { entry ->
-        EditSourceQuestionDialog(store, entry) { editing = null }
-    }
-}
 
 @Composable
 private fun KnowledgeTreeNodeView(
@@ -471,6 +754,7 @@ private fun KnowledgeTreeNodeView(
     selectedPath: String,
     onToggleDirectory: (String) -> Unit,
     onSelectFile: (String) -> Unit,
+    onRename: (KnowledgeTreeNode) -> Unit,
 ) {
     val isExpanded = node.path in expandedDirs
     val selected = !node.isDirectory && node.path == selectedPath
@@ -487,6 +771,17 @@ private fun KnowledgeTreeNodeView(
             )
             .clickable {
                 if (node.isDirectory) onToggleDirectory(node.path) else onSelectFile(node.path)
+            }
+            .pointerInput(node.path) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                            event.changes.forEach { it.consume() }
+                            onRename(node)
+                        }
+                    }
+                }
             }
             .padding(start = (depth * 16).dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -510,33 +805,248 @@ private fun KnowledgeTreeNodeView(
     }
     if (node.isDirectory && isExpanded) {
         node.children.forEach { child ->
-            KnowledgeTreeNodeView(child, depth + 1, expandedDirs, selectedPath, onToggleDirectory, onSelectFile)
+            KnowledgeTreeNodeView(child, depth + 1, expandedDirs, selectedPath, onToggleDirectory, onSelectFile, onRename)
         }
     }
 }
 
 @Composable
-private fun EditSourceQuestionDialog(
+private fun CreateSourceQuestionDialog(
     store: AppStore,
-    entry: SourceQuestions.Entry,
+    targetPath: String,
     onDismiss: () -> Unit,
 ) {
-    var question by remember(entry.id) { mutableStateOf(entry.question) }
-    var answer by remember(entry.id) { mutableStateOf(entry.answer) }
+    var question by remember { mutableStateOf("") }
+    val nextNumber = remember(targetPath) { store.nextSourceQuestionNumber(targetPath) }
+    var numberText by remember(targetPath) { mutableStateOf(nextNumber.toString()) }
+    val number = numberText.toIntOrNull()
+    val duplicate = question.trim().isNotBlank() && question.trim() in remember(targetPath) { store.sourceQuestionTexts(targetPath) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑 Q${entry.number}") },
+        modifier = Modifier.width(760.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        title = { Text("新建题目") },
         confirmButton = {
-            Button(onClick = {
-                if (question.isNotBlank()) store.saveSourceQuestion(entry, question, answer)
-                onDismiss()
-            }) { Text("保存到源文档") }
+            Button(
+                enabled = targetPath.isNotBlank() && question.isNotBlank() && number != null && number > 0 && !duplicate,
+                onClick = {
+                    if (number != null && store.createSourceQuestionAt(targetPath, SourceQuestions.Draft(question, ""), number)) onDismiss()
+                },
+            ) { Text("新建题目") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("当前文档", fontWeight = FontWeight.SemiBold)
+                Text(targetPath.ifBlank { "请先在左侧选择 Markdown 文档" }, fontSize = 12.sp, color = if (targetPath.isBlank()) Theme.WarnOrange else Theme.Accent)
+                Text("输入插入位置，默认填入第 $nextNumber 题；已有题目会向后顺延。", fontSize = 11.sp, color = Theme.Muted)
+                OutlinedTextField(
+                    value = numberText,
+                    onValueChange = { value -> if (value.all { it.isDigit() } && value.length <= 6) numberText = value },
+                    modifier = Modifier.width(180.dp),
+                    label = { Text("题目序号") },
+                    singleLine = true,
+                )
+                if (number != null && number <= 0) Text("题目序号必须是正整数。", fontSize = 12.sp, color = Theme.WarnOrange)
+                OutlinedTextField(
+                    question,
+                    { question = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("题目") },
+                    minLines = 3,
+                )
+                if (question.isNotBlank()) {
+                    Surface(color = Theme.Accent.copy(alpha = 0.08f), shape = MaterialTheme.shapes.small) {
+                        Text("将新建题目：${question.trim()}", Modifier.padding(10.dp), color = Theme.Accent)
+                    }
+                }
+                if (duplicate) Text("该文档已有相同题目，请修改题面。", fontSize = 12.sp, color = Theme.WarnOrange)
+            }
+        },
+    )
+}
+
+@Composable
+private fun BatchCreateSourceQuestionsDialog(
+    store: AppStore,
+    targetPath: String,
+    onDismiss: () -> Unit,
+) {
+    var input by remember { mutableStateOf("") }
+    val drafts = remember(input) { SourceQuestions.parseBatch(input) }
+    val duplicateCount = drafts.groupingBy { it.question }.eachCount().count { it.value > 1 }
+    val existingQuestions = remember(targetPath) { store.sourceQuestionTexts(targetPath) }
+    val existingDuplicateCount = drafts.count { it.question.trim() in existingQuestions }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.width(820.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        title = { Text("批量新建题目") },
+        confirmButton = {
+            Button(
+                enabled = targetPath.isNotBlank() && drafts.isNotEmpty() && duplicateCount == 0 && existingDuplicateCount == 0,
+                onClick = {
+                    if (store.createSourceQuestions(targetPath, drafts)) onDismiss()
+                },
+            ) { Text("写入 ${drafts.size} 道题目") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 600.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("当前文档", fontWeight = FontWeight.SemiBold)
+                Text(targetPath.ifBlank { "请先在左侧选择 Markdown 文档" }, fontSize = 12.sp, color = if (targetPath.isBlank()) Theme.WarnOrange else Theme.Accent)
+                Text("每行输入一道题目，系统会自动生成题号和空答案。", fontSize = 11.sp, color = Theme.Muted)
+                OutlinedTextField(
+                    input,
+                    { input = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("题目列表（一行一道）") },
+                    minLines = 14,
+                    maxLines = 24,
+                )
+                when {
+                    input.isBlank() -> Text("尚未输入题目。", fontSize = 12.sp, color = Theme.Muted)
+                    drafts.isEmpty() -> Text("请输入至少一道题目，每行一道。", fontSize = 12.sp, color = Theme.WarnOrange)
+                    duplicateCount > 0 -> Text("发现重复题目，请修改后再写入。", fontSize = 12.sp, color = Theme.WarnOrange)
+                    existingDuplicateCount > 0 -> Text("目标文档中已有 $existingDuplicateCount 道同名题目，请修改后再写入。", fontSize = 12.sp, color = Theme.WarnOrange)
+                    else -> Text("已识别 ${drafts.size} 道题目，写入时会从源文档最大题号之后连续编号。", fontSize = 12.sp, color = Theme.OkGreen)
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun RenameKnowledgeNodeDialog(
+    store: AppStore,
+    node: KnowledgeTreeNode,
+    onDismiss: () -> Unit,
+) {
+    var name by remember(node.path) { mutableStateOf(node.name) }
+    fun save() {
+        if (store.renameKnowledgeNode(node.path, name)) onDismiss()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (node.isDirectory) "重命名目录" else "重命名文件") },
+        confirmButton = {
+            Button(onClick = ::save) { Text("保存") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
+                        if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
+                            save()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    singleLine = true,
+                    label = { Text(if (node.isDirectory) "目录名" else "文件名") },
+                )
+                Text(
+                    if (node.isDirectory) "不能包含 / 或 \\。" else "文件名会保留 .md 后缀。",
+                    fontSize = 11.sp,
+                    color = Theme.Muted,
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun EditSourceQuestionDialog(
+    store: AppStore,
+    entries: List<SourceQuestions.Entry>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+) {
+    // 保存会触发 AppStore 重载；编辑会话必须使用稳定快照，不能跟着外层 visible 短暂清空。
+    val stableEntries = remember { entries.toList() }
+    var currentIndex by remember { mutableStateOf(initialIndex.coerceIn(0, (stableEntries.size - 1).coerceAtLeast(0))) }
+    var isSaving by remember { mutableStateOf(false) }
+    val safeIndex = safeQuestionIndex(currentIndex, stableEntries.size)
+    if (safeIndex == null) {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
+    val entry = stableEntries[safeIndex]
+    var question by remember(entry.id) { mutableStateOf(entry.question) }
+    var answer by remember(entry.id) { mutableStateOf(entry.answer) }
+    fun saveAndMove(target: Int): Boolean {
+        if (question.isBlank()) return false
+        if (!store.saveSourceQuestion(entry, question, answer)) return false
+        currentIndex = target
+        return true
+    }
+    fun saveAndMoveOnce(target: Int) {
+        if (!canNavigateQuestionEditor(isSaving, target, stableEntries.size)) return
+        isSaving = true
+        try {
+            saveAndMove(target)
+        } finally {
+            isSaving = false
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.width(820.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        title = { Text("编辑 Q${entry.number}（${safeIndex + 1}/${stableEntries.size}）") },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val previous = adjacentQuestionIndex(safeIndex, stableEntries.size, -1)
+                val next = adjacentQuestionIndex(safeIndex, stableEntries.size, 1)
+                OutlinedButton(
+                    enabled = !isSaving && previous != null,
+                    onClick = { previous?.let { saveAndMoveOnce(it) } },
+                ) {
+                    Text("保存并上一个")
+                }
+                OutlinedButton(
+                    enabled = !isSaving && next != null,
+                    onClick = { next?.let { saveAndMoveOnce(it) } },
+                ) {
+                    Text("保存并下一个")
+                }
+                Button(onClick = {
+                    if (!isSaving && question.isNotBlank()) {
+                        isSaving = true
+                        try {
+                            if (store.saveSourceQuestion(entry, question, answer)) onDismiss()
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                }) { Text("保存到源文档") }
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 OutlinedTextField(question, { question = it }, Modifier.fillMaxWidth(), label = { Text("题目") }, minLines = 2)
-                OutlinedTextField(answer, { answer = it }, Modifier.fillMaxWidth(), label = { Text("答案 Markdown") }, minLines = 8)
+                OutlinedTextField(
+                    answer,
+                    { answer = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("答案 Markdown") },
+                    minLines = 8,
+                    maxLines = 16,
+                )
                 Text("保存后直接修改 ${entry.sourcePath}", fontSize = 11.sp, color = Theme.Muted)
             }
         },

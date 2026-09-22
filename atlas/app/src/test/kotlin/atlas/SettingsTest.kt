@@ -3,6 +3,7 @@ package atlas
 import atlas.core.AppSettings
 import atlas.core.SettingsStore
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -20,8 +21,11 @@ class SettingsTest {
             "knowledge-base/docs/面试.md",
         )
 
-        store.save(AppSettings(sourceQuestionPaths = expected))
+        store.save(AppSettings(sourceQuestionPaths = expected, clickAnswerToEdit = false, markdownStyle = "classic"))
 
-        assertEquals(expected, store.load().sourceQuestionPaths)
+        val loaded = store.load()
+        assertEquals(expected, loaded.sourceQuestionPaths)
+        assertFalse(loaded.clickAnswerToEdit)
+        assertEquals("classic", loaded.markdownStyle)
     }
 }

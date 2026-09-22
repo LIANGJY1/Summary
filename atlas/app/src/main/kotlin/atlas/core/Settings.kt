@@ -49,6 +49,10 @@ data class AppSettings(
     val retroDirs: List<String> = emptyList(),
     val theme: String = "light", // light | dark
     val fontScale: Float = 1f,
+    /** 题库答案区域单击时是否打开编辑弹窗；关闭后仍可划词，编辑按钮不受影响。 */
+    val clickAnswerToEdit: Boolean = true,
+    /** Markdown 内容展示样式：reader 为阅读优化样式，classic 为旧版样式。 */
+    val markdownStyle: String = "reader",
 ) {
     val darkTheme: Boolean get() = theme == "dark"
 
@@ -74,6 +78,8 @@ class SettingsStore(private val file: File) {
             retroDirs = list("retroDirs"),
             theme = p.getProperty("theme") ?: "light",
             fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
+            clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
+            markdownStyle = p.getProperty("markdownStyle")?.takeIf { it == "reader" || it == "classic" } ?: "reader",
         )
         Log.d("设置已读取 ${file.absolutePath} library=${s.libraryPath} theme=${s.theme}")
         return s
@@ -89,6 +95,8 @@ class SettingsStore(private val file: File) {
         p.setProperty("retroDirs", s.retroDirs.joinToString(","))
         p.setProperty("theme", s.theme)
         p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
+        p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
+        p.setProperty("markdownStyle", if (s.markdownStyle == "classic") "classic" else "reader")
         file.outputStream().use { p.store(it, "Atlas settings") }
         Log.i("设置已写入 ${file.absolutePath}")
     }

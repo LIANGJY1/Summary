@@ -9,6 +9,19 @@ data class KnowledgeTreeNode(
 )
 
 object KnowledgeTree {
+    fun safeRenameName(rawName: String, isDirectory: Boolean): String? {
+        val name = rawName.trim()
+        if (name.isBlank() || name == "." || name == ".." || name.contains('/') || name.contains('\\') || name.contains('\u0000')) return null
+        return if (isDirectory || name.endsWith(".md", ignoreCase = true)) name else "$name.md"
+    }
+
+    fun renamedPath(path: String, newName: String, isDirectory: Boolean): String {
+        val normalized = path.replace('\\', '/').trim('/')
+        val parent = normalized.substringBeforeLast('/', "")
+        val safeName = requireNotNull(safeRenameName(newName, isDirectory))
+        return if (parent.isBlank()) safeName else "$parent/$safeName"
+    }
+
     fun build(paths: List<String>): KnowledgeTreeNode {
         val normalized = paths.map { it.replace('\\', '/').trim('/') }
             .filter { it.isNotBlank() }.distinct()

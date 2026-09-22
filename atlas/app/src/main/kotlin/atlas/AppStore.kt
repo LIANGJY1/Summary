@@ -190,7 +190,8 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
             sourceQuestions.clear()
             allSourceQuestions.clear()
             sourceSections.clear()
-            val documents = knowledgeDocuments.mapNotNull { path ->
+            val mappedDocuments = SourceQuestions.supportedDocuments(knowledgeDocuments, settings.sourceQuestionPaths)
+            val documents = mappedDocuments.mapNotNull { path ->
                 val file = sourceDocumentFile(path)
                 if (file.isFile) path to file.readText(Charsets.UTF_8) else null
             }
@@ -210,6 +211,126 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         selectedSourcePath = path
         Log.i("切换题库源文档 → $path")
         reloadKnowledgeFiles()
+    }
+
+    fun renameKnowledgeNode(path: String, newName: String): Boolean {
+        val normalized = path.replace('\\', '/').trim('/')
+        if (normalized.isBlank() || normalized == "knowledge-base") {
+            showToast("知识库根目录不能重命名")
+            return false
+        }
+        val oldFile = sourceDocumentFile(normalized)
+        if (!oldFile.exists()) {
+            showToast("找不到要重命名的文件或目录")
+            return false
+        }
+        val safeName = atlas.core.KnowledgeTree.safeRenameName(newName, oldFile.isDirectory)
+            ?: run {
+                showToast("名称不能为空，且不能包含路径分隔符")
+                return false
+            }
+        if (safeName == oldFile.name) return true
+        val target = File(oldFile.parentFile, safeName)
+        if (target.exists()) {
+            showToast("目标名称已存在：$safeName")
+            return false
+        }
+        if (!oldFile.renameTo(target)) {
+            showToast("重命名失败，请检查文件权限")
+            return false
+        }
+        val renamed = atlas.core.KnowledgeTree.renamedPath(normalized, safeName, oldFile.isDirectory)
+        if (selectedSourcePath == normalized || selectedSourcePath.startsWith("$normalized/")) {
+            selectedSourcePath = renamed + selectedSourcePath.removePrefix(normalized)
+        }
+        settings = settings.copy(
+            sourceQuestionPaths = settings.sourceQuestionPaths.map { configured ->
+                if (configured == normalized || configured.startsWith("$normalized/")) {
+                    renamed + configured.removePrefix(normalized)
+                } else configured
+            },
+        )
+        saveSettings()
+        reloadKnowledgeFiles()
+        showToast("已重命名为：$safeName")
+        return true
+    }
+
+    fun nextSourceQuestionNumber(path: String): Int {
+        val file = sourceDocumentFile(path)
+        if (!file.isFile) return 1
+        val entries = SourceQuestions.parse(path, file.readText(Charsets.UTF_8), listOf(path))
+        return (entries.maxOfOrNull { it.number } ?: 0) + 1
+    }
+
+    fun sourceQuestionNumbers(path: String): Set<Int> {
+        val file = sourceDocumentFile(path)
+        if (!file.isFile) return emptySet()
+        return SourceQuestions.parse(path, file.readText(Charsets.UTF_8), listOf(path)).map { it.number }.toSet()
+    }
+
+    fun sourceQuestionTexts(path: String): Set<String> {
+        val file = sourceDocumentFile(path)
+        if (!file.isFile) return emptySet()
+        return SourceQuestions.parse(path, file.readText(Charsets.UTF_8), listOf(path))
+            .map { it.question.trim() }
+            .toSet()
+    }
+
+    fun createSourceQuestions(path: String, drafts: List<SourceQuestions.Draft>): Boolean {
+        if (drafts.isEmpty() || drafts.any { it.question.isBlank() }) {
+            showToast("至少需要一道有效题目")
+            return false
+        }
+        val file = sourceDocumentFile(path)
+        if (!file.isFile) {
+            showToast("找不到目标 Markdown 文档")
+            return false
+        }
+        return runCatching {
+            val document = file.readText(Charsets.UTF_8)
+            MdStores.atomicWrite(file, SourceQuestions.append(document, drafts))
+            selectedSourcePath = path
+            if (!SourceQuestions.isSupportedPath(path, settings.sourceQuestionPaths)) {
+                settings = settings.copy(sourceQuestionPaths = settings.sourceQuestionPaths + path)
+                saveSettings()
+            }
+            reloadKnowledgeFiles()
+            showToast("已新建 ${drafts.size} 道题目")
+            true
+        }.getOrElse { error ->
+            Log.e("新建题目写回失败 path=$path", error)
+            showToast("写入失败：${error.message}")
+            false
+        }
+    }
+
+    fun createSourceQuestionAt(path: String, draft: SourceQuestions.Draft, number: Int): Boolean {
+        if (draft.question.isBlank() || number <= 0) {
+            showToast("题目和插入序号不能为空")
+            return false
+        }
+        val file = sourceDocumentFile(path)
+        if (!file.isFile) {
+            showToast("找不到目标 Markdown 文档")
+            return false
+        }
+        return runCatching {
+            val document = file.readText(Charsets.UTF_8)
+            MdStores.atomicWrite(file, SourceQuestions.insertAtNumber(document, draft, number))
+            selectedSourcePath = path
+            if (!SourceQuestions.isSupportedPath(path, settings.sourceQuestionPaths)) {
+                settings = settings.copy(sourceQuestionPaths = settings.sourceQuestionPaths + path)
+                saveSettings()
+            }
+            reloadKnowledgeFiles()
+            showToast("已在第 ${number.coerceAtMost(sourceQuestions.size)} 题位置插入")
+            true
+        }.getOrElse { error ->
+            Log.e("插入题目写回失败 path=$path", error)
+            showToast("插入失败：${error.message}")
+            false
+        }
     }
 
     private fun sourceDocumentFile(path: String): File {
@@ -250,6 +371,34 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         reloadKnowledgeFiles()
         Log.i("同源题目写回成功 path=${entry.sourcePath} Q${entry.number}")
         return true
+    }
+
+    /** 在当前源文档中调整题目顺序；文档被外部修改时拒绝覆盖并重新加载。 */
+    fun reorderSourceQuestions(entries: List<SourceQuestions.Entry>, fromIndex: Int, toIndex: Int): Boolean {
+        if (entries.isEmpty() || selectedSourcePath != entries.first().sourcePath) return false
+        if (fromIndex !in entries.indices || toIndex !in entries.indices) return false
+        val file = sourceQuestionFile()
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != entries.first().document || entries.any { it.document != current }) {
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        val reordered = SourceQuestions.reorderEntries(current, entries, fromIndex, toIndex)
+        if (reordered == null) {
+            showToast("只能在连续题目之间调整顺序")
+            return false
+        }
+        return runCatching {
+            MdStores.atomicWrite(file, reordered)
+            reloadKnowledgeFiles()
+            showToast("题目顺序已保存")
+            true
+        }.onFailure { error ->
+            Log.e("题目排序写回失败 path=$selectedSourcePath", error)
+            reloadKnowledgeFiles()
+            showToast("题目顺序保存失败：${error.message}")
+        }.getOrElse { false }
     }
 
     fun saveCards() { Log.d("保存 cards.md ${cards.size} 条"); MdStores.saveCards(cardsFile(), cards.toList()) }

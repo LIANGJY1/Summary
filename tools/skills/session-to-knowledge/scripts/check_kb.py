@@ -16,7 +16,7 @@ from collections import Counter
 from pathlib import Path
 
 DEFAULT_KB = Path("/home/liang/Project/MyProject/Summary/knowledge-base")
-SKIP_FILES = {"CONTEXT.md", "README.md", "ROUTING.md"}
+SKIP_FILES = {"CONTEXT.md", "README.md", "ROUTING.md", "WRITING-GUIDE.md"}
 SKIP_DIRS = {"docs/adr"}
 STRUCTURAL = {"边界", "规则", "目录"}
 SECRET_PATTERNS = (
