@@ -71,7 +71,7 @@ fun main() {
             title = "Atlas — AI 成长工作站（零模型 · 零网络）",
             state = rememberWindowState(width = 1280.dp, height = 820.dp),
         ) {
-            AtlasTheme(dark = store.settings.darkTheme) {
+            AtlasTheme(dark = store.settings.darkTheme, fontScale = store.settings.fontScale) {
                 AppRoot(store)
             }
         }
@@ -94,7 +94,6 @@ fun AppRoot(store: AppStore) {
             runCatching { rootFocus.requestFocus() }
         }
     }
-    val due = store.dueCount("全部")
     val inbox = store.candidates.size
 
     if (!store.libraryReady) {
@@ -129,8 +128,7 @@ fun AppRoot(store: AppStore) {
                     )
                     when (t) {
                         "工作台" -> if (inbox > 0) NavBadge("$inbox 待确认", Theme.WarnOrange)
-                        "学习" -> if (due > 0) NavBadge("$due 到期", Theme.WarnOrange)
-                        "题库" -> if (store.questions.isNotEmpty()) NavBadge("${store.questions.size} 题", Theme.Accent)
+                        "题库" -> if (store.sourceQuestions.isNotEmpty()) NavBadge("${store.sourceQuestions.size} 题", Theme.Accent)
                     }
                 }
             }
@@ -167,7 +165,6 @@ fun AppRoot(store: AppStore) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("条目 ${store.notes.size}", fontSize = 11.sp, color = Theme.Muted)
-            Text("到期 $due", fontSize = 11.sp, color = if (due > 0) Theme.WarnOrange else Theme.Muted)
             Text("待确认 $inbox", fontSize = 11.sp, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
             store.toast.value?.let { Text(it, fontSize = 11.sp, color = Theme.OkGreen) }

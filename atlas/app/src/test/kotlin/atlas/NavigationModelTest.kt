@@ -13,7 +13,7 @@ class NavigationModelTest {
 
     @Test
     fun `顶层导航把设置独立放到右侧入口`() {
-        assertEquals(listOf("工作台", "题库", "学习"), topLevelTabs())
+        assertEquals(listOf("工作台", "题库"), topLevelTabs())
         assertEquals("设置", settingsTabLabel())
     }
 
@@ -23,7 +23,6 @@ class NavigationModelTest {
 
         assertEquals(
             listOf(
-                WorkbenchAction("复习到期卡", 2, "开始复习", "学习"),
                 WorkbenchAction("题目待复测", 1, "去复测", "题库"),
                 WorkbenchAction("待确认候选", 3, "去确认", "工作台"),
             ),

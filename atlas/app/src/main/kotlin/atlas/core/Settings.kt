@@ -42,10 +42,13 @@ class IgnoreRules(
 
 data class AppSettings(
     val libraryPath: String = "",
+    /** 支持解析为题目的源文档；路径以知识库根目录为基准，目录规则以 / 结尾。 */
+    val sourceQuestionPaths: List<String> = SourceQuestions.DEFAULT_SUPPORTED_PATHS,
     val ignoredExtra: List<String> = emptyList(),
     val localOnlyExtra: List<String> = emptyList(),
     val retroDirs: List<String> = emptyList(),
     val theme: String = "light", // light | dark
+    val fontScale: Float = 1f,
 ) {
     val darkTheme: Boolean get() = theme == "dark"
 
@@ -65,10 +68,12 @@ class SettingsStore(private val file: File) {
         fun list(k: String) = (p.getProperty(k) ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val s = AppSettings(
             libraryPath = p.getProperty("libraryPath") ?: "",
+            sourceQuestionPaths = list("sourceQuestionPaths").ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS },
             ignoredExtra = list("ignoredExtra"),
             localOnlyExtra = list("localOnlyExtra"),
             retroDirs = list("retroDirs"),
             theme = p.getProperty("theme") ?: "light",
+            fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
         )
         Log.d("设置已读取 ${file.absolutePath} library=${s.libraryPath} theme=${s.theme}")
         return s
@@ -78,10 +83,12 @@ class SettingsStore(private val file: File) {
         file.parentFile?.mkdirs()
         val p = java.util.Properties()
         p.setProperty("libraryPath", s.libraryPath)
+        p.setProperty("sourceQuestionPaths", s.sourceQuestionPaths.joinToString(","))
         p.setProperty("ignoredExtra", s.ignoredExtra.joinToString(","))
         p.setProperty("localOnlyExtra", s.localOnlyExtra.joinToString(","))
         p.setProperty("retroDirs", s.retroDirs.joinToString(","))
         p.setProperty("theme", s.theme)
+        p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
         file.outputStream().use { p.store(it, "Atlas settings") }
         Log.i("设置已写入 ${file.absolutePath}")
     }

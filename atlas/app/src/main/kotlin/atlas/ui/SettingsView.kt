@@ -9,6 +9,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,14 +20,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import atlas.AppStore
 import atlas.core.Log
+import atlas.core.SourceQuestions
 import atlas.core.Tier
 import java.io.File
 import javax.swing.JFileChooser
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsView(store: AppStore) {
     var localOnly by remember { mutableStateOf(store.settings.localOnlyExtra.joinToString("\n")) }
     var ignored by remember { mutableStateOf(store.settings.ignoredExtra.joinToString("\n")) }
+    var sourceQuestionPaths by remember { mutableStateOf(store.settings.sourceQuestionPaths.joinToString("\n")) }
+    var fontScale by remember { mutableStateOf(store.settings.fontScale) }
     var showParams by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("设置", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -65,6 +70,22 @@ fun SettingsView(store: AppStore) {
                 }
             }
             Text("即点即生效，选择会记住；下次启动沿用。", fontSize = 11.sp, color = Theme.Muted)
+            Text("全局文字大小", fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Slider(
+                    value = fontScale,
+                    onValueChange = { value ->
+                        fontScale = value
+                        store.settings = store.settings.copy(fontScale = value)
+                    },
+                    onValueChangeFinished = { store.saveSettings() },
+                    valueRange = 0.8f..1.4f,
+                    steps = 5,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("${(fontScale * 100).roundToInt()}%", Modifier.width(48.dp), color = Theme.Accent)
+            }
+            Text("调整应用内所有文字大小，范围 80%–140%。", fontSize = 11.sp, color = Theme.Muted)
         }
 
         VDivider()
@@ -86,6 +107,45 @@ fun SettingsView(store: AppStore) {
                 OutlinedButton(onClick = { Log.i("手动触发增量扫描"); store.rescan(full = false) }) { Text("重新扫描") }
             }
             Text(store.scanMessage.value, fontSize = 11.sp, color = Theme.Muted)
+        }
+
+        VDivider()
+
+        // 题目源文档
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("题目源文档", fontWeight = FontWeight.SemiBold)
+            Text(
+                "每行一个相对知识库根目录的 Markdown 路径；路径以 / 结尾时表示整个目录。保存后立即重新解析题库。",
+                fontSize = 11.sp, color = Theme.Muted,
+            )
+            OutlinedTextField(
+                sourceQuestionPaths,
+                { sourceQuestionPaths = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("支持解析的文档或目录（每行一个）") },
+                minLines = 4,
+            )
+            Button(onClick = {
+                val configured = sourceQuestionPaths.lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                Log.i("保存题目源文档配置：${configured.size}项")
+                store.settings = store.settings.copy(
+                    sourceQuestionPaths = configured.ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS },
+                )
+                store.saveSettings()
+                val effective = store.settings.sourceQuestionPaths
+                if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, effective)) {
+                    val firstSupportedDocument = store.knowledgeDocuments.firstOrNull {
+                        SourceQuestions.isSupportedPath(it, effective)
+                    }
+                    if (firstSupportedDocument != null) {
+                        store.selectSourceDocument(firstSupportedDocument)
+                    } else {
+                        store.reloadKnowledgeFiles()
+                    }
+                } else {
+                    store.reloadKnowledgeFiles()
+                }
+            }) { Text("保存题目源文档配置") }
         }
 
         VDivider()

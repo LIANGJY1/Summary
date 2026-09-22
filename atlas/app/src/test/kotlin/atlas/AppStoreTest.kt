@@ -3,6 +3,7 @@ package atlas
 import atlas.core.Inbox
 import atlas.core.Md
 import atlas.core.MdStores
+import atlas.core.SourceQuestions
 import atlas.fsrs.FsrsEngine
 import atlas.index.Indexer
 import kotlin.test.assertEquals
@@ -60,6 +61,85 @@ class AppStoreTest {
         while (store.scanning.value && System.currentTimeMillis() < deadline) Thread.sleep(100)
         while (store.notes.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(100)
         return store to root
+    }
+
+    @Test
+    fun `题库读取唯一源文档并局部写回原文件`() {
+        val config = File(tmp, "config-source-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "source-lib-${System.nanoTime()}").apply { mkdirs() }
+        val source = File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                # 01 语法基础
+
+                **Q1: 旧问题？**
+
+                旧答案。
+
+                **Q2: 第二题？**
+
+                第二题答案。
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+
+        assertEquals(2, store.sourceQuestions.size)
+        assertEquals("旧问题？", store.sourceQuestions[0].question)
+        assertEquals("第二题答案。", store.sourceQuestions[1].answer)
+        assertTrue(store.saveSourceQuestion(store.sourceQuestions[0], "新问题？", "新答案。"))
+        assertTrue(source.readText().contains("**Q1: 新问题？**\n\n新答案。"))
+        assertTrue(source.readText().contains("**Q2: 第二题？**\n\n第二题答案。"))
+        assertEquals("新问题？", store.sourceQuestions[0].question)
+    }
+
+    @Test
+    fun `外部修改同源文档后题库自动重载`() {
+        val config = File(tmp, "config-watch-source-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "watch-source-lib-${System.nanoTime()}").apply { mkdirs() }
+        val source = File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 初始问题？**\n\n初始答案。", Charsets.UTF_8)
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        assertEquals("初始问题？", store.sourceQuestions.single().question)
+
+        source.writeText("**Q1: 外部修改的问题？**\n\n外部修改的答案。", Charsets.UTF_8)
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline && store.sourceQuestions.single().question != "外部修改的问题？") {
+            Thread.sleep(200)
+        }
+        assertEquals("外部修改的问题？", store.sourceQuestions.single().question)
+        assertEquals("外部修改的答案。", store.sourceQuestions.single().answer)
+    }
+
+    @Test
+    fun `题库左侧文档列表映射知识库并可切换`() {
+        val config = File(tmp, "config-docs-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "docs-lib-${System.nanoTime()}").apply { mkdirs() }
+        File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 可解析的问题？**\n\n答案。", Charsets.UTF_8)
+        }
+        File(root, "knowledge-base/android/其他文档.md").apply {
+            parentFile.mkdirs()
+            writeText("# 其他文档", Charsets.UTF_8)
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+
+        assertTrue(store.knowledgeDocuments.contains(SourceQuestions.TARGET_PATH))
+        assertTrue(store.knowledgeDocuments.contains("knowledge-base/android/其他文档.md"))
+        store.selectSourceDocument("knowledge-base/android/其他文档.md")
+        assertEquals("knowledge-base/android/其他文档.md", store.selectedSourcePath)
+        assertTrue(store.sourceQuestions.isEmpty())
     }
 
     @Test

@@ -14,6 +14,7 @@ import atlas.core.MdStores.QuestionEntry
 import atlas.core.NoteFile
 import atlas.core.OutboxTasks
 import atlas.core.SettingsStore
+import atlas.core.SourceQuestions
 import atlas.fsrs.FsrsEngine
 import atlas.index.Indexer
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +52,15 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     val notes = mutableStateListOf<NoteFile>()
     val cards = mutableStateListOf<CardEntry>()
     val questions = mutableStateListOf<QuestionEntry>()
+    /** 当前同源题目文档中的题目；首期只开放 SourceQuestions.TARGET_PATH。 */
+    val sourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
+    /** 整棵知识库目录树中的 Q 题目，用于题库全局搜索。 */
+    val allSourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
+    /** 当前同源题目文档中的章节标题，独立于题目答案展示。 */
+    val sourceSections = mutableStateListOf<SourceQuestions.SectionHeading>()
+    /** 题库左侧的知识库 Markdown 文档列表。 */
+    val knowledgeDocuments = mutableStateListOf<String>()
+    var selectedSourcePath by mutableStateOf(SourceQuestions.TARGET_PATH)
     val candidates = mutableStateListOf<Inbox.Candidate>()
     val outbox = mutableStateListOf<OutboxTasks.OutboxTask>()
 
@@ -76,6 +86,9 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     private fun atlasDir() = File(libraryRoot(), "atlas")
     fun cardsFile() = File(atlasDir(), "cards.md")
     fun questionsFile() = File(atlasDir(), "questions.md")
+    fun sourceQuestionFile(): File {
+        return sourceDocumentFile(selectedSourcePath)
+    }
     fun inboxDir() = File(atlasDir(), "inbox")
     fun outboxDir() = File(atlasDir(), "outbox")
     private fun dbFile(): File {
@@ -172,9 +185,71 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         Log.timed("重载知识文件", warnMs = 300) {
             cards.clear(); cards.addAll(MdStores.loadCards(cardsFile()))
             questions.clear(); questions.addAll(MdStores.loadQuestions(questionsFile()))
+            knowledgeDocuments.clear()
+            knowledgeDocuments.addAll(scanKnowledgeDocuments())
+            sourceQuestions.clear()
+            allSourceQuestions.clear()
+            sourceSections.clear()
+            val documents = knowledgeDocuments.mapNotNull { path ->
+                val file = sourceDocumentFile(path)
+                if (file.isFile) path to file.readText(Charsets.UTF_8) else null
+            }
+            allSourceQuestions.addAll(SourceQuestions.parseAll(documents))
+            val source = sourceQuestionFile()
+            if (source.isFile && SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)) {
+                val document = source.readText(Charsets.UTF_8)
+                sourceQuestions.addAll(SourceQuestions.parse(selectedSourcePath, document, settings.sourceQuestionPaths))
+                sourceSections.addAll(SourceQuestions.parseSections(selectedSourcePath, document, settings.sourceQuestionPaths))
+            }
             rebuildDueQueue()
         }
-        
+    }
+
+    fun selectSourceDocument(path: String) {
+        if (path == selectedSourcePath) return
+        selectedSourcePath = path
+        Log.i("切换题库源文档 → $path")
+        reloadKnowledgeFiles()
+    }
+
+    private fun sourceDocumentFile(path: String): File {
+        val root = libraryRoot()
+        val normalized = path.replace('\\', '/').trimStart('/')
+        val relative = if (root.name == "knowledge-base" && normalized.startsWith("knowledge-base/")) {
+            normalized.removePrefix("knowledge-base/")
+        } else normalized
+        return File(root, relative)
+    }
+
+    private fun scanKnowledgeDocuments(): List<String> {
+        val root = libraryRoot()
+        val knowledgeRoot = if (root.name == "knowledge-base") root else File(root, "knowledge-base")
+        if (!knowledgeRoot.isDirectory) return emptyList()
+        return knowledgeRoot.walkTopDown()
+            .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+            .filterNot { file -> file.toPath().any { part -> part.toString() == ".git" || part.toString() == "atlas" } }
+            .map { file ->
+                val relative = root.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/')
+                if (root.name == "knowledge-base") "knowledge-base/$relative" else relative
+            }
+            .sorted()
+            .toList()
+    }
+
+    /** 只改写当前 Q 块；如果源文件已被外部修改，则拒绝覆盖并要求重新加载。 */
+    fun saveSourceQuestion(entry: SourceQuestions.Entry, question: String, answer: String): Boolean {
+        val file = sourceQuestionFile()
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != entry.document) {
+            Log.w("同源题目写回冲突：源文件已变化 file=${file.absolutePath}")
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        MdStores.atomicWrite(file, SourceQuestions.replace(entry, question, answer))
+        reloadKnowledgeFiles()
+        Log.i("同源题目写回成功 path=${entry.sourcePath} Q${entry.number}")
+        return true
     }
 
     fun saveCards() { Log.d("保存 cards.md ${cards.size} 条"); MdStores.saveCards(cardsFile(), cards.toList()) }
@@ -219,10 +294,14 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
 
     private fun knowledgeSignature(): String {
         
-        val files = listOf(cardsFile(), questionsFile())
-            .joinToString(";") { "${it.name}:${it.lastModified()}" }
+        val files = listOf(cardsFile(), questionsFile(), sourceQuestionFile())
+            .joinToString(";") { "${it.absolutePath}:${it.lastModified()}:${it.length()}" }
+        val docs = scanKnowledgeDocuments().joinToString(";") { path ->
+            val file = sourceDocumentFile(path)
+            "$path:${file.lastModified()}:${file.length()}"
+        }
         val inbox = inboxDir().listFiles()?.joinToString(";") { "${it.name}:${it.lastModified()}" } ?: ""
-        return "$files|$inbox"
+        return "$files|$docs|$inbox"
     }
 
     // ---------- 检索与上下文包 ----------

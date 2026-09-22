@@ -16,11 +16,10 @@ import atlas.AppStore
 /** 工作台：只保留需要处理的事项，不承担统计看板或内容浏览。 */
 @Composable
 fun TodayView(store: AppStore, onNavigate: (String) -> Unit) {
-    val due = store.dueCount("全部")
-    val untested = store.questions.count { it.status == "未测" }
-    val retest = store.questions.count { it.status == "待复测" }
+    val untested = store.sourceQuestions.size
+    val retest = 0
     val inbox = store.candidates.size
-    val actions = workbenchActions(due, untested, retest, inbox)
+    val actions = workbenchActions(0, untested, retest, inbox)
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),

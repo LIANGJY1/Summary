@@ -1,6 +1,7 @@
 package atlas.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +17,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -34,6 +37,39 @@ data class AtlasPalette(
     val accent: Color, val okGreen: Color, val warnOrange: Color,
     val badRed: Color, val muted: Color, val codeBg: Color,
 )
+
+internal data class MarkdownTable(
+    val headers: List<String>,
+    val rows: List<List<String>>,
+    val endExclusive: Int,
+)
+
+private fun markdownTableCells(line: String): List<String> {
+    val normalized = line.trim().removePrefix("|").removeSuffix("|")
+    return normalized.split('|').map { it.trim() }
+}
+
+private fun isMarkdownTableSeparator(line: String): Boolean =
+    markdownTableCells(line).size >= 2 && markdownTableCells(line).all { it.matches(Regex(":?-{3,}:?")) }
+
+internal fun parseMarkdownTable(lines: List<String>, start: Int): MarkdownTable? {
+    if (start + 1 >= lines.size || !lines[start].contains('|') || !isMarkdownTableSeparator(lines[start + 1])) return null
+    val headers = markdownTableCells(lines[start])
+    if (headers.size < 2) return null
+    val rows = ArrayList<List<String>>()
+    var index = start + 2
+    while (index < lines.size && lines[index].contains('|') && lines[index].isNotBlank()) {
+        rows += markdownTableCells(lines[index]).let { cells ->
+            when {
+                cells.size < headers.size -> cells + List(headers.size - cells.size) { "" }
+                cells.size > headers.size -> cells.take(headers.size - 1) + cells.drop(headers.size - 1).joinToString(" | ")
+                else -> cells
+            }
+        }
+        index++
+    }
+    return MarkdownTable(headers, rows, index)
+}
 
 private val LIGHT_PALETTE = AtlasPalette(
     accent = Color(0xFF4F6EF7), okGreen = Color(0xFF2E9E5B), warnOrange = Color(0xFFD98A2B),
@@ -64,10 +100,16 @@ object Theme {
 }
 
 @Composable
-fun AtlasTheme(dark: Boolean, content: @Composable () -> Unit) {
+fun AtlasTheme(dark: Boolean, fontScale: Float = 1f, content: @Composable () -> Unit) {
+    val baseDensity = LocalDensity.current
+    val safeFontScale = fontScale.coerceIn(0.8f, 1.4f)
     SideEffect { Theme.apply(dark) }
-    MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
-        Surface(Modifier.fillMaxWidth()) { content() }
+    CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density, safeFontScale),
+    ) {
+        MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
+            Surface(Modifier.fillMaxWidth()) { content() }
+        }
     }
 }
 
@@ -144,6 +186,11 @@ fun MarkdownText(md: String, modifier: Modifier = Modifier) {
         while (i < lines.size) {
             val line = lines[i]
             when {
+                parseMarkdownTable(lines, i)?.let { table ->
+                    MarkdownTableView(table)
+                    i = table.endExclusive - 1
+                    true
+                } == true -> Unit
                 line.trimStart().startsWith("```") -> {
                     val lang = line.trimStart().removePrefix("```")
                     val buf = ArrayList<String>()
@@ -175,6 +222,41 @@ fun MarkdownText(md: String, modifier: Modifier = Modifier) {
                 else -> Text(renderInline(line), fontSize = 14.sp, lineHeight = 20.sp)
             }
             i++
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTableView(table: MarkdownTable) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        MarkdownTableRow(table.headers, header = true)
+        table.rows.forEach { MarkdownTableRow(it, header = false, columnCount = table.headers.size) }
+    }
+}
+
+@Composable
+private fun MarkdownTableRow(cells: List<String>, header: Boolean, columnCount: Int = cells.size) {
+    Row(Modifier.fillMaxWidth()) {
+        repeat(columnCount) { index ->
+            val value = cells.getOrNull(index).orEmpty()
+            Text(
+                renderInline(value),
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .background(
+                        if (header) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                    )
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
         }
     }
 }
