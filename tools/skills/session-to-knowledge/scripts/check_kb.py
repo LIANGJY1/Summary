@@ -25,6 +25,11 @@ SECRET_PATTERNS = (
     re.compile(r"\b(?:ghp|github_pat|glpat)-[A-Za-z0-9_\-]{20,}\b"),
     re.compile(r"(?i)\b(?:api[_-]?)?(?:password|passwd|token|secret)\s*[:=]\s*['\"]?[A-Za-z0-9+/=_\-]{16,}"),
 )
+QUIZ_PATTERNS = (
+    re.compile(r"^\s*\*\*Q(\d+)\s*[:：]\s*(.*?)\*\*\s*$"),
+    re.compile(r"^\s*#{1,6}\s*Q(\d+)\s*[:：]\s*(.*?)\s*$"),
+    re.compile(r"^\s*Q(\d+)\s*[:：]\s*(.*?)\s*$"),
+)
 
 
 def _anchor_key(text: str) -> str:
@@ -88,6 +93,32 @@ def _check_secrets(path: Path, text: str) -> list[str]:
     return [f"{path}: 疑似敏感信息（仅报告模式，不回显原文）" for pattern in SECRET_PATTERNS if pattern.search(clean)]
 
 
+def _quiz_marker(line: str) -> tuple[str, str] | None:
+    for pattern in QUIZ_PATTERNS:
+        match = pattern.match(line)
+        if match:
+            return match.group(1), match.group(2).strip()
+    return None
+
+
+def _check_quiz_blocks(path: Path, text: str) -> list[str]:
+    """校验同源题目 Q 标记：编号文档内唯一、题面非空（识别形态与 atlas SourceQuestions 一致）。"""
+    issues: list[str] = []
+    counts: Counter[str] = Counter()
+    for line in text.splitlines():
+        marker = _quiz_marker(line)
+        if marker is None:
+            continue
+        number, question = marker
+        counts[number] += 1
+        if not question:
+            issues.append(f"{path}: 复盘题题面为空：Q{number}")
+    for number, count in sorted(counts.items(), key=lambda item: int(item[0])):
+        if count > 1:
+            issues.append(f"{path}: 复盘题编号重复（{count} 次）：Q{number}")
+    return issues
+
+
 def _check_supersedes(path: Path, text: str, kb_root: Path | None = None) -> list[str]:
     issues: list[str] = []
     for match in re.finditer(r"\*\*supersedes\*\*\s*[:：]\s*(?:\[[^\]]+\]\(([^)]+)\)|`([^`]+)`)", text, re.I):
@@ -110,6 +141,7 @@ def check_doc(path: Path, profile: str = "entry", kb_root: Path | None = None) -
     issues.extend(_check_links(path, structural_text, kb_root))
     issues.extend(_check_supersedes(path, structural_text, kb_root))
     issues.extend(_check_secrets(path, clean))
+    issues.extend(_check_quiz_blocks(path, structural_text))
     if profile == "language":
         return issues
 

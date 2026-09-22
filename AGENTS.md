@@ -15,10 +15,10 @@
 
 | 路径 | 是什么 | agent 何时读 | 怎么写入 |
 |---|---|---|---|
-| `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；新内容先按 profile 与路由规则处理 |
+| `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；session-to-knowledge 调用即出题——复盘题以 `**Qn:**` 同源格式直接写入知识文档，atlas 同源直读；新内容先按 profile 与路由规则处理 |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
 | `knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、`weekly/`、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 总路线在 `plans/roadmaps/`，每日练习与作答规则在 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
-| `skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后跑 `skills/sync-from-agents.sh` |
+| `tools/skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后手动同步拷贝到此处（暂无自动同步脚本） |
 | `knowledge-base/android/`、`knowledge-base/密码/`、`knowledge-base/网络/`、`knowledge-base/设计模式/`、`knowledge-base/文件管理系列文章/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可迁移结论按 `ROUTING.md` 沉淀为知识条目 |
 | `knowledge-base/path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |
 | `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
@@ -37,7 +37,7 @@
 
 1. **单一事实源**：各子库的边界、规则、格式以其自己的 `CONTEXT.md` / `ROUTING.md` / README 为准——本文件只指路，不复制规则。
 2. **写入分流**：可迁移经验 → knowledge-base（按其 ROUTING 路由）；真实工作项目分析 → `knowledge-base/career/work-project-analysis/`；架构理解 → project-architecture（走 project-decoder）；skill 改动 → 改 `~/.agents/skills` 再同步。分流不确定 → 问用户，不猜。
-3. **不碰**：`skills/`（镜像，手改会被覆盖）、`.gitignore` 排除物（编译产物、AI 工具本地状态）、`LICENSE`。
+3. **不碰**：`tools/skills/`（镜像，手改会被覆盖）、`.gitignore` 排除物（编译产物、AI 工具本地状态）、`LICENSE`。
 4. **脱敏底线**：仓库虽 private，密钥/凭据/内网地址原文仍不入库（沿用既有约定）。
 
 ## 四场景动线（agent 接到任务后怎么走）

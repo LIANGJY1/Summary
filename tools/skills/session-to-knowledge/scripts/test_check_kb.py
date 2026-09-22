@@ -95,6 +95,39 @@ class CheckKbContractTests(unittest.TestCase):
             issues = check_kb.check_doc(write_doc(Path(d), "note.md", body), profile="language")
             self.assertTrue(any("敏感信息" in issue for issue in issues))
 
+    def test_duplicate_quiz_number_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = BASE.format(toc="- [命题](#命题)", title="命题")
+            body += "\n**Q1: 第一题？**\n\n答案一。\n\n**Q1: 第二题？**\n\n答案二。\n"
+            issues = check_kb.check_doc(write_doc(Path(d), "demo.md", body), profile="entry")
+            self.assertTrue(any("编号重复" in issue for issue in issues))
+
+    def test_empty_quiz_question_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = BASE.format(toc="- [命题](#命题)", title="命题")
+            body += "\n**Q1: **\n\n答案。\n"
+            issues = check_kb.check_doc(write_doc(Path(d), "demo.md", body), profile="entry")
+            self.assertTrue(any("题面为空" in issue for issue in issues))
+
+    def test_unique_quiz_blocks_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = BASE.format(toc="- [命题](#命题)", title="命题")
+            body += "\n**Q1: 第一题？**\n\n答案一。\n\n**Q2: 第二题？**\n\n答案二。\n"
+            self.assertEqual(check_kb.check_doc(write_doc(Path(d), "demo.md", body), profile="entry"), [])
+
+    def test_fenced_quiz_marker_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = BASE.format(toc="- [命题](#命题)", title="命题")
+            body += "\n```markdown\n**Q1: 假题？**\n```\n\n**Q1: 真题？**\n\n答案。\n"
+            issues = check_kb.check_doc(write_doc(Path(d), "demo.md", body), profile="entry")
+            self.assertFalse(any("编号重复" in issue for issue in issues))
+
+    def test_language_quiz_number_is_checked(self):
+        with tempfile.TemporaryDirectory() as d:
+            body = "# 学习笔记\n\n**Q1: 甲？**\n\n答。\n\n**Q1: 乙？**\n\n答。\n"
+            issues = check_kb.check_doc(write_doc(Path(d), "note.md", body), profile="language")
+            self.assertTrue(any("编号重复" in issue for issue in issues))
+
 
 if __name__ == "__main__":
     unittest.main()
