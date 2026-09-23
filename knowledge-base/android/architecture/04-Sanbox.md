@@ -7,3 +7,7 @@
 3. **seccomp-BPF**：Android 8.0 起限制应用可用的系统调用集合，收窄内核攻击面。
 
 这套设计的直接推论：应用不能互相读取文件、不能互相 kill，共享数据必须走 ContentProvider 或 Binder 这类受控通道；`android:sharedUserId` 让两个应用合并 UID，等于主动拆掉沙箱，它已从 API 29 起废弃，新应用不应依赖。
+
+
+**Q2: Android 中的 Sanbox 怎么理解？**
+

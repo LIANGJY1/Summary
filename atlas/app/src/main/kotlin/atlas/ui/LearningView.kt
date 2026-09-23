@@ -390,9 +390,17 @@ fun QuestionSection(store: AppStore) {
         if (query.isBlank() && !dragging) {
             store.sourceSections.forEach { add(SourceDocumentItem.Section(it)) }
         }
-    }.let { items ->
-        // 拖拽中必须保持实时渲染顺序；按 startOffset 排序会把顺序打回文档序，其他卡片永远不动
-        if (dragging) items else items.sortedBy { it.startOffset }
+    }
+        // 兜底去重：并发重载的竞态若漏进重复条目，key 冲突会让整个列表崩溃
+        .distinctBy {
+            when (it) {
+                is SourceDocumentItem.Question -> sourceQuestionKey(it.entry)
+                is SourceDocumentItem.Section -> "section:${it.heading.startOffset}"
+            }
+        }
+        .let { items ->
+            // 拖拽中必须保持实时渲染顺序；按 startOffset 排序会把顺序打回文档序，其他卡片永远不动
+            if (dragging) items else items.sortedBy { it.startOffset }
     }
     val mappedDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
         SourceQuestions.supportedDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)

@@ -81,6 +81,9 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
 
     private var watchJob: Job? = null
     private val watching = AtomicBoolean(false)
+    // reloadKnowledgeFiles 会被 UI 线程（新建/编辑写回）与文件监听协程并发触发，
+    // clear→addAll 交错会让列表出现重复条目（LazyColumn key 冲突，2026-09-23），用锁串行化
+    private val reloadLock = Any()
 
     private fun libraryRoot() = File(settings.libraryPath)
     private fun atlasDir() = File(libraryRoot(), "atlas")
@@ -183,26 +186,28 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
 
     fun reloadKnowledgeFiles() {
         Log.timed("重载知识文件", warnMs = 300) {
-            cards.clear(); cards.addAll(MdStores.loadCards(cardsFile()))
-            questions.clear(); questions.addAll(MdStores.loadQuestions(questionsFile()))
-            knowledgeDocuments.clear()
-            knowledgeDocuments.addAll(scanKnowledgeDocuments())
-            sourceQuestions.clear()
-            allSourceQuestions.clear()
-            sourceSections.clear()
-            val mappedDocuments = SourceQuestions.supportedDocuments(knowledgeDocuments, settings.sourceQuestionPaths)
-            val documents = mappedDocuments.mapNotNull { path ->
-                val file = sourceDocumentFile(path)
-                if (file.isFile) path to file.readText(Charsets.UTF_8) else null
+            synchronized(reloadLock) {
+                cards.clear(); cards.addAll(MdStores.loadCards(cardsFile()))
+                questions.clear(); questions.addAll(MdStores.loadQuestions(questionsFile()))
+                knowledgeDocuments.clear()
+                knowledgeDocuments.addAll(scanKnowledgeDocuments())
+                sourceQuestions.clear()
+                allSourceQuestions.clear()
+                sourceSections.clear()
+                val mappedDocuments = SourceQuestions.supportedDocuments(knowledgeDocuments, settings.sourceQuestionPaths)
+                val documents = mappedDocuments.mapNotNull { path ->
+                    val file = sourceDocumentFile(path)
+                    if (file.isFile) path to file.readText(Charsets.UTF_8) else null
+                }
+                allSourceQuestions.addAll(SourceQuestions.parseAll(documents))
+                val source = sourceQuestionFile()
+                if (source.isFile && SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)) {
+                    val document = source.readText(Charsets.UTF_8)
+                    sourceQuestions.addAll(SourceQuestions.parse(selectedSourcePath, document, settings.sourceQuestionPaths))
+                    sourceSections.addAll(SourceQuestions.parseSections(selectedSourcePath, document, settings.sourceQuestionPaths))
+                }
+                rebuildDueQueue()
             }
-            allSourceQuestions.addAll(SourceQuestions.parseAll(documents))
-            val source = sourceQuestionFile()
-            if (source.isFile && SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)) {
-                val document = source.readText(Charsets.UTF_8)
-                sourceQuestions.addAll(SourceQuestions.parse(selectedSourcePath, document, settings.sourceQuestionPaths))
-                sourceSections.addAll(SourceQuestions.parseSections(selectedSourcePath, document, settings.sourceQuestionPaths))
-            }
-            rebuildDueQueue()
         }
     }
 
