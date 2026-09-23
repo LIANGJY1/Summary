@@ -98,7 +98,8 @@ class AdbDevice:
         time.sleep(2.5)
 
     def dump_ui(self) -> str:
-        result = self._run(["shell", "uiautomator", "dump", "/sdcard/window_dump.xml"])
+        # WebView 加载中 uiautomator 可能被 kill（137），交给 tap_text 的重试逻辑
+        result = self._run(["shell", "uiautomator", "dump", "/sdcard/window_dump.xml"], check=False)
         if result.returncode != 0:
             return ""
         pull = self._run(["pull", "/sdcard/window_dump.xml", "/tmp/window_dump.xml"], check=False)
@@ -121,25 +122,42 @@ class AdbDevice:
                 root = ET.fromstring(xml, parser=parser)
             except TypeError:
                 root = ET.fromstring(xml)
-            for node in root.iter("node"):
-                node_text = node.attrib.get("text", "")
-                content_desc = node.attrib.get("content-desc", "")
-                bounds = node.attrib.get("bounds", "")
 
-                match = (text == node_text or text == content_desc)
-                if partial and not match:
-                    match = text in node_text or text in content_desc
+            # 刚插线时系统会弹「USB 已连接」选择框挡住界面，uiautomator 只能 dump 到弹窗
+            if any(n.attrib.get("text") == "USB 已连接" for n in root.iter("node")):
+                if self._tap_node(root, "取消", partial=False):
+                    print("已关闭「USB 已连接」弹窗")
+                    time.sleep(1.5)
+                    continue
 
-                if match and bounds:
-                    x1, y1, x2, y2 = _parse_bounds(bounds)
-                    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                    print(f"点击 '{text}' 坐标 ({cx}, {cy})")
-                    self._run(["shell", "input", "tap", str(cx), str(cy)])
-                    return True
+            if self._tap_node(root, text, partial):
+                return True
 
             print(f"未找到 '{text}'，重试 {attempt + 1}/{retries}")
             time.sleep(delay)
         return False
+
+    def _tap_node(self, root, text: str, partial: bool = True) -> bool:
+        for node in root.iter("node"):
+            node_text = node.attrib.get("text", "")
+            content_desc = node.attrib.get("content-desc", "")
+            bounds = node.attrib.get("bounds", "")
+
+            match = (text == node_text or text == content_desc)
+            if partial and not match:
+                match = text in node_text or text in content_desc
+
+            if match and bounds:
+                x1, y1, x2, y2 = _parse_bounds(bounds)
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                print(f"点击 '{text}' 坐标 ({cx}, {cy})")
+                self._run(["shell", "input", "tap", str(cx), str(cy)])
+                return True
+        return False
+
+    def screen_off(self):
+        print("熄屏")
+        self._run(["shell", "input", "keyevent", "26"], check=False)
 
     def screenshot(self, path: str):
         print(f"截图保存到 {path}")
@@ -226,6 +244,7 @@ def main():
     device.screenshot("/tmp/feishu_checkin_result.png")
     print("结果截图 /tmp/feishu_checkin_result.png")
     device._run(["shell", "svc", "power", "stayon", "false"], check=False)
+    device.screen_off()
 
 
 if __name__ == "__main__":

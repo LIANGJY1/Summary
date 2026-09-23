@@ -6,16 +6,15 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -231,6 +230,9 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
     }
 }
 
+private val markdownBulletPattern = Regex("^\\s*[-*] ")
+private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)(.+)$")
+
 /**
  * 轻量 markdown 渲染（v1 内置实现，ADR：替代 mikepenz 库以零依赖——支持标题/列表/引用/
  * 代码块/分隔线/行内标记；复杂 GFM 交给「用系统编辑器打开」）
@@ -260,19 +262,23 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                     i++
                     while (i < lines.size && !lines[i].trimStart().startsWith("```")) { buf.add(lines[i]); i++ }
                     i++
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        color = Theme.CodeBg,
-                        tonalElevation = 1.dp,
-                    ) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                            if (lang.isNotBlank()) {
-                                Text(lang.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Theme.Muted)
-                                Spacer(Modifier.height(7.dp))
-                            }
-                            buf.forEach { code ->
-                                Text(code, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)
+                    if (lang.equals("mermaid", true) || (lang.isBlank() && buf.firstOrNull()?.trimStart()?.startsWith("flowchart") == true)) {
+                        MermaidFlowchartView(buf)
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Theme.CodeBg,
+                            tonalElevation = 1.dp,
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                                if (lang.isNotBlank()) {
+                                    Text(lang.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Theme.Muted)
+                                    Spacer(Modifier.height(7.dp))
+                                }
+                                buf.forEach { code ->
+                                    Text(code, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)
+                                }
                             }
                         }
                     }
@@ -312,11 +318,34 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                         style = ui.typography.body,
                     )
                 }
-                Regex("^\\s*[0-9]+[.、)] ").containsMatchIn(line) -> Text(
-                    renderInline(line.trim()),
-                    style = ui.typography.body,
-                    modifier = Modifier.padding(start = 18.dp),
-                )
+                markdownNumberedPattern.find(line) != null -> {
+                    val numbered = markdownNumberedPattern.find(line)!!
+                    Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
+                        Text(
+                            "${numbered.groupValues[1]}.",
+                            Modifier.width(26.dp),
+                            color = Theme.Accent,
+                            fontWeight = FontWeight.SemiBold,
+                            style = ui.typography.body,
+                        )
+                        Text(
+                            renderInline(numbered.groupValues[2]),
+                            Modifier.fillMaxWidth(),
+                            style = ui.typography.body,
+                        )
+                    }
+                }
+                line.trimStart().startsWith("flowchart") || line.trimStart().startsWith("graph ") -> {
+                    // 无围栏的 Mermaid 段：声明行 + 后续缩进/空行，直到首个顶格非空行
+                    val block = ArrayList<String>()
+                    var j = i
+                    while (j < lines.size && (j == i || lines[j].isBlank() || lines[j].startsWith(" ") || lines[j].startsWith("\t"))) {
+                        block.add(lines[j]); j++
+                    }
+                    while (block.isNotEmpty() && block.last().isBlank()) block.removeAt(block.lastIndex)
+                    MermaidFlowchartView(block)
+                    i = j - 1
+                }
                 line.isBlank() -> Spacer(Modifier.height(4.dp))
                 else -> Text(renderInline(line), style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)))
             }
@@ -340,15 +369,19 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
                     true
                 } == true -> Unit
                 line.trimStart().startsWith("```") -> {
-                    val lang = line.trimStart().removePrefix("```")
+                    val lang = line.trimStart().removePrefix("```").trim()
                     val buf = ArrayList<String>()
                     i++
                     while (i < lines.size && !lines[i].trimStart().startsWith("```")) { buf.add(lines[i]); i++ }
                     i++
-                    Surface(shape = RoundedCornerShape(8.dp), color = Theme.CodeBg) {
-                        Column(Modifier.fillMaxWidth().padding(10.dp)) {
-                            if (lang.isNotBlank()) Text(lang, fontSize = 11.sp, color = Theme.Muted)
-                            buf.forEach { Text(renderInline(it), fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp) }
+                    if (lang.equals("mermaid", true) || (lang.isBlank() && buf.firstOrNull()?.trimStart()?.startsWith("flowchart") == true)) {
+                        MermaidFlowchartView(buf)
+                    } else {
+                        Surface(shape = RoundedCornerShape(8.dp), color = Theme.CodeBg) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                if (lang.isNotBlank()) Text(lang, fontSize = 11.sp, color = Theme.Muted)
+                                buf.forEach { Text(renderInline(it), fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp) }
+                            }
                         }
                     }
                 }
@@ -365,7 +398,33 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
                     Text("•  ", color = Theme.Muted)
                     Text(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), style = ui.typography.body)
                 }
-                Regex("^\\s*[0-9]+[.、)] ").containsMatchIn(line) -> Text(renderInline(line.trim()), style = ui.typography.body, modifier = Modifier.padding(start = 6.dp))
+                markdownNumberedPattern.find(line) != null -> {
+                    val numbered = markdownNumberedPattern.find(line)!!
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(
+                            "${numbered.groupValues[1]}.",
+                            Modifier.width(26.dp),
+                            color = Theme.Muted,
+                            fontWeight = FontWeight.SemiBold,
+                            style = ui.typography.body,
+                        )
+                        Text(
+                            renderInline(numbered.groupValues[2]),
+                            Modifier.fillMaxWidth(),
+                            style = ui.typography.body,
+                        )
+                    }
+                }
+                line.trimStart().startsWith("flowchart") || line.trimStart().startsWith("graph ") -> {
+                    val block = ArrayList<String>()
+                    var j = i
+                    while (j < lines.size && (j == i || lines[j].isBlank() || lines[j].startsWith(" ") || lines[j].startsWith("\t"))) {
+                        block.add(lines[j]); j++
+                    }
+                    while (block.isNotEmpty() && block.last().isBlank()) block.removeAt(block.lastIndex)
+                    MermaidFlowchartView(block)
+                    i = j - 1
+                }
                 line.isBlank() -> {}
                 else -> Text(renderInline(line), style = ui.typography.body)
             }
@@ -376,23 +435,25 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ReaderMarkdownTableView(table: MarkdownTable) {
-    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        Column(Modifier.widthIn(min = (table.headers.size * 150).dp)) {
-            ReaderMarkdownTableRow(table.headers, header = true)
-            table.rows.forEach { ReaderMarkdownTableRow(it, header = false, columnCount = table.headers.size) }
-        }
+    // 表格直接铺满可用宽度：不能套 horizontalScroll——同轴滚动会把约束变成无穷宽，
+    // weight(1f) 单元格分到 0 宽，文字逐字竖排（2026-09-23 题库答案表格踩坑）
+    Column(Modifier.fillMaxWidth()) {
+        ReaderMarkdownTableRow(table.headers, header = true)
+        table.rows.forEach { ReaderMarkdownTableRow(it, header = false, columnCount = table.headers.size) }
     }
 }
 
 @Composable
 private fun ReaderMarkdownTableRow(cells: List<String>, header: Boolean, columnCount: Int = cells.size) {
-    Row(Modifier.fillMaxWidth()) {
+    // IntrinsicSize.Min + fillMaxHeight：换行格撑起整行高度，其余格子的背景/边框同步拉伸对齐
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         repeat(columnCount) { index ->
             Text(
                 renderInline(cells.getOrNull(index).orEmpty()),
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .fillMaxHeight()
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (header) 0.8f else 0.4f))
                     .background(if (header) Theme.Accent.copy(alpha = 0.12f) else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 9.dp),
@@ -407,20 +468,18 @@ private fun ReaderMarkdownTableRow(cells: List<String>, header: Boolean, columnC
 
 @Composable
 private fun ClassicMarkdownTableView(table: MarkdownTable) {
-    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        Column(
-            Modifier.widthIn(min = (table.headers.size * 150).dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            MarkdownTableRow(table.headers, header = true)
-            table.rows.forEach { MarkdownTableRow(it, header = false, columnCount = table.headers.size) }
-        }
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        MarkdownTableRow(table.headers, header = true)
+        table.rows.forEach { MarkdownTableRow(it, header = false, columnCount = table.headers.size) }
     }
 }
 
 @Composable
 private fun MarkdownTableRow(cells: List<String>, header: Boolean, columnCount: Int = cells.size) {
-    Row(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         repeat(columnCount) { index ->
             val value = cells.getOrNull(index).orEmpty()
             Text(
@@ -428,6 +487,7 @@ private fun MarkdownTableRow(cells: List<String>, header: Boolean, columnCount: 
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .fillMaxHeight()
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     .background(
                         if (header) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)

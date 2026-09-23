@@ -196,6 +196,35 @@ object SourceQuestions {
         return document.substring(0, start) + blocks.joinToString(separator) + document.substring(end)
     }
 
+    /**
+     * 从源文档删除一道题目：整块移除该 Q 区间（题面+答案），剩余题目按文档顺序
+     * 连续重新编号，题目之外的章节内容原样保留。题目在当前文档中匹配不到（源文件
+     * 已被外部修改）时返回 null，由调用方决定如何提示。
+     */
+    fun remove(document: String, entry: Entry): String? {
+        val target = parse(entry.sourcePath, document, listOf(entry.sourcePath))
+            .firstOrNull { it.id == entry.id } ?: return null
+        val prefix = document.substring(0, target.startOffset).trimEnd()
+        val suffix = document.substring(target.endOffset)
+        val removed = when {
+            prefix.isEmpty() && suffix.isBlank() -> ""
+            prefix.isEmpty() -> suffix
+            suffix.isBlank() -> "$prefix\n"
+            else -> "$prefix\n\n$suffix"
+        }
+        val remaining = parse(entry.sourcePath, removed, listOf(entry.sourcePath)).sortedBy { it.startOffset }
+        if (remaining.isEmpty()) return removed
+        val builder = StringBuilder()
+        var cursor = 0
+        remaining.forEachIndexed { index, item ->
+            builder.append(removed, cursor, item.startOffset)
+            builder.append(numberedBlock(removed, item, index + 1))
+            cursor = item.endOffset
+        }
+        builder.append(removed, cursor, removed.length)
+        return builder.toString()
+    }
+
     private fun numberedBlock(document: String, entry: Entry, number: Int): String {
         val header = document.substring(entry.startOffset, entry.answerStartOffset)
         val renumberedHeader = header.replaceFirst("Q${entry.number}", "Q$number")

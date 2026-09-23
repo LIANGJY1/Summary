@@ -123,6 +123,26 @@ if dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installe
 fi
 sudo_run apt install -y "$DEB"
 
+# X11/fcitx 下候选词窗跟随光标：强制 Java XIM over-the-spot。
+# compose 插件的 jpackage 配置不支持自定义 java-options，且 apt 重装会覆盖 cfg，
+# 所以每次安装后补写；root-window 回退会把候选框固定在屏幕左下角（2026-09-23）。
+IME_FLAG="java-options=-Djava.awt.im.style=over-the-spot"
+ATLAS_CFG="/opt/atlas/lib/app/atlas.cfg"
+if ! sudo_run grep -qF "$IME_FLAG" "$ATLAS_CFG"; then
+  sudo_run sed -i "/^\[JavaOptions\]/a $IME_FLAG" "$ATLAS_CFG"
+  echo "==> 已注入输入法光标跟随参数：$IME_FLAG"
+fi
+
+# 窗口 WM_CLASS 是 atlas-MainKt（Compose 默认取主类名），而 jpackage 生成的 desktop
+# 不写 StartupWMClass，GNOME 匹配不上窗口，会把运行实例当另一个应用、多亮一个默认图标。
+# desktop 文件每次安装都被覆盖，所以安装后补写；若改了主类名，这里的值要同步改（2026-09-23）。
+ATLAS_DESKTOP="/usr/share/applications/atlas-atlas.desktop"
+if sudo_run test -f "$ATLAS_DESKTOP" && ! sudo_run grep -q '^StartupWMClass=' "$ATLAS_DESKTOP"; then
+  sudo_run sed -i '/^Icon=/a StartupWMClass=atlas-MainKt' "$ATLAS_DESKTOP"
+  sudo_run update-desktop-database /usr/share/applications 2>/dev/null || true
+  echo "==> 已注入 StartupWMClass=atlas-MainKt（窗口与启动器图标合一）"
+fi
+
 echo "==> [3/3] 验证"
 # jpackage 的 deb 不建 PATH 链接，手工补一个，让终端可直接 atlas 启动
 sudo_run ln -sf /opt/atlas/bin/atlas /usr/local/bin/atlas

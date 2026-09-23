@@ -3,6 +3,10 @@ package atlas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import atlas.ui.AtlasTheme
@@ -44,6 +49,9 @@ import atlas.ui.SettingsView
 import atlas.ui.Theme
 import atlas.ui.TodayView
 import atlas.ui.VDivider
+import atlas.ui.WindowControlButtons
+import atlas.ui.WindowResizeBorders
+import atlas.ui.appTitleBarDrag
 import atlas.ui.atlasUiTokens
 import atlas.ui.settingsTabLabel
 import atlas.ui.topLevelTabs
@@ -64,23 +72,25 @@ fun main() {
     )
     val store = AppStore()
     application {
+        val windowState = rememberWindowState(width = 1280.dp, height = 820.dp)
         Window(
             onCloseRequest = {
                 Log.i("窗口关闭请求，应用退出")
                 exitApplication()
             },
-            title = "Atlas — AI 成长工作站（零模型 · 零网络）",
-            state = rememberWindowState(width = 1280.dp, height = 820.dp),
+            title = "Atlas",
+            state = windowState,
+            undecorated = true,
         ) {
             AtlasTheme(dark = store.settings.darkTheme, fontScale = store.settings.fontScale) {
-                AppRoot(store)
+                AppRoot(store, windowState) { exitApplication() }
             }
         }
     }
 }
 
 @Composable
-fun AppRoot(store: AppStore) {
+fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     val ui = atlasUiTokens()
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
@@ -99,9 +109,26 @@ fun AppRoot(store: AppStore) {
     val inbox = store.candidates.size
 
     if (!store.libraryReady) {
-        SetupView(store)
+        // 建库页同样使用自定义标题栏（窗口已无系统装饰）
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .appTitleBarDrag(windowState)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                    .padding(horizontal = ui.spacing.page, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Theme.Accent)
+                Spacer(Modifier.weight(1f))
+                WindowControlButtons(windowState, onClose)
+            }
+            VDivider()
+            SetupView(store)
+        }
         return
     }
+    WindowResizeBorders(windowState) {
     Column(
         Modifier.fillMaxSize()
             .focusRequester(rootFocus)
@@ -112,44 +139,25 @@ fun AppRoot(store: AppStore) {
                 } else false
             },
     ) {
-        // 顶栏
+        // 顶栏（兼自定义标题栏：拖动移动窗口，双击最大化）
         Row(
             Modifier.fillMaxWidth()
+                .appTitleBarDrag(windowState)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
                 .padding(horizontal = ui.spacing.page, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Theme.Accent)
-            topLevelTabs().forEach { t ->
-                val active = tab == t
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(
-                        Modifier
-                            .clickable { Log.i("页签切换 → $t"); tab = t }
-                            .background(
-                                if (active) Theme.Accent.copy(alpha = 0.12f) else Color.Transparent,
-                                MaterialTheme.shapes.small,
-                            )
-                            .padding(horizontal = 9.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        Text(
-                            t,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                            color = if (active) Theme.Accent else MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                        )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                topLevelTabs().forEach { t ->
+                    val active = tab == t
+                    NavTab(label = t, active = active, onClick = { Log.i("页签切换 → $t"); tab = t }) {
                         when (t) {
                             "工作台" -> if (inbox > 0) NavBadge("$inbox", Theme.WarnOrange)
                             "题库" -> if (store.sourceQuestions.isNotEmpty()) NavBadge("${store.sourceQuestions.size}", Theme.Accent)
                         }
                     }
-                    Box(
-                        Modifier.padding(top = 3.dp).width(24.dp).height(2.dp)
-                            .background(if (active) Theme.Accent else Color.Transparent, MaterialTheme.shapes.small),
-                    )
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -162,6 +170,8 @@ fun AppRoot(store: AppStore) {
                 fontSize = 20.sp,
                 color = if (tab == settingsTabLabel()) Theme.Accent else MaterialTheme.colorScheme.onSurface,
             )
+            // undecorated 窗口的窗口控制按钮
+            WindowControlButtons(windowState, onClose)
         }
         VDivider()
         // 内容
@@ -192,6 +202,7 @@ fun AppRoot(store: AppStore) {
             store.toast.value?.let { Text(it, fontSize = 11.sp, color = Theme.OkGreen) }
         }
     }
+    }
 
     // 预览浮层：复习卡「跳回原文」、Ctrl+K 打开命中（原知识库页预览，现按需弹出）
     var previewRel by remember { mutableStateOf<String?>(null) }
@@ -206,6 +217,37 @@ fun AppRoot(store: AppStore) {
 
     if (showPalette) {
         CommandPalette(store) { showPalette = false }
+    }
+}
+
+/** 顶栏导航页签：激活态为强调色胶囊、悬停有轻反馈；去掉旧版「胶囊+下划线」双重指示。 */
+@Composable
+private fun NavTab(label: String, active: Boolean, onClick: () -> Unit, badge: (@Composable () -> Unit)? = null) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Row(
+        Modifier
+            .hoverable(interaction)
+            .clickable(interactionSource = interaction, indication = null) { onClick() }
+            .background(
+                when {
+                    active -> Theme.Accent.copy(alpha = 0.16f)
+                    hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                    else -> Color.Transparent
+                },
+                RoundedCornerShape(8.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (active) Theme.Accent else Theme.Muted,
+        )
+        badge?.invoke()
     }
 }
 
@@ -282,7 +324,7 @@ fun CommandPalette(store: AppStore, onDismiss: () -> Unit) {
 fun SetupView(store: AppStore) {
     var path by remember { mutableStateOf(store.settings.libraryPath) }
     Column(Modifier.fillMaxSize().padding(48.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Atlas — AI 成长工作站", fontWeight = FontWeight.Bold, fontSize = 28.sp)
+        Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 28.sp)
         Text(
             "把一个 markdown 目录变成：可检索的知识库 + 闪卡复习 + 学习任务队列。\n" +
                 "零模型、零网络：检索与复习全部本地；出题、批改等 AI 能力由你的编码代理（ZCode/Codex）完成。",

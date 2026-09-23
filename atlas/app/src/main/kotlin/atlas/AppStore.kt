@@ -401,6 +401,80 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         }.getOrElse { false }
     }
 
+    /** 从源文档删除一道题目并让剩余题目连续重新编号；文档被外部修改时拒绝覆盖并重新加载。 */
+    fun deleteSourceQuestion(entry: SourceQuestions.Entry): Boolean {
+        val file = sourceDocumentFile(entry.sourcePath)
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != entry.document) {
+            Log.w("同源题目删除冲突：源文件已变化 file=${file.absolutePath}")
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        val updated = SourceQuestions.remove(current, entry)
+        if (updated == null) {
+            reloadKnowledgeFiles()
+            showToast("题目已被外部修改，已重新加载")
+            return false
+        }
+        return runCatching {
+            MdStores.atomicWrite(file, updated)
+            reloadKnowledgeFiles()
+            Log.i("同源题目删除成功 path=${entry.sourcePath} Q${entry.number}")
+            showToast("已删除 Q${entry.number}")
+            true
+        }.getOrElse { error ->
+            Log.e("删除题目写回失败 path=${entry.sourcePath}", error)
+            reloadKnowledgeFiles()
+            showToast("删除失败：${error.message}")
+            false
+        }
+    }
+
+    /** 把一道题目移动到另一份映射文档：源文档整块移除，目标文档末尾追加并从最大题号之后编号。 */
+    fun moveSourceQuestion(entry: SourceQuestions.Entry, targetPath: String): Boolean {
+        val normalizedTarget = targetPath.replace('\\', '/').trim('/')
+        if (normalizedTarget == entry.sourcePath.replace('\\', '/').trim('/')) {
+            showToast("目标文档与题目所在文档相同")
+            return false
+        }
+        if (!SourceQuestions.isSupportedPath(normalizedTarget, settings.sourceQuestionPaths)) {
+            showToast("目标文档未纳入题库映射")
+            return false
+        }
+        val sourceFile = sourceDocumentFile(entry.sourcePath)
+        val targetFile = sourceDocumentFile(normalizedTarget)
+        val current = if (sourceFile.isFile) sourceFile.readText(Charsets.UTF_8) else ""
+        if (current != entry.document) {
+            Log.w("同源题目移动冲突：源文件已变化 file=${sourceFile.absolutePath}")
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        val updatedSource = SourceQuestions.remove(current, entry)
+        if (updatedSource == null) {
+            reloadKnowledgeFiles()
+            showToast("题目已被外部修改，已重新加载")
+            return false
+        }
+        val targetDocument = if (targetFile.isFile) targetFile.readText(Charsets.UTF_8) else ""
+        val updatedTarget = SourceQuestions.append(targetDocument, listOf(SourceQuestions.Draft(entry.question, entry.answer)))
+        return runCatching {
+            // 先写目标再写源：中途失败只会造成题目重复，不会丢题
+            MdStores.atomicWrite(targetFile, updatedTarget)
+            MdStores.atomicWrite(sourceFile, updatedSource)
+            reloadKnowledgeFiles()
+            Log.i("同源题目移动成功 ${entry.sourcePath} Q${entry.number} → $normalizedTarget")
+            showToast("已移动到 $normalizedTarget")
+            true
+        }.getOrElse { error ->
+            Log.e("移动题目写回失败 ${entry.sourcePath} → $normalizedTarget", error)
+            reloadKnowledgeFiles()
+            showToast("移动失败：${error.message}")
+            false
+        }
+    }
+
     fun saveCards() { Log.d("保存 cards.md ${cards.size} 条"); MdStores.saveCards(cardsFile(), cards.toList()) }
     fun saveQuestions() { Log.d("保存 questions.md ${questions.size} 条"); MdStores.saveQuestions(questionsFile(), questions.toList()) }
 

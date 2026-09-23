@@ -1,18 +1,25 @@
 package atlas.ui
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -20,10 +27,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,9 +46,12 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.DialogProperties
 import atlas.AppStore
 import atlas.core.KnowledgeTree
@@ -345,31 +359,41 @@ fun QuestionSection(store: AppStore) {
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
     var renameTarget by remember { mutableStateOf<KnowledgeTreeNode?>(null) }
     var editingEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
+    var deletingEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
+    var movingEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
     var showCreateSingle by remember { mutableStateOf(false) }
     var showCreateBatch by remember { mutableStateOf(false) }
     var showMoreActions by remember { mutableStateOf(false) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
+    var sidebarExpanded by remember { mutableStateOf(true) }
     var reorderMode by remember { mutableStateOf(false) }
     var draggingKey by remember { mutableStateOf<String?>(null) }
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
     val cardTops = remember { mutableStateMapOf<String, Float>() }
+    val cardHeights = remember { mutableStateMapOf<String, Int>() }
+    val rowSpacingPx = with(LocalDensity.current) { 6.dp.toPx() }
+    var listViewportHeight by remember { mutableStateOf(0f) }
     val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else store.sourceQuestions
     val visible = if (query.isBlank()) store.sourceQuestions else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
-    val renderedQuestions = if (reorderMode && draggingKey != null && query.isBlank()) {
+    val dragging = reorderMode && draggingKey != null && query.isBlank()
+    val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
         val to = dragTargetIndex
-        if (from >= 0 && to != null && to in visible.indices && from != to) {
+        if (from >= 0 && to != null && to in visible.indices) {
             visible.toMutableList().apply { add(to, removeAt(from)) }
         } else visible
     } else visible
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
-        if (query.isBlank() && !(reorderMode && draggingKey != null)) {
+        if (query.isBlank() && !dragging) {
             store.sourceSections.forEach { add(SourceDocumentItem.Section(it)) }
         }
-    }.sortedBy { it.startOffset }
+    }.let { items ->
+        // 拖拽中必须保持实时渲染顺序；按 startOffset 排序会把顺序打回文档序，其他卡片永远不动
+        if (dragging) items else items.sortedBy { it.startOffset }
+    }
     val mappedDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
         SourceQuestions.supportedDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
     }
@@ -387,15 +411,27 @@ fun QuestionSection(store: AppStore) {
         expandedDirs = expandedDirs + KnowledgeTree.ancestorPaths(store.selectedSourcePath)
     }
 
+    val treeWidth by animateDpAsState(
+        targetValue = if (sidebarExpanded) 280.dp else 0.dp,
+        animationSpec = tween(200),
+        label = "tree-sidebar-width",
+    )
+    val sidebarChevronRotation by animateFloatAsState(
+        targetValue = if (sidebarExpanded) 180f else 0f,
+        animationSpec = tween(200),
+        label = "tree-sidebar-chevron",
+    )
     Row(Modifier.fillMaxSize().padding(ui.spacing.page)) {
-        Column(Modifier.width(270.dp).fillMaxHeight()) {
-            Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.Accent)
-            Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
-            if (mappedDocuments.isEmpty()) {
-                Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
+        Column(Modifier.width(treeWidth).clipToBounds().fillMaxHeight()) {
+            if (sidebarExpanded) {
+                Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.Accent)
+                Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
+                if (mappedDocuments.isEmpty()) {
+                    Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
+                }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 item(key = knowledgeTree.path) {
                     KnowledgeTreeNodeView(
                         node = knowledgeTree,
@@ -415,7 +451,23 @@ fun QuestionSection(store: AppStore) {
                 }
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.fillMaxHeight().width(24.dp), contentAlignment = Alignment.TopCenter) {
+            Box(
+                Modifier.padding(top = 2.dp)
+                    .size(24.dp)
+                    .clickable { sidebarExpanded = !sidebarExpanded },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    TreeChevronIcon,
+                    contentDescription = if (sidebarExpanded) "收起目录" else "展开目录",
+                    modifier = Modifier.size(14.dp).rotate(sidebarChevronRotation),
+                    tint = Theme.Muted,
+                )
+            }
+        }
+        Spacer(Modifier.width(6.dp))
         Box(Modifier.fillMaxHeight().width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -455,6 +507,7 @@ fun QuestionSection(store: AppStore) {
                 OutlinedButton(
                     onClick = {
                         reorderMode = !reorderMode
+                        if (reorderMode) expanded = emptySet() // 收起展开的答案，拖拽行高一致
                         draggingKey = null
                         dragTargetIndex = null
                         dragPointerY = 0f
@@ -502,7 +555,10 @@ fun QuestionSection(store: AppStore) {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(
+            Modifier.fillMaxSize().onGloballyPositioned { listViewportHeight = it.size.height.toFloat() },
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
             items(documentItems, key = { item ->
                 when (item) {
@@ -512,7 +568,8 @@ fun QuestionSection(store: AppStore) {
             }) { item ->
                 if (item is SourceDocumentItem.Section) {
                     Row(
-                        Modifier.fillMaxWidth()
+                        Modifier.animateItem()
+                            .fillMaxWidth()
                             .background(Theme.Accent.copy(alpha = 0.1f), MaterialTheme.shapes.small)
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -541,21 +598,47 @@ fun QuestionSection(store: AppStore) {
                     label = "question-card-scale",
                 )
                 val cardTop = cardTops[entryKey] ?: 0f
+                val cardInteraction = remember { MutableInteractionSource() }
+                val cardHovered by cardInteraction.collectIsHoveredAsState()
                 Column(
-                    Modifier.fillMaxWidth()
+                    Modifier
+                        // 让位卡片弹簧滑动（启动器手感）；被拖卡片自己禁用位移动画（位置由手势全权控制）
+                        .animateItem(
+                            placementSpec = if (isDragging) null else spring(
+                                stiffness = Spring.StiffnessMediumLow,
+                                visibilityThreshold = IntOffset.VisibilityThreshold,
+                            ),
+                        )
+                        .fillMaxWidth()
+                        .hoverable(cardInteraction)
                         .onGloballyPositioned { coordinates ->
                             cardTops[entryKey] = coordinates.positionInParent().y
+                            cardHeights[entryKey] = coordinates.size.height
                         }
                         .zIndex(if (isDragging) 2f else 0f)
                         .graphicsLayer {
                             scaleX = cardScale
                             scaleY = cardScale
-                            translationY = if (isDragging) dragPointerY - dragGrabOffset - cardTop else 0f
+                            // cardTop 是实时槽位位置：交换时槽位与平移量同步变化，卡片始终贴着指针、视觉连续。
+                            // 同时把视觉位置钳制在列表视口内，拖到上下边缘时卡片顶住边界、不允许出界
+                            translationY = if (isDragging) {
+                                val raw = dragPointerY - dragGrabOffset - cardTop
+                                val height = cardHeights[entryKey]?.toFloat() ?: 0f
+                                val maxTranslate = (listViewportHeight - height - cardTop).coerceAtLeast(-cardTop)
+                                raw.coerceIn(-cardTop, maxTranslate)
+                            } else {
+                                0f
+                            }
                         }
                         .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
-                            if (isExpanded) Theme.Accent.copy(alpha = 0.08f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            when {
+                                // 展开态保持主题色底不变；拖拽中不透明浮起（下层文字不透出重影）；悬停仅给收起态叠蒙层
+                                isExpanded -> Theme.Accent.copy(alpha = 0.08f)
+                                isDragging -> MaterialTheme.colorScheme.surfaceVariant
+                                cardHovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            },
                             MaterialTheme.shapes.small,
                         )
                         .border(
@@ -569,7 +652,6 @@ fun QuestionSection(store: AppStore) {
                         .padding(ui.spacing.card)
                         .pointerInput(entryKey, canReorder) {
                             if (!canReorder) return@pointerInput
-                            var accumulatedDistance = 0f
                             detectDragGestures(
                                 onDragStart = {
                                     draggingKey = entryKey
@@ -578,10 +660,13 @@ fun QuestionSection(store: AppStore) {
                                     dragPointerY = cardTop + it.y
                                 },
                                 onDragEnd = {
+                                    val key = draggingKey
                                     val target = dragTargetIndex
-                                    val from = questionIndex
-                                    if (target != null && target != from) {
-                                        store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
+                                    if (key != null && target != null) {
+                                        val from = store.sourceQuestions.indexOfFirst { sourceQuestionKey(it) == key }
+                                        if (from >= 0 && target != from) {
+                                            store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
+                                        }
                                     }
                                     draggingKey = null
                                     dragTargetIndex = null
@@ -596,18 +681,39 @@ fun QuestionSection(store: AppStore) {
                                 },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
-                                    var target = dragTargetIndex ?: questionIndex
-                                    dragPointerY = (cardTops[entryKey] ?: cardTop) + change.position.y
-                                    accumulatedDistance += dragAmount.y
-                                    while (accumulatedDistance > 36f && target < store.sourceQuestions.lastIndex) {
-                                        target++
-                                        accumulatedDistance -= 36f
+                                    // 增量累计指针位置（卡片自身平移后 change.position 坐标系会漂移）
+                                    dragPointerY += dragAmount.y
+                                    val key = draggingKey ?: return@detectDragGestures
+                                    val base = store.sourceQuestions
+                                    val from = base.indexOfFirst { sourceQuestionKey(it) == key }
+                                    if (from < 0) return@detectDragGestures
+                                    val current = dragTargetIndex ?: from
+                                    val draggedTop = cardTops[key] ?: return@detectDragGestures
+                                    val order = base.toMutableList().apply { add(current, removeAt(from)) }
+                                    fun pitch(k: String) = (cardHeights[k] ?: 96) + rowSpacingPx
+                                    val ownPitch = pitch(key)
+                                    val grabY = dragPointerY - dragGrabOffset
+                                    var target = current
+                                    var top = draggedTop
+                                    var guard = 0
+                                    // 启动器算法：卡片顶部越过自身槽位中点就与下一行交换，退到上一行中点之上就与上一行交换。
+                                    // 槽位边界由各行静态高度推出（被拖卡片槽位无动画、是精确终值），与让位动画无关、行高不均不漂移
+                                    while (guard++ < 64) {
+                                        when {
+                                            target < order.lastIndex && grabY > top + ownPitch / 2 -> {
+                                                order.add(target + 1, order.removeAt(target))
+                                                target++
+                                                top += ownPitch
+                                            }
+                                            target > 0 && grabY < top - pitch(sourceQuestionKey(order[target - 1])) / 2 -> {
+                                                top -= pitch(sourceQuestionKey(order[target - 1]))
+                                                order.add(target - 1, order.removeAt(target))
+                                                target--
+                                            }
+                                            else -> break
+                                        }
                                     }
-                                    while (accumulatedDistance < -36f && target > 0) {
-                                        target--
-                                        accumulatedDistance += 36f
-                                    }
-                                    if (target != dragTargetIndex) dragTargetIndex = target
+                                    if (target != current) dragTargetIndex = target
                                 },
                             )
                         },
@@ -633,6 +739,7 @@ fun QuestionSection(store: AppStore) {
                         }
                         Column(
                             Modifier.weight(1f).singleClickWithoutConsumingSelection {
+                                if (reorderMode) return@singleClickWithoutConsumingSelection
                                 locateSource(entry.sourcePath)
                                 expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                             },
@@ -683,16 +790,22 @@ fun QuestionSection(store: AppStore) {
                             }
                         }
                         Spacer(Modifier.height(7.dp))
-                        Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                            Text(
+                                "移动",
+                                Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
+                                fontSize = 13.sp,
+                                color = Theme.WarnOrange,
+                            )
+                            Text(
+                                "删除",
+                                Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
+                                fontSize = 13.sp,
+                                color = Theme.BadRed,
+                            )
+                        }
                     }
-                }
-                if (canReorder && dragTargetIndex == questionIndex && draggingKey != null && questionIndex == store.sourceQuestions.lastIndex) {
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        Modifier.fillMaxWidth()
-                            .height(3.dp)
-                            .background(Theme.Accent, MaterialTheme.shapes.small),
-                    )
                 }
             }
         }
@@ -714,6 +827,32 @@ fun QuestionSection(store: AppStore) {
             entries = visible,
             initialIndex = visible.indexOfFirst { sourceQuestionKey(it) == sourceQuestionKey(entry) },
             onDismiss = { editingEntry = null },
+        )
+    }
+    deletingEntry?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deletingEntry = null },
+            title = { Text("删除题目") },
+            text = {
+                Text(
+                    "确定删除 Q${entry.number}「${entry.question.take(30)}」？题目和答案会从源文档中整块移除，剩余题目自动重新编号。",
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    deletingEntry = null
+                    store.deleteSourceQuestion(entry)
+                }) { Text("删除") }
+            },
+            dismissButton = { OutlinedButton(onClick = { deletingEntry = null }) { Text("取消") } },
+        )
+    }
+    movingEntry?.let { entry ->
+        MoveSourceQuestionDialog(
+            store = store,
+            entry = entry,
+            targetCandidates = mappedDocuments.filter { it != entry.sourcePath },
+            onDismiss = { movingEntry = null },
         )
     }
 }
@@ -746,6 +885,19 @@ private fun Modifier.singleClickWithoutConsumingSelection(onClick: () -> Unit): 
         }
     }
 
+/** Markdown 编辑快捷键（Ctrl+B/I/`）：在按键隧道阶段消费，避免字符落入正文。 */
+private fun Modifier.markdownFormatKeys(onToggle: (String, String) -> Unit): Modifier =
+    onPreviewKeyEvent { event ->
+        if (event.type == KeyEventType.KeyDown && event.isCtrlPressed) {
+            markdownShortcutWrap(event.key)?.let { (prefix, suffix) ->
+                onToggle(prefix, suffix)
+                true
+            } ?: false
+        } else {
+            false
+        }
+    }
+
 @Composable
 private fun KnowledgeTreeNodeView(
     node: KnowledgeTreeNode,
@@ -758,16 +910,29 @@ private fun KnowledgeTreeNodeView(
 ) {
     val isExpanded = node.path in expandedDirs
     val selected = !node.isDirectory && node.path == selectedPath
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     LaunchedEffect(selected) {
         if (selected) bringIntoViewRequester.bringIntoView()
     }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 90f else 0f,
+        animationSpec = tween(160),
+        label = "tree-chevron-rotation",
+    )
     Row(
         Modifier.fillMaxWidth()
+            .height(30.dp)
             .bringIntoViewRequester(bringIntoViewRequester)
+            .hoverable(interactionSource)
             .background(
-                if (selected) Theme.Accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent,
-                MaterialTheme.shapes.small,
+                when {
+                    selected -> Theme.Accent.copy(alpha = 0.16f)
+                    hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                    else -> androidx.compose.ui.graphics.Color.Transparent
+                },
+                RoundedCornerShape(7.dp),
             )
             .clickable {
                 if (node.isDirectory) onToggleDirectory(node.path) else onSelectFile(node.path)
@@ -783,24 +948,42 @@ private fun KnowledgeTreeNodeView(
                     }
                 }
             }
-            .padding(start = (depth * 16).dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
+            .padding(start = (depth * 14).dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            if (node.isDirectory) (if (isExpanded) "▾" else "▸") else "  ",
-            modifier = Modifier.width(18.dp), color = Theme.Muted, fontSize = 13.sp,
+        // 箭头槽位对目录和文件等宽，保证各级名称左对齐；文件占位不画箭头
+        Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
+            if (node.isDirectory) {
+                Icon(
+                    TreeChevronIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp).rotate(chevronRotation),
+                    tint = if (selected) Theme.Accent else Theme.Muted,
+                )
+            }
+        }
+        Icon(
+            if (node.isDirectory) TreeFolderIcon else TreeFileIcon,
+            contentDescription = null,
+            modifier = Modifier.size(15.dp),
+            tint = if (selected) Theme.Accent else Theme.Muted,
         )
-        Text(
-            if (node.isDirectory) "▰" else "M↓",
-            modifier = Modifier.width(28.dp),
-            color = if (selected) Theme.Accent else Theme.Muted,
-            fontSize = if (node.isDirectory) 13.sp else 10.sp,
-        )
+        Spacer(Modifier.width(7.dp))
         Text(
             node.name,
-            color = if (selected) Theme.Accent else MaterialTheme.colorScheme.onSurface,
-            fontSize = if (node.isDirectory) 14.sp else 13.sp,
-            maxLines = 2,
+            color = when {
+                selected -> Theme.Accent
+                node.isDirectory -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f)
+            },
+            fontSize = 13.sp,
+            fontWeight = when {
+                selected -> FontWeight.SemiBold
+                node.isDirectory -> FontWeight.Medium
+                else -> FontWeight.Normal
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
     if (node.isDirectory && isExpanded) {
@@ -966,6 +1149,79 @@ private fun RenameKnowledgeNodeDialog(
 }
 
 @Composable
+private fun MoveSourceQuestionDialog(
+    store: AppStore,
+    entry: SourceQuestions.Entry,
+    targetCandidates: List<String>,
+    onDismiss: () -> Unit,
+) {
+    var selected by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.width(680.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        title = { Text("移动题目到其他文档") },
+        confirmButton = {
+            Button(
+                enabled = selected.isNotBlank(),
+                onClick = {
+                    store.moveSourceQuestion(entry, selected)
+                    onDismiss()
+                },
+            ) { Text("移动") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("题目", fontWeight = FontWeight.SemiBold)
+                Text(entry.question, fontSize = 13.sp)
+                Text("当前文档", fontWeight = FontWeight.SemiBold)
+                Text(entry.sourcePath, fontSize = 12.sp, color = Theme.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("目标文档", fontWeight = FontWeight.SemiBold)
+                if (targetCandidates.isEmpty()) {
+                    Text("没有其他纳入题库映射的文档可作目标。", fontSize = 12.sp, color = Theme.WarnOrange)
+                }
+                targetCandidates.forEach { path ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable { selected = path }
+                            .background(
+                                if (selected == path) Theme.Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent,
+                                MaterialTheme.shapes.small,
+                            )
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            TreeFileIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = if (selected == path) Theme.Accent else Theme.Muted,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            path,
+                            fontSize = 12.sp,
+                            color = if (selected == path) Theme.Accent else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Text(
+                    "移动后题目会追加到目标文档末尾，题号按目标文档现有最大题号续排；源文档剩余题目自动重新编号。",
+                    fontSize = 11.sp,
+                    color = Theme.Muted,
+                )
+            }
+        },
+    )
+}
+
+@Composable
 private fun EditSourceQuestionDialog(
     store: AppStore,
     entries: List<SourceQuestions.Entry>,
@@ -983,10 +1239,10 @@ private fun EditSourceQuestionDialog(
     }
     val entry = stableEntries[safeIndex]
     var question by remember(entry.id) { mutableStateOf(entry.question) }
-    var answer by remember(entry.id) { mutableStateOf(entry.answer) }
+    var answer by remember(entry.id) { mutableStateOf(TextFieldValue(entry.answer)) }
     fun saveAndMove(target: Int): Boolean {
         if (question.isBlank()) return false
-        if (!store.saveSourceQuestion(entry, question, answer)) return false
+        if (!store.saveSourceQuestion(entry, question, answer.text)) return false
         currentIndex = target
         return true
     }
@@ -1024,7 +1280,7 @@ private fun EditSourceQuestionDialog(
                     if (!isSaving && question.isNotBlank()) {
                         isSaving = true
                         try {
-                            if (store.saveSourceQuestion(entry, question, answer)) onDismiss()
+                            if (store.saveSourceQuestion(entry, question, answer.text)) onDismiss()
                         } finally {
                             isSaving = false
                         }
@@ -1042,10 +1298,17 @@ private fun EditSourceQuestionDialog(
                 OutlinedTextField(
                     answer,
                     { answer = it },
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().markdownFormatKeys { prefix, suffix ->
+                        answer = answer.toggleMarkdownWrap(prefix, suffix)
+                    },
                     label = { Text("答案 Markdown") },
                     minLines = 8,
                     maxLines = 16,
+                )
+                Text(
+                    "快捷键：选中文字按 Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+` 行内代码（再按一次取消）",
+                    fontSize = 11.sp,
+                    color = Theme.Muted,
                 )
                 Text("保存后直接修改 ${entry.sourcePath}", fontSize = 11.sp, color = Theme.Muted)
             }
