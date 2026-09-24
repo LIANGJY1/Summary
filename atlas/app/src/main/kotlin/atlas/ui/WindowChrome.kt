@@ -42,6 +42,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import java.awt.Cursor
+import java.awt.MouseInfo
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -56,11 +57,17 @@ private val CornerSize = 16.dp
 private val AppWindowMinSize = DpSize(720.dp, 480.dp)
 
 /** 顶栏拖动移动窗口；双击切换最大化。最大化状态忽略拖动。
- *  注意：detectDragGestures 的 onDrag 回调是"距上一事件的增量"，必须累加，不能当作相对起点的位移。 */
+ *  拖动用「OS 指针屏幕坐标闭环」：每个拖动事件读 MouseInfo 的真实指针屏幕位置，
+ *  减去按下时记录的抓取偏移得到窗口目标位置，按帧合并写入 state.position。
+ *  Compose Desktop 的 WindowState.position 数值就是屏幕像素（componentMoved 回写
+ *  window.x.dp 即此约定），所以全程用原始像素、不做密度换算。
+ *  绝不能用 Compose 本地坐标增量做航位推算：窗口被我们自己移动后，指针不动也会收到
+ *  合成移动事件，增量方向翻转，窗口会在两个位置间来回振荡（2026-09-24 用户录屏：拖动乱串闪烁）；
+ *  高 DPI 缩放屏上增量还会带密度倍率误差。 */
 fun Modifier.appTitleBarDrag(state: WindowState): Modifier = composed {
     pointerInput(Unit) {
         coroutineScope {
-            // 拖动回调只记目标位置，按帧合并应用：高回报率鼠标的回调频率远高于屏幕
+            // 拖动回调只记目标位置，按帧合并应用：高回报率鼠标的事件频率远高于屏幕
             // 刷新率，逐事件写 position 会让 X11 ConfigureRequest 积压，表现为拖动
             // 鬼影与卡顿（2026-09-23）。
             var pending: WindowPosition? = null
@@ -70,24 +77,26 @@ fun Modifier.appTitleBarDrag(state: WindowState): Modifier = composed {
                     pending?.let { state.position = it; pending = null }
                 }
             }
-            var lastX = 0.dp
-            var lastY = 0.dp
+            var grabX = 0f
+            var grabY = 0f
             var dragging = false
             detectDragGestures(
                 onDragStart = {
                     val pos = state.position
-                    if (pos is WindowPosition.Absolute && state.placement == WindowPlacement.Floating) {
-                        lastX = pos.x; lastY = pos.y; dragging = true
+                    val pointer = MouseInfo.getPointerInfo()?.location
+                    if (pos is WindowPosition.Absolute && state.placement == WindowPlacement.Floating && pointer != null) {
+                        grabX = pointer.x - pos.x.value
+                        grabY = pointer.y - pos.y.value
+                        dragging = true
                     } else {
                         dragging = false
                     }
                 },
-                onDrag = { change, amount ->
+                onDrag = { change, _ ->
                     change.consume()
                     if (!dragging) return@detectDragGestures
-                    lastX += amount.x.toDp()
-                    lastY += amount.y.toDp()
-                    pending = WindowPosition(lastX, lastY)
+                    val pointer = MouseInfo.getPointerInfo()?.location ?: return@detectDragGestures
+                    pending = WindowPosition((pointer.x - grabX).dp, (pointer.y - grabY).dp)
                 },
                 onDragEnd = { dragging = false },
                 onDragCancel = { dragging = false },

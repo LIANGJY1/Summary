@@ -615,10 +615,11 @@ fun QuestionSection(store: AppStore) {
                 val cardHovered by cardInteraction.collectIsHoveredAsState()
                 Column(
                     Modifier
-                        // 让位卡片弹簧滑动（启动器手感）；被拖卡片自己禁用位移动画（位置由手势全权控制）。
-                        // 低刚度+中弹跳会大幅过冲、连续换位时残留晃动追不上拖拽节奏，改中刚度+低弹跳干净利落
+                        // 让位卡片：拖拽进行中全部即时吸附换位，与被拖卡片锁步——弹簧在连续换位时追不上
+                        // 指针，会产生缝隙和叠影；非拖拽的布局变化（展开收起等）保留弹簧滑动。
+                        // 被拖卡片自己始终即时（位置由手势全权控制）。
                         .animateItem(
-                            placementSpec = if (isDragging) null else spring(
+                            placementSpec = if (dragging || isDragging) null else spring(
                                 dampingRatio = Spring.DampingRatioLowBouncy,
                                 stiffness = Spring.StiffnessMedium,
                                 visibilityThreshold = IntOffset.VisibilityThreshold,
@@ -775,56 +776,79 @@ fun QuestionSection(store: AppStore) {
                             }
                         }
                     }
-                    if (isExpanded) {
-                        Spacer(Modifier.height(10.dp))
-                        if (entry.answer.isBlank()) {
-                            Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
-                        } else {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .singleClickWithoutConsumingSelection {
-                                        if (store.settings.clickAnswerToEdit) editingEntry = entry
-                                    },
-                                shape = MaterialTheme.shapes.small,
-                                color = if (store.settings.markdownStyle == "classic") {
-                                    Theme.OkGreen.copy(alpha = 0.10f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                                },
-                            ) {
-                                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
-                                    Spacer(Modifier.height(4.dp))
-                                    CompositionLocalProvider(
-                                        LocalContentColor provides if (store.settings.markdownStyle == "classic") {
-                                            Theme.OkGreen.copy(alpha = 0.92f)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
+                    // 展开/收起必须带高度动画：直接增删答案块会让卡片高度瞬间跳变，下方卡片只能靠弹簧
+                    // 滑过来补位，过渡期盖在答案上互相重叠。高度连续变化后，跟随卡片才能同步滑动不脱节。
+                    // 弹簧参数与让位卡片一致，卡片底边与下方卡片作为一个系统运动；从顶部展开对齐题干。
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = expandVertically(
+                            spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                                visibilityThreshold = IntSize.VisibilityThreshold,
+                            ),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(tween(120)),
+                        exit = shrinkVertically(
+                            spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                                visibilityThreshold = IntSize.VisibilityThreshold,
+                            ),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(tween(90)),
+                    ) {
+                        Column {
+                            Spacer(Modifier.height(10.dp))
+                            if (entry.answer.isBlank()) {
+                                Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
+                            } else {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .singleClickWithoutConsumingSelection {
+                                            if (store.settings.clickAnswerToEdit) editingEntry = entry
                                         },
-                                    ) {
-                                        SelectionContainer {
-                                            MarkdownText(entry.answer, style = store.settings.markdownStyle)
+                                    shape = MaterialTheme.shapes.small,
+                                    color = if (store.settings.markdownStyle == "classic") {
+                                        Theme.OkGreen.copy(alpha = 0.10f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                    },
+                                ) {
+                                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                        Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
+                                        Spacer(Modifier.height(4.dp))
+                                        CompositionLocalProvider(
+                                            LocalContentColor provides if (store.settings.markdownStyle == "classic") {
+                                                Theme.OkGreen.copy(alpha = 0.92f)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
+                                        ) {
+                                            SelectionContainer {
+                                                MarkdownText(entry.answer, style = store.settings.markdownStyle)
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        Spacer(Modifier.height(7.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
-                            Text(
-                                "移动",
-                                Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
-                                fontSize = 13.sp,
-                                color = Theme.WarnOrange,
-                            )
-                            Text(
-                                "删除",
-                                Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
-                                fontSize = 13.sp,
-                                color = Theme.BadRed,
-                            )
+                            Spacer(Modifier.height(7.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                                Text(
+                                    "移动",
+                                    Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
+                                    fontSize = 13.sp,
+                                    color = Theme.WarnOrange,
+                                )
+                                Text(
+                                    "删除",
+                                    Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
+                                    fontSize = 13.sp,
+                                    color = Theme.BadRed,
+                                )
+                            }
                         }
                     }
                 }

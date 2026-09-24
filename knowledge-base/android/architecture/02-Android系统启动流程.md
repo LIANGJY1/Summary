@@ -18,7 +18,15 @@
 
 理解要点：init 之前的阶段属于"芯片与内核世界"，排查开机问题先分清卡在哪一侧；`system_server` 的诞生是启动链内的一步（不经 socket 请求），后续应用进程才全部走 socket 请求路径（见 Q7）。
 
-**Q2: Android init 进程怎么理解？**
+
+
+**Q2: 内核有“进程”这个概念吗？内核为什么能运行？**
+
+进程是内核管理的对象，不是内核存在的前提。 在 Linux 里，所谓进程，本质是内核里的一块数据结构（task_struct：记录 PID、地址空间、打开的文件、调度信息……）加上一份地址空间。内核创建进程，就是在内存里建这样一个结构；销毁进程，就是释放它。
+
+那内核自己是什么？它不是任何进程，它就是被 bootloader 装进内存的一段特权代码 + 它管理的数据结构的总和。 CPU 在特权模式（ARM 上的 EL1/EL2）下直接执行它的指令——不需要“进程”这个载体。开机时连调度器都没有，谈不上“谁在运行内核”：就是 CPU 一条条顺序执行内核指令。
+
+**Q3: Android init 进程怎么理解？**
 
 init 是内核启动的第一个用户态进程（PID 1）、所有用户态进程的祖先；它本身不承载业务逻辑，而是"配置驱动的进程管理器 + 系统初始化执行器"。Android 17 中它仍按第一阶段、SELinux 访问控制初始化、第二阶段三步执行。
 
@@ -31,7 +39,9 @@ init 是内核启动的第一个用户态进程（PID 1）、所有用户态进�
 
 理解它的用处：所有"谁负责重启某个服务"的答案最终都落在 init 的服务监督上——system_server 崩溃后 Zygote 自杀，再由 init 重启 Zygote、重新 fork system_server（见 Q6），这条恢复链的管理者就是 init。
 
-**Q3: .rc 文件怎么理解？**
+
+
+**Q4: .rc 文件怎么理解？**
 
 `.rc` 文件是用 Android Init Language 写的声明式配置，相当于 init 的"启动脚本 + 服务注册表"：一个 `service` 块声明一个长驻进程（名字、可执行文件、参数与选项），一个 `on <触发器>` 块声明一组要执行的命令。init 第二阶段解析全部 `.rc` 后，按触发器执行动作、按服务定义 fork/exec 进程并监督。
 
@@ -53,7 +63,9 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 理解要点：`.rc` 把"启动哪些进程、怎么启动、崩了怎么办"全部声明化，init 只是执行器；分析开机耗时与进程拉起顺序时，`.rc` 是第一手材料。
 
-**Q4: Zygote 是怎么被拉起的？启动后依次做什么？**
+
+
+**Q5: Zygote 是怎么被拉起的？启动后依次做什么？**
 
 拉起路径：`init.zygote64.rc` 声明服务 → `init.rc` 的 `zygote-start` 触发器执行 `start zygote` → init fork/exec `/system/bin/app_process64 --zygote --start-system-server` → app_process 初始化 ART 运行时 → 进入 `ZygoteInit.main()`。
 
@@ -66,7 +78,9 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 理解要点：`--start-system-server` 参数说明"fork 出 system_server"是主 Zygote 启动流程内的一步，不是后续 socket 请求的结果；init 直接管理的是 Zygote 进程本身，而不是 system_server。
 
-**Q5: system_server 是怎么被创建并启动到"服务就绪"的？**
+
+
+**Q6: system_server 是怎么被创建并启动到"服务就绪"的？**
 
 创建分四步：
 
@@ -84,7 +98,9 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 边界：到达 `main()` 时进程已具备 ART、Framework JNI、预加载页面和 Binder 线程池，但各服务对象要由 `run()` 建立；`Looper.loop()` 只表示主启动控制流进入消息循环，不等于"Framework 全部 ready"——Binder 线程池与 InitThreadPool 不服从主 Looper 顺序，判断就绪要看各服务 `systemReady()` 与 Boot Phase 事件。
 
-**Q6: system_server 崩溃后，系统靠什么恢复？**
+
+
+**Q7: system_server 崩溃后，系统靠什么恢复？**
 
 恢复链分三步：
 
@@ -96,7 +112,9 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 排查要点：先确认"是谁死了"——`ps -A -o PID,PPID,NAME` 看 system_server 的父进程是否指向 Zygote、Zygote 是否换了新 pid；Zygote socket 只解释应用进程的创建请求，与 system_server 的崩溃恢复无关。
 
-**Q7: 普通应用进程是怎么诞生的？它和 system_server 的诞生路径差在哪？**
+
+
+**Q8: 普通应用进程是怎么诞生的？它和 system_server 的诞生路径差在哪？**
 
 普通应用冷启动路径：
 
@@ -112,7 +130,9 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 排查边界：拿到 PID 只说明 Zygote/USAP 侧创建完成，`bindApplication`、组件生命周期、首帧都是后面的事——发起进程启动、返回 PID、attach 完成三个时间点要分开取证。
 
-**Q8: init 为什么要在启动中途 execv 自己两次？三个阶段各自做什么？**
+
+
+**Q9: init 为什么要在启动中途 execv 自己两次？三个阶段各自做什么？**
 
 init 是同一个二进制以三个不同进程映像接力：第一阶段在 ramdisk 上搭最小环境，之后 execv 切入 selinux_setup 镜像装载策略，再 execv 切入 second_stage 常驻形态——中间两次 exec 是因为 SELinux 域转换只发生在 exec 时刻，这是把"同一程序不同阶段需要不同信任级别"交由内核保证的做法。
 
@@ -124,7 +144,9 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 边界：三个阶段是三个不同进程映像，第一阶段的全局变量与静态状态不会带到第二阶段，跨阶段传数据只能靠环境变量（如 `INIT_AVB_VERSION`）或文件。设计取舍：阶段间需要硬安全边界时才值得 exec 接力；纯逻辑分阶段用函数调用更简单，exec 反而增加调试成本。
 
-**Q9: init 第二阶段的主循环怎么运转？为什么每轮只执行一条命令？**
+
+
+**Q10: init 第二阶段的主循环怎么运转？为什么每轮只执行一条命令？**
 
 第二阶段的 init 是单线程事件泵——epoll、signalfd、属性 socket 三路事件源汇入一个主循环，每轮只推进一条 Command，间隙处理 SIGCHLD 收割、属性变化与 ctl 控制消息。每轮一条不是性能设计而是活性设计：防止长命令饿死事件响应，让关机请求、崩溃收割的响应延迟有上界。
 
@@ -136,7 +158,9 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 边界：`wait_for_prop` 全局同时只允许一个等待，rc 里连续两条是串行等待；这种分片调度适合看护型常驻进程，吞吐型后台任务不适用。
 
-**Q10: 服务崩溃后 init 的 Reap 裁决按什么顺序处理？哪些情况会放大成整机重启？**
+
+
+**Q11: 服务崩溃后 init 的 Reap 裁决按什么顺序处理？哪些情况会放大成整机重启？**
 
 Reap 是服务死亡后的唯一裁决点，五步顺序即语义：收尸（杀残留进程组、清理非 persist 的 socket）→ 违约检查（声明 `reboot_on_failure` 的服务异常退出直接触发重启）→ 后继态裁决（oneshot 且非手动重启置 disabled）→ 重启裁决 → 复活准备（执行 rc 声明的 onrestart 命令、进入 RESTARTING 等主循环重启）。
 
@@ -147,7 +171,9 @@ Reap 是服务死亡后的唯一裁决点，五步顺序即语义：收尸（杀
 
 边界与易错：服务状态用 SVC_* 位标志而非枚举表达（oneshot、disabled、critical 可并存，退出后继态取决于位组合）；oneshot 服务正常退出进 disabled，不会再被 class_start 拉起，须显式 start；stop 后 start 的 RESTART 中间态会跳过置 disabled，否则 start 拉不起来。
 
-**Q11: 启动期 SELinux 策略是怎么装载的？预编译产物不可信时怎么回退？**
+
+
+**Q12: 启动期 SELinux 策略是怎么装载的？预编译产物不可信时怎么回退？**
 
 Treble 下 system 与 vendor 独立更新，而内核只接受单一二进制策略，SetupSelinux 因此把 system/system_ext/product/vendor/odm/apex 六个来源的 CIL 策略合成、校验、装载，再切 enforcing；装载优先信任 vendor 预编译产物，校验失败回退 secilc 现场编译。
 
@@ -162,7 +188,9 @@ Treble 下 system 与 vendor 独立更新，而内核只接受单一二进制策
 
 边界：APEX 可更新策略是增量强化，验签或解包失败一律回退 system 自带版本；userdebug 调试策略是双条件门（`INIT_FORCE_DEBUGGABLE` 环境变量与设备解锁缺一不可），量产锁定设备不存在换策略路径。
 
-**Q12: Zygote 的 fork 模型有哪些硬约束？"zygote 本体没有 Binder"是怎么来的？**
+
+
+**Q13: Zygote 的 fork 模型有哪些硬约束？"zygote 本体没有 Binder"是怎么来的？**
 
 Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空间，所以"fork 时刻必须单线程"是硬约束：preload 期间禁止创建线程、GC 线程在 preFork 时暂停、Binder 线程池推迟到 fork 之后的子进程里（nativeZygoteInit 只在子进程路径调用）——任何在 Zygote 本体起线程或用 Binder 的改动，都会让所有后代进程带上损坏的线程副本。
 
@@ -174,7 +202,9 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 
 边界："模板进程 + N 个派生进程"的架构才适合 fork 模型，差异大的负载（独立工具进程）fork 反而拖累（继承整个 VM）。Android 13 批注还勘误了一处上游过时注释：现行代码用普通 return 退栈，不是历史上的抛异常方式。
 
-**Q13: 主 Zygote 和次 Zygote 怎么分工？preload 与 USAP 池各有什么坑？**
+
+
+**Q14: 主 Zygote 和次 Zygote 怎么分工？preload 与 USAP 池各有什么坑？**
 
 64 位主 Zygote 负责 fork system_server 与 64 位应用；32 位次 Zygote（`--enable-lazy-preload`）只服务 32 位应用，不 fork system_server，且 system_server 启动前会等次 Zygote 就绪，两者互为看门狗。preload 是双刃剑：加进 preloaded-classes 的类被所有进程共享，但开机时间变长；删类则各应用首次加载变慢，不是纯优化。USAP 池开启时禁止并发多 fork，调试器附加场景会退回普通 fork 路径。
 
@@ -182,7 +212,9 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 
 收束：排查"应用启动走了哪条路"先确认三点——设备是否 64/32 双 Zygote、USAP 是否开启、是否处于调试附加场景。
 
-**Q14: system_server 的四波装配顺序为什么改不得？BootPhase 广播解决了什么问题？**
+
+
+**Q15: system_server 的四波装配顺序为什么改不得？BootPhase 广播解决了什么问题？**
 
 startBootstrapServices → startCoreServices → startOtherServices → startApexServices 四波的顺序是硬依赖（AMS 依赖 PMS、WMS 依赖 AMS/IMS），改顺序直接启动失败；四波之外的弱依赖靠 SystemServiceManager 的 PHASE_* 阶段广播解耦——服务只声明自己在哪个阶段做什么（onBootPhase），不需要知道彼此的启动顺序。一句话：强依赖用排序表达，弱依赖用阶段事件表达。
 
@@ -195,7 +227,9 @@ startBootstrapServices → startCoreServices → startOtherServices → startApe
 
 BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 逐级广播到 PHASE_BOOT_COMPLETED(1000)。易错：PMS 构造可能超过 Watchdog 心跳，SystemServer 在调 PMS.main 前显式 pauseWatchingCurrentThread、构造完再恢复——新增长耗时初始化若不照做会被 Watchdog 误杀。
 
-**Q15: system_server 的单点风险靠什么兜底？Watchdog 是怎么工作的？**
+
+
+**Q16: system_server 的单点风险靠什么兜底？Watchdog 是怎么工作的？**
 
 单进程装下所有服务换来了服务间进程内直调的简单，也把崩溃域合并成一个；兜底是双层——Watchdog 监控各关键线程心跳、超时杀掉 system_server 进程，之后接 init 侧的 critical 崩溃计数兜底（窗口内超 4 次或开机完成前崩溃，整机重启进 bootloader）。
 
@@ -203,7 +237,9 @@ BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 �
 
 边界：调试时反复 kill Zygote 会因 critical 规则把设备直接带回 bootloader，不是 bug。
 
-**Q16: system_server 内部服务之间怎么互相调用？systemReady 回调解决了什么时序问题？**
+
+
+**Q17: system_server 内部服务之间怎么互相调用？systemReady 回调解决了什么时序问题？**
 
 同进程服务间调用走两条总线：跨进程消费经 ServiceManager.addService 注册 Binder 句柄，进程内消费经 LocalServices.addService 注册 `*Internal` 接口（进程内视图可以加宽方法、减少校验）；对外契约是 Manager 或 `*Internal` 接口而非实现类，其他服务不 import 实现。启动收尾的时序用 systemReady 回调收束——SystemServer 把剩余装配逻辑打包成 Runnable 交给 AMS.systemReady，在"所有服务已就绪"的时点回放：回调内可以安全使用任何服务，AMS 又不需要知道回调里有什么。
 
@@ -211,7 +247,9 @@ systemReady 内部（Android 13 批注）：置 mSystemReady/mProcessesReady →
 
 边界：同一能力按消费方进程边界提供两套视图的做法只适用于单体进程内的模块化——服务一旦拆进程（APEX 化），就要收敛到 Binder 契约。
 
-**Q17: 在 system_server 里写代码和读代码各有哪些纪律？**
+
+
+**Q18: 在 system_server 里写代码和读代码各有哪些纪律？**
 
 主线程纪律：system_server 主线程跑全部服务的消息，任何阻塞调用（同步 Binder、磁盘 IO）都会放大成整机卡顿，护栏是 `Binder.setWarnOnBlocking(true)` 与 100/200ms 慢消息阈值。读码分流：任务与生命周期逻辑在 ATMS（wm 包），AMS 是进程/内存/Binder 门面——别在 AMS 里找 Activity 启动细节。
 
@@ -219,7 +257,9 @@ systemReady 内部（Android 13 批注）：置 mSystemReady/mProcessesReady →
 
 收束：判断一段 system_server 代码的行为是否合法，先问三个问题——它跑在哪个线程、是否假设冷启动、该逻辑属于 AMS 还是 ATMS。
 
-**Q18: AAOS 在标准启动链的哪三个挂点接入车机专属层？CarService 是怎么起来的？**
+
+
+**Q19: AAOS 在标准启动链的哪三个挂点接入车机专属层？CarService 是怎么起来的？**
 
 三个挂点：AMS.systemReady 回调里启动框架侧宿主 CarServiceHelperService，由它绑定可更新的 CarService APK；startSystemUi 启动 SystemUI 时经 AppComponentFactory 换成车机依赖图；startHomeOnAllDisplays 把 HOME intent 解析到 CarLauncher。核心取舍是"可更新"——CarService 是普通 APK（com.android.car 进程），可脱离整机 OTA 单独更新，框架与车逻辑的边界落在 ICar Binder 契约上；框架只保留不可变的时序骨架（宿主），演进频繁的领域逻辑装进可更新容器。
 
@@ -231,7 +271,9 @@ CarService 起链路（Android 13 批注）：
 
 设计与边界：车辆数据是一切车机决策的源头，VehicleDeathRecipient 检测到 VHAL 死亡就 kill 整个 CarService 进程、靠绑定者重新拉起——数据完整性优先于可用性，普通应用服务不宜如此激进。框架侧宿主 CarServiceHelperService（com.android.internal.car 包）不在标注仓库内，其启动时序与绑定重试行为属推断，深入需另查完整源码树。
 
-**Q19: CarSystemUI 和 CarLauncher 是怎么在不 fork 原生代码的前提下完成车机化的？**
+
+
+**Q20: CarSystemUI 和 CarLauncher 是怎么在不 fork 原生代码的前提下完成车机化的？**
 
 CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原生源码，而是在 manifest 声明 CarSystemUIAppComponentFactory，进程创建时把 Dagger 根组件替换为车机版（CarGlobalRootComponent/CarWMComponent），原生 SystemUI 的启动编排（SystemUIService → startServicesIfNeeded → Dagger 展开 CoreStartable）原样复用。CarLauncher 是 AMS.startHomeOnAllDisplays 的 HOME 解析落点，用 TaskView 把地图 App（另一个进程的受控任务）嵌进桌面，配 HomeCardModule 装顶部/底部卡片。
 
