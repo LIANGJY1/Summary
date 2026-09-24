@@ -120,6 +120,88 @@ class AppStoreTest {
     }
 
     @Test
+    fun `保存后面题目的答案不改前面题目的列表键`() {
+        // 题库 LazyColumn 以 sourcePath#startOffset 为 key 锚定滚动位置：编辑 Q3 的答案
+        // 只允许改写 Q3 自己的块，Q1/Q2 的偏移必须原样保留，否则保存后滚动位置丢失。
+        val config = File(tmp, "config-anchor-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "anchor-lib-${System.nanoTime()}").apply { mkdirs() }
+        File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                **Q1: 一？**
+
+                答案一。
+
+                **Q2: 二？**
+
+                答案二。
+
+                **Q3: 三？**
+
+                答案三。
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+
+        val offsetsBefore = store.sourceQuestions.map { it.startOffset }
+        assertTrue(store.saveSourceQuestion(store.sourceQuestions[2], "三改？", "答案三变长了。\n\n- 多一行\n- 再多一行"))
+        assertEquals(offsetsBefore[0], store.sourceQuestions[0].startOffset, "Q1 的 key 必须稳定，否则滚动锚点丢失")
+        assertEquals(offsetsBefore[1], store.sourceQuestions[1].startOffset, "Q2 的 key 必须稳定，否则滚动锚点丢失")
+        assertEquals(listOf("一？", "二？", "三改？"), store.sourceQuestions.map { it.question })
+        assertEquals(3, store.sourceQuestions.size)
+    }
+
+    @Test
+    fun `重载对读者原子_题目列表永不见空档`() {
+        // 文件监听在 IO 线程重载，UI 线程随时取帧：若能读到 clear→addAll 之间的空列表，
+        // LazyColumn 滚动位置会被钳回顶部。快照原子换入后，读者只应看到旧态或新态。
+        val config = File(tmp, "config-atomic-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "atomic-lib-${System.nanoTime()}").apply { mkdirs() }
+        File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                **Q1: 一？**
+
+                答案一。
+
+                **Q2: 二？**
+
+                答案二。
+
+                **Q3: 三？**
+
+                答案三。
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        assertEquals(3, store.sourceQuestions.size)
+
+        var sawEmpty = false
+        var samples = 0L
+        val reader = Thread {
+            while (samples < 2_000_000 && !sawEmpty) {
+                samples++
+                if (store.sourceQuestions.isEmpty()) sawEmpty = true
+            }
+        }
+        reader.start()
+        repeat(30) { store.reloadKnowledgeFiles() }
+        reader.join(15_000)
+        assertFalse(sawEmpty, "读者在重载期间看到了空题目列表（快照原子性被破坏）")
+        assertEquals(3, store.sourceQuestions.size)
+    }
+
+    @Test
     fun `题库左侧文档列表映射知识库并可切换`() {
         val config = File(tmp, "config-docs-${System.nanoTime()}")
         val store = AppStore(config)

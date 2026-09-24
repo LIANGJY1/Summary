@@ -1,11 +1,16 @@
 package atlas.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +57,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.DialogProperties
 import atlas.AppStore
 import atlas.core.KnowledgeTree
@@ -605,15 +611,16 @@ fun QuestionSection(store: AppStore) {
                     animationSpec = tween(180),
                     label = "question-card-scale",
                 )
-                val cardTop = cardTops[entryKey] ?: 0f
                 val cardInteraction = remember { MutableInteractionSource() }
                 val cardHovered by cardInteraction.collectIsHoveredAsState()
                 Column(
                     Modifier
-                        // 让位卡片弹簧滑动（启动器手感）；被拖卡片自己禁用位移动画（位置由手势全权控制）
+                        // 让位卡片弹簧滑动（启动器手感）；被拖卡片自己禁用位移动画（位置由手势全权控制）。
+                        // 低刚度+中弹跳会大幅过冲、连续换位时残留晃动追不上拖拽节奏，改中刚度+低弹跳干净利落
                         .animateItem(
                             placementSpec = if (isDragging) null else spring(
-                                stiffness = Spring.StiffnessMediumLow,
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMedium,
                                 visibilityThreshold = IntOffset.VisibilityThreshold,
                             ),
                         )
@@ -627,13 +634,16 @@ fun QuestionSection(store: AppStore) {
                         .graphicsLayer {
                             scaleX = cardScale
                             scaleY = cardScale
-                            // cardTop 是实时槽位位置：交换时槽位与平移量同步变化，卡片始终贴着指针、视觉连续。
+                            // 槽位位置必须在绘制期现读：组合先于布局执行，换位那一帧组合里读到的还是上一帧槽位，
+                            // 拿它算平移补偿会差一行，被拖卡片每次换位都跳一格。绘制发生在 onGloballyPositioned
+                            // 之后，现读 cardTops 拿到的是本帧精确槽位，交换时槽位与平移量同步变化、视觉连续。
                             // 同时把视觉位置钳制在列表视口内，拖到上下边缘时卡片顶住边界、不允许出界
                             translationY = if (isDragging) {
-                                val raw = dragPointerY - dragGrabOffset - cardTop
-                                val height = cardHeights[entryKey]?.toFloat() ?: 0f
-                                val maxTranslate = (listViewportHeight - height - cardTop).coerceAtLeast(-cardTop)
-                                raw.coerceIn(-cardTop, maxTranslate)
+                                val slotTop = cardTops[entryKey] ?: 0f
+                                val raw = dragPointerY - dragGrabOffset - slotTop
+                                val height = (cardHeights[entryKey] ?: 0).toFloat()
+                                val maxTranslate = (listViewportHeight - height - slotTop).coerceAtLeast(-slotTop)
+                                raw.coerceIn(-slotTop, maxTranslate)
                             } else {
                                 0f
                             }
@@ -665,7 +675,7 @@ fun QuestionSection(store: AppStore) {
                                     draggingKey = entryKey
                                     dragTargetIndex = questionIndex
                                     dragGrabOffset = it.y
-                                    dragPointerY = cardTop + it.y
+                                    dragPointerY = (cardTops[entryKey] ?: 0f) + it.y
                                 },
                                 onDragEnd = {
                                     val key = draggingKey
@@ -699,22 +709,25 @@ fun QuestionSection(store: AppStore) {
                                     val draggedTop = cardTops[key] ?: return@detectDragGestures
                                     val order = base.toMutableList().apply { add(current, removeAt(from)) }
                                     fun pitch(k: String) = (cardHeights[k] ?: 96) + rowSpacingPx
-                                    val ownPitch = pitch(key)
                                     val grabY = dragPointerY - dragGrabOffset
                                     var target = current
                                     var top = draggedTop
                                     var guard = 0
-                                    // 启动器算法：卡片顶部越过自身槽位中点就与下一行交换，退到上一行中点之上就与上一行交换。
-                                    // 槽位边界由各行静态高度推出（被拖卡片槽位无动画、是精确终值），与让位动画无关、行高不均不漂移
+                                    // 启动器算法：视觉位置越过「当前槽位与相邻槽位顶点连线的中点」就换位。上下行的换位线都必须
+                                    // 按「被越过那行」的行距推导，再加半行距滞回：行高不均时若下行用自身行距，换位线两侧不对称，
+                                    // 会提前连环换位、下一帧又弹回，表现为列表乱跳。
+                                    val hysteresis = rowSpacingPx / 2
                                     while (guard++ < 64) {
+                                        val nextPitch = if (target < order.lastIndex) pitch(sourceQuestionKey(order[target + 1])) else 0f
+                                        val prevPitch = if (target > 0) pitch(sourceQuestionKey(order[target - 1])) else 0f
                                         when {
-                                            target < order.lastIndex && grabY > top + ownPitch / 2 -> {
+                                            target < order.lastIndex && grabY > top + nextPitch / 2 + hysteresis -> {
+                                                top += nextPitch
                                                 order.add(target + 1, order.removeAt(target))
                                                 target++
-                                                top += ownPitch
                                             }
-                                            target > 0 && grabY < top - pitch(sourceQuestionKey(order[target - 1])) / 2 -> {
-                                                top -= pitch(sourceQuestionKey(order[target - 1]))
+                                            target > 0 && grabY < top - prevPitch / 2 - hysteresis -> {
+                                                top -= prevPitch
                                                 order.add(target - 1, order.removeAt(target))
                                                 target--
                                             }

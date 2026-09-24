@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -41,6 +42,8 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import java.awt.Cursor
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * undecorated 窗口的自定义 chrome（PRD v0.11：顶栏与系统标题栏融为一体）：
@@ -56,28 +59,40 @@ private val AppWindowMinSize = DpSize(720.dp, 480.dp)
  *  注意：detectDragGestures 的 onDrag 回调是"距上一事件的增量"，必须累加，不能当作相对起点的位移。 */
 fun Modifier.appTitleBarDrag(state: WindowState): Modifier = composed {
     pointerInput(Unit) {
-        var lastX = 0.dp
-        var lastY = 0.dp
-        var dragging = false
-        detectDragGestures(
-            onDragStart = {
-                val pos = state.position
-                if (pos is WindowPosition.Absolute && state.placement == WindowPlacement.Floating) {
-                    lastX = pos.x; lastY = pos.y; dragging = true
-                } else {
-                    dragging = false
+        coroutineScope {
+            // 拖动回调只记目标位置，按帧合并应用：高回报率鼠标的回调频率远高于屏幕
+            // 刷新率，逐事件写 position 会让 X11 ConfigureRequest 积压，表现为拖动
+            // 鬼影与卡顿（2026-09-23）。
+            var pending: WindowPosition? = null
+            launch {
+                while (true) {
+                    withFrameNanos { }
+                    pending?.let { state.position = it; pending = null }
                 }
-            },
-            onDrag = { change, amount ->
-                change.consume()
-                if (!dragging) return@detectDragGestures
-                lastX += amount.x.toDp()
-                lastY += amount.y.toDp()
-                state.position = WindowPosition(lastX, lastY)
-            },
-            onDragEnd = { dragging = false },
-            onDragCancel = { dragging = false },
-        )
+            }
+            var lastX = 0.dp
+            var lastY = 0.dp
+            var dragging = false
+            detectDragGestures(
+                onDragStart = {
+                    val pos = state.position
+                    if (pos is WindowPosition.Absolute && state.placement == WindowPlacement.Floating) {
+                        lastX = pos.x; lastY = pos.y; dragging = true
+                    } else {
+                        dragging = false
+                    }
+                },
+                onDrag = { change, amount ->
+                    change.consume()
+                    if (!dragging) return@detectDragGestures
+                    lastX += amount.x.toDp()
+                    lastY += amount.y.toDp()
+                    pending = WindowPosition(lastX, lastY)
+                },
+                onDragEnd = { dragging = false },
+                onDragCancel = { dragging = false },
+            )
+        }
     }.pointerInput(Unit) {
         detectTapGestures(onDoubleTap = { toggleMaximize(state) })
     }
@@ -108,46 +123,59 @@ private fun Modifier.windowResizeArea(state: WindowState, area: WindowResizeArea
         )
     }
     pointerInput(area) {
-        var originW = 0.dp; var originH = 0.dp; var originX = 0.dp; var originY = 0.dp
-        var hasOrigin = false
-        var accX = 0f; var accY = 0f
-        detectDragGestures(
-            onDragStart = {
-                originW = state.size.width; originH = state.size.height
-                val pos = state.position
-                if (pos is WindowPosition.Absolute) {
-                    originX = pos.x; originY = pos.y; hasOrigin = true
-                } else {
-                    hasOrigin = false
-                }
-                accX = 0f; accY = 0f
-            },
-            onDrag = { change, amount ->
-                change.consume()
-                if (!hasOrigin || state.placement != WindowPlacement.Floating) return@detectDragGestures
-                accX += amount.x; accY += amount.y
-                val dx = accX.toDp(); val dy = accY.toDp()
-                var w = originW; var h = originH; var x = originX; var y = originY
-                when (area) {
-                    WindowResizeArea.E, WindowResizeArea.NE, WindowResizeArea.SE ->
-                        w = (w + dx).coerceAtLeast(AppWindowMinSize.width)
-                    WindowResizeArea.W, WindowResizeArea.NW, WindowResizeArea.SW -> {
-                        w = (w - dx).coerceAtLeast(AppWindowMinSize.width); x = originX + (originW - w)
+        coroutineScope {
+            // 与拖动同理：缩放回调按帧合并应用，避免 X11 请求积压导致的卡顿。
+            var pending: Pair<DpSize, WindowPosition>? = null
+            launch {
+                while (true) {
+                    withFrameNanos { }
+                    pending?.let { (size, pos) ->
+                        state.size = size
+                        state.position = pos
+                        pending = null
                     }
-                    else -> {}
                 }
-                when (area) {
-                    WindowResizeArea.S, WindowResizeArea.SE, WindowResizeArea.SW ->
-                        h = (h + dy).coerceAtLeast(AppWindowMinSize.height)
-                    WindowResizeArea.N, WindowResizeArea.NE, WindowResizeArea.NW -> {
-                        h = (h - dy).coerceAtLeast(AppWindowMinSize.height); y = originY + (originH - h)
+            }
+            var originW = 0.dp; var originH = 0.dp; var originX = 0.dp; var originY = 0.dp
+            var hasOrigin = false
+            var accX = 0f; var accY = 0f
+            detectDragGestures(
+                onDragStart = {
+                    originW = state.size.width; originH = state.size.height
+                    val pos = state.position
+                    if (pos is WindowPosition.Absolute) {
+                        originX = pos.x; originY = pos.y; hasOrigin = true
+                    } else {
+                        hasOrigin = false
                     }
-                    else -> {}
-                }
-                state.size = DpSize(w, h)
-                state.position = WindowPosition(x, y)
-            },
-        )
+                    accX = 0f; accY = 0f
+                },
+                onDrag = { change, amount ->
+                    change.consume()
+                    if (!hasOrigin || state.placement != WindowPlacement.Floating) return@detectDragGestures
+                    accX += amount.x; accY += amount.y
+                    val dx = accX.toDp(); val dy = accY.toDp()
+                    var w = originW; var h = originH; var x = originX; var y = originY
+                    when (area) {
+                        WindowResizeArea.E, WindowResizeArea.NE, WindowResizeArea.SE ->
+                            w = (w + dx).coerceAtLeast(AppWindowMinSize.width)
+                        WindowResizeArea.W, WindowResizeArea.NW, WindowResizeArea.SW -> {
+                            w = (w - dx).coerceAtLeast(AppWindowMinSize.width); x = originX + (originW - w)
+                        }
+                        else -> {}
+                    }
+                    when (area) {
+                        WindowResizeArea.S, WindowResizeArea.SE, WindowResizeArea.SW ->
+                            h = (h + dy).coerceAtLeast(AppWindowMinSize.height)
+                        WindowResizeArea.N, WindowResizeArea.NE, WindowResizeArea.NW -> {
+                            h = (h - dy).coerceAtLeast(AppWindowMinSize.height); y = originY + (originH - h)
+                        }
+                        else -> {}
+                    }
+                    pending = DpSize(w, h) to WindowPosition(x, y)
+                },
+            )
+        }
     }.pointerHoverIcon(cursor)
 }
 

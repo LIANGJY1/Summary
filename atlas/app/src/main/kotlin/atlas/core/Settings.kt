@@ -53,6 +53,10 @@ data class AppSettings(
     val clickAnswerToEdit: Boolean = true,
     /** Markdown 内容展示样式：reader 为阅读优化样式，classic 为旧版样式。 */
     val markdownStyle: String = "reader",
+    /** 屏幕录制（tools/screen_recorder）参数：保存目录（空=默认 ~/Videos/Screencasts）、帧率、码率 kbps。 */
+    val recordingSaveDir: String = "",
+    val recordingFps: Int = 15,
+    val recordingBitrate: Int = 4000,
 ) {
     val darkTheme: Boolean get() = theme == "dark"
 
@@ -80,6 +84,9 @@ class SettingsStore(private val file: File) {
             fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
             clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
             markdownStyle = p.getProperty("markdownStyle")?.takeIf { it == "reader" || it == "classic" } ?: "reader",
+            recordingSaveDir = p.getProperty("recordingSaveDir") ?: "",
+            recordingFps = p.getProperty("recordingFps")?.toIntOrNull()?.coerceIn(5, 60) ?: 15,
+            recordingBitrate = p.getProperty("recordingBitrate")?.toIntOrNull()?.coerceIn(500, 20000) ?: 4000,
         )
         Log.d("设置已读取 ${file.absolutePath} library=${s.libraryPath} theme=${s.theme}")
         return s
@@ -97,6 +104,9 @@ class SettingsStore(private val file: File) {
         p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
         p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
         p.setProperty("markdownStyle", if (s.markdownStyle == "classic") "classic" else "reader")
+        p.setProperty("recordingSaveDir", s.recordingSaveDir)
+        p.setProperty("recordingFps", s.recordingFps.toString())
+        p.setProperty("recordingBitrate", s.recordingBitrate.toString())
         file.outputStream().use { p.store(it, "Atlas settings") }
         Log.i("设置已写入 ${file.absolutePath}")
     }

@@ -339,26 +339,15 @@ WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，�
 
 **Q14: Android 五层架构中各层的典型对象是什么？**
 
-各层的典型对象（按 AOSP `android-17.0.0_r1` 语境）及其典型所在位置：
+各层的典型对象及其典型所在位置：
 
-1. **应用**：`Activity`、Compose/View、业务线程、RenderThread——各应用自己的进程；
-2. **应用框架**：`ActivityTaskManagerService`、`WindowManagerService`、`PackageManagerService` 等——服务端在 `system_server`，SDK 客户端代码在每个应用进程；
+1. **应用**：Activity、Compose/View、业务线程、RenderThread——各应用自己的进程；
+2. **应用框架**：ActivityTaskManagerService、WindowManagerService、`PackageManagerService` 等——服务端在 system_server，SDK 客户端代码在每个应用进程；
 3. **原生库与 ART**：ART、Bionic、Skia、SQLite 随进程加载；SurfaceFlinger、AudioFlinger、媒体服务是独立原生服务进程；
 4. **HAL**：Stable AIDL HAL、存量 HIDL HAL、厂商实现——独立 Binder/hwbinder 服务进程，或直通式加载进调用方进程；
 5. **Linux 内核**：调度器、内存管理、Binder 驱动、网络栈、文件系统、DMA-BUF、设备驱动——内核空间。
 
-两个注意点：
-
-1. "典型对象"按 Android 17 源码核对，具体类名会随版本迁移（如进程状态相关实现已移入 `com.android.server.am.psc`），引用时要带版本；
-2. 这份清单再次说明层与进程不是一一对应——同一层里既有进程内对象，也有独立服务进程，SurfaceFlinger、AudioFlinger 属"原生库与原生服务"，却不在 `system_server` 里。
-
-
-
-
-
-
-
-**Q15: 公共内核是什么？量产设备都会使用吗？厂商会修改什么、为什么？**
+**Q15: Android 公共内核是什么？量产设备都会使用吗？厂商会修改什么、为什么？**
 
 公共内核指 Android Common Kernel（ACK）——Google 基于上游 Linux 内核（通常选 LTS 分支）维护、包含 Android 所需驱动与特性（Binder 驱动、PSI 等）的公共内核分支；GKI（Generic Kernel Image，通用内核镜像）项目进一步把它变成"Google 统一构建的核心内核镜像 + 厂商可加载模块"的形态。量产设备不是原样照搬：核心镜像来自 ACK/GKI，厂商在之上叠加自己的部分。
 
@@ -367,4 +356,3 @@ WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，�
 3. **为什么**：内核碎片化曾让同一版本 Android 背着几十种内核 fork，安全补丁与上游更新无法统一下发；GKI 把硬件代码移出核心镜像、用稳定的内核模块接口（KMI）解耦，使核心内核可以独立更新而厂商模块不动。
 
 排查边界：公共内核源码标签（如 ACK `android17-6.18-2026-06_r6`）只能核对平台通用机制；具体设备的驱动、配置与调度策略要看设备自己的内核提交版本与 fragment，不能拿公共内核源码当设备内核源码用。
-

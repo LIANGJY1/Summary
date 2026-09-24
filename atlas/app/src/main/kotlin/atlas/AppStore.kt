@@ -15,6 +15,7 @@ import atlas.core.NoteFile
 import atlas.core.OutboxTasks
 import atlas.core.SettingsStore
 import atlas.core.SourceQuestions
+import atlas.core.Tools
 import atlas.fsrs.FsrsEngine
 import atlas.index.Indexer
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +80,40 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
 
     val toast = mutableStateOf<String?>(null)
 
+    /** 工具页：27HM 日志解密的运行状态（跨页签保留，进程在 scope 托管的 IO 协程里跑） */
+    val hcToolRun = mutableStateOf<Tools.ToolRun?>(null)
+
+    fun runHcLogTool(inputPath: String) {
+        if (hcToolRun.value?.running == true) return
+        val script = Tools.hcLogScriptFile()
+        if (!script.isFile) {
+            Log.e("工具页：解密脚本不存在 ${script.absolutePath}")
+            hcToolRun.value = Tools.ToolRun(false, inputPath, exitCode = -1, tail = listOf("未找到解密脚本：${script.absolutePath}"))
+            showToast("未找到解密脚本，请确认 Summary 仓库位置")
+            return
+        }
+        Log.i("工具页：运行日志解密 input=$inputPath")
+        hcToolRun.value = Tools.ToolRun(running = true, inputPath = inputPath)
+        scope.launch {
+            runCatching {
+                val proc = ProcessBuilder(Tools.hcLogCommand(script.absolutePath, inputPath))
+                    .redirectErrorStream(true)
+                    .start()
+                val text = proc.inputStream.bufferedReader().readText()
+                Tools.parseToolOutput(text, proc.waitFor())
+            }.onSuccess { run ->
+                if (run.exitCode == 0) Log.i("工具页：解密完成 ${run.summary}")
+                else Log.w("工具页：解密结束 exitCode=${run.exitCode}")
+                hcToolRun.value = run
+                if (run.exitCode != 0) showToast("解密未成功，请查看输出详情")
+            }.onFailure { e ->
+                Log.e("工具页：解密运行异常", e)
+                hcToolRun.value = Tools.ToolRun(false, inputPath, exitCode = -1, tail = listOf("运行失败：${e.message}"))
+                showToast("解密运行失败：${e.message}")
+            }
+        }
+    }
+
     private var watchJob: Job? = null
     private val watching = AtomicBoolean(false)
     // reloadKnowledgeFiles 会被 UI 线程（新建/编辑写回）与文件监听协程并发触发，
@@ -133,7 +168,28 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         }
     }
 
-    fun saveSettings() { Log.i("设置保存 libraryPath=${settings.libraryPath} 仅本地=${settings.localOnlyExtra.size}个 忽略额外=${settings.ignoredExtra.size}个"); settingsStore.save(settings) }
+    fun saveSettings() {
+        Log.i("设置保存 libraryPath=${settings.libraryPath} 仅本地=${settings.localOnlyExtra.size}个 忽略额外=${settings.ignoredExtra.size}个")
+        settingsStore.save(settings)
+        writeRecordingConfig()
+    }
+
+    /**
+     * 把录屏参数导出为 tools/screen_recorder 脚本读取的 JSON（契约见 tools/screen_recorder/README.md）。
+     * 保存目录为空时导出默认路径，让脚本侧始终拿到具体目录。
+     */
+    private fun writeRecordingConfig() {
+        try {
+            val defaultDir = File(System.getProperty("user.home"), "Videos/Screencasts").absolutePath
+            val dir = settings.recordingSaveDir.ifBlank { defaultDir }
+            val json = "{\"saveDir\": \"${jsonEscape(dir)}\", \"fps\": ${settings.recordingFps}, \"bitrate\": ${settings.recordingBitrate}}"
+            File(configDir, "screen-recorder.json").writeText(json)
+        } catch (e: Exception) {
+            Log.e("导出录屏配置失败", e)
+        }
+    }
+
+    private fun jsonEscape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
 
     /** 打开/切换库：连接 DB → 载入知识文件 → 增量扫描 → 启动文件监听 */
     fun openLibrary(path: String, rescanIfNeeded: Boolean) {
@@ -187,26 +243,39 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     fun reloadKnowledgeFiles() {
         Log.timed("重载知识文件", warnMs = 300) {
             synchronized(reloadLock) {
-                cards.clear(); cards.addAll(MdStores.loadCards(cardsFile()))
-                questions.clear(); questions.addAll(MdStores.loadQuestions(questionsFile()))
-                knowledgeDocuments.clear()
-                knowledgeDocuments.addAll(scanKnowledgeDocuments())
-                sourceQuestions.clear()
-                allSourceQuestions.clear()
-                sourceSections.clear()
-                val mappedDocuments = SourceQuestions.supportedDocuments(knowledgeDocuments, settings.sourceQuestionPaths)
-                val documents = mappedDocuments.mapNotNull { path ->
+                // 重载可能来自 UI 线程（编辑写回）也可能来自 IO 线程（文件监听），UI 随时在取帧。
+                // 先把新数据全部解析进局部量，再用一个可变快照原子换入：读者只会看到换入前或
+                // 换入后的完整状态。若让 UI 看到 clear→addAll 之间的空列表，题库 LazyColumn 的
+                // 滚动位置会被钳回顶部（2026-09-24 用户录屏：保存题目后页面跳回顶部）。
+                val newCards = MdStores.loadCards(cardsFile())
+                val newQuestions = MdStores.loadQuestions(questionsFile())
+                val documents = scanKnowledgeDocuments()
+                val mappedDocuments = SourceQuestions.supportedDocuments(documents, settings.sourceQuestionPaths)
+                val docContents = mappedDocuments.mapNotNull { path ->
                     val file = sourceDocumentFile(path)
                     if (file.isFile) path to file.readText(Charsets.UTF_8) else null
                 }
-                allSourceQuestions.addAll(SourceQuestions.parseAll(documents))
+                val newAllSourceQuestions = SourceQuestions.parseAll(docContents)
                 val source = sourceQuestionFile()
-                if (source.isFile && SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)) {
-                    val document = source.readText(Charsets.UTF_8)
-                    sourceQuestions.addAll(SourceQuestions.parse(selectedSourcePath, document, settings.sourceQuestionPaths))
-                    sourceSections.addAll(SourceQuestions.parseSections(selectedSourcePath, document, settings.sourceQuestionPaths))
+                val sourceDocument = if (
+                    source.isFile &&
+                    SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)
+                ) source.readText(Charsets.UTF_8) else null
+                val newSourceQuestions = sourceDocument
+                    ?.let { SourceQuestions.parse(selectedSourcePath, it, settings.sourceQuestionPaths) }
+                    .orEmpty()
+                val newSourceSections = sourceDocument
+                    ?.let { SourceQuestions.parseSections(selectedSourcePath, it, settings.sourceQuestionPaths) }
+                    .orEmpty()
+                androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
+                    cards.clear(); cards.addAll(newCards)
+                    questions.clear(); questions.addAll(newQuestions)
+                    knowledgeDocuments.clear(); knowledgeDocuments.addAll(documents)
+                    sourceQuestions.clear(); sourceQuestions.addAll(newSourceQuestions)
+                    allSourceQuestions.clear(); allSourceQuestions.addAll(newAllSourceQuestions)
+                    sourceSections.clear(); sourceSections.addAll(newSourceSections)
+                    rebuildDueQueue()
                 }
-                rebuildDueQueue()
             }
         }
     }

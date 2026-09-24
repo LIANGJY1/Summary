@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""GNOME 内置录屏的 MP4 版开关：
+第一次运行开始录制，再次运行停止并保存。
+底层走 org.gnome.Shell.Screencast 的自定义管线(x264+mp4mux)，
+要求本进程在录制期间保持 D-Bus 连接(停止必须在同一连接上调用)。"""
+
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+DEST, PATH, IFACE = "org.gnome.Shell.Screencast", "/org/gnome/Shell/Screencast", "org.gnome.Shell.Screencast"
+PIDFILE = Path("/tmp/record-mp4.pid")
+
+
+def load_config():
+    """Atlas 设置页保存时写出 ~/.local/share/atlas/screen-recorder.json；缺省字段用内置默认。"""
+    try:
+        import json
+        return json.loads((Path.home() / ".local/share/atlas/screen-recorder.json").read_text())
+    except Exception:
+        return {}
+
+
+_CFG = load_config()
+OUTDIR = Path(_CFG.get("saveDir") or Path.home() / "Videos" / "Screencasts").expanduser()
+FPS = int(_CFG.get("fps", 15))
+BITRATE = int(_CFG.get("bitrate", 4000))
+
+
+def build_pipeline():
+    """x264 只接受 yuv420p + 偶数宽高，按当前屏幕比例算一个 1920 宽的目标尺寸。"""
+    try:
+        dim = subprocess.run(["xdpyinfo"], capture_output=True, text=True, timeout=5).stdout
+        w, h = (int(x) for x in next(l for l in dim.splitlines() if "dimensions" in l).split()[1].split("x"))
+        tw = min(w, 1920)
+        th = round(h * tw / w) & ~1  # 向下取偶
+        scale = f"videoscale method=lanczos ! video/x-raw,format=I420,width={tw},height={th} ! "
+    except Exception:
+        scale = ""
+    return f"videoconvert ! {scale}x264enc tune=zerolatency speed-preset=ultrafast bitrate={BITRATE} key-int-max={FPS * 10} ! mp4mux"
+
+
+def notify(msg):
+    try:
+        subprocess.Popen(["notify-send", "-a", "录屏", msg])
+    except Exception:
+        pass
+
+
+def reveal_in_file_manager(path):
+    """文件管理器打开所在目录并选中文件（FileManager1 标准接口）；失败退回 xdg-open 目录。"""
+    try:
+        uri = Path(path).as_uri()
+        subprocess.Popen(["gdbus", "call", "--session",
+                          "--dest", "org.freedesktop.FileManager1",
+                          "--object-path", "/org/freedesktop/FileManager1",
+                          "--method", "org.freedesktop.FileManager1.ShowItems",
+                          f"[\"{uri}\"]", ""])
+        return
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)])
+    except Exception:
+        pass
+
+
+def recording_pid():
+    if not PIDFILE.exists():
+        return None
+    try:
+        pid = int(PIDFILE.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError):
+        PIDFILE.unlink(missing_ok=True)
+        return None
+
+
+def main():
+    running = recording_pid()
+    if running:
+        os.kill(running, signal.SIGTERM)
+        for _ in range(50):
+            if recording_pid() is None:
+                break
+            time.sleep(0.1)
+        return
+
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    target = str(OUTDIR / f"Screencast MP4 {time.strftime('%Y%m%d-%H%M%S')}.mp4")
+
+    res = bus.call_sync(
+        DEST, PATH, IFACE, "Screencast",
+        GLib.Variant("(sa{sv})", (target, {
+            "framerate": GLib.Variant("i", FPS),
+            "draw-cursor": GLib.Variant("b", True),
+            "pipeline": GLib.Variant("s", build_pipeline()),
+        })),
+        GLib.VariantType("(bs)"), Gio.DBusCallFlags.NONE, -1, None)
+    ok, real_path = res.unpack()
+    if not ok:
+        notify("录屏启动失败（管线创建出错，看 journal）")
+        sys.exit(1)
+
+    PIDFILE.write_text(str(os.getpid()))
+    notify(f"● 开始录制 MP4\n{os.path.basename(real_path)}")
+
+    stop = {"v": False}
+    signal.signal(signal.SIGTERM, lambda *_: stop.update(v=True))
+    while not stop["v"]:
+        time.sleep(0.2)
+
+    bus.call_sync(DEST, PATH, IFACE, "StopScreencast", None,
+                  GLib.VariantType("(b)"), Gio.DBusCallFlags.NONE, -1, None)
+    PIDFILE.unlink(missing_ok=True)
+    notify(f"■ 录制已保存\n{os.path.basename(real_path)}")
+    reveal_in_file_manager(real_path)
+
+
+if __name__ == "__main__":
+    main()

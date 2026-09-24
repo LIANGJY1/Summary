@@ -27,6 +27,10 @@ import java.io.File
 import javax.swing.JFileChooser
 import kotlin.math.roundToInt
 
+/** 录屏图形界面脚本位置（随 Summary 仓库分发，见 tools/screen_recorder/README.md）。 */
+private val RECORD_GUI =
+    File(System.getProperty("user.home"), "Project/MyProject/Summary/tools/screen_recorder/record-gui").absolutePath
+
 @Composable
 fun SettingsView(store: AppStore) {
     val ui = atlasUiTokens()
@@ -183,6 +187,66 @@ fun SettingsView(store: AppStore) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatusChip("全索引", Theme.OkGreen); StatusChip("仅本地 🔒", Theme.WarnOrange); StatusChip("忽略", Theme.Muted)
                 }
+            }
+
+            // 屏幕录制：保存目录 / 帧率 / 码率（保存时导出给 tools/screen_recorder 脚本）
+            SettingsCard("屏幕录制") {
+                val recDir = store.settings.recordingSaveDir.ifBlank {
+                    File(System.getProperty("user.home"), "Videos/Screencasts").absolutePath
+                }
+                Text("保存目录", fontWeight = FontWeight.SemiBold)
+                Text(recDir, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val chooser = JFileChooser(File(recDir))
+                        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                        chooser.dialogTitle = "选择录屏保存目录"
+                        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                            val path = chooser.selectedFile.absolutePath
+                            Log.i("设置录屏保存目录 → $path")
+                            store.settings = store.settings.copy(recordingSaveDir = path)
+                            store.saveSettings()
+                        }
+                    }) { Text("选择目录") }
+                    OutlinedButton(onClick = {
+                        if (!File(RECORD_GUI).isFile) {
+                            Log.e("录屏脚本不存在：$RECORD_GUI")
+                            return@OutlinedButton
+                        }
+                        try {
+                            ProcessBuilder(RECORD_GUI)
+                                .redirectErrorStream(true)
+                                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                                .start()
+                            Log.i("已启动录屏界面")
+                        } catch (e: Exception) {
+                            Log.e("启动录屏界面失败", e)
+                        }
+                    }) { Text("打开录屏界面") }
+                }
+
+                Text("默认帧率（喂 AI 分析 15 足够，更高只增加文件体积）", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                ChipSelector(
+                    options = listOf("10" to "10 fps", "15" to "15 fps", "24" to "24 fps", "30" to "30 fps"),
+                    selected = store.settings.recordingFps.toString(),
+                ) { value, _ ->
+                    store.settings = store.settings.copy(recordingFps = value.toInt())
+                    store.saveSettings()
+                }
+
+                var bitrate by remember { mutableStateOf(store.settings.recordingBitrate.toString()) }
+                Text("x264 码率（kbps，决定清晰度与文件大小）", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(bitrate, { bitrate = it }, Modifier.width(160.dp), label = { Text("码率 kbps") })
+                    Button(onClick = {
+                        val v = bitrate.toIntOrNull()?.coerceIn(500, 20000) ?: 4000
+                        bitrate = v.toString()
+                        Log.i("设置录屏码率 → ${v}kbps")
+                        store.settings = store.settings.copy(recordingBitrate = v)
+                        store.saveSettings()
+                    }) { Text("保存") }
+                }
+                Text("参数保存时写入 ~/.local/share/atlas/screen-recorder.json，录屏脚本启动时读取。", fontSize = 11.sp, color = Theme.Muted)
             }
 
             // 关于：数据位置与产品说明

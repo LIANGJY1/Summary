@@ -1,0 +1,491 @@
+#!/usr/bin/env python3
+"""屏幕录制 MP4 图形界面（X11 + GStreamer）
+- 支持整桌面 / 单块屏幕 / 框选区域
+- 输出 AI 友好 MP4（H.264 + yuv420p，>1920 宽自动等比缩小，奇数尺寸自动取偶）
+- 编码由 gst-launch-1.0 -e 子进程承担，停止时发 SIGINT 触发 EOS 正常收尾
+"""
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import cairo
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+def load_config():
+    """Atlas 设置页保存时写出 ~/.local/share/atlas/screen-recorder.json；缺省字段用内置默认。"""
+    try:
+        import json
+        return json.loads((Path.home() / ".local/share/atlas/screen-recorder.json").read_text())
+    except Exception:
+        return {}
+
+
+_CFG = load_config()
+OUTDIR = Path(_CFG.get("saveDir") or Path.home() / "Videos" / "Screencasts").expanduser()
+FPS_DEFAULT = int(_CFG.get("fps", 15))
+BITRATE = int(_CFG.get("bitrate", 4000))
+PIDFILE = Path("/tmp/record-gui-gst.pid")
+APP_PIDFILE = Path("/tmp/record-gui-app.pid")
+
+
+def notify(msg):
+    try:
+        subprocess.Popen(["notify-send", "-a", "屏幕录制", msg])
+    except Exception:
+        pass
+
+
+def reveal_in_file_manager(path):
+    """文件管理器打开所在目录并选中文件（FileManager1 标准接口）；失败退回 xdg-open 目录。"""
+    try:
+        uri = Path(path).as_uri()
+        subprocess.Popen(["gdbus", "call", "--session",
+                          "--dest", "org.freedesktop.FileManager1",
+                          "--object-path", "/org/freedesktop/FileManager1",
+                          "--method", "org.freedesktop.FileManager1.ShowItems",
+                          f"[\"{uri}\"]", ""])
+        return
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)])
+    except Exception:
+        pass
+
+
+def x_screen_size():
+    out = subprocess.run(["xdpyinfo"], capture_output=True, text=True).stdout
+    m = re.search(r"dimensions:\s+(\d+)x(\d+)", out)
+    return (int(m.group(1)), int(m.group(2))) if m else (None, None)
+
+
+def monitors():
+    """[(名称, x, y, w, h)]，来自 xrandr。"""
+    out = subprocess.run(["xrandr", "--current"], capture_output=True, text=True).stdout
+    result = []
+    for line in out.splitlines():
+        m = re.match(r"(\S+) connected (?:primary )?(\d+)x(\d+)\+(\d+)\+(\d+)", line)
+        if m:
+            name, w, h, x, y = m.group(1), *map(int, m.groups()[1:])
+            result.append((name, x, y, w, h))
+    return result
+
+
+def actual_pipeline(rect, fps, path):
+    """gst-launch 按 argv 逐 token 解析（单字符串会报 syntax error），所以返回列表。"""
+    x, y, w, h = rect
+    tw = 1920 if w > 1920 else w & ~1
+    th = round(h * tw / w) & ~1
+    return [
+        "ximagesrc", f"use-damage=false", "show-pointer=true",
+        f"startx={x}", f"starty={y}", f"endx={x + w - 1}", f"endy={y + h - 1}",
+        "!", f"video/x-raw,framerate={fps}/1",
+        "!", "videoconvert", "!", "videoscale", "method=lanczos",
+        "!", f"video/x-raw,format=I420,width={tw},height={th}",
+        "!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+        f"bitrate={BITRATE}", f"key-int-max={fps * 10}",
+        "!", "mp4mux", "!", "filesink", f"location={path}",
+    ]
+
+
+class RegionPicker(Gtk.Window):
+    """全屏半透明取景框，拖拽画矩形，ESC 取消。override-redirect + 键鼠抓取（slop 式）。"""
+
+    def __init__(self, callback):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.callback = callback
+        self.origin = None
+        self.rect = None
+        self.set_decorated(False)
+        self.set_app_paintable(True)
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+        # 逻辑像素即可铺满全部显示器（Gdk.Screen 尺寸=逻辑合成桌面）
+        self.set_size_request(screen.width(), screen.height())
+        self.move(0, 0)
+        self.add_events(
+            Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.POINTER_MOTION_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.KEY_PRESS_MASK
+        )
+        self.connect("draw", self.on_draw)
+        self.connect("button-press-event", self.on_press)
+        self.connect("motion-notify-event", self.on_motion)
+        self.connect("button-release-event", self.on_release)
+        self.connect("key-press-event", self.on_key)
+        self.connect("delete-event", lambda *a: self.cancel())
+        self.connect("realize", self.on_realize)
+        self.show_all()
+
+    def on_realize(self, w):
+        # override-redirect 绕过 mutter 的单屏工作区钳制，精确铺满合成桌面；
+        # 同时抓取键鼠：OR 窗口无焦点，不抓取就收不到 ESC 和跨屏拖拽事件。
+        try:
+            g = w.get_window()
+            g.set_override_redirect(True)
+            cursor = Gdk.Cursor.new_for_display(self.get_display(), Gdk.CursorType.CROSSHAIR)
+            Gdk.Seat.get_default().grab(
+                g, Gdk.SeatCapabilities.ALL, True, cursor, None, None)
+        except Exception:
+            pass
+        try:
+            g.set_cursor(Gdk.Cursor.new_for_display(self.get_display(), Gdk.CursorType.CROSSHAIR))
+        except Exception:
+            pass
+
+    def on_press(self, w, e):
+        if e.button == 1:
+            self.origin = (e.x_root, e.y_root)
+            self.rect = None
+
+    def on_motion(self, w, e):
+        if self.origin:
+            self.rect = Gdk.Rectangle()
+            self.rect.x = int(min(self.origin[0], e.x_root))
+            self.rect.y = int(min(self.origin[1], e.y_root))
+            self.rect.width = int(abs(e.x_root - self.origin[0]))
+            self.rect.height = int(abs(e.y_root - self.origin[1]))
+            self.queue_draw()
+
+    def on_release(self, w, e):
+        if self.origin and self.rect and self.rect.width > 8 and self.rect.height > 8:
+            # GTK 事件坐标是逻辑像素（HiDPI 下=物理/2），ximagesrc 需要物理像素
+            s = (x_screen_size()[0] or Gdk.Screen.width()) / max(1, Gdk.Screen.width())
+            r = self.rect
+            rect = (round(r.x * s), round(r.y * s),
+                    max(2, round(r.width * s)), max(2, round(r.height * s)))
+            self.destroy()
+            self.callback(rect)
+        else:
+            self.origin = None
+            self.rect = None
+            self.queue_draw()
+
+    def on_key(self, w, e):
+        if e.keyval == Gdk.KEY_Escape:
+            self.cancel()
+            return True
+        return False
+
+    def cancel(self):
+        self.destroy()
+        self.callback(None)
+        return True
+
+    def on_draw(self, w, cr):
+        cr.set_source_rgba(0, 0, 0, 0.25)
+        cr.paint()
+        if self.rect:
+            r = self.rect
+            cr.set_source_rgba(1, 0.25, 0.2, 0.12)
+            cr.rectangle(r.x, r.y, r.width, r.height)
+            cr.fill()
+            cr.set_source_rgba(1, 0.2, 0.15, 0.95)
+            cr.set_line_width(2)
+            cr.rectangle(r.x, r.y, r.width, r.height)
+            cr.stroke()
+        return True
+
+
+class StopBar(Gtk.Window):
+    """录制中的悬浮停止条：● 时间 + ■ 停止按钮。整条可按住拖动。"""
+
+    def __init__(self, on_stop):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.on_stop = on_stop
+        self.t0 = time.time()
+        self.drag_origin = None
+        self.drag_offset = None
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self.set_resizable(False)
+        box = Gtk.Box(spacing=10)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+        box.set_margin_start(14)
+        box.set_margin_end(14)
+        self.dot = Gtk.Label(label="●")
+        self.dot.get_style_context().add_class("rec-dot")
+        self.label = Gtk.Label(label="00:00")
+        # 拖动把手 = ● + 时间（EventBox 可收事件）；按钮独立，互不干扰
+        self.handle = Gtk.EventBox()
+        handle_box = Gtk.Box(spacing=10)
+        handle_box.pack_start(self.dot, False, False, 0)
+        handle_box.pack_start(self.label, False, False, 0)
+        self.handle.add(handle_box)
+        btn = Gtk.Button(label="■ 停止")
+        btn.connect("clicked", self.stop)
+        box.pack_start(self.handle, False, False, 0)
+        box.pack_start(btn, False, False, 0)
+        self.add(box)
+        css = Gtk.CssProvider()
+        css.load_from_data(b"""
+            .rec-dot { color: #e33; font-size: 18px; }
+            .rec-bar { background: rgba(30,30,30,0.85); border-radius: 10px; }
+        """)
+        self.get_style_context().add_class("rec-bar")
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.connect("delete-event", self.stop)
+        # 按住把手拖动；不能挂整窗——会吞掉按钮的点击事件
+        self.handle.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_MOTION_MASK)
+        self.handle.connect("button-press-event", self.on_press)
+        self.handle.connect("motion-notify-event", self.on_motion)
+        self.show_all()
+        self.connect("size-allocate", self.center_once)
+        GLib.timeout_add(500, self.tick)
+
+    def center_once(self, w, alloc):
+        """分配宽度后居中一次；提前取 allocated_width 会拿到 -1 导致位置跑偏。"""
+        self.move((Gdk.Screen.width() - alloc.width) // 2, 24)
+        self.disconnect_by_func(self.center_once)
+
+    def on_press(self, w, e):
+        if e.button == 1:
+            pos = self.get_position()
+            self.drag_origin = (e.x_root, e.y_root)
+            self.drag_offset = (pos[0] - e.x_root, pos[1] - e.y_root)
+            return True
+        return False
+
+    def on_motion(self, w, e):
+        if self.drag_origin and e.state & Gdk.ModifierType.BUTTON1_MASK:
+            self.move(int(e.x_root + self.drag_offset[0]),
+                      int(e.y_root + self.drag_offset[1]))
+            return True
+        return False
+
+    def tick(self):
+        s = int(time.time() - self.t0)
+        self.label.set_text(f"{s // 60:02d}:{s % 60:02d}")
+        return True
+
+    def stop(self, *a):
+        self.on_stop()
+        return True
+
+
+class BorderOverlay(Gtk.Window):
+    """录制区域的通用样式矩形边框：随录制范围铺开、点击穿透、置顶。rect 为物理像素。"""
+
+    def __init__(self, rect):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_app_paintable(True)
+        visual = self.get_screen().get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+        s = (x_screen_size()[0] or Gdk.Screen.width()) / max(1, Gdk.Screen.width())
+        x, y, w, h = rect
+        self.connect("draw", self.on_draw)
+        self.connect("realize", self.on_realize)
+        self.show_all()
+        # 注意：set_resizable(False) 会让 show 前的 resize 被内容自然尺寸覆盖，
+        # 所以尺寸/位置一律在 show 之后设置；输入区域为空，用户无法拖改大小。
+        self.move(max(0, round(x / s)), max(0, round(y / s)))
+        self.resize(max(2, round(w / s)), max(2, round(h / s)))
+        # 输入区域置空 → 鼠标点击完全穿透，不影响下层操作
+        try:
+            self.get_window().input_shape_combine_region(cairo.Region(), 0, 0)
+        except Exception:
+            pass
+
+    def on_realize(self, w):
+        # override-redirect 绕过 mutter：否则大于单屏工作区的窗口会被 WM 钳制缩放/挪位
+        w.get_window().set_override_redirect(True)
+
+    def on_draw(self, w, cr):
+        aw = w.get_allocated_width()
+        ah = w.get_allocated_height()
+        cr.set_source_rgba(1.0, 0.15, 0.1, 0.95)
+        cr.set_line_width(3)
+        cr.rectangle(1.5, 1.5, aw - 3, ah - 3)
+        cr.stroke()
+        # 四角短粗角标（通用录制框样式）
+        cr.set_line_width(6)
+        L = 18
+        for cx, cy, dx, dy in ((0, 0, 1, 1), (aw, 0, -1, 1), (0, ah, 1, -1), (aw, ah, -1, -1)):
+            cr.move_to(cx + dx * L, cy)
+            cr.line_to(cx, cy)
+            cr.line_to(cx, cy + dy * L)
+            cr.stroke()
+        return True
+
+
+class App:
+    def __init__(self):
+        self.proc = None
+        self.border = None
+        self.target = None
+        self.out_path = None
+        self.win = Gtk.Window(title="屏幕录制 → MP4")
+        self.win.set_default_size(420, 220)
+        self.win.set_position(Gtk.WindowPosition.CENTER)
+        self.win.connect("destroy", self.on_destroy)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(14)
+        box.set_margin_bottom(14)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+        self.win.add(box)
+
+        box.pack_start(Gtk.Label(label="录制范围", xalign=0), False, False, 0)
+        self.combo = Gtk.ComboBoxText()
+        total = x_screen_size() or (Gdk.Screen.width(), Gdk.Screen.height())
+        self.rects = [("整个桌面 (%d×%d)" % total, (0, 0, *total))]
+        for i, (name, x, y, w, h) in enumerate(monitors(), 1):
+            self.rects.append((f"屏幕 {i}: {name} ({w}×{h})", (x, y, w, h)))
+        self.rects.append(("选定区域…", None))
+        for label, _ in self.rects:
+            self.combo.append_text(label)
+        self.combo.set_active(0)
+        box.pack_start(self.combo, False, False, 0)
+
+        row = Gtk.Box(spacing=10)
+        row.pack_start(Gtk.Label(label="帧率", xalign=0), False, False, 0)
+        self.fps = Gtk.ComboBoxText()
+        for f in ("10", "15", "24", "30"):
+            self.fps.append_text(f)
+        self.fps.set_active(max(0, ("10", "15", "24", "30").index(str(FPS_DEFAULT))))
+        row.pack_start(self.fps, False, False, 0)
+        box.pack_start(row, False, False, 0)
+
+        self.start_btn = Gtk.Button(label="● 开始录制")
+        self.start_btn.get_style_context().add_class("suggested-action")
+        self.start_btn.connect("clicked", self.on_start)
+        box.pack_start(self.start_btn, False, False, 0)
+
+        self.win.show_all()
+
+    def on_start(self, *_):
+        label, rect = self.rects[self.combo.get_active()]
+        fps = int(self.fps.get_active_text())
+        if rect is None:
+            self.win.hide()
+            RegionPicker(lambda r: self.picked(r, fps))
+            return
+        self.begin(rect, fps)
+
+    def picked(self, rect, fps):
+        if rect is None:
+            self.win.show_all()
+            return
+        self.begin(rect, fps)
+
+    def begin(self, rect, fps):
+        if PIDFILE.exists():
+            try:
+                os.kill(int(PIDFILE.read_text()), 0)
+                notify("已经在录制中了")
+                Gtk.main_quit()
+                return
+            except (ValueError, ProcessLookupError):
+                PIDFILE.unlink(missing_ok=True)
+        OUTDIR.mkdir(parents=True, exist_ok=True)
+        self.out_path = str(OUTDIR / f"Screencast MP4 {time.strftime('%Y%m%d-%H%M%S')}.mp4")
+        cmd = ["gst-launch-1.0", "-e"] + actual_pipeline(rect, fps, self.out_path)
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        PIDFILE.write_text(str(self.proc.pid))
+        self.win.hide()
+        self.border = BorderOverlay(rect)
+        self.bar = StopBar(self.finish)
+
+    def finish(self):
+        if not self.proc:
+            return
+        self.bar.destroy()
+        try:
+            self.border.destroy()
+        except Exception:
+            pass
+        if self.proc.poll() is None:
+            self.proc.send_signal(signal.SIGINT)
+            try:
+                self.proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        PIDFILE.unlink(missing_ok=True)
+        size = Path(self.out_path).stat().st_size if Path(self.out_path).exists() else 0
+        if self.proc.returncode != 0:
+            notify(f"录制进程异常退出（rc={self.proc.returncode}），文件可能不完整")
+        elif size > 0:
+            notify(f"■ 已保存 ({size // 1024} KB)\n{os.path.basename(self.out_path)}")
+            reveal_in_file_manager(self.out_path)
+        else:
+            notify("录制失败，未产出文件")
+        self.proc = None
+        Gtk.main_quit()
+
+    def on_destroy(self, *_):
+        if self.proc:
+            self.finish()
+        else:
+            Gtk.main_quit()
+
+
+def app_pid_alive():
+    if not APP_PIDFILE.exists():
+        return None
+    try:
+        pid = int(APP_PIDFILE.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError):
+        APP_PIDFILE.unlink(missing_ok=True)
+        return None
+
+
+if __name__ == "__main__":
+    _app = None
+
+    def _on_term(signum, frame):
+        """TERM 时优雅停录（不能在信号处理器里调 GTK，只碰子进程）。"""
+        try:
+            if _app is not None and _app.proc is not None and _app.proc.poll() is None:
+                _app.proc.send_signal(signal.SIGINT)
+                _app.proc.wait(timeout=15)
+        except Exception:
+            pass
+        os._exit(0)
+
+    try:
+        if os.environ.get("XDG_SESSION_TYPE") not in (None, "x11", ""):
+            notify("屏幕录制仅支持 X11 会话，当前是 " + os.environ["XDG_SESSION_TYPE"])
+            sys.exit(1)
+        if app_pid_alive():
+            notify("录屏界面已经打开了")
+            sys.exit(0)
+        _app = App()
+        APP_PIDFILE.write_text(str(os.getpid()))
+        signal.signal(signal.SIGTERM, _on_term)
+        Gtk.main()
+        APP_PIDFILE.unlink(missing_ok=True)
+    except SystemExit:
+        raise
+    except Exception:
+        import traceback
+        tb = traceback.format_exc()
+        try:
+            log = Path.home() / ".local/share/atlas/screen-recorder-gui.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open("a") as f:
+                f.write(time.strftime("[%Y-%m-%d %H:%M:%S]\n") + tb + "\n")
+        except Exception:
+            pass
+        notify("录屏界面出错（详情见 ~/.local/share/atlas/screen-recorder-gui.log）")
+        sys.exit(1)

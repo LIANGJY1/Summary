@@ -9,8 +9,8 @@ data class WorkbenchAction(
 
 enum class WorkbenchRegion { SCROLLABLE_PAGE }
 
-/** 闪卡/学习入口暂时隐藏；题库直接读取同源 Markdown。 */
-fun topLevelTabs(): List<String> = listOf("工作台", "题库")
+/** 闪卡/学习入口暂时隐藏；题库直接读取同源 Markdown；工具页图形化集成本地小工具。 */
+fun topLevelTabs(): List<String> = listOf("工作台", "题库", "工具")
 
 fun settingsTabLabel(): String = "设置"
 

@@ -13,7 +13,7 @@ class NavigationModelTest {
 
     @Test
     fun `顶层导航把设置独立放到右侧入口`() {
-        assertEquals(listOf("工作台", "题库"), topLevelTabs())
+        assertEquals(listOf("工作台", "题库", "工具"), topLevelTabs())
         assertEquals("设置", settingsTabLabel())
     }
 

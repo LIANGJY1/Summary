@@ -48,6 +48,7 @@ import atlas.ui.QuestionSection
 import atlas.ui.SettingsView
 import atlas.ui.Theme
 import atlas.ui.TodayView
+import atlas.ui.ToolsView
 import atlas.ui.VDivider
 import atlas.ui.WindowControlButtons
 import atlas.ui.WindowResizeBorders
@@ -179,6 +180,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
             when (tab) {
                 "学习" -> LearningView(store, learnSection) { learnSection = it }
                 "题库" -> QuestionSection(store)
+                "工具" -> ToolsView(store)
                 "设置" -> SettingsView(store)
                 else -> TodayView(store) { destination ->
                     when (destination) {
