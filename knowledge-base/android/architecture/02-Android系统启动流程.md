@@ -1,6 +1,6 @@
 # Android 系统启动流程
 
-> 学习资料（文章模式沉淀）。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》的启动章节（init 三阶段、Zygote 与 SystemServer 路径按 AOSP `android-17.0.0_r1` 核对）；Boot ROM/Bootloader/内核阶段与 GKI 概览已于 2026-09-23 与官方资料核对；2026-09-23 并入 AAOS13_study《Android 系统启动全流程 源码分析》的机制细节与 AAOS 挂点（init 接力与调度、Service Reap、SELinux 策略装载、Zygote 约束、SystemServer 看护、CarService/CarSystemUI/CarLauncher；源码锚点 commit `abec84ef9`，Android 13 / Automotive，Q8 起）。配套架构主题见 [01-Android系统架构.md](./01-Android系统架构.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》的启动章节（init 三阶段、Zygote 与 SystemServer 路径按 AOSP `android-17.0.0_r1` 核对）；Boot ROM/Bootloader/内核阶段与 GKI 概览已于 2026-09-23 与官方资料核对；2026-09-23 并入 AAOS13_study《Android 系统启动全流程 源码分析》的机制细节与 AAOS 挂点（init 接力与调度、Service Reap、SELinux 策略装载、Zygote 约束、SystemServer 看护、CarService/CarSystemUI/CarLauncher；源码锚点 commit `abec84ef9`，Android 13 / Automotive）；2026-09-24 并入地基概念深讲（内核与进程、ramdisk、/init 与 execve 变身、fstab、GKI 与 vendor ramdisk、伪文件系统）。配套架构主题见 [01-Android系统架构.md](./01-Android系统架构.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 系统的启动流程？（从点击开机键开始 ）**
 
@@ -16,7 +16,7 @@
 8. **system_server**：进入 `SystemServer.main()`/`run()`，按 Bootstrap/Core/Other/Apex 四组启动 Java 系统服务（AMS/ATMS、PMS、WMS 等），各服务依次 `systemReady()`；
 9. **Launcher 启动**：AMS 就绪后经 Zygote socket 创建桌面进程，桌面第一帧上屏即视为开机完成。
 
-理解要点：init 之前的阶段属于"芯片与内核世界"，排查开机问题先分清卡在哪一侧；`system_server` 的诞生是启动链内的一步（不经 socket 请求），后续应用进程才全部走 socket 请求路径（见 Q7）。
+理解要点：init 之前的阶段属于"芯片与内核世界"，排查开机问题先分清卡在哪一侧；`system_server` 的诞生是启动链内的一步（不经 socket 请求），后续应用进程才全部走 socket 请求路径。
 
 
 
@@ -26,6 +26,16 @@
 
 那内核自己是什么？它不是任何进程，它就是被 bootloader 装进内存的一段特权代码 + 它管理的数据结构的总和。 CPU 在特权模式（ARM 上的 EL1/EL2）下直接执行它的指令——不需要“进程”这个载体。开机时连调度器都没有，谈不上“谁在运行内核”：就是 CPU 一条条顺序执行内核指令。
 
+初始化顺序：
+
+1. Bootloader 把内核镜像载入内存，把 CPU 的程序计数器（PC）设到内核入口，跳过去；
+2. 内核入口是一小段汇编：建立临时页表、打开 MMU（虚拟内存）、清空 BSS 段、设好栈——把自己变成"可以跑 C 代码"的环境；
+3. 进入 C 函数 `start_kernel()`：初始化内存管理、调度器、中断、驱动模型……每初始化完一个子系统，就多一块可用能力；
+4. 初始化尾声创建最早的两个特殊内核线程：kthreadd（PID 2，之后所有内核线程的祖先）和 kernel_init（PID 1）；
+5. 调度器接管，这些线程才开始被调度运行。
+
+内核线程与用户进程的边界：内核线程只有内核态身份（task_struct 里的地址空间指针为空），永不回落用户态，只执行内核代码（ksoftirqd 软中断处理、kworker 工作队列）——"任务"这个概念在内核里先于"用户进程"存在。
+
 **Q3: Android init 进程怎么理解？**
 
 init 是内核启动的第一个用户态进程（PID 1）、所有用户态进程的祖先；它本身不承载业务逻辑，而是"配置驱动的进程管理器 + 系统初始化执行器"。Android 17 中它仍按第一阶段、SELinux 访问控制初始化、第二阶段三步执行。
@@ -33,11 +43,11 @@ init 是内核启动的第一个用户态进程（PID 1）、所有用户态进�
 职责分四块：
 
 1. **分阶段初始化**：第一阶段挂载基础文件系统与早期分区，第二阶段完成 SELinux 之后的完整用户态准备；
-2. **解析执行 .rc**：按 Android Init Language 声明的服务与动作拉起各守护进程——Zygote、SurfaceFlinger 都由它启动（见 Q3）；
+2. **解析执行 .rc**：按 Android Init Language 声明的服务与动作拉起各守护进程——Zygote、SurfaceFlinger 都由它启动；
 3. **属性服务**：维护系统属性（`ro.*`、`persist.*` 等）的设置与变更广播；
 4. **服务监督与收尸**：作为 PID 1 `waitpid()` 回收子进程；服务退出后按 `.rc` 定义决定是否重启。
 
-理解它的用处：所有"谁负责重启某个服务"的答案最终都落在 init 的服务监督上——system_server 崩溃后 Zygote 自杀，再由 init 重启 Zygote、重新 fork system_server（见 Q6），这条恢复链的管理者就是 init。
+理解它的用处：所有"谁负责重启某个服务"的答案最终都落在 init 的服务监督上——system_server 崩溃后 Zygote 自杀，再由 init 重启 Zygote、重新 fork system_server，这条恢复链的管理者就是 init。
 
 
 
@@ -283,3 +293,149 @@ CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原�
 2. **TaskView 行为差异**：地图是另一个进程的 Activity，崩溃与焦点行为和普通 View 完全不同，`autoRestartOnCrash=false` 意味着地图崩溃后卡片留白、需用户手动重进；
 3. **多用户边界**：CarSystemUIInitializer 只给 system user 注入 RootTaskDisplayAreaOrganizer（副驾屏等按用户隔离）；headless system user 0 的设备上 CarLauncher 不显示地图卡片；
 4. **崩溃连锁**：car_service 进程被杀会连带 CarSystemUI/CarLauncher 的依赖（它们经 CarServiceProvider 等待重连），调试时 kill CarService 进程应预期 UI 层短暂异常。
+
+**Q21: ramdisk 是什么？明明有真分区，开机为什么还要一块内存里的临时根文件系统？**
+
+ramdisk 是打包进内存的临时根文件系统：构建系统把 init 二进制、fstab 和少量基础工具打成 cpio 归档塞进 boot 镜像，内核启动时解包到一块内存文件系统（ramfs/tmpfs）上作为最初的根。Linux 里这个最初的根有个专名叫 rootfs，是所有进程根挂载点的原型、不可卸载；它完全活在内存里，重启即消失。
+
+为什么要多此一举——鸡生蛋问题：挂载真正的分区需要挂载程序、fstab 和驱动，这些代码与数据本身得先有个地方住；内核只管机制、不带这些内容，所以必须有一块"随内核一起交付的种子文件系统"。
+
+GKI 时代的布局：boot.img = GKI 内核 + 通用 ramdisk（init、通用 fstab 片段）；vendor_boot.img = vendor ramdisk（vendor 的内核模块、vendor fstab 与 rc 片段）。
+
+**Q22: 内核是怎么启动第一个用户态进程 /init 的？为什么说它不是 fork 出来的？**
+
+不是 fork，是"内核线程 execve 变身"：内核初始化尾声创建的 kernel_init 内核线程（PID 1 此时已存在，但只是没有用户地址空间的内核态任务）在收尾时调用 kernel_execve("/init")——丢弃旧地址空间、装载新 ELF 程序、建立页表与入口栈，回落用户态时执行的就是 init 的 main 函数；exec 失败（找不到 /init、ELF 损坏）则内核 panic，开机失败。
+
+内核按固定顺序寻找第一个用户态程序：`init=` 启动参数指定的路径优先，其次 ramdisk 上的指定命令，再退到 /sbin/init、/etc/init、/bin/init。Android 把自己的 init（源码 system/core/init/）放在 /init 占住第一顺位。它担得起这个位置靠两个细节：静态链接（自带 libc、不依赖分区上的 .so——system 分区挂出来之前动态链接器没有输入）；一个二进制多个身份（按启动参数扮演第一/第二阶段 init、selinux_setup、ueventd、subcontext 执行器，/system/bin/ueventd 就是指向 init 的符号链接）。
+
+收束：fork 是"复制已有进程"，此刻没有任何进程可复制；execve 才是"从无到有进入用户态"的动作。此后 Android 所有进程（zygote、system_server、每个应用）都由 init 一脉 fork/exec 派生——这就是"所有用户态进程的祖先"的由来。
+
+**Q23: fstab 是什么？init 第一阶段怎么按它挂载分区？**
+
+fstab（file system table）是文件系统挂载声明表：纯文本，每行一条规则——把哪个块设备、挂到哪个目录、什么文件系统类型、带什么选项；init 的挂载组件 fs_mgr 按 fs_mgr_flags 关键字行事。fstab 就是"挂载分区"这件事的数据化，init 只是执行器。
+
+```text
+# 设备                          挂载点    类型  挂载选项        fs_mgr 标志
+/dev/block/by-name/system      /system  ext4  ro,barrier=1    wait,avb=vbmeta,first_stage_logical,logical
+/dev/block/by-name/vendor      /vendor  ext4  ro,barrier=1    wait,avb=vbmeta,first_stage_logical,logical
+/dev/block/by-name/userdata    /data    f2fs  ...             latemount,encrypted=...,fileencryption=...
+```
+
+fs_mgr_flags 关键字决定挂载策略：wait 等设备节点出现再挂；avb= 做 verified boot 校验；first_stage_logical 第一阶段就要处理；latemount 可以等到 post-fs-data 再挂；encrypted 涉及加密卷。
+
+表有两份：第一阶段的精简版打进 ramdisk（彼时只能读 ramdisk），完整版在 vendor 分区（/vendor/etc/fstab.<板级名>）。
+
+**Q24: GKI 时代，为什么内核模块要放在 vendor ramdisk 里而不是编进内核？**
+
+GKI（Generic Kernel Image，通用内核镜像）把内核切成两半：Google 基于 ACK（Android Common Kernel）统一构建的核心内核（不含 SoC 私有驱动）+ 厂商提供的 .ko 可加载模块，两边靠稳定的 KMI（内核模块接口）解耦——核心内核可独立打补丁升级而厂商模块不动；量产落点是 Android 12 起新设备按 GKI 2.0 出货（核心内核 5.10 起）。
+
+模块放进 vendor ramdisk（vendor_boot 分区里厂商附加的第二份 ramdisk）而不是编进内核，是 GKI 哲学的延伸：硬件代码全部外置、厂商自持，核心保持通用。而模块不能等 vendor 分区挂载后再加载，又是一层鸡生蛋：挂载 vendor 分区本身就需要 vendor 的存储/加密驱动——驱动必须住在比分区更早可用的地方。所以第一阶段的 LoadKernelModules 在挂分区之前从 ramdisk 加载这些 .ko，分区才挂得出来。
+
+收束：GKI 内核（无硬件驱动）+ vendor ramdisk 里的模块（硬件驱动）= 一颗能操作这台设备真硬件的内核，拼装发生在 init 第一阶段、任何分区挂载之前。
+
+**Q25: /dev、/proc、/sys 这三个伪文件系统怎么理解？init 为什么要先挂载它们？**
+
+三个都是伪文件系统：目录里的"文件"不占磁盘，是内核数据结构的文件化视图，读一个"文件"等于触发内核现场生成内容；它们分别是设备、进程状态、设备模型拓扑三个窗口。init 第一阶段先挂载它们，是因为后续每一步——找设备节点、读启动参数、控制电源——都依赖窗口先打开。
+
+1. **/dev**：设备节点目录。节点用 mknod 创建、本质是一对主/次设备号，打开它就是把读写路由给对应内核驱动——用户态操作硬件的唯一门牌（/dev/null、/dev/console、/dev/block/by-name/system 都在这）；Android 的 /dev 是 tmpfs、开机全空，由 ueventd 监听内核 uevent 补建全部节点（冷插拔扫描）；
+2. **/proc**：进程与内核运行状态的窗口——/proc/<pid>/ 每进程一个目录，meminfo/cpuinfo 报告资源，/proc/sys 是 sysctl 可调参数；对 init 特别重要的是 /proc/cmdline（内核启动参数，androidboot.mode=charger 这类启动模式信息），init 第二阶段读它决定走哪条启动线；
+3. **/sys**：内核设备模型的拓扑窗口（kobject 目录树）——/sys/devices 是设备本体、/sys/class 按类聚合、/sys/module 列已加载模块、设备目录下的 uevent 文件用于事件重放、/sys/power/state 写入可触发休眠。
+
+时序：第一阶段由 init 统一挂载，/dev 的节点随后由 ueventd 补齐。
+
+**Q26: 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
+
+内核态完整可用、用户态只有一个进程——此刻"Android"还不存在，只存在 Linux。逐项清点：
+
+1. **CPU/内核态**：完整可用——调度器、内存管理、驱动模型就绪，GKI 时代 vendor 模块已加载；
+2. **进程**：恰好一个——PID 1，刚由 kernel_init 内核线程 execve /init 变身而来；
+3. **根文件系统**：刚解包的 ramdisk（内存里），只有 init、fstab、少量工具；
+4. **/dev、/proc、/sys**：尚未挂载，三个窗口全关；
+5. **真正的系统**：在 system/vendor 分区上，未挂载、未过 AVB 校验；
+6. **SELinux**：策略未装载，强制访问控制未生效；
+7. **系统属性与配置状态**：全部为零，唯一可读的是 /proc/cmdline 里的启动参数。
+
+收束：这份清点就是 init"建设者"职责的完整清单——它要补的每一项空白（窗口、真根、策略、服务、Java 世界）都对应上面一行。
+
+**Q27: 按下电源键到 Linux 内核开始执行之间发生了什么？Boot ROM 和 Bootloader 各做什么？**
+
+上电复位后 CPU 从芯片内固化的 Boot ROM 开始执行——它初始化最基础的执行环境、从存储加载 Bootloader 并校验其签名；Bootloader 再初始化内存（DRAM）等最小硬件环境、把内核镜像与 ramdisk 载入内存、完成启动镜像校验，最后把 PC 跳到内核入口。此后 CPU 离开芯片厂商代码、进入 Android 世界的第一段代码。
+
+分工：
+
+1. **Boot ROM**：掩膜在 SoC 里、出厂即存在且不可改的只读代码——整个安全启动链的信任根；它只负责认出并加载下一级（Bootloader）；
+2. **Bootloader**：厂商实现（U-Boot、ABL 等），职责是"为内核准备一个可运行的内存环境"——初始化 DRAM、从存储读出 boot/vendor_boot 镜像、校验签名（vbmeta）、写好启动参数（cmdline）、跳转内核入口。
+
+边界：Bootloader 不在 AOSP 源码树内、属芯片/厂商私有实现，各芯片 Boot ROM 行为有差异，但"ROM 校验 Bootloader"是 verified boot 链条公认的起点。
+
+**Q28: verified boot（AVB）是怎么保证"启动运行的代码没有被篡改"的？**
+
+AVB 靠一条逐级签名的信任链：芯片 ROM 的内置公钥校验 Bootloader → Bootloader 用 vbmeta 分区里被签名的元数据校验 boot/vendor_boot 等启动镜像的哈希 → 系统起来后 dm-verity 对 system/vendor 等只读分区做运行期逐块校验。任何一级失败都会阻断启动或进入告警状态。
+
+机制：
+
+1. **签名与哈希分离**：vbmeta 分区存放被签名的描述符（各分区的哈希表），签名公钥的根固化在 ROM 或熔丝里，设备出厂即带；
+2. **运行期校验**：fstab 里的 avb= 标志让第一阶段挂载时配置 dm-verity——只读分区每读一块就核对树状哈希，盘上内容被篡改会直接表现为读取错误；
+3. **解锁状态**：用户解锁 bootloader 后信任链根被替换，设备显示警告并允许刷入未签名镜像——量产锁定设备不存在这条路径。
+
+收束：AVB 的校验对象是静态镜像与只读分区，可写的 /data 不在其内（由 FBE 文件级加密保护）。
+
+**Q29: init 的属性服务是怎么工作的？为什么系统里到处都在用属性？**
+
+属性服务是 init 维护的全局键值对仓库：各分区 prop 文件提供初始值，其他进程经属性 socket 向 init 提交写入请求，init 校验请求方的 SELinux 上下文后写入一块进程间共享的内存区并广播变更——读属性是纯内存读取，写属性必须经过 init。
+
+机制：
+
+1. **类别与语义**：ro.* 开机后只读；persist.* 持久化到 /data、重启保留；init.svc.<名字> 是各服务状态的对外投影；ctl.* 是命令不是状态；
+2. **双向作用**：向外，init 把服务状态机外化成 init.svc.* 供任何进程免特权读取；向内，属性变化触发 rc 动作（`on property:xxx=yyy`）——组件之间不互相调用、靠"设属性 → 触发动作"编排启动时序；
+3. **典型闭环**：system_server 装配完成后置 sys.boot_completed=1，监听该属性的系统组件与测试框架由此得知开机完成。
+
+边界：写权限由 SELinux 精确控制到"哪个域能写哪个前缀"；属性有长度与数量上限，不适合传大块数据。
+
+**Q30: init 是怎么把一个服务进程拉起来的？Service::Start 里有哪些容易忽略的细节？**
+
+每个服务由 init fork 出子进程再 exec 目标二进制；fork 之前 init 把服务声明的 socket 先创建好、fork 后子进程直接继承 fd；fork 之后父进程建好 cgroup 进程组、经管道写一个字节放行，子进程才 exec。
+
+细节与设计：
+
+1. **fork 前建 socket**：描述符经 fork 继承传递，环境变量 `ANDROID_SOCKET_<名字>` 只传 fd 编号——进程树内的资源交接靠继承，是零拷贝通道；Zygote 接收应用创建请求的 socket 就是这样到手的；
+2. **管道握手**：fork 后父子有严格初始化依赖（子进程 exec 前必须已进 cgroup），用"父写一个字节、子读到才继续"表达顺序约束，比轮询或延时可靠；
+3. **exec 之后**：服务状态经 init.svc.<名字> 属性汇报，退出后进入 Reap 裁决流程。
+
+边界："继承优于显式传输"只适用于有亲缘关系且 fork 顺序明确的进程树；无亲缘进程间传 fd 要走 SCM_RIGHTS。
+
+**Q31: Zygote 的 preload 到底预加载了哪些东西？为什么所有应用进程能直接共享？**
+
+preload 阶段把"每个应用都需要的公共物"只加载一次：preloaded-classes 清单里的常用框架类、系统资源（drawable/color 资源表）、图形相关初始化与 JCA 安全 Provider；此后所有 fork 出的进程靠写时复制物理共享这些页——读到的都是同一份内存，谁写了那一页才真正复制。
+
+机制：
+
+1. **时机**：主 Zygote 在进入 socket 循环前执行 preload；次 Zygote 用 `--enable-lazy-preload` 跳过大头，只为 32 位应用按需补载；
+2. **共享原理**：fork 复制页表而不复制物理页，preload 出来的类元数据与资源位图因此成为全体后代共享的只读页——"省时间"与"省内存"两个收益同源于此；
+3. **代价**：清单里的每个类都被全体应用背着——加类开机变慢、删类各应用首载变慢，preloaded-classes 的每次调整都是全局权衡。
+
+收束：排查应用首帧慢时，"目标类不在 preload 清单、首次加载要自己付全部成本"是一个常被忽略的取证点。
+
+**Q32: ueventd 是怎么把空的 /dev 填满的？**
+
+ueventd 是 init 同一二进制的另一个形态，职责只有一个：监听内核的 uevent 设备事件，按 /dev/ueventd.rc 及各分区 rc 声明的规则创建设备节点并设置属主与权限——/dev 是 tmpfs、每次开机全空，所有节点都是它补建出来的。
+
+机制：
+
+1. **事件来源**：内核在设备注册或移除时发出 uevent（携带设备路径、主/次设备号、子系统），ueventd 经 netlink socket 接收；
+2. **冷插拔**：内核早于 ueventd 启动，启动早期的设备事件已经发完——ueventd 起来后向 /sys 重放一遍事件（coldboot），把错过的事件补齐；
+3. **权限规则**：ueventd.rc 每行声明"设备路径 属主 组 权限位"，如 /dev/binder 属 root、组 binder、0660。
+
+边界：节点能建的前提是驱动已注册——遇到"设备节点缺失"先分清是驱动没加载/没匹配，还是 ueventd 没建节点。
+
+**Q33: Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
+
+Zygote 是带完整 ART 运行时和预加载类/资源的模板进程，所有应用进程和 `system_server` 都由它 fork 出来，用"写时复制"换取启动速度和内存共享。init 第二阶段解析 `.rc` 后启动 Zygote；Zygote 完成类与资源预加载、直接 fork 出 `system_server` 后，进入 socket 循环等待后续进程创建请求。
+
+fork 之后父子进程共享未修改的物理页，写入时才真正复制（Copy-on-Write），所以新进程并不携带一份完整内存副本；子进程随后完成 specialize——设置到目标应用的 UID/GID、SELinux 域、seccomp 等安全身份——再进入 `ActivityThread.main()`。选择 fork 而非独立启动的原因：
+
+1. **省时间**：不必每进程重新初始化 ART、加载几千个预加载类；
+2. **省内存**：预加载页与未写脏页被所有应用进程共享；
+3. **同一起点**：所有进程从一致的运行环境出发。
+
+边界：COW 不等于零成本——后续写入和应用初始化会逐步产生私有页；普通应用的创建请求由 `system_server` 经 Zygote/USAP 本地 socket 发起，而 `system_server` 自己是 Zygote 在进入 socket 循环前一步直接 fork 的，两条路径不同（深挖见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)）。

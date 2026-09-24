@@ -2,6 +2,7 @@ package atlas
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import atlas.core.AppSettings
@@ -15,6 +16,7 @@ import atlas.core.NoteFile
 import atlas.core.OutboxTasks
 import atlas.core.SettingsStore
 import atlas.core.SourceQuestions
+import atlas.core.TextDiff
 import atlas.core.Tools
 import atlas.fsrs.FsrsEngine
 import atlas.index.Indexer
@@ -30,6 +32,20 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+
+/** 单道题相对 git HEAD 的内容差异，行内着色用：题面给字符区间，答案给行号集合。 */
+data class SourceQuestionGitDiff(
+    val changed: Boolean,
+    /** 题面中变化的字符区间（当前题面文本坐标） */
+    val questionRanges: List<IntRange> = emptyList(),
+    /** 答案中变化的行下标（当前答案 lines() 坐标） */
+    val answerDirtyLines: Set<Int> = emptySet(),
+)
+
+/** git 改动标记的 key：按文档 + 题号配对，内容编辑或块偏移变化不影响配对。 */
+internal fun sourceQuestionGitKey(entry: SourceQuestions.Entry): String =
+    "${entry.sourcePath}#${entry.number}"
 
 /**
  * 应用中枢：持有全部状态与动作。UI 只读状态 + 调动作。
@@ -57,6 +73,8 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     val sourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
     /** 整棵知识库目录树中的 Q 题目，用于题库全局搜索。 */
     val allSourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
+    /** 题目内容相对 git HEAD 的差异；key = sourceQuestionGitKey，缺值 = 未知/未加载/git 不可用。 */
+    val sourceQuestionGitDiffs = mutableStateMapOf<String, SourceQuestionGitDiff>()
     /** 当前同源题目文档中的章节标题，独立于题目答案展示。 */
     val sourceSections = mutableStateListOf<SourceQuestions.SectionHeading>()
     /** 题库左侧的知识库 Markdown 文档列表。 */
@@ -277,8 +295,92 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
                     rebuildDueQueue()
                 }
             }
+            // 内容可能变了，异步重算"相对 git HEAD 的题目改动"标记（子进程慢，不能占 UI 线程）
+            refreshSourceQuestionGitDiff()
         }
     }
+
+    /** 比对任务代号：刷新期间又发生重载时，旧任务结果直接丢弃。 */
+    private val gitDiffGeneration = AtomicInteger(0)
+
+    /** 探测过「不是 git 仓库」的库根：签名轮询每 3s 一次，不能对这种根反复 spawn 子进程 */
+    private val gitUnavailableRoots: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * 逐题比对当前内容与 git HEAD 里的版本（按题号配对）。除是否变化外，
+     * 还携带题面变化字符区间与答案变化行号，供 UI 行内着色。
+     * 返回 null 表示 git 不可用或当前库不在 git 仓库里，UI 不标色。
+     */
+    fun computeSourceQuestionGitDiffs(): Map<String, SourceQuestionGitDiff>? {
+        val entriesByDoc = allSourceQuestions.toList().groupBy { it.sourcePath }
+        if (entriesByDoc.isEmpty()) return emptyMap()
+        val rootPath = libraryRoot().absolutePath
+        if (rootPath in gitUnavailableRoots) return null
+        val probe = runCatching {
+            val proc = ProcessBuilder("git", "-C", rootPath, "rev-parse", "--git-dir")
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+            proc.waitFor()
+        }.getOrNull() ?: return null
+        if (probe != 0) {
+            gitUnavailableRoots.add(rootPath)
+            return null
+        }
+        val result = HashMap<String, SourceQuestionGitDiff>()
+        for ((path, entries) in entriesByDoc) {
+            val oldDoc = gitShowHeadContent(sourceDocumentFile(path))
+            if (oldDoc == null) {
+                // 文件不在 HEAD（新文件尚未提交过）：全部内容都算有未提交改动
+                entries.forEach { entry ->
+                    result[sourceQuestionGitKey(entry)] = SourceQuestionGitDiff(
+                        changed = true,
+                        questionRanges = listOf(0 until entry.question.length),
+                        answerDirtyLines = entry.answer.lines().indices.toSet(),
+                    )
+                }
+                continue
+            }
+            val oldByNumber = SourceQuestions.parse(path, oldDoc, settings.sourceQuestionPaths).associateBy { it.number }
+            entries.forEach { entry ->
+                val old = oldByNumber[entry.number]
+                result[sourceQuestionGitKey(entry)] = when {
+                    old == null -> SourceQuestionGitDiff(
+                        changed = true,
+                        questionRanges = listOf(0 until entry.question.length),
+                        answerDirtyLines = entry.answer.lines().indices.toSet(),
+                    )
+                    old.question == entry.question && old.answer == entry.answer -> SourceQuestionGitDiff(changed = false)
+                    else -> SourceQuestionGitDiff(
+                        changed = true,
+                        questionRanges = TextDiff.changedRangesInNew(old.question, entry.question),
+                        answerDirtyLines = TextDiff.changedLinesInNew(old.answer, entry.answer),
+                    )
+                }
+            }
+        }
+        return result
+    }
+
+    /** 后台重算 git 改动标记并原子发布；重载后调用，保存与外部修改都会跟着刷新。 */
+    fun refreshSourceQuestionGitDiff() {
+        val generation = gitDiffGeneration.incrementAndGet()
+        scope.launch {
+            val result = computeSourceQuestionGitDiffs() ?: return@launch
+            if (gitDiffGeneration.get() != generation) return@launch
+            androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
+                sourceQuestionGitDiffs.clear()
+                sourceQuestionGitDiffs.putAll(result)
+            }
+        }
+    }
+
+    private fun gitShowHeadContent(file: File): String? = runCatching {
+        val proc = ProcessBuilder("git", "-C", file.parentFile.absolutePath, "show", "HEAD:./${file.name}")
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        val text = proc.inputStream.readBytes().toString(Charsets.UTF_8)
+        if (proc.waitFor() != 0) null else text
+    }.getOrNull()
 
     fun selectSourceDocument(path: String) {
         if (path == selectedSourcePath) return
@@ -590,7 +692,7 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     }
 
     private fun knowledgeSignature(): String {
-        
+
         val files = listOf(cardsFile(), questionsFile(), sourceQuestionFile())
             .joinToString(";") { "${it.absolutePath}:${it.lastModified()}:${it.length()}" }
         val docs = scanKnowledgeDocuments().joinToString(";") { path ->
@@ -598,7 +700,24 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
             "$path:${file.lastModified()}:${file.length()}"
         }
         val inbox = inboxDir().listFiles()?.joinToString(";") { "${it.name}:${it.lastModified()}" } ?: ""
-        return "$files|$docs|$inbox"
+        // 把 HEAD 提交代号纳入签名：git commit 不改文件内容，但不纳入的话「未提交改动」
+        // 标记要等到下次内容变化才会重算，用户提交后橙标迟迟不消失。
+        // 非仓库的库根缓存探测结果，避免监听线程每 3s 空转一个子进程
+        val rootPath = libraryRoot().absolutePath
+        val gitHead = if (rootPath in gitUnavailableRoots) {
+            "no-git"
+        } else runCatching {
+            val proc = ProcessBuilder("git", "-C", rootPath, "rev-parse", "HEAD")
+                .redirectErrorStream(true)
+                .start()
+            val output = proc.inputStream.readBytes().toString(Charsets.UTF_8)
+            when {
+                proc.waitFor() == 0 -> output.trim()
+                output.contains("not a git repository") -> { gitUnavailableRoots.add(rootPath); "no-git" }
+                else -> "no-git"
+            }
+        }.getOrDefault("no-git")
+        return "$files|$docs|$inbox|$gitHead"
     }
 
     // ---------- 检索与上下文包 ----------

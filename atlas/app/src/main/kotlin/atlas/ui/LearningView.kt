@@ -36,6 +36,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
@@ -60,6 +63,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.DialogProperties
 import atlas.AppStore
+import atlas.SourceQuestionGitDiff
+import atlas.sourceQuestionGitKey
 import atlas.core.KnowledgeTree
 import atlas.core.KnowledgeTreeNode
 import atlas.core.Log
@@ -560,7 +565,7 @@ fun QuestionSection(store: AppStore) {
         if (SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
             Text(
                 if (reorderMode) "排序模式：按住任意题目卡片拖动换位，松开后自动保存并重新编号。"
-                else if (query.isBlank()) "点击题目显示答案；需要调整顺序时点击右上角「调整顺序」。"
+                else if (query.isBlank()) "点击题目显示答案；橙色标记 = 内容相对 git 最近提交有改动；需要调整顺序时点击右上角「调整顺序」。"
                 else "点击题目显示答案；搜索结果仅供查看，清空搜索后可调整顺序。",
                 fontSize = 11.sp,
                 color = Theme.Muted,
@@ -600,6 +605,9 @@ fun QuestionSection(store: AppStore) {
                 val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isExpanded = entryKey in expanded
                 val isDragging = draggingKey == entryKey
+                // 内容相对 git HEAD 有未提交改动：橙色边框 + Q 标签 + 行内着色（比对异步完成，加载中不标色）
+                val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
+                val gitDirty = gitDiff?.changed == true
                 val canReorder = reorderMode && query.isBlank() && questionIndex >= 0 && visible.size == store.sourceQuestions.size
                 val cardElevation by animateDpAsState(
                     targetValue = if (isDragging) 12.dp else 0.dp,
@@ -665,6 +673,7 @@ fun QuestionSection(store: AppStore) {
                             if (isDragging) Theme.Accent
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
                             else if (isExpanded) Theme.Accent.copy(alpha = 0.42f)
+                            else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.55f)
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
                             MaterialTheme.shapes.small,
                         )
@@ -766,10 +775,17 @@ fun QuestionSection(store: AppStore) {
                                 expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                             },
                         ) {
-                            Text("Q${entry.number}", fontSize = 11.sp, color = Theme.Muted)
+                            Text(
+                                if (gitDirty) "Q${entry.number} ·有改动" else "Q${entry.number}",
+                                fontSize = 11.sp,
+                                color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
+                            )
                             Spacer(Modifier.height(2.dp))
                             SelectionContainer {
-                                Text(entry.question, style = ui.typography.itemTitle)
+                                Text(
+                                    remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
+                                    style = ui.typography.itemTitle,
+                                )
                             }
                             if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
                                 Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
@@ -827,7 +843,11 @@ fun QuestionSection(store: AppStore) {
                                             },
                                         ) {
                                             SelectionContainer {
-                                                MarkdownText(entry.answer, style = store.settings.markdownStyle)
+                                                MarkdownText(
+                                                    entry.answer,
+                                                    style = store.settings.markdownStyle,
+                                                    dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
+                                                )
                                             }
                                         }
                                     }
@@ -899,6 +919,18 @@ fun QuestionSection(store: AppStore) {
             targetCandidates = mappedDocuments.filter { it != entry.sourcePath },
             onDismiss = { movingEntry = null },
         )
+    }
+}
+
+/** 题面行内 diff 着色：相对 git HEAD 变化的字符标橙字；纯删除没有 new 侧区间则整段原样。 */
+private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): AnnotatedString = buildAnnotatedString {
+    append(text)
+    diff?.questionRanges?.forEach { range ->
+        val start = range.first.coerceIn(0, text.length)
+        val end = (range.last + 1).coerceIn(start, text.length)
+        if (end > start) {
+            addStyle(SpanStyle(color = Theme.WarnOrange), start, end)
+        }
     }
 }
 

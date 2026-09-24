@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：分层架构与进程边界、跨层接口、HAL 与 Treble、近年架构边界、进程与线程的架构分工。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》（机制按 AOSP `android-17.0.0_r1` 与 ACK `android17-6.18-2026-06_r6` 核对）；16 KB 分发时间线、应用沙箱与 ART 编译策略已于 2026-09-23 与官方资料核对。启动全链路（init、.rc、Zygote、system_server、应用进程诞生）见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: Android 的五层架构怎么理解？**
+**Q1: Android 的五层架构怎么理解？各层中的典型对象都有什么？**
 
 五层按**职责**划分系统组件：应用、应用框架、原生库与 ART、HAL、Linux 内核。
 
@@ -29,7 +29,22 @@ flowchart TB
 4. **HAL 层**：硬件抽象层，把显示合成、相机、音频、蓝牙等硬件能力封装成标准接口（Stable AIDL、存量 HIDL），向上屏蔽芯片与厂商差异；
 5. **Linux 内核层**：提供进程调度、内存管理、电源管理、Binder 驱动、网络栈与设备驱动，是进程隔离与硬件访问的基石。
 
+各层的典型对象及其典型所在位置：
 
+1. **应用**：Activity、Compose/View、业务线程、RenderThread——各应用自己的进程；
+2. **应用框架**：ActivityTaskManagerService、WindowManagerService、PackageManagerService 等——服务端在 system_server，SDK 客户端代码在每个应用进程；
+3. **原生库与 ART**：ART、Bionic、Skia、SQLite 随进程加载；SurfaceFlinger、AudioFlinger、媒体服务是独立原生服务进程；
+4. **HAL**：Stable AIDL HAL、存量 HIDL HAL、厂商实现——独立 Binder/hwbinder 服务进程，或直通式加载进调用方进程；
+5. **Linux 内核**：调度器、内存管理、Binder 驱动、网络栈、文件系统、DMA-BUF、设备驱动——内核空间。
+
+**为什么 SurfaceFlinger、AudioFlinger 算这一层？** 判据用排除法最直接：五层是互斥的职责划分，两者与其余四层的判据逐一对照全部不符，只能落在本层。
+
+1. **不属于应用层**：无 APK，由 init 启动，先于任何应用存在；
+2. **不属于应用框架层**：该层是 Java SDK API 的实现世界，两者是原生机器码、进程里没有 ART，SDK 里也没有以它们为对象的业务 API；
+3. **不属于 HAL 层**：不封装芯片差异，反而是 Composer HAL 的调用方；
+4. **不属于内核层**：是用户态进程。
+
+与本层判据全部吻合：C/C++ 编译成机器码、链接 Bionic、随系统镜像分发、为全系统提供公共能力；存在形态是这层两种形态之一的"独立原生服务"，另一种是随进程加载的 .so 库。依赖方向可作印证：WMS 经 Binder 向 SurfaceFlinger 下发图层事务，AudioTrack 经 libaudioclient 向 AudioFlinger 送音频数据，依赖永远从框架侧指向两者、从不反向。
 
 **Q2: Android 五层架构之间是通过什么方式通信的，可以跨层通信吗？**
 
@@ -43,6 +58,8 @@ flowchart TB
 4. **原生库/HAL → 内核**：系统调用、`ioctl`、`mmap` 与设备节点。
 
 跳过中间层的直达是常态：应用可以经 Bionic 直接发起文件系统调用，直达内核而不经过框架服务和 HAL；SurfaceFlinger 可以直接对接 Composer HAL 和 DRM 显示子系统。
+
+SF 这条直达链的展开：各应用把渲染好的缓冲区经 BufferQueue 交给 SF，SF 在每个 vsync 周期把图层描述（缓冲区句柄、几何、混合模式、Z 序）经 Binder 交给 Composer HAL——SF 是它全系统唯一的客户端；厂商 HAL 实现再对内核 DRM/KMS 发 ioctl，把图层提交到显示控制器的硬件 plane 合成后扫描上屏，需要 GPU 合成的图层由 SF 的 RenderEngine 经 DRM 渲染节点提交。从 SF 起整条路径全是原生调用，不经过任何 Java 框架服务——"直接"指 HAL 边界与内核边界这两次跨界都由原生组件一步完成。
 
 
 
@@ -202,72 +219,7 @@ flowchart TB
 2. **性能归属**：耗时在业务逻辑、Framework 分发、ART（GC/JIT）还是原生库/渲染线程，优化动作完全不同；
 3. **安全边界**：进程边界就是沙箱边界，每个应用默认独占一个 Linux UID 和一个进程，跨进程访问必须走 Binder 等显式 IPC。
 
-
-
-
-
-
-
-**Q6: `system_server` 进程都包含哪些层级的代码？了解这些有什么用？**
-
-`system_server` 是"应用框架层服务端"的宿主进程：里面运行着几百个 Java 系统服务（AMS/ATMS、WMS、PMS 等，按 Bootstrap/Core/Other/Apex 四组启动）、Framework 的 JNI 库、ART 运行时和 Binder 原生库；它由 Zygote fork 出来，继承预加载的类与资源，接收 Binder 事务的线程池在进入 `SystemServer.main()` 之前就已启动。
-
-它**不包含**的东西同样重要：SurfaceFlinger 是独立原生服务进程，HAL 或是独立进程、或是加载进调用方的共享库——"应用框架"这个层名不等于"某一个进程"。
-
-了解这些的用处有三点：
-
-1. **框架单点**：`system_server` 崩溃意味着整个框架重启——Zygote 检测到其死亡后自杀，由 init 重启 Zygote 再重新 fork；各应用的日常 Binder 调用大量落在这里，它的卡顿是全局性卡顿；
-2. **慢的归属**：`system_server` 内的排队和锁竞争是系统服务的开销，不要算到应用头上；
-3. **进程归属**：定位问题前先确认进程，别把层名当进程名用。
-
-
-
-
-
-
-
-
-
-**Q7: Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
-
-Zygote 是带完整 ART 运行时和预加载类/资源的模板进程，所有应用进程和 `system_server` 都由它 fork 出来，用"写时复制"换取启动速度和内存共享。init 第二阶段解析 `.rc` 后启动 Zygote；Zygote 完成类与资源预加载、直接 fork 出 `system_server` 后，进入 socket 循环等待后续进程创建请求。
-
-fork 之后父子进程共享未修改的物理页，写入时才真正复制（Copy-on-Write），所以新进程并不携带一份完整内存副本；子进程随后完成 specialize——设置到目标应用的 UID/GID、SELinux 域、seccomp 等安全身份——再进入 `ActivityThread.main()`。选择 fork 而非独立启动的原因：
-
-1. **省时间**：不必每进程重新初始化 ART、加载几千个预加载类；
-2. **省内存**：预加载页与未写脏页被所有应用进程共享；
-3. **同一起点**：所有进程从一致的运行环境出发。
-
-边界：COW 不等于零成本——后续写入和应用初始化会逐步产生私有页；普通应用的创建请求由 `system_server` 经 Zygote/USAP 本地 socket 发起，而 `system_server` 自己是 Zygote 在进入 socket 循环前一步直接 fork 的，两条路径不同（深挖见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)）。
-
-
-
-
-
-
-
-**Q8: HAL 有哪几种存在形态？Treble 之后 system 与 vendor 的边界靠什么维持兼容？**
-
-HAL 有三种存在形态：Stable AIDL HAL（以 Binder 服务进程运行）、服务化（binderized）HIDL HAL（独立服务进程，走 hwbinder）、直通式（passthrough）HIDL HAL（以共享库加载进调用方进程，没有独立 HAL 进程）。Project Treble（Android 8.0 起）用"稳定接口 + VINTF 清单"维持 system/vendor 分区的可组合性。
-
-形态直接决定排查路径：
-
-1. **服务化实现**：调用沿 Binder 进入 HAL 进程，查服务线程、锁、系统调用与同步栅栏；
-2. **直通式实现**：代码留在调用方进程，查原生调用栈和共享库内部等待。
-
-兼容机制上，新 HAL 接口已转向 Stable AIDL（用于 system/vendor 边界时需声明 VINTF 稳定性），VINTF 清单与框架端、设备端的兼容矩阵共同决定一个具体的系统镜像与厂商镜像组合是否可安装；稳定接口保证"只更系统框架"成为可能，但不保证任意组合都兼容。
-
-边界：Android 17 设备上仍可能保留存量 HIDL HAL 以兼容旧厂商镜像，不能仅凭系统版本假定全部 HAL 已迁移。
-
-
-
-
-
-
-
-
-
-**Q9: 16 KB 页大小、Mainline 模块化、VNDK 废弃——这三个近年架构边界分别改变了什么？**
+**Q6: 16 KB 页大小、Mainline 模块化、VNDK 废弃——这三个近年架构边界分别改变了什么？**
 
 三者分别在二进制兼容、系统模块分发、system/vendor 原生库依赖三个维度收紧或移动边界：16 KB 页改变原生库的对齐要求，Mainline 让部分系统组件绕过整机 OTA 独立更新，VNDK 自 Android 15 起废弃、厂商依赖的库改为随厂商镜像自带。
 
@@ -275,32 +227,7 @@ HAL 有三种存在形态：Stable AIDL HAL（以 Binder 服务进程运行）�
 2. **Mainline**：系统组件封装为 APEX/APK，可经 Play 系统更新独立升级，所以同版本号设备的 ART、Media、Wi-Fi 等模块实现可能不同；分析问题要同时记录 build fingerprint 和相关模块版本；模块能变实现，但变不了稳定 SDK/System API、稳定 C API 或 Stable AIDL 边界。
 3. **VNDK 废弃**（Android 15 起）：新的 vendor/product 分区不再声明 `ro.vndk.version`，原 VNDK 库改按 vendor-available 库安装进厂商镜像；但动态链接器命名空间隔离没有随之删除，加载前的可访问性校验仍在——"VNDK 废弃 = 命名空间隔离取消"是错误推论。
 
-
-
-
-
-
-
-
-
-**Q10: WindowManagerService 和 SurfaceFlinger 各自负责什么？为什么说它们是"层≠进程"的典型实例？**
-
-WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，策略与合成解耦，两个角色互不隶属、不能合并进同一个"应用框架进程"标签：
-
-1. **WMS**：运行在 `system_server`，管窗口容器、层级、焦点、配置，产出图层描述；
-2. **SurfaceFlinger**：init 启动的独立原生服务进程，收集各应用的图层与缓冲区，借助 CompositionEngine、RenderEngine 和 Composer HAL 在每个 vsync 周期合成上屏。
-
-对排查的意义：判断"界面没动"时两侧都要查——可能是 WMS 侧没有产生布局/层级变化，也可能是 SF 侧没有合成新帧或提交被栅栏卡住；`system_server` 与 SF 通过明确接口协作，一方的卡顿与崩溃不会自动等同于另一方。这也是"属于同一层（框架层）却在不同进程、不同语言、不同崩溃域"的最直接例证。
-
-
-
-
-
-
-
-
-
-**Q11: Android 的进程回收架构由哪些角色组成？杀、冻、压分别是谁在做什么？**
+**Q7: Android 的进程回收架构由哪些角色组成？杀、冻、压分别是谁在做什么？**
 
 进程回收是一条四角色流水线：OomAdjuster（在 `system_server` 内）按组件状态和依赖关系计算每个进程的回收优先级（adj，数值越小越受保护）并同步给 lmkd；lmkd 在用户态监控内存压力并决定杀谁；缓存进程冻结器（Freezer）通过 cgroup 暂停缓存进程但不杀；mmd（Android 17 新增）负责 ZRAM 内存压缩维护。杀、冻、压是三种不同操作，由不同角色执行。
 
@@ -323,7 +250,7 @@ WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，�
 
 
 
-**Q12: 一个 Android 应用进程内部有哪几类固定线程角色？一次点击到上屏经过哪些线程？**
+**Q8: 一个 Android 应用进程内部有哪几类固定线程角色？一次点击到上屏经过哪些线程？**
 
 进程内固定有四类线程角色——主线程、RenderThread、Binder 线程池和各类后台执行器；一次点击沿"主线程输入分发 → 业务逻辑 →（可能跨进程的 Binder 调用）→ 主线程测量布局并记录显示列表 → RenderThread 渲染提交 → SurfaceFlinger 合成"行进，任何一环阻塞都可能丢帧。
 
@@ -342,7 +269,7 @@ WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，�
 
 
 
-**Q13: 应用的所有请求都需要经过 Android 的五层架构吗？**
+**Q9: 应用的所有请求都需要经过 Android 的五层架构吗？**
 
 不需要。五层是职责划分，不是一条所有请求都必须流经的调用管线：一次请求只穿过它实际跨越的层，很多高频请求完全绕开"应用框架服务"这一层，数据面请求也常常不经 HAL。
 
@@ -354,33 +281,3 @@ WMS 与 SurfaceFlinger 分管显示链路的"策略世界"和"像素世界"，�
 4. **相机、音频**：Binder 只传控制命令，数据经共享缓冲区/FMQ 直达 HAL 与驱动，控制路径和数据路径不同。
 
 判断方法：把一次操作拆成"控制命令走哪、数据走哪"，数它跨过的进程和边界，就知道该去哪些进程取证；"应用发起的请求"不等于"会逐层经过五层"。
-
-
-
-
-
-
-
-
-
-**Q14: Android 五层架构中各层的典型对象是什么？**
-
-各层的典型对象及其典型所在位置：
-
-1. **应用**：Activity、Compose/View、业务线程、RenderThread——各应用自己的进程；
-2. **应用框架**：ActivityTaskManagerService、WindowManagerService、`PackageManagerService` 等——服务端在 system_server，SDK 客户端代码在每个应用进程；
-3. **原生库与 ART**：ART、Bionic、Skia、SQLite 随进程加载；SurfaceFlinger、AudioFlinger、媒体服务是独立原生服务进程；
-4. **HAL**：Stable AIDL HAL、存量 HIDL HAL、厂商实现——独立 Binder/hwbinder 服务进程，或直通式加载进调用方进程；
-5. **Linux 内核**：调度器、内存管理、Binder 驱动、网络栈、文件系统、DMA-BUF、设备驱动——内核空间。
-
-
-
-**Q15: Android 公共内核是什么？量产设备都会使用吗？厂商会修改什么、为什么？**
-
-公共内核指 Android Common Kernel（ACK）——Google 基于上游 Linux 内核（通常选 LTS 分支）维护、包含 Android 所需驱动与特性（Binder 驱动、PSI 等）的公共内核分支；GKI（Generic Kernel Image，通用内核镜像）项目进一步把它变成"Google 统一构建的核心内核镜像 + 厂商可加载模块"的形态。量产设备不是原样照搬：核心镜像来自 ACK/GKI，厂商在之上叠加自己的部分。
-
-1. **谁在用**：Android 12 起新发布的设备按 GKI 2.0 形态出货（核心内核 5.10 起）；存量升级设备可能仍运行厂商旧内核，所以"量产设备都会使用"只对新发布设备成立；
-2. **厂商改什么**：SoC/板级硬件驱动以厂商模块形式加载（装在 vendor_boot/vendor_dlkm 等分区）、设备树与产品配置、电源/温控/调度策略调优（经 ACK 预留的 vendor hooks 挂回调）；核心内核镜像本身不打厂商补丁；
-3. **为什么**：内核碎片化曾让同一版本 Android 背着几十种内核 fork，安全补丁与上游更新无法统一下发；GKI 把硬件代码移出核心镜像、用稳定的内核模块接口（KMI）解耦，使核心内核可以独立更新而厂商模块不动。
-
-排查边界：公共内核源码标签（如 ACK `android17-6.18-2026-06_r6`）只能核对平台通用机制；具体设备的驱动、配置与调度策略要看设备自己的内核提交版本与 fragment，不能拿公共内核源码当设备内核源码用。

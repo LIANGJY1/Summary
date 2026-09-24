@@ -202,6 +202,104 @@ class AppStoreTest {
     }
 
     @Test
+    fun `不在 git 仓库时不标记题目改动`() {
+        val config = File(tmp, "config-nogit-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "nogit-lib-${System.nanoTime()}").apply { mkdirs() }
+        File(root, SourceQuestions.TARGET_PATH).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 问题？**\n\n答案。", Charsets.UTF_8)
+        }
+        store.settings = store.settings.copy(libraryPath = root.absolutePath)
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        assertEquals(1, store.sourceQuestions.size)
+        assertEquals(null, store.computeSourceQuestionGitDiffs(), "git 不可用时应返回 null，UI 保持不标色")
+    }
+
+    @Test
+    fun `相对 git HEAD 标记有改动的题目`() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+            runCatching {
+                ProcessBuilder("git", "--version").start().waitFor() == 0
+            }.getOrDefault(false),
+            "测试环境没有 git 命令",
+        )
+        val config = File(tmp, "config-gitdiff-${System.nanoTime()}")
+        val store = AppStore(config)
+        val root = File(tmp, "gitdiff-lib-${System.nanoTime()}").apply { mkdirs() }
+        val committedRel = "knowledge-base/android/架构.md"
+        val committed = File(root, committedRel).apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                **Q1: 稳定题？**
+
+                稳定答案。
+
+                **Q2: 改答案题？**
+
+                旧答案。
+
+                **Q3: 旧题面？**
+
+                稳定答案三。
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+        fun git(vararg args: String): Boolean =
+            ProcessBuilder("git", "-C", root.absolutePath, *args)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+                .waitFor() == 0
+        assertTrue(git("init"))
+        assertTrue(git("add", "."))
+        assertTrue(git("-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-m", "init"))
+        // 提交后：Q2 改答案、Q3 改题面，另有一个从未提交过的新文档
+        committed.writeText(
+            """
+            **Q1: 稳定题？**
+
+            稳定答案。
+
+            **Q2: 改答案题？**
+
+            新答案，多了几个字。
+
+            **Q3: 新题面？**
+
+            稳定答案三。
+            """.trimIndent(),
+            Charsets.UTF_8,
+        )
+        val newRel = "knowledge-base/android/新文档.md"
+        File(root, newRel).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 未提交题？**\n\n未提交答案。", Charsets.UTF_8)
+        }
+
+        store.settings = store.settings.copy(
+            libraryPath = root.absolutePath,
+            sourceQuestionPaths = store.settings.sourceQuestionPaths + committedRel + newRel,
+        )
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+
+        val diffs = store.computeSourceQuestionGitDiffs()!!
+        assertFalse(diffs["$committedRel#1"]!!.changed, "与 HEAD 一致的题目不应标色")
+        val answerChanged = diffs["$committedRel#2"]!!
+        assertTrue(answerChanged.changed, "答案相对 HEAD 有改动应标色")
+        assertTrue(answerChanged.questionRanges.isEmpty(), "题面没变不应有题面差异区间")
+        assertEquals(setOf(0), answerChanged.answerDirtyLines, "答案第一行有改动应标记行 0")
+        val questionChanged = diffs["$committedRel#3"]!!
+        assertTrue(questionChanged.changed, "题面相对 HEAD 有改动应标色")
+        assertTrue(questionChanged.questionRanges.isNotEmpty(), "题面变了应给出变化字符区间")
+        assertTrue(questionChanged.answerDirtyLines.isEmpty(), "答案没变不应有答案行标记")
+        val brandNew = diffs["$newRel#1"]!!
+        assertTrue(brandNew.changed, "未提交新文档的题目应标色")
+        assertEquals(listOf(0 until "未提交题？".length), brandNew.questionRanges, "未提交题目题面整体标色")
+    }
+
+    @Test
     fun `题库左侧文档列表映射知识库并可切换`() {
         val config = File(tmp, "config-docs-${System.nanoTime()}")
         val store = AppStore(config)

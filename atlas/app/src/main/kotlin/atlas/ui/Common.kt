@@ -233,17 +233,27 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
 private val markdownBulletPattern = Regex("^\\s*[-*] ")
 private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)(.+)$")
 
+/** 答案 diff 行着色：相对 git HEAD 变化的行整行文字标橙（追加在内联样式之上） */
+private fun colorIfDirty(annotated: AnnotatedString, lineIndex: Int, dirtyLines: Set<Int>): AnnotatedString =
+    if (lineIndex in dirtyLines) {
+        buildAnnotatedString {
+            append(annotated)
+            addStyle(SpanStyle(color = Theme.WarnOrange), 0, length)
+        }
+    } else annotated
+
 /**
  * 轻量 markdown 渲染（v1 内置实现，ADR：替代 mikepenz 库以零依赖——支持标题/列表/引用/
- * 代码块/分隔线/行内标记；复杂 GFM 交给「用系统编辑器打开」）
+ * 代码块/分隔线/行内标记；复杂 GFM 交给「用系统编辑器打开」）。
+ * [dirtyLines]：需要高亮的行下标（md.lines() 坐标），题库 git 改动行内着色用。
  */
 @Composable
-fun MarkdownText(md: String, modifier: Modifier = Modifier, style: String = "reader") {
-    if (style == "classic") ClassicMarkdownText(md, modifier) else ReaderMarkdownText(md, modifier)
+fun MarkdownText(md: String, modifier: Modifier = Modifier, style: String = "reader", dirtyLines: Set<Int> = emptySet()) {
+    if (style == "classic") ClassicMarkdownText(md, modifier, dirtyLines) else ReaderMarkdownText(md, modifier, dirtyLines)
 }
 
 @Composable
-private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
+private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) {
     val ui = atlasUiTokens()
     val lines = md.lines()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -284,24 +294,24 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                     }
                 }
                 line.startsWith("### ") -> Text(
-                    renderInline(line.removePrefix("### ")),
+                    colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 8.dp),
                     style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 23.sp),
                 )
                 line.startsWith("## ") -> Text(
-                    renderInline(line.removePrefix("## ")),
+                    colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 12.dp),
                     style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 27.sp),
                 )
                 line.startsWith("# ") -> Text(
-                    renderInline(line.removePrefix("# ")),
+                    colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 14.dp),
                     style = ui.typography.pageTitle.copy(fontSize = 24.sp, lineHeight = 32.sp),
                 )
                 line.startsWith("> ") -> Row(Modifier.fillMaxWidth()) {
                     Box(Modifier.width(3.dp).height(22.dp).background(Theme.Accent, RoundedCornerShape(2.dp)))
                     Text(
-                        renderInline(line.removePrefix("> ")),
+                        colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
                         Modifier.padding(start = 12.dp).fillMaxWidth(),
                         color = Theme.Muted,
                         fontStyle = FontStyle.Italic,
@@ -313,7 +323,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                 Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
                     Text("•", color = Theme.Accent, fontSize = 15.sp)
                     Text(
-                        renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")),
+                        colorIfDirty(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), i, dirtyLines),
                         Modifier.padding(start = 10.dp),
                         style = ui.typography.body,
                     )
@@ -329,7 +339,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                             style = ui.typography.body,
                         )
                         Text(
-                            renderInline(numbered.groupValues[2]),
+                            colorIfDirty(renderInline(numbered.groupValues[2]), i, dirtyLines),
                             Modifier.fillMaxWidth(),
                             style = ui.typography.body,
                         )
@@ -347,7 +357,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
                     i = j - 1
                 }
                 line.isBlank() -> Spacer(Modifier.height(4.dp))
-                else -> Text(renderInline(line), style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)))
+                else -> Text(colorIfDirty(renderInline(line), i, dirtyLines), style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)))
             }
             i++
         }
@@ -355,7 +365,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
+private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) {
     val ui = atlasUiTokens()
     val lines = md.lines()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ui.spacing.item)) {
@@ -385,18 +395,18 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
                         }
                     }
                 }
-                line.startsWith("### ") -> Text(renderInline(line.removePrefix("### ")), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                line.startsWith("## ") -> Text(renderInline(line.removePrefix("## ")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                line.startsWith("# ") -> Text(renderInline(line.removePrefix("# ")), fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                line.startsWith("### ") -> Text(colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                line.startsWith("## ") -> Text(colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                line.startsWith("# ") -> Text(colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines), fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 line.startsWith("> ") -> Text(
-                    renderInline(line.removePrefix("> ")),
+                    colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
                     Modifier.padding(start = 10.dp).fillMaxWidth(),
                     color = Theme.Muted, fontStyle = FontStyle.Italic, fontSize = 14.sp,
                 )
                 line.trim() == "---" -> VDivider()
                 Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth()) {
                     Text("•  ", color = Theme.Muted)
-                    Text(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), style = ui.typography.body)
+                    Text(colorIfDirty(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), i, dirtyLines), style = ui.typography.body)
                 }
                 markdownNumberedPattern.find(line) != null -> {
                     val numbered = markdownNumberedPattern.find(line)!!
@@ -409,7 +419,7 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
                             style = ui.typography.body,
                         )
                         Text(
-                            renderInline(numbered.groupValues[2]),
+                            colorIfDirty(renderInline(numbered.groupValues[2]), i, dirtyLines),
                             Modifier.fillMaxWidth(),
                             style = ui.typography.body,
                         )
@@ -426,7 +436,7 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier) {
                     i = j - 1
                 }
                 line.isBlank() -> {}
-                else -> Text(renderInline(line), style = ui.typography.body)
+                else -> Text(colorIfDirty(renderInline(line), i, dirtyLines), style = ui.typography.body)
             }
             i++
         }
