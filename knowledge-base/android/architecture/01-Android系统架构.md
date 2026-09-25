@@ -269,7 +269,7 @@ SF 这条直达链的展开：各应用把渲染好的缓冲区经 BufferQueue �
 
 
 
-**Q9: 应用的所有请求都需要经过 Android 的五层架构吗？**
+**Q9: 应用的所有请求都需要经过 Android 的五层架构吗？可以跨层通信吗？**
 
 不需要。五层是职责划分，不是一条所有请求都必须流经的调用管线：一次请求只穿过它实际跨越的层，很多高频请求完全绕开"应用框架服务"这一层，数据面请求也常常不经 HAL。
 
@@ -281,3 +281,130 @@ SF 这条直达链的展开：各应用把渲染好的缓冲区经 BufferQueue �
 4. **相机、音频**：Binder 只传控制命令，数据经共享缓冲区/FMQ 直达 HAL 与驱动，控制路径和数据路径不同。
 
 判断方法：把一次操作拆成"控制命令走哪、数据走哪"，数它跨过的进程和边界，就知道该去哪些进程取证；"应用发起的请求"不等于"会逐层经过五层"。
+
+**Q10: Android 说的"原生库"指什么？"原生"（native）在这里是什么意思？**
+
+原生库指用 C/C++ 编译成本机机器码、以 .so 形式分发、由 CPU 直接执行的库；"原生"是 native 的中译，取"CPU 本机指令集"之义，对立面是需要在虚拟机里翻译执行的字节码，而不是"系统原装"的意思。
+
+"native"的地基：CPU 只执行自己指令集的机器码，native code 即编译成这套指令、无中间翻译层直接执行的代码（NDK 的 N 就是 Native）。它的对立面是 dex 字节码——不面向具体 CPU，由 ART 在运行时翻译，对象活在 GC 管理的堆上。一段代码是不是"原生世界"的成员，看它的进程里有没有 ART、内存由谁管理。
+
+"库"的形态对照：
+
+1. **原生库**：动态库 .so，装载进调用方进程的地址空间，进程内直接调函数——Bionic libc、Skia、SQLite、libbinder，以及应用经 NDK 打包的 libxxx.so；
+2. **独立原生服务**：ELF 可执行程序，由 init 拉起为无界面守护进程——SurfaceFlinger、AudioFlinger。"原生库与 ART 层"这个名字把两种形态都框进同一层，"库"字不读死。
+
+边界与纠偏：
+
+1. WMS 也是系统自带，但它是 Java 类、活在 ART 里，不是 native——"原生"不等于"原装、出厂自带"；
+2. ART 自己就是 native 库（libart.so），是 native 世界派去管理 dex 世界的运行时，这也是这一层叫"原生库与 ART 层"的原因；
+3. 应用侧的直观体感：NDK 写 C/C++ 编出 .so 塞进 APK，System.loadLibrary() 加载后经 JNI 调用。
+
+**Q11: C/C++ 编写的组件都属于"原生库与 ART 层"吗？**
+
+不属于。"C/C++ 编写"只说明组件是 native 代码（实现形态），层归属是架构角色，由"随谁分发、服务谁、在哪个边界"决定；C/C++ 代码实际横跨五层中的四层。
+
+四层对照：
+
+1. **应用层**：游戏引擎与 App 的 NDK 模块（如 libunity.so）——随 APK 分发、跑在应用进程、服务单个应用的业务；
+2. **原生库与 ART 层**：Skia、SQLite、libbinder、SurfaceFlinger——随系统镜像分发、为全系统提供公共能力；
+3. **HAL 层**：厂商的相机、音频、显示 HAL 实现——C/C++ 写成，贴硬件、躲在稳定接口后面；
+4. **内核层**：Linux 内核与驱动本身就是 C。
+
+归属三问的判断顺序：先问随谁分发（系统镜像还是 APK），再问服务谁（全系统公共能力还是单应用业务），最后问在哪个边界（贴内核驱动属 HAL/内核，管 dex 的是 ART）。语言只是入场券，席位由归属决定——应用自带的 C++ 是"运行在应用层的原生代码"，内核的 C 是内核层，厂商的 C++ HAL 是 HAL 层。
+
+**Q12: HAL 的实现代码是 Java 还是 C/C++？框架与 HAL 之间为什么用 Binder 而不是 JNI？**
+
+HAL 实现是 C/C++，不是 Java；框架与 HAL 之间走 Binder（Stable AIDL 或存量 HIDL）而非 JNI，因为 JNI 是同一进程内的语言桥，而 Android 8.0 Treble 之后框架与 HAL 分属两个进程，JNI 跨不过进程边界。
+
+实现只能选 C/C++ 的三个原因：
+
+1. **贴内核**：HAL 的日常是对设备节点发 ioctl、mmap 图形缓冲、读串口、配 ALSA，要求精确控制内存布局并使用内核头文件的结构体，Java 没有指针、不能 mmap、不能直接 ioctl；
+2. **数据面大流量**：相机图像流、逐 vsync 的合成提交、毫秒级混音靠零拷贝共享缓冲（DMA-BUF、FMQ）与同步栅栏，全是 native 概念；
+3. **存量生态**：厂商的显示、相机、音频方案本就是多年积累的 C/C++ 库与 DSP 固件，HAL 实现只是包一层稳定接口。
+
+形态演进了三代而语言未变：最早的 legacy HAL 是被调用方 dlopen 的 .so；Treble 后变成独立服务进程（binderized HIDL，走 hwbinder）；新接口转 Stable AIDL（普通 Binder 加 VINTF 稳定性承诺）。Java 在框架侧只是 API 门面——相机的 Java 类底下站着 native 的 CameraService，真正调 HAL 的是它。
+
+为什么不是 JNI：JNI 的前提是两端代码装在同一地址空间（.so 加载进同进程、函数调用级互调），跨进程只能走 IPC。这段边界历史上真的是直连——Android 7 及更早 HAL 就是 .so，被框架进程直接加载，代价是 HAL 崩溃带走 system_server、system 与 vendor 强耦合无法各自升级。Treble 刻意把 HAL 推出去单独成进程，换来崩溃隔离、独立 OTA 与 SELinux 最小权限；控制面 Binder 往返是微秒级，数据面另有 FMQ 共享内存兜底。
+
+两个纠偏：
+
+1. Java 不是绝对碰不到 HAL——AIDL 有 Java 后端，车机 CarService（Java）就经 Binder 直接调 vendor 分区的 VHAL，恰好证明分界是进程而非语言；C++ 进程调 C++ 的 HAL 同样要走 Binder；
+2. 收拢成规则：同进程的语言边界用 JNI，跨进程（进而跨分区、跨 SELinux 域）的边界用 Binder。
+
+**Q13: "框架服务之间走原生 Binder"指什么？**
+
+指框架家族的原生服务守护进程（SurfaceFlinger、AudioFlinger、CameraService、installd 等）互相调用、以及 system_server 内原生代码调用它们时，用的是 libbinder 的 C++ 接口——BBinder、BpBinder、C++ 版 Parcel 与 AIDL 的 C++/NDK 后端，编解码全程在 C++ 里完成，没有 JVM 参与。
+
+地基：Binder 只有一套底座——内核一个驱动加用户态一个 libbinder，其上有两个语言门面：Java 门面（android.os.Binder、Java 版 Parcel、AIDL 的 Java 后端，本身经 JNI 包着 libbinder）和 native 门面（C++ API）。"原生 Binder"不是第二套 IPC，而是同一条管道的 C++ 门面。必须用它没有选择余地：原生服务进程里没有 ART，android.os.Binder 这个类在那些进程里不存在。
+
+三个具体调用：
+
+1. **图层事务**：WMS 经 JNI 进 libgui 的 SurfaceComposerClient，用 C++ Binder 把事务发给 surfaceflinger 进程的 ISurfaceComposer 接口；
+2. **音频通路**：AudioTrack 的 native 半截与 audioserver 进程的 AudioFlinger 之间，经 IAudioFlinger、IAudioTrack 这些 C++ Binder 接口传控制命令与 PCM 数据；
+3. **installd**：system_server 的原生部分经 IInstalld（AIDL 的 C++ 后端）跨进程调 installd 守护进程做 dexopt 与目录操作。
+
+两个易混点：
+
+1. **别与 hwbinder 混淆**：hwbinder 是 Treble 时代给 HIDL HAL 划的专用通道；框架原生服务之间走普通 Binder；
+2. **跨语言调用是常态**：system_server 的 Java 服务调 cameraserver 的 C++ 服务，就是 Java 代理对 C++ 实现，同一个驱动承载——这恰好证明 Java 与 native 门面是同一套 IPC；另外 system_server 内部 Java 服务互调（如 AMS 调 PMS）虽是 Binder 语义，但两端同进程时走本地路径直接执行，不进内核。
+
+**Q14: Android 平台架构用了哪几种编程语言？为什么是这些？**
+
+五种通用语言——Java、Kotlin、C、C++、Rust，外加接口定义语言 AIDL/HIDL。它们不是历史堆砌，而是各自守住三种执行世界（ART 托管世界、native 机器码世界、内核世界）和一条跨世界契约线；每种语言的存留由所属世界的硬约束决定，不由偏好决定。
+
+逐语言的存在理由：
+
+1. **Java**：立项选型——托管内存与沙箱让内存受限设备上的多任务可控（不够就杀进程）、字节码跨 CPU 架构、开发者生态大；至今仍是框架层主体（system_server 的几百个服务），存量决定它只能被补充、不能被替换；
+2. **Kotlin**：编译成同样的 dex 字节码、与 Java 双向互操作，带空安全、协程等现代特性——不带来新世界，只升级 Java 世界的语言质感；Android 12 起进入平台代码，新代码优先、存量不动；
+3. **C**：Linux 内核不接受 C++（异常与 RTTI 的运行时开销不可控、内核自建全部基础设施），内核与驱动必须是 C；Bionic、SQLite 选 C 是为可移植与嵌入；
+4. **C++**：native 世界的主体——SurfaceFlinger、AudioFlinger、CameraService、ART 本身、Skia、libbinder、HAL 实现；平台代码大面积禁用异常与 RTTI，换体积与执行时间的可预测；
+5. **Rust**：为内存安全新增——内存安全漏洞长期占 Android 严重漏洞的大头且全部出自 C/C++，Rust 用所有权与借用检查在编译期消灭这些类目，性能与 C++ 同级；Android 13 前后起量产（Keystore2、蓝牙栈、UWB、虚拟化框架），策略是只写新代码、不重写存量；Google 官方口径：内存安全漏洞占比从 2019 年约四分之三降到 2024 年约四分之一，新增 native 代码约两成是 Rust；
+6. **AIDL/HIDL**：接口定义语言而非实现语言，一份契约生成 Java、C++、NDK、Rust 多种后端，让各世界互调而不互相依赖对方的运行时。
+
+收敛逻辑：每多一种语言就要多维护工具链、互操作边界、团队技能与安全审计面；而需求侧恰好四条正交——应用层要生产力与沙箱、系统层要性能与硬件控制、native 新代码要内存安全、跨世界要稳定契约。新需求出现时映射回现有成员（如内核驱动要内存安全，做法是 Linux 6.1 起把 Rust 推进内核，而不是引入新语言），所以集合稳定在"五个加一个"。
+
+四个常见误会：
+
+1. "C++ 是 C 的升级所以全用 C++"——不成立，内核强制 C，两者各有领地；
+2. "Kotlin 取代了 Java"——没有，两者共享同一运行时与生态，框架主体仍是 Java；
+3. "Rust 会取代 C++"——官方策略是增量不重写，存量 C/C++ 长期在位；
+4. "应用能用 Dart、JavaScript 写，所以它们也是架构语言"——那是应用自带运行时（Flutter、React Native）随 APK 分发，属应用层的实现自由，不改变平台镜像的语言集合。
+
+**Q15: system_server 里有 C++ 代码吗？"system_server 的原生部分"指什么？**
+
+有。system_server 不是纯 Java 进程，而是一个宿主：ART 运行时加几百个 Java 服务，再加 JNI 胶水、成建制的 C++ 库甚至完整的 C++ 服务；"原生部分"就指这些 C++ 代码。
+
+地基是"进程不是语言单元"：同一个地址空间可以同时装两类代码——Java 部分由 ART 执行字节码、内存归 GC 管，C++ 部分是 .so 装载后由 CPU 直接执行；两部分共享线程与内存，靠 JNI 互调。system_server 是这一事实最集中的样本。
+
+system_server 里的 C++ 分三类：
+
+1. **JNI 胶水**：libandroid_runtime（Binder、Parcel、MessageQueue 的 native 实现）、libandroid_servers（各系统服务的 JNI 总库）；
+2. **混合服务的 native 半边**：不少"Java 服务"只有决策逻辑在 Java，执行管道在 C++——窗口的 SurfaceControl 经 JNI 落到 libgui，音频的 AudioService 经 JNI 落到 libaudioclient，dexopt 落到 installd 的客户端封装；
+3. **整建制 C++ 服务**：输入子系统的 InputReader 与 InputDispatcher 是纯 C++，跑在 system_server 自己的 native 线程上，Java 的 InputManagerService 只是壳；SensorService 也是完整的 C++ Binder 服务，经 JNI 在 system_server 内实例化，外部进程察觉不到它与 Java 服务同住。
+
+为什么这么设计：输入分发延迟直接影响触控跟手度，InputReader 要用 epoll 直读内核 input 设备节点；贴内核的接口 Java 做不了；libgui、inputflinger 这些库本就是为多进程共享写的，直接装载即可。
+
+代价与归属边界：
+
+1. **同进程即同崩溃域**：C++ 部分崩溃照样带走整个 system_server、触发框架重启——InputDispatcher 崩溃等于框架崩溃；
+2. **层级归属不变**：这些 C++ 仍是原生层的代码，不因住进 system_server 变成框架层——层与进程是多对多关系，system_server 同时承载应用框架层与原生层的代码。
+
+**Q16: system_server 引入了哪些 so 库？如何拿到权威清单？**
+
+没有固定清单——"引入"有三种途径（SystemServer.java 显式 loadLibrary、各服务类 static 块按需加载、ELF 依赖被动态链接器自动拉入），且库随版本与产品增减；权威口径是查进程实际映射，静态清单只作锚点。
+
+三种途径对应三类库：
+
+1. **SystemServer 显式加载**：libandroid_servers（frameworks/base/services 的 JNI 总库，收输入、电源、灯光、闹钟、USB、Vibrator 等服务的 JNI 与 SensorService 的启动入口；AAOS 13 源码中其链接依赖含 libinputflinger、libinputservice、libaudioclient、libpowermanager、libhardware、libhidlbase、libbinder_ndk 等）；另有触发式加载的 libfdtrack——FD 数量越过阈值才装载的文件描述符泄漏追踪库；
+2. **框架必用、自 Zygote 继承的 JNI**：libandroid_runtime（android.os.Binder、Parcel、MessageQueue 的 native 实现）、libhwui（渲染管线，SurfaceControl 与 Surface 的 JNI 也在其中）、libmedia_jni（音频与媒体的框架绑定）、Wi-Fi 栈的 libwifi-service；
+3. **依赖拉入的实现库**：libbinder 与基础设施（libcutils、libutils、liblog、libbase）、libgui（SurfaceComposerClient，经 libhwui 的依赖进入）、libaudioclient、libhardware（hw_get_module 加载旧式直通 HAL 的入口）、libhidlbase（存量 HIDL，逐步退场）、libEGL 与 libGLESv2（system_server 自绘界面时生效）、Bionic（libc、libm、libdl）与 C++ 运行时。
+
+权威清单的取法：
+
+```bash
+adb shell su -c 'cat /proc/$(pidof system_server)/maps' | grep '\.so' | awk '{print $6}' | sort -u
+```
+
+maps 列出的是此刻真实映射进地址空间的全部 .so（含传递依赖），是唯一权威口径；user 版无 root 读不了其他进程的 maps，需要 userdebug、eng 或车机开发版。源码侧锚点两处：frameworks/base/services/core/jni/ 目录（libandroid_servers 的全部源文件）与全局搜索 loadLibrary（各服务的显式加载点）。
+
+边界：libhwbinder 已并入 libbinder（Android 11 起），新版本看不到单独的它；Mainline 模块化把部分能力挪出 system_server，车机 CarService 一族又会加进产品依赖——网上流传的清单都是特定版本快照，以设备 maps 为准、以源码为锚。
