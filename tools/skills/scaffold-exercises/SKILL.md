@@ -90,9 +90,9 @@ Section 05: Memory Skill Building
 Create:
 
 ```bash
-mkdir -p exercises/05-memory-skill-building/05.01-introduction-to-memory/explainer
-mkdir -p exercises/05-memory-skill-building/05.02-short-term-memory/{explainer,problem,solution}
-mkdir -p exercises/05-memory-skill-building/05.03-long-term-memory/explainer
+mkdir -p exercises/05-05-memory-skill-building/05.01-introduction-to-05-memory/explainer
+mkdir -p exercises/05-05-memory-skill-building/05.02-short-term-05-memory/{explainer,problem,solution}
+mkdir -p exercises/05-05-memory-skill-building/05.03-long-term-05-memory/explainer
 ```
 
 Then create readme stubs:

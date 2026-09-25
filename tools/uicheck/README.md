@@ -20,7 +20,7 @@ python3 -m pip install numpy pillow   # 无需 scipy，无需视觉模型
 零依赖本地 Web 工具，浏览器里可视化比对、勾选、导出：
 
 ```bash
-cd tools/uicheck
+cd 10-tools/uicheck
 python3 server.py --port 8765
 # 浏览器打开 http://127.0.0.1:8765/
 ```
@@ -38,7 +38,7 @@ python3 server.py --port 8765
 ## 命令行用法
 
 ```bash
-cd tools/uicheck
+cd 10-tools/uicheck
 python3 uicheck.py <设计图.png> <车机截图.png>                 # 打印差异报告
 python3 uicheck.py 设计图.png 截图.png --out report.md --json diff.json
 python3 uicheck.py 设计图.png 截图.png --fail-delta 2          # 有元素位移>2px 时退出码=1（可做 CI 门槛）

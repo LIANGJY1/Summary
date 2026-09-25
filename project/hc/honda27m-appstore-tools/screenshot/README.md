@@ -40,14 +40,14 @@
 
 ```bash
 # 命令永远固定不变；截哪个模式改 CURRENT_VARIANT、跑哪些任务改 CURRENT_TASKS，均在脚本顶部
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py
 
 # 查看全部模式、输出路径与当前生效项
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --list-variants
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py --list-variants
 
 # 可选：本次临时覆盖模式 / 指定输出根目录 / 多设备 serial（均不改脚本）
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --variant en_dark_fullscreen
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py -o ./out/screenshots -d <device_serial>
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py --variant en_dark_fullscreen
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py -o ./out/screenshots -d <device_serial>
 ```
 
 ### 截图模式与目录结构
@@ -147,10 +147,10 @@ CURRENT_TASKS = "all"          # all=全部；逗号分隔可混选，例如：
 
 ```json
 {
-  "tab_mine": "input tap 1100 120",
-  "tab_mine_settings": "input tap 120 330",
-  "swipe_home_down": "input swipe 960 750 960 200 400",
-  "swipe_detail_down": "input swipe 960 700 960 300"
+  "tab_mine": "03-input tap 1100 120",
+  "tab_mine_settings": "03-input tap 120 330",
+  "swipe_home_down": "03-input swipe 960 750 960 200 400",
+  "swipe_detail_down": "03-input swipe 960 700 960 300"
 }
 ```
 
@@ -262,12 +262,12 @@ adb shell am start -a com.hynex.appstoreapp.screenshot.SHOW_DIALOG_HCC_FAILED \
 
 ```bash
 # 1. 截实机图（全部启用任务，或按分类/序号筛选）
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py --category mine
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py --category mine
 
 # 2. 生成并排对比报告：默认跟随截图脚本当前模式（CURRENT_VARIANT），
 #    自动取 screenshots/<模式>/ 与该模式的 ref_dir，报告输出 report/<模式>/index.html
-python3 project/honda27m-appstore-tools/screenshot/compare_report.py
+python3 project/honda27m-appstore-10-tools/screenshot/compare_report.py
 
 # 3. 浏览器打开 report/index.html 逐张肉眼比对，
 #    把结论记入 walkthrough.md（✅一致 / ⚠️细节差异 / ❌不一致 / ⬜未截）

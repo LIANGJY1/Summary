@@ -6090,7 +6090,7 @@
               StdIO.write((i + j).toString())
           }
       }
-      add.getOrElseF(StdIOMonad, StdIO.write("input error"))
+      add.getOrElseF(StdIOMonad, StdIO.write("03-input error"))
   }
   ```
 - **收益**：运用 OptionT 之后，成功解决了之前的问题（提前短路、避免第二次读值），同时又保证了语法表达上的简洁——不再需要层层模式匹配。抽象的数据类型就像数学中的公式，定义上显得抽象，但只要耐心一步步推演其中的逻辑，就会无比正确。
@@ -6571,7 +6571,7 @@
   fun main(args: Array<String>) {
       val stocksA = hashMapOf(Pair(1L, 10), Pair(2L, 5), Pair(3L, 20))
       val stocksB = hashMapOf(Pair(1L, 15), Pair(2L, 8), Pair(3L, 30))
-      val actorSystem = ActorSystem.apply("shop-system") //初始化Actor系统
+      val actorSystem = ActorSystem.apply("shop-06-system") //初始化Actor系统
       val manageActor = actorSystem.actorOf(Props.create(ManageActor::class.java), "manage-actor")
       val timeout = Timeout(Duration.create(3, "seconds"))
       val resA = Patterns.ask(manageActor, Action.GetStockOrInit(1L, "A", stocksA), timeout)

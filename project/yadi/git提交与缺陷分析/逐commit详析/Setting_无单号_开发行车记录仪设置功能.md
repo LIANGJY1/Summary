@@ -43,7 +43,7 @@
 +            }
 +        //格式化存储设备
 +        mBinding.btnFormat.setOnFastClickListener {
-+            log("format storage device click")
++            log("format 04-storage device click")
 +            //TODO 接入格式化存储设备内部接口
 +        }
 ```

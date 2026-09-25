@@ -115,12 +115,12 @@ project/honda27m-appstore-tools/
 
 ```bash
 # 1. 截实机图：改 capture_appstore_screenshots.py 顶部 CURRENT_VARIANT 后固定命令运行
-python3 project/honda27m-appstore-tools/screenshot/capture_appstore_screenshots.py
+python3 project/honda27m-appstore-10-tools/screenshot/capture_appstore_screenshots.py
 
 # 2. 生成并排对比报告（自动跟随当前模式，含 _split 自动回退）
-python3 project/honda27m-appstore-tools/screenshot/compare_report.py
+python3 project/honda27m-appstore-10-tools/screenshot/compare_report.py
 #    分屏走查用分屏版报告：
-python3 project/honda27m-appstore-tools/screenshot/compare_split_report.py
+python3 project/honda27m-appstore-10-tools/screenshot/compare_split_report.py
 
 # 3. 浏览器打开 report/<模式>/index.html 逐张比对，结论记入 walkthrough.md
 ```

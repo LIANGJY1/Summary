@@ -368,8 +368,8 @@ LSP / AST 相关能力按官方文档使用即可；这份手册只保留入口�
 
 ```json
 {
-  "active_plan": "/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore/.sisyphus/plans/android-java-review-architecture-optimization.md",
-  "plan_name": "android-java-review-architecture-optimization"
+  "active_plan": "/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore/.sisyphus/plans/android-java-review-01-architecture-optimization.md",
+  "plan_name": "android-java-review-01-architecture-optimization"
 }
 ```
 

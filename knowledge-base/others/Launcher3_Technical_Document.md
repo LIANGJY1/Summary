@@ -500,7 +500,7 @@ Launcher3 需要通过特权获取的关键权限（定义在 `privapp_whitelist
 
 ```bash
 # 检查编译产物中是否存在被覆盖的APK
-find out/target/product/<device>/system -name "Launcher3.apk"
+find out/target/product/<device>/06-system -name "Launcher3.apk"
 # 如果编译的是 Launcher3QuickStep，则 Launcher3.apk 不存在
 ```
 
@@ -544,7 +544,7 @@ make Launcher3QuickStep -j8
 make -j8
 
 # 编译产物路径
-# out/target/product/<device>/system/product/priv-app/Launcher3QuickStep/
+# out/target/product/<device>/06-system/product/priv-app/Launcher3QuickStep/
 ```
 
 ### 8.4 Android.bp 关键字段与 build.gradle 对照
@@ -752,7 +752,7 @@ adb shell pm path com.android.launcher3
 adb shell dumpsys package com.android.launcher3
 
 # 查看所有特权应用
-adb shell ls /system/priv-app/ /system/product/priv-app/ /system/system_ext/priv-app/
+adb shell ls /06-system/priv-app/ /06-system/product/priv-app/ /06-system/system_ext/priv-app/
 
 # 查看当前正在运行的Home Activity
 adb shell dumpsys activity activities | grep -i home

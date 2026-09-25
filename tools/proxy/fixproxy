@@ -4,7 +4,7 @@
 # 流程: ① 检测网络与各配置通道现状 ② 对过期的通道逐一修复并验证 ③ 汇总结果
 # 用法: 连上热点后运行 `fixproxy`。已开着的程序(zcode/codex/浏览器)是启动时读一次代理,需重启才用上新值。
 #
-# 位置: 本体即本文件 /home/liang/Project/MyProject/Summary/tools/proxy/fixproxy
+# 位置: 本体即本文件 /home/liang/Project/MyProject/Summary/10-tools/proxy/fixproxy
 #       ~/.local/bin/fixproxy 只是指向本体的软链接(为让 PATH 里能直接敲 fixproxy),
 #       通过软链接编辑等价于编辑本体,但请统一改这里,勿在其他位置另存副本。
 # 配套: 新终端的代理环境变量由 ~/.bashrc 的动态段(__PROXY_GW)负责;
@@ -19,7 +19,7 @@
 #   2026-09-06  新增 opencode 通道:其配置无 proxy 字段、走环境变量,故扫描
 #               opencode.json/oh-my-openagent.json 防写死旧地址,并检测当前终端
 #               环境变量是否仍指向旧地址(opencode/codex 会继承)
-#   2026-09-06  本体迁至 Project/MyProject/Summary/tools/proxy/,
+#   2026-09-06  本体迁至 Project/MyProject/Summary/10-tools/proxy/,
 #               ~/.local/bin/fixproxy 改为软链接
 #   2026-09-08  新增真实 Git HTTPS/SSH-443 检测;同步 Git 代理与 ~/.ssh/config,
 #               修复“Google 可通但 git push 卡住”的误报

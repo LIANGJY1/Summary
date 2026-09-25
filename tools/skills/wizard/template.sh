@@ -96,7 +96,7 @@ _existing() {
 }
 
 # ask KEY "Prompt" reads a value into $KEY. Offers the existing .env value as
-# a default on re-runs (Enter keeps it). Visible input (non-secret).
+# a default on re-runs (Enter keeps it). Visible 03-input (non-secret).
 ask() {
   local key="$1" prompt="$2" current input
   current=$(_existing "$key" || true)
@@ -110,7 +110,7 @@ ask() {
   printf -v "$key" '%s' "$input"
 }
 
-# ask_secret KEY "Prompt" is like ask, but input is hidden.
+# ask_secret KEY "Prompt" is like ask, but 03-input is hidden.
 ask_secret() {
   local key="$1" prompt="$2" current input
   current=$(_existing "$key" || true)

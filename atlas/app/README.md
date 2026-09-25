@@ -7,8 +7,8 @@
 
 ```bash
 # 依赖：JDK 17+（构建与运行）
-JAVA_HOME=$HOME/jdk/jdk-17 ~/tools/gradle-8.14.3/bin/gradle run      # 开发运行
-JAVA_HOME=$HOME/jdk/jdk-17 ~/tools/gradle-8.14.3/bin/gradle packageReleaseDeb   # 产出 deb
+JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle run      # 开发运行
+JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle packageReleaseDeb   # 产出 deb
 
 # 一键更新（编译→测试→打包→安装本机）：./update.sh
 # sudo 密码来源：环境变量 ATLAS_SUDO_PASS > ~/.atlas-sudo-pass > 交互式输入（均不写入仓库）
