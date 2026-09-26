@@ -57,6 +57,8 @@ data class AppSettings(
     val recordingSaveDir: String = "",
     val recordingFps: Int = 15,
     val recordingBitrate: Int = 4000,
+    /** 题库上次选中的源文档路径（重启恢复）；空 = 未记录，用默认文档。 */
+    val selectedSourcePath: String = "",
 ) {
     val darkTheme: Boolean get() = theme == "dark"
 
@@ -87,6 +89,7 @@ class SettingsStore(private val file: File) {
             recordingSaveDir = p.getProperty("recordingSaveDir") ?: "",
             recordingFps = p.getProperty("recordingFps")?.toIntOrNull()?.coerceIn(5, 60) ?: 15,
             recordingBitrate = p.getProperty("recordingBitrate")?.toIntOrNull()?.coerceIn(500, 20000) ?: 4000,
+            selectedSourcePath = p.getProperty("selectedSourcePath") ?: "",
         )
         Log.d("设置已读取 ${file.absolutePath} library=${s.libraryPath} theme=${s.theme}")
         return s
@@ -107,6 +110,7 @@ class SettingsStore(private val file: File) {
         p.setProperty("recordingSaveDir", s.recordingSaveDir)
         p.setProperty("recordingFps", s.recordingFps.toString())
         p.setProperty("recordingBitrate", s.recordingBitrate.toString())
+        if (s.selectedSourcePath.isNotEmpty()) p.setProperty("selectedSourcePath", s.selectedSourcePath)
         file.outputStream().use { p.store(it, "Atlas settings") }
         Log.i("设置已写入 ${file.absolutePath}")
     }

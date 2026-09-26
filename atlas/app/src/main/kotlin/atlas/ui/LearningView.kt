@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package atlas.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -5,16 +7,19 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -26,6 +31,8 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,7 +56,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.Key
@@ -59,6 +68,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.DialogProperties
@@ -377,6 +387,8 @@ fun QuestionSection(store: AppStore) {
     var showMoreActions by remember { mutableStateOf(false) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
     var sidebarExpanded by remember { mutableStateOf(true) }
+    var sidebarWidth by remember { mutableStateOf(280.dp) }
+    var sidebarDragging by remember { mutableStateOf(false) }
     var reorderMode by remember { mutableStateOf(false) }
     var draggingKey by remember { mutableStateOf<String?>(null) }
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
@@ -431,8 +443,9 @@ fun QuestionSection(store: AppStore) {
     }
 
     val treeWidth by animateDpAsState(
-        targetValue = if (sidebarExpanded) 280.dp else 0.dp,
-        animationSpec = tween(200),
+        targetValue = if (sidebarExpanded) sidebarWidth else 0.dp,
+        // 拖拽调宽时 snap 跟手，收起/展开仍走 tween
+        animationSpec = if (sidebarDragging) snap() else tween(200),
         label = "tree-sidebar-width",
     )
     val sidebarChevronRotation by animateFloatAsState(
@@ -470,7 +483,35 @@ fun QuestionSection(store: AppStore) {
                 }
             }
         }
-        Spacer(Modifier.width(6.dp))
+        // 拖拽手柄：贴着目录右缘，中间画 1dp 分隔线，热区加宽到 9dp；悬停/拖拽时高亮
+        val resizeCursor = remember { PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR)) }
+        val handleInteraction = remember { MutableInteractionSource() }
+        val handleHovered by handleInteraction.collectIsHoveredAsState()
+        val sidebarDensity = LocalDensity.current
+        Box(
+            Modifier.width(9.dp).fillMaxHeight()
+                .hoverable(handleInteraction)
+                .pointerHoverIcon(if (sidebarExpanded) resizeCursor else PointerIcon.Default)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { sidebarDragging = true },
+                        onDragEnd = { sidebarDragging = false },
+                        onDragCancel = { sidebarDragging = false },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        sidebarWidth = with(sidebarDensity) { sidebarWidth + dragAmount.toDp() }
+                            .coerceIn(180.dp, 520.dp)
+                    }
+                },
+        ) {
+            Box(
+                Modifier.width(1.dp).fillMaxHeight().align(Alignment.Center)
+                    .background(
+                        if (sidebarDragging || handleHovered) Theme.Accent
+                        else MaterialTheme.colorScheme.outlineVariant,
+                    ),
+            )
+        }
         Box(Modifier.fillMaxHeight().width(24.dp), contentAlignment = Alignment.TopCenter) {
             Box(
                 Modifier.padding(top = 2.dp)
@@ -486,8 +527,6 @@ fun QuestionSection(store: AppStore) {
                 )
             }
         }
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.fillMaxHeight().width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Column(
@@ -998,75 +1037,112 @@ private fun KnowledgeTreeNodeView(
         animationSpec = tween(160),
         label = "tree-chevron-rotation",
     )
-    Row(
-        Modifier.fillMaxWidth()
-            .height(30.dp)
-            .bringIntoViewRequester(bringIntoViewRequester)
-            .hoverable(interactionSource)
-            .background(
-                when {
-                    selected -> Theme.Accent.copy(alpha = 0.16f)
-                    hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                    else -> androidx.compose.ui.graphics.Color.Transparent
-                },
-                RoundedCornerShape(7.dp),
-            )
-            .clickable {
-                if (node.isDirectory) onToggleDirectory(node.path) else onSelectFile(node.path)
-            }
-            .pointerInput(node.path) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                            event.changes.forEach { it.consume() }
-                            onRename(node)
+    // 只有名称被省略号截断才挂载 TooltipArea，未截断的条目不弹提示
+    var nameTruncated by remember { mutableStateOf(false) }
+    val row: @Composable () -> Unit = {
+        Row(
+            Modifier.fillMaxWidth()
+                .height(30.dp)
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .hoverable(interactionSource)
+                .background(
+                    when {
+                        selected -> Theme.Accent.copy(alpha = 0.16f)
+                        hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                        else -> androidx.compose.ui.graphics.Color.Transparent
+                    },
+                    RoundedCornerShape(7.dp),
+                )
+                .clickable {
+                    if (node.isDirectory) onToggleDirectory(node.path) else onSelectFile(node.path)
+                }
+                .pointerInput(node.path) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                event.changes.forEach { it.consume() }
+                                onRename(node)
+                            }
                         }
                     }
                 }
+                .padding(start = (depth * 14).dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 箭头槽位对目录和文件等宽，保证各级名称左对齐；文件占位不画箭头
+            Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
+                if (node.isDirectory) {
+                    Icon(
+                        TreeChevronIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp).rotate(chevronRotation),
+                        tint = if (selected) Theme.Accent else Theme.Muted,
+                    )
+                }
             }
-            .padding(start = (depth * 14).dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 箭头槽位对目录和文件等宽，保证各级名称左对齐；文件占位不画箭头
-        Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
-            if (node.isDirectory) {
-                Icon(
-                    TreeChevronIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(13.dp).rotate(chevronRotation),
-                    tint = if (selected) Theme.Accent else Theme.Muted,
-                )
-            }
+            Icon(
+                if (node.isDirectory) TreeFolderIcon else TreeFileIcon,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = if (selected) Theme.Accent else Theme.Muted,
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                node.name,
+                onTextLayout = { nameTruncated = it.hasVisualOverflow },
+                color = when {
+                    selected -> Theme.Accent
+                    node.isDirectory -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f)
+                },
+                fontSize = 13.sp,
+                fontWeight = when {
+                    selected -> FontWeight.SemiBold
+                    node.isDirectory -> FontWeight.Medium
+                    else -> FontWeight.Normal
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Icon(
-            if (node.isDirectory) TreeFolderIcon else TreeFileIcon,
-            contentDescription = null,
-            modifier = Modifier.size(15.dp),
-            tint = if (selected) Theme.Accent else Theme.Muted,
-        )
-        Spacer(Modifier.width(7.dp))
-        Text(
-            node.name,
-            color = when {
-                selected -> Theme.Accent
-                node.isDirectory -> MaterialTheme.colorScheme.onSurface
-                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f)
-            },
-            fontSize = 13.sp,
-            fontWeight = when {
-                selected -> FontWeight.SemiBold
-                node.isDirectory -> FontWeight.Medium
-                else -> FontWeight.Normal
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    }
+    if (nameTruncated) {
+        TooltipArea(
+            tooltip = { KnowledgeTreeNameTip(node.name) },
+            delayMillis = 500,
+            // CursorPoint 默认 BottomEnd 对齐：提示框左上角贴光标向右下展开；
+            // 小偏移让光标箭头不压住提示框，窗口右/下边缘放不下时自动翻到另一侧
+            tooltipPlacement = TooltipPlacement.CursorPoint(
+                offset = DpOffset(10.dp, 12.dp),
+            ),
+        ) {
+            row()
+        }
+    } else {
+        row()
     }
     if (node.isDirectory && isExpanded) {
         node.children.forEach { child ->
             KnowledgeTreeNodeView(child, depth + 1, expandedDirs, selectedPath, onToggleDirectory, onSelectFile, onRename)
         }
+    }
+}
+
+@Composable
+private fun KnowledgeTreeNameTip(name: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = Theme.CodeBg,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 6.dp,
+    ) {
+        Text(
+            name,
+            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+        )
     }
 }
 

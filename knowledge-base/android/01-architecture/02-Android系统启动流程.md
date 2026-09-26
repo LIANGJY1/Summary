@@ -1,6 +1,6 @@
 # Android 系统启动流程
 
-> 学习资料（文章模式沉淀）。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》的启动章节（init 三阶段、Zygote 与 SystemServer 路径按 AOSP `android-17.0.0_r1` 核对）；Boot ROM/Bootloader/内核阶段与 GKI 概览已于 2026-09-23 与官方资料核对；2026-09-23 并入 AAOS13_study《Android 系统启动全流程 源码分析》的机制细节与 AAOS 挂点（init 接力与调度、Service Reap、SELinux 策略装载、Zygote 约束、SystemServer 看护、CarService/CarSystemUI/CarLauncher；源码锚点 commit `abec84ef9`，Android 13 / Automotive）；2026-09-24 并入地基概念深讲（内核与进程、ramdisk、/init 与 execve 变身、fstab、GKI 与 vendor ramdisk、伪文件系统）。配套架构主题见 [01-Android系统架构.md](./01-Android系统架构.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》的启动章节（init 三阶段、Zygote 与 SystemServer 路径按 AOSP `android-17.0.0_r1` 核对）；Boot ROM/Bootloader/内核阶段与 GKI 概览已于 2026-09-23 与官方资料核对；2026-09-23 并入 AAOS13_study《Android 系统启动全流程 源码分析》的机制细节与 AAOS 挂点（init 接力与调度、Service Reap、SELinux 策略装载、Zygote 约束、SystemServer 看护、CarService/CarSystemUI/CarLauncher；源码锚点 commit `abec84ef9`，Android 13 / Automotive）；2026-09-24 并入地基概念深讲（内核与进程、ramdisk、/init 与 execve 变身、fstab、GKI 与 vendor ramdisk、伪文件系统）；2026-09-25 增补工程实战题（Watchdog 阈值与日志定位、pstore 早期日志、BOOT_COMPLETED 送达条件、Direct Boot 启动视角），关键数字经 AOSP 源码与官方文档核对。配套架构主题见 [01-Android系统架构.md](./01-Android系统架构.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 系统的启动流程？（从点击开机键开始 ）**
 
@@ -218,7 +218,7 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 
 64 位主 Zygote 负责 fork system_server 与 64 位应用；32 位次 Zygote（`--enable-lazy-preload`）只服务 32 位应用，不 fork system_server，且 system_server 启动前会等次 Zygote 就绪，两者互为看门狗。preload 是双刃剑：加进 preloaded-classes 的类被所有进程共享，但开机时间变长；删类则各应用首次加载变慢，不是纯优化。USAP 池开启时禁止并发多 fork，调试器附加场景会退回普通 fork 路径。
 
-机制：次 Zygote 的判定依据是 `ro.product.cpu.abilist` 与自身 abi-list 不一致；`--start-system-server` 只出现在主 Zygote 命令行上；USAP（Unspecialized App Process）预 fork 待命、取用时只补 specialize，失败回退主 socket 路径。
+机制：次 Zygote 的判定依据是 `ro.product.cpu.abilist` 与自身 abi-list 不一致；`--start-system-server` 只出现在主 Zygote 命令行上；USAP（Unspecialized App Process）预 fork 待命、取用时只补 specialize，失败回退主 socket 路径；但 USAP 改变了 fork 时机，依赖 fork 路径注入的框架（Magisk/Zygisk/Riru 等，社区案例）开启后可能失效，排查注入类异常先查 USAP 开关。
 
 收束：排查"应用启动走了哪条路"先确认三点——设备是否 64/32 双 Zygote、USAP 是否开启、是否处于调试附加场景。
 
@@ -279,7 +279,7 @@ CarService 起链路（Android 13 批注）：
 2. new ICarImpl：构造约 30 个车机子服务进 mAllServices 表，init() 先 VHAL 再按表序逐个初始化，依赖顺序由表序表达（与 SystemServer 四波装配同构）；
 3. ServiceManager.addService("car_service") 并置 `boot.car_service_created=1`，与 CarServiceHelperService 互持 Binder。
 
-设计与边界：车辆数据是一切车机决策的源头，VehicleDeathRecipient 检测到 VHAL 死亡就 kill 整个 CarService 进程、靠绑定者重新拉起——数据完整性优先于可用性，普通应用服务不宜如此激进。框架侧宿主 CarServiceHelperService（com.android.internal.car 包）不在标注仓库内，其启动时序与绑定重试行为属推断，深入需另查完整源码树。
+设计与边界：车辆数据是一切车机决策的源头，VehicleDeathRecipient 检测到 VHAL 死亡就 kill 整个 CarService 进程、靠绑定者重新拉起——数据完整性优先于可用性，普通应用服务不宜如此激进。VHAL 死亡自毁的触发细节、AIDL/HIDL 兜底选择与订阅契约的服务侧展开见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q28–Q34。框架侧宿主 CarServiceHelperService（com.android.internal.car 包）不在标注仓库内，其启动时序与绑定重试行为属推断，深入需另查完整源码树。
 
 
 
@@ -292,7 +292,7 @@ CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原�
 1. **换图定制点**：Dagger 化的代码用根组件替换当主定制点，比继承或复制源码可维护；前提是目标代码已 Dagger 化、组件边界清晰；
 2. **TaskView 行为差异**：地图是另一个进程的 Activity，崩溃与焦点行为和普通 View 完全不同，`autoRestartOnCrash=false` 意味着地图崩溃后卡片留白、需用户手动重进；
 3. **多用户边界**：CarSystemUIInitializer 只给 system user 注入 RootTaskDisplayAreaOrganizer（副驾屏等按用户隔离）；headless system user 0 的设备上 CarLauncher 不显示地图卡片；
-4. **崩溃连锁**：car_service 进程被杀会连带 CarSystemUI/CarLauncher 的依赖（它们经 CarServiceProvider 等待重连），调试时 kill CarService 进程应预期 UI 层短暂异常。
+4. **崩溃连锁**：car_service 进程被杀会连带 CarSystemUI/CarLauncher 的依赖（它们经 CarServiceProvider 等待重连），调试时 kill CarService 进程应预期 UI 层短暂异常。TaskView/CarSystemUI 的公开故障案例与官方修复清单见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q35–Q36。
 
 **Q21: ramdisk 是什么？明明有真分区，开机为什么还要一块内存里的临时根文件系统？**
 
@@ -438,4 +438,97 @@ fork 之后父子进程共享未修改的物理页，写入时才真正复制（
 2. **省内存**：预加载页与未写脏页被所有应用进程共享；
 3. **同一起点**：所有进程从一致的运行环境出发。
 
-边界：COW 不等于零成本——后续写入和应用初始化会逐步产生私有页；普通应用的创建请求由 `system_server` 经 Zygote/USAP 本地 socket 发起，而 `system_server` 自己是 Zygote 在进入 socket 循环前一步直接 fork 的，两条路径不同（深挖见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)）。
+边界：COW 不等于零成本——后续写入和应用初始化会逐步产生私有页；普通应用与 `system_server` 的两条创建路径差异见 Q5 与 Q8。
+
+**Q34: 设备正常使用中突然黑屏软重启（不会回 bootloader），日志出现 "WATCHDOG KILLING SYSTEM PROCESS"——Watchdog 的超时阈值是多少？怎么定位是哪条线程卡住的？**
+
+Watchdog 是 `system_server` 内置看门狗：受监控线程必须定期喂狗，默认 60 秒（debug 构建为 10 秒）未恢复即杀掉 system_server，触发整个 Java 框架重启——"用着用着软重启"最常见的原因之一（机制取舍见 Q16）。
+
+1. **监控对象**：foreground、main、ui、io、display、animation、surface animation 七个关键线程的 HandlerChecker，外加所有 Binder 线程的存活监控；
+2. **两级动作**：超过一半时限（约 30 秒）先 dump 全进程栈写入 dropbox（tag `pre_watchdog`）；满 60 秒打印 kill 日志后杀进程；
+3. **定位手法**：日志 "Blocked in handler on <线程名> (...)" 或 "Blocked in monitor <类名> ..." 指明卡住的检查项；紧随的 WatchdogDiagnostics 打印阻塞线程的 Java 栈，"waiting to lock <0x...> held by thread N" 直接给出锁归属；
+4. **工具**：`dumpsys watchdog` 看当前注册与阻塞状态；dropbox 按 `watchdog`/`pre_watchdog` 检索历史；
+5. **防循环**：非 user 构建可配 `framework_watchdog.fatal_count`/`fatal_window.second`，窗口内反复超时进入专门的循环处理；挂载 debugger 期间不杀。
+
+**Q35: 设备反复重启进不了桌面（boot loop）——init 对关键服务反复崩溃的判据是什么？adb 不可用时怎么拿到上一次崩溃的日志？**
+
+init 对标 `critical` 的服务有硬判据：4 分钟窗口内累计退出 4 次、或开机完成前崩溃——前者整机重启进 fatal target（默认 bootloader），这就是 zygote 反复崩溃演变成 boot loop 的直接机制（Reap 裁决的完整语义见 Q11）。
+
+1. **早期日志**：`/sys/fs/pstore/console-ramoops` 保存上一次开机（含内核 panic）的日志，需内核启用 pstore/ramoops；老内核对应 `/proc/last_kmsg`；用户态日志走 `/dev/pmsg0`；比这更早（内核没起来）只能靠串口或 Bootloader；
+2. **排查动作**：日志里 grep `avc: denied`、`critical process`、`Fatal signal`、`service exited`；pstore 不可读时用 recovery 模式拉日志；
+3. **调试逃生口**：`setprop init.svc_debug.no_fatal.<服务名> true` 可临时禁用某服务的 fatal 处理，把循环打断在可调试状态；
+4. **边界**：AVB/签名校验失败发生在 Bootloader 阶段（fastboot 报错、无 logcat），与本节的"框架层循环"是不同世界（AVB 机制见 Q28）。
+
+**Q36: 开机广播 BOOT_COMPLETED 有时收不到、有时收到就 ANR——它的送达条件、超时和限制到底是什么？**
+
+三个事实决定送达与超时：接收器超时前台 10 秒/后台 60 秒（新版广播队列统一 10 秒起步、可经 DeviceConfig 调整）；处于 stopped state 的应用默认收不到；FBE 设备上该广播在用户解锁后才发出。
+
+1. **超时 ANR**：`onReceive()` 里做重活即触发，ANR 日志形如 "Broadcast of Intent { act=android.intent.action.BOOT_COMPLETED }"——前台 `BROADCAST_FG_TIMEOUT` 10 秒、后台 60 秒；
+2. **stopped state 拦截**：系统广播默认带 `FLAG_EXCLUDE_STOPPED_PACKAGES`——刚安装未启动过、或被强制停止（含 OEM 省电清理）的应用都收不到，直到用户手动启动一次；`FLAG_INCLUDE_STOPPED_PACKAGES` 仅系统可用；
+3. **时序**：FBE 设备上随用户解锁链路发出，只有先收到 `LOCKED_BOOT_COMPLETED` 的 directBootAware 组件能在解锁前行动（见 Q37）；`sys.boot_completed` 属性先于广播置位（见 Q17）；开机完成后的软重启不会重发该广播、一般也不重播开机动画（见 Q42）；
+4. **合规限制**：Android 12 起禁止从 BOOT_COMPLETED 等接收器经通知 trampoline 启动 Activity；后台启动 Activity 的限制也让"开机直接弹界面"不再可靠。
+
+正确姿势：`onReceive()` 只做转发，重活交 `goAsync()`、前台服务（注意 Android 14 起的类型豁免要求）或 WorkManager。
+
+**Q37: FBE 设备重启后、用户还没输锁屏密码，闹钟类应用怎么才能正常响？LOCKED_BOOT_COMPLETED 和 BOOT_COMPLETED 是什么关系？**
+
+`directBootAware="true"` 的组件在用户解锁前就能被系统拉起并收到 `LOCKED_BOOT_COMPLETED`，但此时只能访问设备加密（DE）存储；用户输完锁屏收到 `ACTION_USER_UNLOCKED` 后，凭据加密（CE）存储才可用——FBE 的 DE/CE 密钥机制见 [../04-storage/01-存储与IO.md](../04-storage/01-存储与IO.md)。
+
+1. **状态判断**：`UserManager.isUserUnlocked()`（API 24+）区分解锁前后两个阶段；
+2. **DE 存储用法**：`createDeviceProtectedStorageContext()` 拿 DE 上下文，可用 `moveSharedPreferencesFrom()/moveDatabaseFrom()` 在解锁后把数据迁到 CE；
+3. **任务重建**：CE 侧的 alarm/job 重启即丢——directBootAware 接收器要用 DE 存储持久化"重启前有任务"的标记，解锁后重建；
+4. **典型 bug**：只把恢复闹钟注册在 `BOOT_COMPLETED`（FBE 设备上它要等解锁后才发，用户不解锁就永远不发）；directBootAware 组件里直接打开 CE 路径抛 `FileNotFoundException` 或 SQLite "cannot open file"。
+
+**Q38: init.rc 的 service 块还有哪些关键选项？class_start/class_stop/class_reset 有什么区别？**
+
+除 `service`/`socket`/`onrestart` 外，init 还有几个影响"生死语义"的选项；class 三条命令的差别在"停止之后还能不能被再次拉起"。
+
+1. **critical**：默认 4 分钟窗口内退出 4 次（或开机完成前退出）触发整机重启；新版可写 `critical window=<分钟> target=<目标>`（如 zygote 的 `target=zygote-fatal`）；触发时 init 打 `critical process 'xxx' exited 4 times ...` 的 FATAL 日志——grep 这句即可确认循环根因；
+2. **oneshot 与 disabled**：oneshot 退出后不重启；disabled 不随 class_start 启动、只能按名 start——bootanim 就是 `disabled + oneshot`，由 SurfaceFlinger 按需拉起（见 Q39）；
+3. **class 三命令**：`class_start` 启动整类中未运行的服务；`class_stop` 停止且禁用；`class_reset` 只停止不禁用、之后可再次 class_start 拉起；
+4. **时代变迁**：`writepid` 已被 init README 标记过时（改用 `task_profiles`，Android 14 起作用于整个进程）；`updatable` 允许被 APEX 内同名服务 override，且该服务在 APEX 激活前启动会被延迟；
+5. **排查入口**：`getprop | grep init.svc` 看全部服务状态投影；调试 critical 用 `setprop init.svc_debug.no_fatal.<名> true`。
+
+**Q39: 开机动画由谁拉起、怎么退出？"开机动画卡死不退出"这个经典回归怎么查？**
+
+bootanim 是 `disabled + oneshot` 服务，由 SurfaceFlinger 初始化时按需拉起；退出靠 `service.bootanim.exit` 属性——WMS 与 SF 双保险置位，动画进程轮询该属性自行退出。
+
+1. **拉起**：`bootanim.rc`（注意文件名）定义 `class core animation`、`disabled`、`oneshot`；SF 检查 `debug.sf.boot_animation`（默认 true）与 `debug.sf.nobootanimation` 后 `ctl.start bootanim`——经属性触发是刻意的异步设计，避免被 `mount_all --late` 拖慢属性服务；
+2. **退出链**：全部窗口绘制完成后 WMS `performEnableScreen()` 先直接置 `service.bootanim.exit=1`，再经 Binder 调 `SurfaceFlinger::bootFinished()` 再置一次并打 "Boot is finished (%ld ms)"；WMS 同时轮询 bootanim 服务消失才 enable screen；
+3. **卡死排查**：`desc.txt` 里 `c` 类 part 是"必须播完"（`p` 可被打断、`f` 打断时淡出），`c` part 不结束就是"动画卡死不退出"的经典根因；`getprop service.bootanim.exit` 看退出属性，对照 WMS 的 "Waited %dms for all windows to be drawn" 区分是动画慢还是窗口慢；
+4. **自定义坑**：帧必须 PNG 按序命名、分辨率与 desc.txt 首行一致、zip 用 store 模式（`zip -0qry`）。
+
+**Q40: APEX 在启动链的哪一步激活？APEX 损坏时设备表现成什么样？**
+
+APEX 激活是 Zygote/system_server 启动前的硬性串行阻塞点：init 在 /data 挂载后重启 apexd，扫描 `/data/apex/active` 与内置 APEX，逐个验签、建 loop 与 dm-verity 设备、挂到 `/apex/<名>@<版本>`，随后 `wait_for_prop apexd.status activated` 通过才继续往下走。
+
+1. **两段激活**：`apexd-bootstrap` 在 /data 挂载前先处理提供关键库的 APEX（runtime/ART 等，保证后续进程能链接到新 ART）；完整激活在 /data 挂载后，收尾置 `apexd.status=ready`；
+2. **故障表现**：验签/hash 失败（常见于 OTA 后 /data/apex/active 残留脏数据）→ `apexd.status` 永不 activated → 后续服务全部不启动，表现为卡开机动画后黑屏；
+3. **排查入口**：`getprop apexd.status`、`logcat -s apexd`、`ls /apex`、`pm list packages --apex`；日志锚点 "Bootstrapping done" / "Marking APEXd as activated/ready"。
+
+**Q41: 误删或禁用了桌面应用，设备开机会怎样？FallbackHome 是干什么的？**
+
+不会 boot loop——系统保证至少一个可用的 HOME：CE 存储未解锁时真桌面 resolve 不到，由 Settings 包里的 `FallbackHome` 顶上显示过渡页，用户解锁后再切回真桌面；新版 frameworks 还加了 `SystemUserHomeActivity` 作为更底层的占位保底。
+
+1. **FallbackHome**：以低优先级 HOME 候选常驻；解锁前它就是 resolve 结果，`onCreate` 注册 `ACTION_USER_UNLOCKED` 广播，解锁后 `finish()` 让系统重新 resolve 到真桌面；
+2. **SystemUserHomeActivity**：frameworks 内置的占位 HOME（system user 必装），源码注释原话"至少要有一个 home activity 系统才能开机"——两层保底使"没有桌面"只表现为空过渡页而不是重启循环；
+3. **persistent 应用**：`FLAG_SYSTEM|FLAG_PERSISTENT` 的应用以 PERSISTENT 优先级常驻几乎不被杀；解锁前系统只启动其中 directBootAware 的（衔接 Q37）；
+4. **实用**：`cmd package query-activities -a android.intent.action.MAIN -c android.intent.category.HOME` 查当前 HOME 候选；禁用桌面前先确认 FallbackHome 存在。
+
+**Q42: 设备"突然重启/黑屏"，怎么从日志快速判断死在哪一层——内核、init、Zygote 还是 system_server？**
+
+四层死亡的日志指纹不同，按"先 pstore、再 init、再 zygote、再 watchdog"的顺序对号入座。
+
+1. **内核 panic**：pstore/console-ramoops 里有 "Kernel panic - not syncing: ..."，设备直接黑屏重启、没有任何 Android 日志延续（pstore 用法见 Q35）；
+2. **init（PID 1）异常**：dmesg 里 "Attempted to kill init!"，或 critical 服务触发 init 自杀的 FATAL 日志——短周期重启循环、重启进 bootloader/recovery（判据见 Q11）；
+3. **Zygote 崩溃**：logcat 里 init 的 `Service 'zygote' (pid N) received signal ...`——init 重拉 zygote、system_server 随之重建（软重启），全部应用进程死、回到锁屏；zygote 的 onrestart 链还会把 audioserver/cameraserver/media/netd/wificond 一并重启；
+4. **system_server 软重启（Watchdog）**：`*** WATCHDOG KILLING SYSTEM PROCESS` 加 "Blocked in ..." 定位（见 Q34）；只死 framework 层进程，dropbox 有 watchdog 条目；
+5. **软硬判别口诀**：重发 BOOT_COMPLETED、重播开机动画 ≈ 硬重启（init 层以上全部重建）；两者都没有 = 软重启（仅框架重建，`sys.boot_completed` 仍为 1）。system_server 死亡的恢复链见 Q7。
+
+**Q43: webview_zygote 是什么？应用声明 isolatedProcess 的服务跑在什么进程里？**
+
+webview_zygote 是从主 Zygote fork 出来的"子 Zygote"，专门孵化 WebView 的多进程渲染进程；应用声明 `android:isolatedProcess="true"` 的服务则落入 isolated_app 沙箱域（隔离 UID 段）——两者都是"最小权限进程"的载体。
+
+1. **webview_zygote**：WebView provider 更新时旧 zygote 被杀重建（换 provider 必重启 webview zygote），并按目标 ABI 预载 provider 代码；`ps -A | grep zygote` 可同时看到 32/64 位主/辅 zygote 与 webview_zygote，`dumpsys webviewupdate` 看 provider 与 zygote 状态；
+2. **isolatedProcess**：seapp_contexts 把 `user=_isolated` 映射到 `isolated_app` 域——基本无权限、无网络，用于渲染不可信内容；WebView 渲染进程 = webview_zygote + 隔离沙箱的组合；
+3. **主/辅 Zygote 回顾**：`ro.zygote`（32/64/64_32 等）决定 init.zygote*.rc 的 import 布局，`zygote` 与 `zygote_secondary` 两个进程名对应主/辅（分工见 Q14）；注意 init.zygote*.rc 已从 frameworks/base 迁到 system/core/rootdir——老资料里的 rc 路径已失效。

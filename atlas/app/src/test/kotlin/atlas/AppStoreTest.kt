@@ -300,6 +300,61 @@ class AppStoreTest {
     }
 
     @Test
+    fun `题库选中文档持久化_重启恢复上次选择`() {
+        val config = File(tmp, "config-persist-${System.nanoTime()}")
+        val root = File(tmp, "persist-lib-${System.nanoTime()}").apply { mkdirs() }
+        val aRel = "knowledge-base/android/A.md"
+        val bRel = "knowledge-base/android/B.md"
+        listOf(aRel, bRel).forEach { rel ->
+            File(root, rel).apply {
+                parentFile.mkdirs()
+                writeText("**Q1: ${rel} 题？**\n\n答案。", Charsets.UTF_8)
+            }
+        }
+        val firstStore = AppStore(config)
+        firstStore.settings = firstStore.settings.copy(
+            libraryPath = root.absolutePath,
+            sourceQuestionPaths = firstStore.settings.sourceQuestionPaths + aRel + bRel,
+        )
+        firstStore.openLibrary(root.absolutePath, rescanIfNeeded = false)
+
+        firstStore.selectSourceDocument(bRel)
+        assertEquals(bRel, firstStore.selectedSourcePath)
+
+        // 同一 config 目录新建 store 模拟重启（boot 会读 settings）：应恢复 B 而不是默认文档
+        val secondStore = AppStore(config)
+        secondStore.boot()
+        assertEquals(bRel, secondStore.selectedSourcePath, "重启后应恢复上次选中的文档")
+    }
+
+    @Test
+    fun `持久化的题库文档失效时回退到首篇可用文档`() {
+        val config = File(tmp, "config-stale-${System.nanoTime()}")
+        val root = File(tmp, "stale-lib-${System.nanoTime()}").apply { mkdirs() }
+        val aRel = "knowledge-base/android/A.md"
+        val bRel = "knowledge-base/android/B.md"
+        listOf(aRel, bRel).forEach { rel ->
+            File(root, rel).apply {
+                parentFile.mkdirs()
+                writeText("**Q1: ${rel} 题？**\n\n答案。", Charsets.UTF_8)
+            }
+        }
+        val firstStore = AppStore(config)
+        firstStore.settings = firstStore.settings.copy(
+            libraryPath = root.absolutePath,
+            sourceQuestionPaths = firstStore.settings.sourceQuestionPaths + aRel + bRel,
+        )
+        firstStore.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        firstStore.selectSourceDocument(bRel)
+
+        // 关库后文档 B 被删除，再重启：应回退到 A
+        File(root, bRel).delete()
+        val secondStore = AppStore(config)
+        secondStore.boot()
+        assertEquals(aRel, secondStore.selectedSourcePath, "失效文档应回退到首篇可用文档")
+    }
+
+    @Test
     fun `题库左侧文档列表映射知识库并可切换`() {
         val config = File(tmp, "config-docs-${System.nanoTime()}")
         val store = AppStore(config)

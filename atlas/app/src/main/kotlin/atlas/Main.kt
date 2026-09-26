@@ -154,10 +154,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
                 topLevelTabs().forEach { t ->
                     val active = tab == t
                     NavTab(label = t, active = active, onClick = { Log.i("页签切换 → $t"); tab = t }) {
-                        when (t) {
-                            "工作台" -> if (inbox > 0) NavBadge("$inbox", Theme.WarnOrange)
-                            "题库" -> if (store.sourceQuestions.isNotEmpty()) NavBadge("${store.sourceQuestions.size}", Theme.Accent)
-                        }
+                        if (t == "工作台" && inbox > 0) NavBadge("$inbox", Theme.WarnOrange)
                     }
                 }
             }

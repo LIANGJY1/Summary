@@ -1,3 +1,7 @@
+# SystemServer
+
+> 学习资料（文章模式沉淀）。主线：system_server 的进程构成与单点语义、WMS 与 SurfaceFlinger 的分工。创建与启动链细节见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)（Q5/Q6/Q15–Q18）。Q 序列即结构，供 atlas 同源直读。
+
 **Q1: `system_server` 进程都包含哪些层级的代码？了解这些有什么用？**
 
 `system_server` 是"应用框架层服务端"的宿主进程：里面运行着几百个 Java 系统服务（AMS/ATMS、WMS、PMS 等，按 Bootstrap/Core/Other/Apex 四组启动）、Framework 的 JNI 库、ART 运行时和 Binder 原生库；它由 Zygote fork 出来，继承预加载的类与资源，接收 Binder 事务的线程池在进入 `SystemServer.main()` 之前就已启动。

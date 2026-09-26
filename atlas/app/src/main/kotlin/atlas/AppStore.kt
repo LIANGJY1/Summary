@@ -79,7 +79,23 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     val sourceSections = mutableStateListOf<SourceQuestions.SectionHeading>()
     /** 题库左侧的知识库 Markdown 文档列表。 */
     val knowledgeDocuments = mutableStateListOf<String>()
-    var selectedSourcePath by mutableStateOf(SourceQuestions.TARGET_PATH)
+
+    private val selectedSourcePathState = mutableStateOf(SourceQuestions.TARGET_PATH)
+
+    /**
+     * 当前同源题目文档。选择持久化到 settings：重启恢复上次选择（2026-09-24 用户反馈：
+     * 每次进题库都默认打开 01-语法基础.md）；换库或文档失效时由 reloadKnowledgeFiles 回退。
+     */
+    var selectedSourcePath: String
+        get() = selectedSourcePathState.value
+        set(value) {
+            if (selectedSourcePathState.value == value) return
+            selectedSourcePathState.value = value
+            if (settings.selectedSourcePath != value) {
+                settings = settings.copy(selectedSourcePath = value)
+                runCatching { settingsStore.save(settings) }.onFailure { Log.e("持久化题库选中文档失败", it) }
+            }
+        }
     val candidates = mutableStateListOf<Inbox.Candidate>()
     val outbox = mutableStateListOf<OutboxTasks.OutboxTask>()
 
@@ -223,10 +239,18 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
         Log.timed("打开 SQLite db=${dbFile().absolutePath}", warnMs = 500) { conn = Indexer.connect(dbFile()) }
         indexer = Indexer(conn!!)
         libraryReady = true
+        // 恢复上次选中的题库文档（换库后可能失效，reloadKnowledgeFiles 会回退到首篇映射文档）
+        selectedSourcePathState.value = settings.selectedSourcePath.ifBlank { SourceQuestions.TARGET_PATH }
         Log.timed("载入知识文件与收件箱", warnMs = 500) {
             reloadKnowledgeFiles()
             scanInbox()
             refreshOutbox()
+        }
+        // 持久化恢复的路径可能已失效（换库/文档被删）：回退到扫描到的首篇文档，避免题库空白。
+        // 只在启动时做——会话内允许选中未映射文档（界面有"暂未接入解析"提示），重载不能弹回。
+        if (selectedSourcePath !in knowledgeDocuments && knowledgeDocuments.isNotEmpty()) {
+            Log.i("持久化的题库文档已失效（${selectedSourcePath}），回退到 ${knowledgeDocuments.first()}")
+            selectedSourcePath = knowledgeDocuments.first()
         }
         if (rescanIfNeeded) rescan(full = false)
         startWatching()
