@@ -72,6 +72,7 @@ fun main() {
         "应用启动 java=${System.getProperty("java.version")} os=${System.getProperty("os.name")}/${System.getProperty("os.arch")} " +
             "heapMax=${Runtime.getRuntime().maxMemory() / 1048576}MB user.home=${System.getProperty("user.home")}"
     )
+    logImeRuntimeCapability()
     val store = AppStore()
     application {
         val windowState = rememberWindowState(width = 1280.dp, height = 820.dp)
@@ -92,10 +93,10 @@ fun main() {
 }
 
 /**
- * X11 输入法候选框跟随光标：JBR 自带的新版 XIM 客户端默认关闭，不开时输入法拿不到
- * 光标位置，候选框退化为 root-window 模式固定画在屏幕左下角（2026-09-26 用户录屏）。
- * 旧缓解 java.awt.im.style=over-the-spot（update.sh 注入打包 cfg）实测不够；新客户端有
- * 原生的 adjustCandidatesNativeWindowPosition，按 XIM 协议把候选框移到光标处。
+ * X11 输入法候选框跟随光标：靠 JetBrains Runtime 的新版 XIM 客户端，它在建立输入上下文时
+ * 与输入法协商 PreeditPosition 样式并按 XIM 协议设置 XNSpotLocation。stock OpenJDK 的
+ * libawt_xawt.so 完全没有 spotLocation 这段逻辑，候选框只能落在屏幕左下角。
+ *
  * 必须在 AWT 输入上下文激活前设置；用户/脚本已显式设置时不覆盖。
  */
 internal fun installImeCompatFlags() {
@@ -108,13 +109,36 @@ internal fun installImeCompatFlags() {
     }
 }
 
+/**
+ * 把输入法能力写进启动日志。候选框能否跟随光标，取决于**运行时**是否含 JetBrains 的 XIM
+ * 补丁（`sun.awt.X11.XInputMethod.isJbNewXimClientEnabled` + native 的 `spotLocation`，
+ * JBR 独有；stock OpenJDK 两者都没有）。2026-09-26 打包时用了 OpenJDK，候选框恒在屏幕左下角，
+ * 排查四轮都聚焦在 Compose/AWT 的 InputMethodRequests 上，没人先看运行时是谁——这行日志就是
+ * 为了把那次成本降到零：出问题时先看它，不用反编译。
+ */
+internal fun logImeRuntimeCapability() {
+    val jbrPatch = runCatching {
+        // initialize=false：只需列出方法名，不必跑静态初始化——X11InputMethodBase.initIDs()
+        // 是 native，而本函数在 main() 早期调用，此时 AWT 尚未启动，跑初始化会抛
+        // UnsatisfiedLinkError（曾导致误报「无补丁」）。
+        Class.forName("sun.awt.X11.XInputMethod", false, ClassLoader.getSystemClassLoader())
+            .declaredMethods
+            .any { it.name == "isJbNewXimClientEnabled" }
+    }.fold(onSuccess = { if (it) "有" else "无" }, onFailure = { "未知" })
+    val verdict = when (jbrPatch) {
+        "有" -> "候选框应跟随光标"
+        "无" -> "候选框会固定在屏幕左下角（须用 JBR 打包，见 update.sh）"
+        else -> "无法判定，检查 java.vendor=${System.getProperty("java.vendor")}"
+    }
+    Log.i(
+        "输入法能力：vendor=${System.getProperty("java.vendor")} java=${System.getProperty("java.version")} " +
+            "JBR-XIM补丁=$jbrPatch newXimClient.enabled=${System.getProperty("jb.awt.newXimClient.enabled")} → $verdict"
+    )
+}
+
 @Composable
 fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     val ui = atlasUiTokens()
-    // 输入法候选框定位兜底（包 Compose 的 InputMethodRequests，杜绝候选框固定屏幕左下角）。
-    // 必须等 Compose 自己完成 AWT/Swing 全局初始化（首帧）后再装：main() 里过早调
-    // Toolkit 会打乱其时序，表现为整页字体缩放异常（2026-09-26 回归）。
-    LaunchedEffect(Unit) { atlas.ui.ImeCaretFix.install() }
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
     }

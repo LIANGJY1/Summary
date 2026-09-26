@@ -103,7 +103,11 @@ wait_for_deb() {
 }
 
 echo "==> [1/3] 编译 + 测试 + 打包"
+# 构建必须用「带 jpackage 的 JDK」。Android Studio 自带的 JBR 被打包补丁过（X11 下会向
+# 输入法设置 XNSpotLocation，候选框跟随光标的关键），但它被精简掉 jpackage 与 jmods，
+# 无法用于打包；所以这里用普通 JDK 打包，装完再把运行时替换成 JBR（见 [2/3]）。
 JAVA_HOME="${JAVA_HOME:-$HOME/jdk/jdk-17}"
+[[ -x "$JAVA_HOME/bin/jpackage" ]] || die "构建 JDK 缺 jpackage：$JAVA_HOME"
 GRADLE="${GRADLE:-$HOME/tools/gradle-8.14.3/bin/gradle}"
 JAVA_HOME="$JAVA_HOME" "$GRADLE" test packageReleaseDeb --console=plain
 
@@ -123,14 +127,35 @@ if dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installe
 fi
 sudo_run apt install -y "$DEB"
 
-# X11/fcitx 下候选词窗跟随光标：JBR 新版 XIM 客户端（jb.awt.newXimClient）带原生
-# adjustCandidatesNativeWindowPosition，默认关闭，不开则候选框固定在屏幕左下角
-# （root-window 回退，2026-09-26 复现）；im.style=over-the-spot 是 09-23 的旧缓解，实测
-# 不够，保留无害。compose 插件的 jpackage 配置不支持自定义 java-options，且 apt 重装
-# 会覆盖 cfg，所以每次安装后补写；Main.kt 的 installImeCompatFlags 也注入了同样的值，
-# 这里是打包应用双保险。
+# 把 deb 自带的 jlink 运行时换成 JBR。deb 里的 runtime 是用上面那个「能跑 jpackage 的
+# JDK」打的，必然不含 JetBrains 的 XIM 补丁；而 Android Studio 自带的 JBR 被精简过，没有
+# jpackage/jmods，无法直接打包（jimage extract + jlink 也会因模块哈希丢失而失败），所以
+# 在这里做安装后替换。jpackage 启动器只需要 lib/libjli.so + lib/modules，完整 JBR 目录是
+# jlink 镜像的超集，可直接顶替（实测 java.version=21.0.7 / vendor=JetBrains，界面无回归）。
+ATLAS_RUNTIME="/opt/atlas/lib/runtime"
+JBR="${ATLAS_JBR:-/opt/android-studio-for-platform/jbr}"
+if [[ -x "$JBR/bin/java" && -f "$JBR/lib/libjli.so" ]]; then
+  if sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so"; then
+    echo "==> 运行时已是 JBR（$ATLAS_RUNTIME），跳过替换"
+  else
+    echo "==> 用 JBR 替换运行时（$(du -sh "$JBR" | cut -f1)，替换前 $(sudo_run du -sh "$ATLAS_RUNTIME" | cut -f1)）"
+    sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
+    sudo_run mv "$ATLAS_RUNTIME" "$ATLAS_RUNTIME.jlink"
+    sudo_run cp -a "$JBR" "$ATLAS_RUNTIME"
+    sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
+    sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so" \
+      || die "替换后仍找不到 spotLocation，JBR 路径不对：$JBR"
+    echo "==> 运行时已切换为 JBR：$(sudo_run "$ATLAS_RUNTIME/bin/java" -version 2>&1 | head -1)"
+  fi
+else
+  echo "! 找不到可用的 JBR（$JBR），保留 deb 自带运行时——输入法候选框将无法跟随光标" >&2
+fi
+
+# JBR 的新版 XIM 客户端默认关闭；开启后它在建输入上下文时与输入法协商 PreeditPosition
+# 样式并按 XIM 协议设置 XNSpotLocation，候选框才会跟随光标。compose 插件的 jpackage
+# 不支持自定义 java-options，且 apt 重装会覆盖 cfg，所以每次安装后补写；Main.kt 的
+# installImeCompatFlags 注入同样的值，打包应用与开发运行双保险。
 IME_FLAGS=(
-  "java-options=-Djava.awt.im.style=over-the-spot"
   "java-options=-Djb.awt.newXimClient.enabled=true"
   "java-options=-Djb.awt.newXimClient.preferBelowTheSpot=true"
 )
@@ -138,7 +163,7 @@ ATLAS_CFG="/opt/atlas/lib/app/atlas.cfg"
 for ime_flag in "${IME_FLAGS[@]}"; do
   if ! sudo_run grep -qF "$ime_flag" "$ATLAS_CFG"; then
     sudo_run sed -i "/^\[JavaOptions\]/a $ime_flag" "$ATLAS_CFG"
-    echo "==> 已注入输入法光标跟随参数：$ime_flag"
+    echo "==> 已注入 JBR XIM 光标跟随开关：$ime_flag"
   fi
 done
 
