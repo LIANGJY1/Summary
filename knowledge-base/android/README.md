@@ -35,6 +35,10 @@
 
 - [11-defects/](11-defects/) — 某车机项目 85 天 1010 条提交、761 条缺陷修复的复盘沉淀：项目缺陷画像与复盘方法、车控信号语义、主线程与异步时序、蓝牙机制、Kanzi 双端状态同步、UI 还原与主题适配、状态缓存与启动时序、崩溃防护与偶现排查、提交治理与防回归
 
+## 平台原生层（外部资料，证据等级：二手）
+
+- [12-platform-native/](12-platform-native/) — **证据等级低于 01–11 册**：来自官方 `source.android.com` 文档、AOSP/Soong 源码与中文社区源码分析，未经本地源码逐条核对。补 01–11 册未覆盖的内核与原生层：Binder 驱动的四组核心对象与"一次拷贝"成立条件、ashmem 的 pin/unpin 与 LRU 回收、ION 到 DMA-BUF heap 迁移、GKI 边界；Bionic 动态链接器的命名空间隔离与符号解析；aconfig 特性开关的声明、代码生成与运行期存储
+
 ## 早期文档
 
 - [framework/](../others/framework/) — Android 13 长文专题：addWindow 全链路、渲染架构解析、显示系统、电源、时间、硬按键
@@ -108,12 +112,15 @@
 | [10-tools/06-APM-平台与SDK.md](10-tools/06-APM-平台与SDK.md) | APM 平台与 SDK | 30 |  |
 | [10-tools/07-APM-专项原理与架构.md](10-tools/07-APM-专项原理与架构.md) | APM 专项原理与架构 | 32 |  |
 | [10-tools/08-学习方法与检查清单.md](10-tools/08-学习方法与检查清单.md) | 学习方法与检查清单 | 8 |  |
-| [11-defects/00-项目缺陷画像与复盘方法.md](11-defects/00-项目缺陷画像与复盘方法.md) | 项目缺陷画像与复盘方法 | 17 |  |
+| [11-defects/00-项目缺陷画像与复盘方法.md](11-defects/00-项目缺陷画像与复盘方法.md) | 项目缺陷画像与复盘方法 | 18 |  |
 | [11-defects/01-车控信号语义.md](11-defects/01-车控信号语义.md) | 车控信号语义 | 24 |  |
-| [11-defects/02-主线程与异步时序.md](11-defects/02-主线程与异步时序.md) | 主线程与异步时序 | 26 |  |
+| [11-defects/02-主线程与异步时序.md](11-defects/02-主线程与异步时序.md) | 主线程与异步时序 | 27 |  |
 | [11-defects/03-蓝牙机制.md](11-defects/03-蓝牙机制.md) | 蓝牙机制 | 31 |  |
-| [11-defects/04-Kanzi双端状态同步.md](11-defects/04-Kanzi双端状态同步.md) | Kanzi 双端状态同步 | 17 |  |
-| [11-defects/05-UI还原与主题适配.md](11-defects/05-UI还原与主题适配.md) | UI 还原与主题适配 | 29 |  |
-| [11-defects/06-状态缓存与启动时序.md](11-defects/06-状态缓存与启动时序.md) | 状态缓存与启动时序 | 22 |  |
+| [11-defects/04-Kanzi双端状态同步.md](11-defects/04-Kanzi双端状态同步.md) | Kanzi 双端状态同步 | 18 |  |
+| [11-defects/05-UI还原与主题适配.md](11-defects/05-UI还原与主题适配.md) | UI 还原与主题适配 | 31 |  |
+| [11-defects/06-状态缓存与启动时序.md](11-defects/06-状态缓存与启动时序.md) | 状态缓存与启动时序 | 26 |  |
 | [11-defects/07-崩溃防护与偶现排查.md](11-defects/07-崩溃防护与偶现排查.md) | 崩溃防护与偶现排查 | 20 |  |
 | [11-defects/08-提交治理与防回归.md](11-defects/08-提交治理与防回归.md) | 提交治理与防回归 | 20 |  |
+| [12-platform-native/01-内核与原生层.md](12-platform-native/01-内核与原生层.md) | 内核与原生层（二手） | 20 | Binder 驱动 / ashmem / ION→DMA-BUF / GKI |
+| [12-platform-native/02-Bionic链接器与命名空间.md](12-platform-native/02-Bionic链接器与命名空间.md) | Bionic 链接器与命名空间（二手） | 17 | 命名空间隔离 / 符号解析 / dlopen 流程 |
+| [12-platform-native/03-aconfig特性开关.md](12-platform-native/03-aconfig特性开关.md) | aconfig 特性开关（二手） | 14 | 声明 / codegen 模板 / aconfigd 存储 |

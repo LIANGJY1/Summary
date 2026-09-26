@@ -26,6 +26,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -48,7 +49,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
@@ -80,8 +80,11 @@ import atlas.core.KnowledgeTreeNode
 import atlas.core.Log
 import atlas.core.MdStores.QuestionEntry
 import atlas.core.QuestionListModel
+import atlas.core.QuestionReorder
 import atlas.core.QuestionTags
+import atlas.core.ReorderSlot
 import atlas.core.SourceQuestions
+import atlas.core.TextDiff
 
 /** 学习页只负责闪卡复习与卡片浏览；题目管理位于独立的「题库」页。 */
 @Composable
@@ -394,12 +397,19 @@ fun QuestionSection(store: AppStore) {
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
-    val cardTops = remember { mutableStateMapOf<String, Float>() }
-    val cardHeights = remember { mutableStateMapOf<String, Int>() }
+    // 拖拽几何一律现读 layoutInfo：它只含本帧已组合的项，随滚动自然失效，不会残留陈旧坐标。
+    // 绝不要为它再挂一份逐卡缓存——卡片滚出组合范围后缓存会冻结，目标位次就会跟着漂移。
+    val listState = rememberLazyListState()
     val rowSpacingPx = with(LocalDensity.current) { 6.dp.toPx() }
     var listViewportHeight by remember { mutableStateOf(0f) }
     val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else store.sourceQuestions
     val visible = if (query.isBlank()) store.sourceQuestions else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
+    // layoutInfo 的下标是 documentItems 的下标，其中夹着章节行，与题目下标并不一致；
+    // 一律经 key 换算，避免「非排序模式下多出章节行」导致位次整体错位。
+    val questionIndexByKey = remember(store.sourceQuestions) {
+        store.sourceQuestions.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
+    }
+    val canReorderList = reorderMode && query.isBlank() && visible.size == store.sourceQuestions.size
     val dragging = reorderMode && draggingKey != null && query.isBlank()
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
@@ -436,6 +446,25 @@ fun QuestionSection(store: AppStore) {
     fun locateSource(path: String) {
         expandedDirs = expandedDirs + setOf("knowledge-base") + KnowledgeTree.ancestorPaths(path)
         store.selectSourceDocument(path)
+    }
+
+    fun resolveDragTarget() {
+        val key = draggingKey ?: return
+        val base = store.sourceQuestions
+        val from = questionIndexByKey[key] ?: return
+        val current = dragTargetIndex ?: from
+        val target = QuestionReorder.resolveTargetIndex(
+            current = current,
+            grabY = dragPointerY - dragGrabOffset,
+            slots = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+                val itemKey = info.key as? String ?: return@mapNotNull null
+                val questionIndex = questionIndexByKey[itemKey] ?: return@mapNotNull null
+                ReorderSlot(questionIndex, info.offset.toFloat(), info.size)
+            },
+            total = base.size,
+            hysteresis = rowSpacingPx / 2f,
+        )
+        if (target != current) dragTargetIndex = target
     }
 
     LaunchedEffect(store.selectedSourcePath, mappedDocuments) {
@@ -613,8 +642,56 @@ fun QuestionSection(store: AppStore) {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
         Spacer(Modifier.height(8.dp))
+        // 拖拽手势挂在列表容器上，不能挂在卡片上：LazyColumn 会回收视口外的 item，卡片一旦被回收，
+        // 挂在它身上的 pointerInput 节点随之销毁，onDragCancel 触发——用户「抓着卡片滚动」滚到一半，
+        // 拖拽就断了。挂在容器上则与单个卡片的存亡无关。
         LazyColumn(
-            Modifier.fillMaxSize().onGloballyPositioned { listViewportHeight = it.size.height.toFloat() },
+            Modifier.fillMaxSize()
+                .onGloballyPositioned { listViewportHeight = it.size.height.toFloat() }
+                .pointerInput(reorderMode, query, store.sourceQuestions) {
+                    if (!canReorderList) return@pointerInput
+                    detectDragGestures(
+                        onDragStart = { pos ->
+                            // 指针落在哪个槽位就抓哪张卡；章节行不是题目，不参与重排
+                            val hit = listState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+                                pos.y >= info.offset && pos.y < info.offset + info.size
+                            }
+                            val key = hit?.key as? String
+                            val from = key?.let { questionIndexByKey[it] }
+                            if (hit == null || from == null) return@detectDragGestures
+                            draggingKey = key
+                            dragTargetIndex = from
+                            dragGrabOffset = pos.y - hit.offset
+                            dragPointerY = hit.offset + dragGrabOffset
+                        },
+                        onDragEnd = {
+                            val key = draggingKey
+                            val target = dragTargetIndex
+                            if (key != null && target != null) {
+                                val from = questionIndexByKey[key]
+                                if (from != null && target != from) {
+                                    store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
+                                }
+                            }
+                            draggingKey = null
+                            dragTargetIndex = null
+                            dragPointerY = 0f
+                            dragGrabOffset = 0f
+                        },
+                        onDragCancel = {
+                            draggingKey = null
+                            dragTargetIndex = null
+                            dragPointerY = 0f
+                            dragGrabOffset = 0f
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragPointerY += dragAmount.y
+                            resolveDragTarget()
+                        },
+                    )
+                },
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
@@ -640,14 +717,12 @@ fun QuestionSection(store: AppStore) {
                 }
                 val entry = (item as SourceDocumentItem.Question).entry
                 val entryKey = sourceQuestionKey(entry)
-                val questionIndex = store.sourceQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isExpanded = entryKey in expanded
                 val isDragging = draggingKey == entryKey
                 // 内容相对 git HEAD 有未提交改动：橙色边框 + Q 标签 + 行内着色（比对异步完成，加载中不标色）
                 val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
                 val gitDirty = gitDiff?.changed == true
-                val canReorder = reorderMode && query.isBlank() && questionIndex >= 0 && visible.size == store.sourceQuestions.size
                 val cardElevation by animateDpAsState(
                     targetValue = if (isDragging) 12.dp else 0.dp,
                     animationSpec = tween(180),
@@ -674,24 +749,21 @@ fun QuestionSection(store: AppStore) {
                         )
                         .fillMaxWidth()
                         .hoverable(cardInteraction)
-                        .onGloballyPositioned { coordinates ->
-                            cardTops[entryKey] = coordinates.positionInParent().y
-                            cardHeights[entryKey] = coordinates.size.height
-                        }
                         .zIndex(if (isDragging) 2f else 0f)
                         .graphicsLayer {
                             scaleX = cardScale
                             scaleY = cardScale
-                            // 槽位位置必须在绘制期现读：组合先于布局执行，换位那一帧组合里读到的还是上一帧槽位，
-                            // 拿它算平移补偿会差一行，被拖卡片每次换位都跳一格。绘制发生在 onGloballyPositioned
-                            // 之后，现读 cardTops 拿到的是本帧精确槽位，交换时槽位与平移量同步变化、视觉连续。
-                            // 同时把视觉位置钳制在列表视口内，拖到上下边缘时卡片顶住边界、不允许出界
+                            // 槽位取自 layoutInfo 的本帧实测值：绘制期现读，组合期读到的还是上一帧布局，
+                            // 换位那一帧会差一行。同时把视觉位置钳制在列表视口内，拖到上下边缘时卡片顶住边界。
                             translationY = if (isDragging) {
-                                val slotTop = cardTops[entryKey] ?: 0f
-                                val raw = dragPointerY - dragGrabOffset - slotTop
-                                val height = (cardHeights[entryKey] ?: 0).toFloat()
-                                val maxTranslate = (listViewportHeight - height - slotTop).coerceAtLeast(-slotTop)
-                                raw.coerceIn(-slotTop, maxTranslate)
+                                val slot = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == entryKey }
+                                if (slot == null) {
+                                    0f
+                                } else {
+                                    val visualTop = (dragPointerY - dragGrabOffset)
+                                        .coerceIn(0f, (listViewportHeight - slot.size).coerceAtLeast(0f))
+                                    visualTop - slot.offset
+                                }
                             } else {
                                 0f
                             }
@@ -717,76 +789,6 @@ fun QuestionSection(store: AppStore) {
                             MaterialTheme.shapes.small,
                         )
                         .padding(ui.spacing.card)
-                        .pointerInput(entryKey, canReorder) {
-                            if (!canReorder) return@pointerInput
-                            detectDragGestures(
-                                onDragStart = {
-                                    draggingKey = entryKey
-                                    dragTargetIndex = questionIndex
-                                    dragGrabOffset = it.y
-                                    dragPointerY = (cardTops[entryKey] ?: 0f) + it.y
-                                },
-                                onDragEnd = {
-                                    val key = draggingKey
-                                    val target = dragTargetIndex
-                                    if (key != null && target != null) {
-                                        val from = store.sourceQuestions.indexOfFirst { sourceQuestionKey(it) == key }
-                                        if (from >= 0 && target != from) {
-                                            store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
-                                        }
-                                    }
-                                    draggingKey = null
-                                    dragTargetIndex = null
-                                    dragPointerY = 0f
-                                    dragGrabOffset = 0f
-                                },
-                                onDragCancel = {
-                                    draggingKey = null
-                                    dragTargetIndex = null
-                                    dragPointerY = 0f
-                                    dragGrabOffset = 0f
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    // 增量累计指针位置（卡片自身平移后 change.position 坐标系会漂移）
-                                    dragPointerY += dragAmount.y
-                                    val key = draggingKey ?: return@detectDragGestures
-                                    val base = store.sourceQuestions
-                                    val from = base.indexOfFirst { sourceQuestionKey(it) == key }
-                                    if (from < 0) return@detectDragGestures
-                                    val current = dragTargetIndex ?: from
-                                    val draggedTop = cardTops[key] ?: return@detectDragGestures
-                                    val order = base.toMutableList().apply { add(current, removeAt(from)) }
-                                    fun pitch(k: String) = (cardHeights[k] ?: 96) + rowSpacingPx
-                                    val grabY = dragPointerY - dragGrabOffset
-                                    var target = current
-                                    var top = draggedTop
-                                    var guard = 0
-                                    // 启动器算法：视觉位置越过「当前槽位与相邻槽位顶点连线的中点」就换位。上下行的换位线都必须
-                                    // 按「被越过那行」的行距推导，再加半行距滞回：行高不均时若下行用自身行距，换位线两侧不对称，
-                                    // 会提前连环换位、下一帧又弹回，表现为列表乱跳。
-                                    val hysteresis = rowSpacingPx / 2
-                                    while (guard++ < 64) {
-                                        val nextPitch = if (target < order.lastIndex) pitch(sourceQuestionKey(order[target + 1])) else 0f
-                                        val prevPitch = if (target > 0) pitch(sourceQuestionKey(order[target - 1])) else 0f
-                                        when {
-                                            target < order.lastIndex && grabY > top + nextPitch / 2 + hysteresis -> {
-                                                top += nextPitch
-                                                order.add(target + 1, order.removeAt(target))
-                                                target++
-                                            }
-                                            target > 0 && grabY < top - prevPitch / 2 - hysteresis -> {
-                                                top -= prevPitch
-                                                order.add(target - 1, order.removeAt(target))
-                                                target--
-                                            }
-                                            else -> break
-                                        }
-                                    }
-                                    if (target != current) dragTargetIndex = target
-                                },
-                            )
-                        },
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -964,7 +966,7 @@ fun QuestionSection(store: AppStore) {
 /** 题面行内 diff 着色：相对 git HEAD 变化的字符标橙字；纯删除没有 new 侧区间则整段原样。 */
 private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): AnnotatedString = buildAnnotatedString {
     append(text)
-    diff?.questionRanges?.forEach { range ->
+    TextDiff.coalesceForHighlight(diff?.questionRanges.orEmpty(), text.length).forEach { range ->
         val start = range.first.coerceIn(0, text.length)
         val end = (range.last + 1).coerceIn(start, text.length)
         if (end > start) {

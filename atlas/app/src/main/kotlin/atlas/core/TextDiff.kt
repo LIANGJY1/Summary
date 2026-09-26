@@ -64,6 +64,32 @@ object TextDiff {
         return dirty
     }
 
+    /**
+     * 把字符级差异区间收敛成「整段染色」区间。
+     *
+     * 整份文档被重写时字符级 LCS 会碎成单双字交替（实测一道题 11 段，如 `作为fr|a|m|e|w|o|rk…`），
+     * 读者只看到满屏跳色却看不出哪里变了。碎片过多或覆盖过大时退化为整段着色。
+     *
+     * @param maxSegments 区间数超过它就整段着色
+     * @param minCoverage 变化字符占比达到它就整段着色
+     */
+    fun coalesceForHighlight(
+        ranges: List<IntRange>,
+        totalLength: Int,
+        maxSegments: Int = 3,
+        minCoverage: Double = 0.6,
+    ): List<IntRange> {
+        if (ranges.isEmpty() || totalLength <= 0) return emptyList()
+        val covered = ranges.sumOf { range ->
+            val from = range.first.coerceIn(0, totalLength)
+            val to = (range.last + 1).coerceIn(from, totalLength)
+            to - from
+        }
+        val fragmented = ranges.size > maxSegments
+        val dense = covered.toDouble() / totalLength >= minCoverage
+        return if (fragmented || dense) listOf(0 until totalLength) else ranges
+    }
+
     /** a、b 均不超过 lcsLimit：返回 b 中每个位置是否不在与 a 的 LCS 匹配里（即变化/新增） */
     private fun unmatchedInNew(a: String, b: String): BooleanArray {
         val dp = Array(a.length + 1) { ShortArray(b.length + 1) }

@@ -51,4 +51,42 @@ class TextDiffTest {
         val new = (1..500).joinToString("\n") { "新$it" }
         assertEquals((0 until 500).toSet(), TextDiff.changedLinesInNew(old, new, lcsLimit = 400))
     }
+
+    @Test
+    fun `零散小改动保留字符级区间`() {
+        val ranges = TextDiff.changedRangesInNew("旧题面？", "新题面？")
+        assertEquals(listOf(0..0), TextDiff.coalesceForHighlight(ranges, "新题面？".length), "只改一个字时行内区间仍有信息量")
+    }
+
+    @Test
+    fun `区间过多退化为整段着色`() {
+        // 真实场景：20-SELinux.md 整份重写后 Q4「作为framework开发者…」碎成 6 段单双字交替
+        val ranges = listOf(0..3, 5..5, 7..7, 9..17, 20..20, 23..29)
+        assertEquals(listOf(0 until 30), TextDiff.coalesceForHighlight(ranges, 30))
+    }
+
+    @Test
+    fun `覆盖过高退化为整段着色`() {
+        // 真实场景：Q7「allow 规则到底该写在哪个文件？…」只有 2 段，但覆盖 37/46
+        val ranges = listOf(6..18, 21..44)
+        assertEquals(listOf(0 until 46), TextDiff.coalesceForHighlight(ranges, 46))
+    }
+
+    @Test
+    fun `整份重写后的题面全部退化为整段`() {
+        val question = "作为framework开发者，SELinux的实际应用场景都是什么？"
+        val ranges = TextDiff.changedRangesInNew("作为应用层开发者，SELinux都有哪些实际使用场景？", question)
+        assertEquals(listOf(0 until question.length), TextDiff.coalesceForHighlight(ranges, question.length))
+    }
+
+    @Test
+    fun `无差异与零长度文本不产生着色区间`() {
+        assertEquals(emptyList(), TextDiff.coalesceForHighlight(emptyList(), 10))
+        assertEquals(emptyList(), TextDiff.coalesceForHighlight(listOf(0..3), 0))
+    }
+
+    @Test
+    fun `越界区间按文本长度裁剪后再统计覆盖`() {
+        assertEquals(listOf(0..4), TextDiff.coalesceForHighlight(listOf(0..99), 5), "越界区间裁到文本末尾，覆盖达满则整段")
+    }
 }
