@@ -123,15 +123,24 @@ if dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installe
 fi
 sudo_run apt install -y "$DEB"
 
-# X11/fcitx 下候选词窗跟随光标：强制 Java XIM over-the-spot。
-# compose 插件的 jpackage 配置不支持自定义 java-options，且 apt 重装会覆盖 cfg，
-# 所以每次安装后补写；root-window 回退会把候选框固定在屏幕左下角（2026-09-23）。
-IME_FLAG="java-options=-Djava.awt.im.style=over-the-spot"
+# X11/fcitx 下候选词窗跟随光标：JBR 新版 XIM 客户端（jb.awt.newXimClient）带原生
+# adjustCandidatesNativeWindowPosition，默认关闭，不开则候选框固定在屏幕左下角
+# （root-window 回退，2026-09-26 复现）；im.style=over-the-spot 是 09-23 的旧缓解，实测
+# 不够，保留无害。compose 插件的 jpackage 配置不支持自定义 java-options，且 apt 重装
+# 会覆盖 cfg，所以每次安装后补写；Main.kt 的 installImeCompatFlags 也注入了同样的值，
+# 这里是打包应用双保险。
+IME_FLAGS=(
+  "java-options=-Djava.awt.im.style=over-the-spot"
+  "java-options=-Djb.awt.newXimClient.enabled=true"
+  "java-options=-Djb.awt.newXimClient.preferBelowTheSpot=true"
+)
 ATLAS_CFG="/opt/atlas/lib/app/atlas.cfg"
-if ! sudo_run grep -qF "$IME_FLAG" "$ATLAS_CFG"; then
-  sudo_run sed -i "/^\[JavaOptions\]/a $IME_FLAG" "$ATLAS_CFG"
-  echo "==> 已注入输入法光标跟随参数：$IME_FLAG"
-fi
+for ime_flag in "${IME_FLAGS[@]}"; do
+  if ! sudo_run grep -qF "$ime_flag" "$ATLAS_CFG"; then
+    sudo_run sed -i "/^\[JavaOptions\]/a $ime_flag" "$ATLAS_CFG"
+    echo "==> 已注入输入法光标跟随参数：$ime_flag"
+  fi
+done
 
 # 窗口 WM_CLASS 是 atlas-MainKt（Compose 默认取主类名），而 jpackage 生成的 desktop
 # 不写 StartupWMClass，GNOME 匹配不上窗口，会把运行实例当另一个应用、多亮一个默认图标。

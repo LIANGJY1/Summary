@@ -62,6 +62,7 @@ import java.io.File
 import javax.swing.JFileChooser
 
 fun main() {
+    installImeCompatFlags()
     Log.init(File(System.getProperty("user.home"), ".local/share/atlas"))
     Thread.setDefaultUncaughtExceptionHandler { t, e ->
         Log.e("未捕获异常（thread=${t.name}）——应用可能崩溃或 EDT 挂掉导致界面卡死", e)
@@ -90,9 +91,30 @@ fun main() {
     }
 }
 
+/**
+ * X11 输入法候选框跟随光标：JBR 自带的新版 XIM 客户端默认关闭，不开时输入法拿不到
+ * 光标位置，候选框退化为 root-window 模式固定画在屏幕左下角（2026-09-26 用户录屏）。
+ * 旧缓解 java.awt.im.style=over-the-spot（update.sh 注入打包 cfg）实测不够；新客户端有
+ * 原生的 adjustCandidatesNativeWindowPosition，按 XIM 协议把候选框移到光标处。
+ * 必须在 AWT 输入上下文激活前设置；用户/脚本已显式设置时不覆盖。
+ */
+internal fun installImeCompatFlags() {
+    val defaults = mapOf(
+        "jb.awt.newXimClient.enabled" to "true",
+        "jb.awt.newXimClient.preferBelowTheSpot" to "true",
+    )
+    defaults.forEach { (key, value) ->
+        if (System.getProperty(key) == null) System.setProperty(key, value)
+    }
+}
+
 @Composable
 fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     val ui = atlasUiTokens()
+    // 输入法候选框定位兜底（包 Compose 的 InputMethodRequests，杜绝候选框固定屏幕左下角）。
+    // 必须等 Compose 自己完成 AWT/Swing 全局初始化（首帧）后再装：main() 里过早调
+    // Toolkit 会打乱其时序，表现为整页字体缩放异常（2026-09-26 回归）。
+    LaunchedEffect(Unit) { atlas.ui.ImeCaretFix.install() }
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
     }

@@ -1,6 +1,6 @@
 # Android 学习资料目录
 
-> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。《android-internals-wiki》全书已于 2026-09-25 按 session-to-knowledge 文章模式全量沉淀为本目录下的 Q&A 学习资料：机制类结论按本地 AAOS13 源码（Android 13）核对并标注与材料 Android 17 语境的版本差异，Q 序列即结构、供 atlas 同源直读；`architecture/01–10` 等早期文档为既往沉淀，予以保留。维护者：session-to-knowledge。
+> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。《android-internals-wiki》全书已于 2026-09-25 按 session-to-knowledge 文章模式全量沉淀为本目录下的 Q&A 学习资料：机制类结论按本地 AAOS13 源码（Android 13）核对并标注与材料 Android 17 语境的版本差异，Q 序列即结构、供 atlas 同源直读；`architecture/01–10` 等早期文档为既往沉淀，予以保留。yadi 车机项目《git 提交与缺陷分析》已于 2026-09-26 沉淀为 [11-defects/](11-defects/) 九册。维护者：session-to-knowledge。
 
 ## 面试冲刺
 
@@ -30,6 +30,10 @@
 ## 应用实践（源书第五部分）
 
 - [app-practice/](09-app-practice/) — 稳定性治理（度量崩溃/资源泄漏/线程 IPC/Native 与 SDK）、启动优化、渲染实战（View 与 Compose/图像显示/媒体混合栈）、内存实践、I/O 与存储、网络与连接、功耗优化、CPU 与体积、可观测性（体系治理/线上诊断）
+
+## 缺陷复盘（yadi 项目）
+
+- [11-defects/](11-defects/) — 某车机项目 85 天 1010 条提交、761 条缺陷修复的复盘沉淀：项目缺陷画像与复盘方法、车控信号语义、主线程与异步时序、蓝牙机制、Kanzi 双端状态同步、UI 还原与主题适配、状态缓存与启动时序、崩溃防护与偶现排查、提交治理与防回归
 
 ## 早期文档
 
@@ -104,3 +108,12 @@
 | [10-tools/06-APM-平台与SDK.md](10-tools/06-APM-平台与SDK.md) | APM 平台与 SDK | 30 |  |
 | [10-tools/07-APM-专项原理与架构.md](10-tools/07-APM-专项原理与架构.md) | APM 专项原理与架构 | 32 |  |
 | [10-tools/08-学习方法与检查清单.md](10-tools/08-学习方法与检查清单.md) | 学习方法与检查清单 | 8 |  |
+| [11-defects/00-项目缺陷画像与复盘方法.md](11-defects/00-项目缺陷画像与复盘方法.md) | 项目缺陷画像与复盘方法 | 17 |  |
+| [11-defects/01-车控信号语义.md](11-defects/01-车控信号语义.md) | 车控信号语义 | 24 |  |
+| [11-defects/02-主线程与异步时序.md](11-defects/02-主线程与异步时序.md) | 主线程与异步时序 | 26 |  |
+| [11-defects/03-蓝牙机制.md](11-defects/03-蓝牙机制.md) | 蓝牙机制 | 31 |  |
+| [11-defects/04-Kanzi双端状态同步.md](11-defects/04-Kanzi双端状态同步.md) | Kanzi 双端状态同步 | 17 |  |
+| [11-defects/05-UI还原与主题适配.md](11-defects/05-UI还原与主题适配.md) | UI 还原与主题适配 | 29 |  |
+| [11-defects/06-状态缓存与启动时序.md](11-defects/06-状态缓存与启动时序.md) | 状态缓存与启动时序 | 22 |  |
+| [11-defects/07-崩溃防护与偶现排查.md](11-defects/07-崩溃防护与偶现排查.md) | 崩溃防护与偶现排查 | 20 |  |
+| [11-defects/08-提交治理与防回归.md](11-defects/08-提交治理与防回归.md) | 提交治理与防回归 | 20 |  |
