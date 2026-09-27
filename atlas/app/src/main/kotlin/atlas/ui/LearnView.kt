@@ -108,7 +108,7 @@ fun ReviewSection(store: AppStore) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth()
                         .background(Theme.Elevated, RoundedCornerShape(18.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f), RoundedCornerShape(18.dp))
                         .padding(horizontal = 30.dp, vertical = 26.dp)
                         .onPreviewKeyEvent { e ->
                             if (e.type == KeyEventType.KeyUp) {

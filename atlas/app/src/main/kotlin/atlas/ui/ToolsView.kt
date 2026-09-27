@@ -105,7 +105,7 @@ private fun HcLogDecryptCard(store: AppStore) {
         Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = Theme.Panel,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // 卡片头：绘制图标（避免字体缺字）+ 标题 + 一句话说明

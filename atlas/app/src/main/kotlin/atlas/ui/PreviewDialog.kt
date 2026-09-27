@@ -48,8 +48,8 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
             Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f),
             shape = MaterialTheme.shapes.medium,
             color = Theme.Panel,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
-            tonalElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)),
+            tonalElevation = 2.dp,
         ) {
             Column(Modifier.padding(ui.spacing.page), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

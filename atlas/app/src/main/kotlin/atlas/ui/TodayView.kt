@@ -73,7 +73,7 @@ private fun WorkbenchRow(item: WorkbenchAction, onClick: () -> Unit) {
         Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = Theme.Panel,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),

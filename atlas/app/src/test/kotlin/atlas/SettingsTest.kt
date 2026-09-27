@@ -74,6 +74,6 @@ class SettingsTest {
         val valid = CustomTheme("测试", AtlasThemes.ATLAS.light, AtlasThemes.ATLAS.dark).encode()
         assertEquals(null, CustomTheme.decode(""))
         assertEquals(null, CustomTheme.decode("v2|只有名字"))
-        assertEquals(null, CustomTheme.decode(valid.replaceFirst("#FF4969B2", "#zz")))
+        assertEquals(null, CustomTheme.decode(valid.replaceFirst("#FF536477", "#zz")))
     }
 }

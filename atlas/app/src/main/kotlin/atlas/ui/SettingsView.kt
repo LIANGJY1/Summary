@@ -55,7 +55,7 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
         Box(
             Modifier.fillMaxHeight()
                 .width(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
         )
         Column(
             Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(ui.spacing.page),

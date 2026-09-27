@@ -24,9 +24,9 @@ class ThemeMdTest {
     @Test
     fun `Atlas markdown 语义具有稳定层级`() {
         val md = AtlasThemes.ATLAS.dark.md()
-        assertEquals("#FFC6A0F6", hexOf(md.h1))
-        assertEquals("#FF8AADF4", hexOf(md.h2))
-        assertEquals("#FFCAD3F5", hexOf(md.h3))
+        assertEquals("#FFC8CDD4", hexOf(md.h1))
+        assertEquals("#FFB9C1CC", hexOf(md.h2))
+        assertEquals("#FFD0D1D2", hexOf(md.h3))
         assertNotEquals(hexOf(md.h3), hexOf(md.bold))
         assertNotEquals(hexOf(md.h2), hexOf(md.link))
     }
@@ -34,10 +34,10 @@ class ThemeMdTest {
     @Test
     fun `Theme 暴露分级 Markdown 语义`() {
         Theme.apply(dark = true, spec = AtlasThemes.ATLAS.dark)
-        assertEquals("#FFC6A0F6", hexOf(Theme.MdH1))
-        assertEquals("#FF8AADF4", hexOf(Theme.MdH2))
-        assertEquals("#FFCAD3F5", hexOf(Theme.MdH3))
-        assertEquals("#FFE6E9FF", hexOf(Theme.MdBold))
-        assertEquals("#FFF5A97F", hexOf(Theme.MdInlineCode))
+        assertEquals("#FFC8CDD4", hexOf(Theme.MdH1))
+        assertEquals("#FFB9C1CC", hexOf(Theme.MdH2))
+        assertEquals("#FFD0D1D2", hexOf(Theme.MdH3))
+        assertEquals("#FFE0E1E2", hexOf(Theme.MdBold))
+        assertEquals("#FFC1C4C8", hexOf(Theme.MdInlineCode))
     }
 }

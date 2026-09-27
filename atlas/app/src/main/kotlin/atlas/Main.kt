@@ -352,8 +352,8 @@ fun CommandPalette(store: AppStore, onDismiss: () -> Unit) {
                 },
             shape = MaterialTheme.shapes.medium,
             color = Theme.Panel,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-            tonalElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)),
+            tonalElevation = 3.dp,
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

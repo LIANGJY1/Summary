@@ -37,7 +37,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -102,9 +101,9 @@ data class AtlasUiTokens(
             typography = AtlasTypography(
                 pageTitle = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
                 sectionTitle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-                itemTitle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
-                body = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
-                secondary = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                itemTitle = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.SansSerif),
+                body = TextStyle(fontSize = 15.sp, lineHeight = 26.sp, fontFamily = FontFamily.SansSerif, letterSpacing = 0.1.sp),
+                secondary = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, fontFamily = FontFamily.SansSerif),
                 caption = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
             ),
             contentMaxWidth = 1440.dp,
@@ -255,13 +254,17 @@ fun AtlasTheme(
         LocalAtlasUiTokens provides AtlasUiTokens.forTheme(dark),
     ) {
         MaterialTheme(colorScheme = spec.toMaterialScheme(dark)) {
-            Surface(Modifier.fillMaxSize()) { content() }
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = spec.background,
+                contentColor = spec.onSurface,
+            ) { content() }
         }
     }
 }
 
 @Composable
-fun VDivider() = Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)))
+fun VDivider() = Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)))
 
 @Composable
 fun AtlasPanel(
@@ -274,14 +277,14 @@ fun AtlasPanel(
         modifier = modifier,
         shape = shape,
         color = color,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)),
         content = content,
     )
 }
 
 @Composable
 fun StatusChip(text: String, color: Color = Theme.Accent) {
-    Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.15f)) {
+    Surface(shape = RoundedCornerShape(999.dp), color = color.copy(alpha = 0.12f)) {
         Text(text, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = color, fontSize = 12.sp)
     }
 }
@@ -292,18 +295,18 @@ private fun CodeLanguageLabel(text: String) {
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
-                .background(Theme.MdInlineCodeBg.copy(alpha = 0.28f))
+                .background(Theme.MdInlineCodeBg.copy(alpha = 0.18f))
                 .padding(horizontal = 16.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.width(3.dp).height(14.dp)
-                    .background(Theme.MdH2, RoundedCornerShape(2.dp)),
+                Modifier.width(2.dp).height(12.dp)
+                    .background(Theme.Accent.copy(alpha = 0.75f), RoundedCornerShape(2.dp)),
             )
             Spacer(Modifier.width(9.dp))
             Text(
                 text.uppercase(),
-                color = Theme.MdH2,
+                color = Theme.Muted,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -312,7 +315,7 @@ private fun CodeLanguageLabel(text: String) {
         }
         Box(
             Modifier.fillMaxWidth().height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)),
         )
     }
 }
@@ -320,7 +323,7 @@ private fun CodeLanguageLabel(text: String) {
 /** 顶部导航专用数量徽标：保留提示语义，但不与主导航标签争夺层级。 */
 @Composable
 fun NavBadge(text: String, color: Color = Theme.Accent) {
-    Surface(shape = RoundedCornerShape(7.dp), color = color.copy(alpha = 0.14f)) {
+    Surface(shape = RoundedCornerShape(7.dp), color = color.copy(alpha = 0.11f)) {
         Text(
             text,
             Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
@@ -343,7 +346,7 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
                 if (end > 0) {
                     append(s.substring(i + 2, end)); addStyle(
                         SpanStyle(
-                            fontWeight = FontWeight.ExtraBold,
+                            fontWeight = FontWeight.SemiBold,
                             color = Theme.MdBold,
                         ),
                         length - (end - i - 2),
@@ -359,8 +362,8 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
                         SpanStyle(
                             fontFamily = FontFamily.Monospace,
                             // 行内代码是辅助结构：保留等宽与底色，但不再使用高饱和强调色抢正文焦点。
-                            color = Theme.Muted.copy(alpha = 0.92f),
-                            background = Theme.MdInlineCodeBg.copy(alpha = 0.22f),
+                            color = Theme.MdInlineCode.copy(alpha = 0.92f),
+                            background = Theme.MdInlineCodeBg.copy(alpha = 0.18f),
                         ),
                         length - (end - i - 1),
                         length,
@@ -393,7 +396,7 @@ private fun colorIfDirty(annotated: AnnotatedString, lineIndex: Int, dirtyLines:
     if (lineIndex in dirtyLines) {
         buildAnnotatedString {
             append(annotated)
-            addStyle(SpanStyle(color = Theme.WarnOrange), 0, length)
+            addStyle(SpanStyle(color = Theme.WarnOrange.copy(alpha = 0.72f)), 0, length)
         }
     } else annotated
 
@@ -413,7 +416,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
     Box(modifier.fillMaxWidth()) {
         Column(
             Modifier.fillMaxWidth().widthIn(max = ui.readingMaxWidth).align(Alignment.Center),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             var i = 0
             while (i < lines.size) {
@@ -437,22 +440,22 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
                             color = Theme.CodeBlock,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-                            tonalElevation = 1.dp,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            tonalElevation = 0.dp,
                         ) {
                             Column(Modifier.fillMaxWidth()) {
                                 if (lang.isNotBlank()) CodeLanguageLabel(lang)
                                 SelectionContainer {
                                     Column(
                                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                            .padding(horizontal = 16.dp, vertical = 15.dp),
                                     ) {
                                         buf.forEach { code ->
                                             Text(
                                                 code,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontSize = 13.sp,
-                                                lineHeight = 21.sp,
+                                                lineHeight = 20.sp,
                                                 softWrap = false,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                             )
@@ -465,32 +468,31 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 }
                 line.startsWith("### ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines),
-                    modifier = Modifier.padding(top = 8.dp),
-                    style = ui.typography.itemTitle.copy(fontSize = 17.sp, lineHeight = 26.sp), color = Theme.MdH3,
+                    modifier = Modifier.padding(top = 7.dp),
+                    style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 24.sp), color = Theme.MdH3,
                 )
                 line.startsWith("## ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines),
-                    modifier = Modifier.padding(top = 12.dp),
-                    style = ui.typography.sectionTitle.copy(fontSize = 21.sp, lineHeight = 31.sp), color = Theme.MdH2,
+                    modifier = Modifier.padding(top = 10.dp),
+                    style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 28.sp), color = Theme.MdH2,
                 )
                 line.startsWith("# ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines),
-                    modifier = Modifier.padding(top = 14.dp),
-                    style = ui.typography.pageTitle.copy(fontSize = 28.sp, lineHeight = 38.sp), color = Theme.MdH1,
+                    modifier = Modifier.padding(top = 12.dp),
+                    style = ui.typography.pageTitle.copy(fontSize = 25.sp, lineHeight = 34.sp), color = Theme.MdH1,
                 )
                 line.startsWith("> ") -> Row(
                     Modifier.fillMaxWidth()
-                        .background(Theme.MdQuote.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .background(Theme.MdQuote.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
                 ) {
-                    Box(Modifier.width(3.dp).height(24.dp).background(Theme.MdH1.copy(alpha = 0.85f), RoundedCornerShape(2.dp)))
+                    Box(Modifier.width(2.dp).height(24.dp).background(Theme.MdQuote.copy(alpha = 0.75f), RoundedCornerShape(2.dp)))
                     Text(
                         colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
                         Modifier.padding(start = 12.dp).fillMaxWidth(),
                         color = Theme.MdQuote,
-                        fontStyle = FontStyle.Italic,
-                        fontSize = 14.sp,
-                        lineHeight = 23.sp,
+                        fontSize = 15.sp,
+                        lineHeight = 25.sp,
                     )
                 }
                 line.trim() == "---" -> VDivider()
@@ -520,7 +522,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     Text(
                         colorIfDirty(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), i, dirtyLines),
                         Modifier.padding(start = 10.dp),
-                        style = ui.typography.body.copy(fontSize = 15.sp, lineHeight = 25.sp),
+                        style = ui.typography.body,
                     )
                 }
                 markdownNumberedPattern.find(line) != null -> {
@@ -531,12 +533,12 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                             Modifier.width(26.dp),
                             color = Theme.MdH2,
                             fontWeight = FontWeight.SemiBold,
-                            style = ui.typography.body.copy(fontSize = 15.sp, lineHeight = 25.sp),
+                            style = ui.typography.body,
                         )
                         Text(
                             colorIfDirty(renderInline(numbered.groupValues[2]), i, dirtyLines),
                             Modifier.fillMaxWidth(),
-                            style = ui.typography.body.copy(fontSize = 15.sp, lineHeight = 25.sp),
+                            style = ui.typography.body,
                         )
                     }
                 }
@@ -554,7 +556,7 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 line.isBlank() -> Spacer(Modifier.height(4.dp))
                 else -> Text(
                     colorIfDirty(renderInline(line), i, dirtyLines),
-                    style = ui.typography.body.copy(fontSize = 15.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.94f)),
+                    style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.96f)),
                 )
             }
                 i++

@@ -260,7 +260,8 @@ private fun LegacyQuestionSection(store: AppStore) {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(
-                            if (expanded) Theme.Selected else Theme.Panel,
+                            // 展开只增加内容，不切换整块色板，避免列表出现刺眼的大色块。
+                            Theme.Panel,
                             MaterialTheme.shapes.small,
                         )
                         .clickable {
@@ -282,10 +283,10 @@ private fun LegacyQuestionSection(store: AppStore) {
                             Text(
                                 q.q,
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (expanded) Theme.Accent else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium,
+                                color = if (expanded) Theme.MdH2 else MaterialTheme.colorScheme.onSurface,
                             )
-                            if (q.tags.isNotEmpty()) Text("标签：${q.tags.joinToString("、")}", fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                            if (q.tags.isNotEmpty()) Text("标签：${q.tags.joinToString("、")}", fontSize = 10.sp, color = Theme.Muted, maxLines = 1)
                         }
                         StatusChip(
                             q.status,
@@ -303,8 +304,8 @@ private fun LegacyQuestionSection(store: AppStore) {
                                 shape = MaterialTheme.shapes.small,
                                 color = Theme.Elevated,
                             ) {
-                                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
                                     Spacer(Modifier.height(4.dp))
                                     CompositionLocalProvider(
                                         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
@@ -539,7 +540,7 @@ fun QuestionSection(store: AppStore) {
                 Modifier.width(1.dp).fillMaxHeight().align(Alignment.Center)
                     .background(
                         if (sidebarDragging || handleHovered) Theme.Accent
-                        else MaterialTheme.colorScheme.outlineVariant,
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
                     ),
             )
         }
@@ -801,11 +802,11 @@ fun QuestionSection(store: AppStore) {
                             MaterialTheme.shapes.small,
                         )
                         .border(
-                            if (isExpanded) 1.5.dp else 1.dp,
+                            if (isExpanded) 1.dp else 1.dp,
                             if (isDragging) Theme.Accent
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
-                            else if (isExpanded) Theme.BorderStrong.copy(alpha = 0.78f)
-                            else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.55f)
+                            else if (isExpanded) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f)
+                            else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.36f)
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f),
                             MaterialTheme.shapes.small,
                         )
@@ -852,7 +853,7 @@ fun QuestionSection(store: AppStore) {
                             SelectionContainer {
                                 Text(
                                     remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                    style = ui.typography.itemTitle,
+                                    style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
                                 )
                             }
                             if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
@@ -895,16 +896,16 @@ fun QuestionSection(store: AppStore) {
                                     },
                                     shape = MaterialTheme.shapes.small,
                                     color = Theme.Elevated,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)),
                                 ) {
-                                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                    Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Box(
-                                                Modifier.width(3.dp).height(14.dp)
-                                                    .background(Theme.MdH2, RoundedCornerShape(2.dp)),
+                                                Modifier.width(2.dp).height(14.dp)
+                                                    .background(Theme.MdH2.copy(alpha = 0.8f), RoundedCornerShape(2.dp)),
                                             )
                                             Spacer(Modifier.width(8.dp))
-                                            Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
+                                            Text("答案", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
                                         }
                                         Spacer(Modifier.height(4.dp))
                                         CompositionLocalProvider(
@@ -1000,7 +1001,7 @@ private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): A
         val start = range.first.coerceIn(0, text.length)
         val end = (range.last + 1).coerceIn(start, text.length)
         if (end > start) {
-            addStyle(SpanStyle(color = Theme.WarnOrange), start, end)
+            addStyle(SpanStyle(color = Theme.WarnOrange.copy(alpha = 0.72f)), start, end)
         }
     }
 }

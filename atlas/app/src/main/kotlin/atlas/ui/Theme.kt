@@ -44,22 +44,22 @@ data class ThemeSpec(
     fun md() = MdSpec(mdH1, mdH2, mdH3, mdBold, mdLink, mdQuote, mdInlineCode, mdInlineCodeBg)
 
     fun elevatedSurface(@Suppress("UNUSED_PARAMETER") dark: Boolean): Color =
-        lerp(surface, surfaceVariant, 0.45f)
+        lerp(surface, surfaceVariant, 0.34f)
 
     fun inputBg(@Suppress("UNUSED_PARAMETER") dark: Boolean): Color = surfaceVariant
 
     /** Derived interaction surfaces keep the persisted palette small while making state styling consistent. */
-    fun panelSurface(): Color = lerp(surface, surfaceVariant, 0.28f)
+    fun panelSurface(): Color = lerp(surface, surfaceVariant, 0.20f)
 
-    fun hoverSurface(): Color = lerp(surfaceVariant, accent, 0.03f)
+    fun hoverSurface(): Color = lerp(surfaceVariant, accent, 0.025f)
 
-    fun selectedSurface(): Color = lerp(surfaceVariant, accent, 0.07f)
+    fun selectedSurface(): Color = lerp(surfaceVariant, accent, 0.05f)
 
-    fun pressedSurface(): Color = lerp(surfaceVariant, accent, 0.13f)
+    fun pressedSurface(): Color = lerp(surfaceVariant, accent, 0.10f)
 
-    fun codeBlockSurface(): Color = lerp(codeBg, surfaceVariant, 0.24f)
+    fun codeBlockSurface(): Color = lerp(codeBg, surfaceVariant, 0.14f)
 
-    /** Periwinkle is reserved for actions and focus; Peach remains a Markdown/warning accent. */
+    /** Accent is reserved for actions and focus; status colors stay quiet and local to their semantic role. */
     fun infoColor(): Color = mdH2
 
     fun borderStrong(): Color = lerp(outline, mdH2, 0.26f)
@@ -68,16 +68,30 @@ data class ThemeSpec(
         (if (dark) darkColorScheme() else lightColorScheme()).copy(
             primary = accent,
             onPrimary = contentOn(accent),
+            primaryContainer = selectedSurface(),
+            onPrimaryContainer = onSurface,
             secondary = mdLink,
             onSecondary = contentOn(mdLink),
+            secondaryContainer = surfaceVariant,
+            onSecondaryContainer = onSurface,
+            tertiary = mdQuote,
+            onTertiary = contentOn(mdQuote),
+            tertiaryContainer = surfaceVariant,
+            onTertiaryContainer = onSurface,
             error = badRed,
             onError = contentOn(badRed),
+            errorContainer = lerp(surfaceVariant, badRed, 0.12f),
+            onErrorContainer = badRed,
             background = background,
             onBackground = onSurface,
             surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = muted,
+            surfaceTint = Color.Transparent,
+            inverseSurface = onSurface,
+            inverseOnSurface = surface,
+            inversePrimary = accent,
             outline = outline,
             outlineVariant = outlineVariant,
         )
@@ -168,35 +182,35 @@ data class CustomTheme(
     }
 }
 
-/** 唯一内置主题：Macchiato 色族，浅深两版均为人工校准值。 */
+/** 唯一内置主题：Atlas 中性编辑器色板，浅深两版均为人工校准值。 */
 object AtlasThemes {
     const val NAME = "Atlas"
 
     val ATLAS = ThemeDefinition(
         name = NAME,
         dark = ThemeSpec(
-            accent = color("#B7BDF8"), okGreen = color("#A6DA95"),
-            warnOrange = color("#EED49F"), badRed = color("#ED8796"),
-            muted = color("#A5ADCB"), codeBg = color("#181926"),
-            background = color("#181926"), surface = color("#1E2030"),
-            surfaceVariant = color("#24273A"), onSurface = color("#CAD3F5"),
-            outline = color("#6E738D"), outlineVariant = color("#494D64"),
-            mdH1 = color("#C6A0F6"), mdH2 = color("#8AADF4"),
-            mdH3 = color("#CAD3F5"), mdBold = color("#E6E9FF"),
-            mdLink = color("#8BD5CA"), mdQuote = color("#B8C0E0"),
-            mdInlineCode = color("#F5A97F"), mdInlineCodeBg = color("#363A4F"),
+            accent = color("#9BAEC8"), okGreen = color("#9BB6A0"),
+            warnOrange = color("#BDA782"), badRed = color("#C18F93"),
+            muted = color("#A0A0A0"), codeBg = color("#1F2022"),
+            background = color("#1B1B1C"), surface = color("#202122"),
+            surfaceVariant = color("#27282A"), onSurface = color("#D0D1D2"),
+            outline = color("#62656A"), outlineVariant = color("#383A3D"),
+            mdH1 = color("#C8CDD4"), mdH2 = color("#B9C1CC"),
+            mdH3 = color("#D0D1D2"), mdBold = color("#E0E1E2"),
+            mdLink = color("#9EBAB4"), mdQuote = color("#AEB2B8"),
+            mdInlineCode = color("#C1C4C8"), mdInlineCodeBg = color("#313336"),
         ),
         light = ThemeSpec(
-            accent = color("#5969A8"), okGreen = color("#3C7848"),
-            warnOrange = color("#8C6C2C"), badRed = color("#A13D52"),
-            muted = color("#6D6676"), codeBg = color("#F0E9E7"),
-            background = color("#F7F2EE"), surface = color("#FFFCFA"),
-            surfaceVariant = color("#F0E8E6"), onSurface = color("#3B3440"),
-            outline = color("#877E8D"), outlineVariant = color("#D8CFD6"),
-            mdH1 = color("#704B8F"), mdH2 = color("#4969B2"),
-            mdH3 = color("#3B3440"), mdBold = color("#292534"),
-            mdLink = color("#2F716E"), mdQuote = color("#6D6676"),
-            mdInlineCode = color("#9A4E2D"), mdInlineCodeBg = color("#F2E8E2"),
+            accent = color("#526782"), okGreen = color("#487254"),
+            warnOrange = color("#806538"), badRed = color("#94545B"),
+            muted = color("#66696D"), codeBg = color("#F0F0ED"),
+            background = color("#F3F3F1"), surface = color("#FAFAF8"),
+            surfaceVariant = color("#EAEAE7"), onSurface = color("#303236"),
+            outline = color("#70747A"), outlineVariant = color("#D2D2CE"),
+            mdH1 = color("#46576F"), mdH2 = color("#536477"),
+            mdH3 = color("#303236"), mdBold = color("#25272B"),
+            mdLink = color("#396B66"), mdQuote = color("#626A72"),
+            mdInlineCode = color("#565B61"), mdInlineCodeBg = color("#E9E9E6"),
         ),
     )
 
