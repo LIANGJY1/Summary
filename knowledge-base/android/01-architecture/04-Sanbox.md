@@ -26,6 +26,8 @@
 
 
 
+
+
 **Q2: 应用沙箱依靠哪些机制实现？DAC、MAC、seccomp-BPF 分别是什么？**
 
 应用沙箱把三套内核机制叠在同一条进程边界上：每个应用默认独占一个 Linux UID 和一个进程，任何跨边界访问都必须经过显式 IPC 和权限检查。
@@ -62,6 +64,8 @@
 
 
 
+
+
 **Q3: DAC 和 MAC 都在做"放行/拒绝"，本质区别是什么？**
 
 输出同构（都是允许/拒绝），本质区别在三个维度：
@@ -78,7 +82,29 @@
 
 
 
-**Q4: 同一应用在工作资料里数据完全隔离，ps 里看到 u0_a123 与 u10_a123——多用户下 UID 怎么分配？跨用户访问的合法路径是什么？**
+
+
+**Q4: 应用的 UID 是怎么分配的？u0_a199 这样的名字怎么换算成真实 UID？**
+
+UID 在应用安装时由系统分配：PackageManagerService 驱动 installd 从应用段取号（Process.FIRST_APPLICATION_UID = 10000 起，LAST_APPLICATION_UID = 19999 封顶），同时创建数据目录并 chown 到该 UID。进程身份名 u0_a199 的读法是"第 0 个物理用户里的第 199 个应用"，换算：真实 UID = 10000 + 199 = 10199。
+
+源码锚点（frameworks/base/core/android/os/Process.java 与 android.os.UserHandle，AOSP 13–17 常量稳定）：
+
+1. UserHandle.getAppId(uid) 取 `uid % 100000` 得应用编号，UserHandle.getUserId(uid) 取 `uid / 100000` 得物理用户编号；
+2. 多用户的 UID 公式是 物理用户编号 × 100000 + 应用编号（PER_USER_RANGE = 100000）——第 10 个用户的 u10_a199 是 10010199；user 0 的 SYSTEM 是 1000、user 10 的 SYSTEM 是 1001000，同一身份跨用户天然不同 UID；
+3. 分配与数据目录同生同灭：卸载后 UID 由系统回收、近期重装通常复用（removed-app-id 机制），应用不得依赖固定 UID。
+
+
+
+
+
+
+
+
+
+
+
+**Q5: 同一应用在工作资料里数据完全隔离，ps 里看到 u0_a123 与 u10_a123——多用户下 UID 怎么分配？跨用户访问的合法路径是什么？**
 
 多用户隔离建立在 UID 体系上：`uid = userId × 100000 + appId`（`UserHandle` 的组合规则），同一 appId 在不同用户下是**不同的 Linux UID**——u0_a123 与 u10_a123 互为陌生应用，隔离由 UID 加 SELinux 双重实施。
 
@@ -95,7 +121,9 @@
 
 
 
-**Q5: "Fatal signal 31 (SIGSYS)" 把进程直接杀死——seccomp 拦截系统调用时表现成什么样？怎么确认是哪个调用被拒？**
+
+
+**Q6: "Fatal signal 31 (SIGSYS)" 把进程直接杀死——seccomp 拦截系统调用时表现成什么样？怎么确认是哪个调用被拒？**
 
 seccomp 拦截不抛 Java 异常：被拒的系统调用直接以 SIGSYS（信号 31）杀死进程，logcat 表现为 `Fatal signal 31 (SIGSYS), code 1 (SYS_SECCOMP)`，tombstone 的信号信息带被拒的 syscall 编号。常见两类来源：应用升级 targetSdk 后，Zygote 按目标 SDK 安装更严格的白名单过滤器，老 native 库里被淘汰的调用被拒；或第三方 ROM/裁剪内核删掉了白名单允许的调用。
 
@@ -105,22 +133,6 @@ seccomp 拦截不抛 Java 异常：被拒的系统调用直接以 SIGSYS（信�
 4. **排查提示**：同类崩溃集中在"刚升 targetSdk 的版本 + 特定 native SDK"时优先怀疑 seccomp，而不是先查业务代码。
 
 
-
-
-
-
-
-
-
-**Q6: 应用的 UID 是怎么分配的？u0_a199 这样的名字怎么换算成真实 UID？**
-
-UID 在应用安装时由系统分配：PackageManagerService 驱动 installd 从应用段取号（Process.FIRST_APPLICATION_UID = 10000 起，LAST_APPLICATION_UID = 19999 封顶），同时创建数据目录并 chown 到该 UID。进程身份名 u0_a199 的读法是"第 0 个物理用户里的第 199 个应用"，换算：真实 UID = 10000 + 199 = 10199。
-
-源码锚点（frameworks/base/core/android/os/Process.java 与 android.os.UserHandle，AOSP 13–17 常量稳定）：
-
-1. UserHandle.getAppId(uid) 取 `uid % 100000` 得应用编号，UserHandle.getUserId(uid) 取 `uid / 100000` 得物理用户编号；
-2. 多用户的 UID 公式是 物理用户编号 × 100000 + 应用编号（PER_USER_RANGE = 100000）——第 10 个用户的 u10_a199 是 10010199；user 0 的 SYSTEM 是 1000、user 10 的 SYSTEM 是 1001000，同一身份跨用户天然不同 UID；
-3. 分配与数据目录同生同灭：卸载后 UID 由系统回收、近期重装通常复用（removed-app-id 机制），应用不得依赖固定 UID。
 
 
 
@@ -150,6 +162,8 @@ UID 段位就是能力档位：0 是 root、1000 是 SYSTEM（system_server 等�
 
 
 
+
+
 **Q8: Zygote fork 出应用进程时，UID 与 SELinux 域是在哪一步被设置的？**
 
 不是 Zygote 的身份，而是 specialize（改造）阶段设置到子进程上的。链路：AMS 的 ProcessList.startProcess 组装参数（--setuid、--setgid、--gids、--seinfo 等）→ 写入 Zygote socket → ZygoteConnection 解析 → Zygote.forkAndSpecialize → native 层 com_android_internal_os_Zygote.cpp 的 SpecializeCommon 完成改造。
@@ -162,6 +176,8 @@ SpecializeCommon 的关键顺序（Android 13 源码）：
 4. 最后才 SetUidGid：setresgid()/setresuid() 把身份降到目标应用 UID——全部配置在丢权之前完成，丢权后子进程再也无法改回身份。
 
 边界：任何一步失败都直接 kill 子进程，由 AMS 走重试路径；Zygote 本体始终保持 root 身份、没有 Binder 线程——身份交接只发生在 specialize 一瞬间。
+
+
 
 
 
@@ -193,6 +209,8 @@ drwxrws--x u0_a199 u0_a199_cache … files
 
 
 
+
+
 **Q10: 两个应用通过 sharedUserId 共享 UID 后，就一定能互相访问吗？**
 
 不一定。sharedUserId 让两个应用（要求同签名）在安装时拿到同一个 UID——这只是打通了三层过滤中的第一层；完整互通要同时满足"同 UID + 同 SELinux 域 + 同物理用户"，任何一层不同都可能被拦。
@@ -213,6 +231,8 @@ drwxrws--x u0_a199 u0_a199_cache … files
 
 
 
+
+
 **Q11: isolatedProcess 的沙箱为什么更小？UID 在其中是怎么变的？**
 
 声明 `android:isolatedProcess="true"` 的服务进程，系统给它随机分配一个 99000–99999 区间的临时 UID（每次启动都不同）、不加入任何用户组，SELinux 域也从 untrusted_app 换成能力更小的 isolated_app——无网络、无大部分系统服务、没有应用数据目录。它的用途是承载处理不可信数据的组件（渲染器、解码器）。
@@ -220,6 +240,8 @@ drwxrws--x u0_a199 u0_a199_cache … files
 这条链恰好证明 UID 是沙箱能力的索引：UID 段位变 → seapp_contexts 匹配到的域变 → 能力面收窄。普通应用进程能做的事，隔离进程几乎都不行；临时 UID 使它无法与任何既有身份建立 DAC 关系。
 
 边界：隔离进程退出 UID 即回收；它与宿主的通信只能走宿主主动建立的 Binder/管道通道——"处理不可信数据 + 最小能力"是这类进程的设计契约。
+
+
 
 
 
@@ -247,6 +269,8 @@ SDK 沙箱是 Android 13 引入的 SDK Runtime：把第三方广告/分析 SDK �
 
 
 
+
+
 **Q13: 为什么框架的权限检查都用 getCallingUid 而不是 PID？**
 
 因为 UID 是沙箱身份（稳定、跨进程成立、不可伪造），PID 只是瞬时的进程编号（随生死变化、应用无法预测）。Binder 驱动在每次事务里都记录发送方的 uid/pid，Binder.getCallingUid() 返回的是内核认证过的对端 UID——调用方伪造不了，所以权限检查（"只有 system UID 能调这个接口"）全部锚定 UID。
@@ -258,6 +282,8 @@ SDK 沙箱是 Android 13 引入的 SDK Runtime：把第三方广告/分析 SDK �
 3. PID 的用途是进程级管理（kill、进程状态）与调试归因，不承载安全语义。
 
 收束：沙箱的单位是 UID，所以安全判据也是 UID——这条对齐贯穿框架的每一处权限检查。
+
+
 
 
 
@@ -283,6 +309,8 @@ SDK 沙箱是 Android 13 引入的 SDK Runtime：把第三方广告/分析 SDK �
 
 
 
+
+
 **Q15: MAC 层的拒绝（如应用读 /dev/ttyS0 被 avc denied）是 Linux 内核行为还是 Android 上层行为？**
 
 拦截动作是纯 Linux 内核行为——DAC 与 MAC 两道检查在内核 VFS 层的同一函数里先后执行；Android 决定的只是策略规则的内容（哪个域对哪个类型有 allow），框架层全程不参与。
@@ -290,6 +318,8 @@ SDK 沙箱是 Android 13 引入的 SDK Runtime：把第三方广告/分析 SDK �
 链路：应用 open("/dev/ttyS0") → 内核先做 DAC 检查（inode 权限位 vs 进程 UID），假设放行 → 紧接着 LSM 钩子 security_inode_permission 触发 SELinux：拿"进程域 untrusted_app vs 文件标签 tty_device"查内存 policydb，无 allow 规则 → 返回 EACCES 并留 avc denied。全程没有 Java 异常或权限弹窗——Android 框架甚至不知道这次访问发生过。
 
 实锤判据：错误码 EACCES 来自内核、avc 行出现在 dmesg；若拦截发生在 Android 上层，表现会是 Java 异常或权限弹窗。收束：拦截机制是 Linux 内核的，拦截规则是 Android sepolicy 写的——同一套内核装载不同策略，行为就不同。
+
+
 
 
 

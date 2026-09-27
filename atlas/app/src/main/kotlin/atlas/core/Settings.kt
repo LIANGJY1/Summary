@@ -48,6 +48,10 @@ data class AppSettings(
     val localOnlyExtra: List<String> = emptyList(),
     val retroDirs: List<String> = emptyList(),
     val theme: String = "light", // light | dark
+    /** 主题名：内置名（见 ui.AtlasThemes）或 customThemes 里的自定义主题名。 */
+    val themeName: String = "",
+    /** 用户自建主题，逐条 `名称|h1|…|h12`，多条之间用 `;` 分隔。 */
+    val customThemes: List<String> = emptyList(),
     val fontScale: Float = 1f,
     /** 题库答案区域单击时是否打开编辑弹窗；关闭后仍可划词，编辑按钮不受影响。 */
     val clickAnswerToEdit: Boolean = true,
@@ -83,6 +87,9 @@ class SettingsStore(private val file: File) {
             localOnlyExtra = list("localOnlyExtra"),
             retroDirs = list("retroDirs"),
             theme = p.getProperty("theme") ?: "light",
+            themeName = p.getProperty("themeName") ?: "",
+            customThemes = (p.getProperty("customThemes") ?: "").split(";")
+                .map { it.trim() }.filter { it.isNotEmpty() },
             fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
             clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
             markdownStyle = p.getProperty("markdownStyle")?.takeIf { it == "reader" || it == "classic" } ?: "reader",
@@ -104,6 +111,8 @@ class SettingsStore(private val file: File) {
         p.setProperty("localOnlyExtra", s.localOnlyExtra.joinToString(","))
         p.setProperty("retroDirs", s.retroDirs.joinToString(","))
         p.setProperty("theme", s.theme)
+        p.setProperty("themeName", s.themeName)
+        p.setProperty("customThemes", s.customThemes.joinToString(";"))
         p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
         p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
         p.setProperty("markdownStyle", if (s.markdownStyle == "classic") "classic" else "reader")

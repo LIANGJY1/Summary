@@ -7,6 +7,28 @@ package atlas.core
  * 标记或文件结尾的全部 Markdown 都是答案。当前只开放一个真实文档，避免在协议
  * 尚未稳定时误读整个知识库。
  */
+/**
+ * 同源题目的完成状态。状态编码在 Q 行题面的方括号前缀里，例如
+ * `**Q1: [done] Android 中的 Sandbox 怎么理解？**`。状态随源文档走 git，
+ * agent 也能直接改；缺省即 [TODO]，因此未标注的旧文档无需迁移。
+ */
+enum class QuestionStatus(val key: String) {
+    TODO("todo"),
+    LEARNING("learning"),
+    DONE("done");
+
+    /** 写回 Q 行时的前缀；默认态不写标记，避免给既有文档制造无谓 diff。 */
+    fun markerPrefix(): String = if (this == DEFAULT) "" else "[$key] "
+
+    companion object {
+        val DEFAULT = TODO
+
+        /** 只认已知状态键：题面里出现 `[1]`、`[注意]` 这类方括号时必须原样保留。 */
+        fun fromKey(raw: String): QuestionStatus? =
+            values().firstOrNull { it.key.equals(raw.trim(), ignoreCase = true) }
+    }
+}
+
 object SourceQuestions {
     const val TARGET_PATH = "knowledge-base/language/kotlin/01-语法基础.md"
     val DEFAULT_SUPPORTED_PATHS = listOf(TARGET_PATH)
@@ -20,7 +42,9 @@ object SourceQuestions {
         val endOffset: Int,
         val answerStartOffset: Int,
         val document: String,
+        val status: QuestionStatus = QuestionStatus.DEFAULT,
     ) {
+        /** id 只由题号与题面决定：状态是展示元数据，改状态不该让题目换身份。 */
         val id: String get() = "$sourcePath#Q$number:${Md.md5(question)}"
     }
 
@@ -33,13 +57,20 @@ object SourceQuestions {
 
     data class Draft(val question: String, val answer: String, val number: Int? = null)
 
-    private data class Marker(val number: Int, val question: String, val start: Int, val lineEnd: Int)
+    private data class Marker(
+        val number: Int,
+        val question: String,
+        val status: QuestionStatus,
+        val start: Int,
+        val lineEnd: Int,
+    )
     private data class SectionMarker(val title: String, val start: Int, val lineEnd: Int)
 
     private val boldPattern = Regex("^\\s*\\*\\*Q(\\d+)\\s*[:：]\\s*(.*?)\\*\\*\\s*$")
     private val headingPattern = Regex("^\\s*#{1,6}\\s*Q(\\d+)\\s*[:：]\\s*(.*?)\\s*$")
     private val plainPattern = Regex("^\\s*Q(\\d+)\\s*[:：]\\s*(.*?)\\s*$")
     private val sectionPattern = Regex("^\\s*第\\s*[0-9一二三四五六七八九十百]+\\s*[章节]\\s+(.+?)\\s*$")
+    private val statusPrefixPattern = Regex("^\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*")
 
     fun isSupportedPath(path: String, supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS): Boolean {
         val normalized = path.replace('\\', '/').trimStart('/')
@@ -90,6 +121,7 @@ object SourceQuestions {
                 endOffset = end,
                 answerStartOffset = marker.lineEnd,
                 document = document,
+                status = marker.status,
             )
         }
     }
@@ -264,18 +296,23 @@ object SourceQuestions {
         val match = listOf(boldPattern, headingPattern, plainPattern)
             .firstNotNullOfOrNull { it.matchEntire(line) }
             ?: return null
+        val number = match.groupValues[1].toIntOrNull() ?: return null
+        val raw = match.groupValues[2]
+        val prefix = statusPrefixPattern.find(raw)
+        val status = prefix?.let { QuestionStatus.fromKey(it.groupValues[1]) }
         return Marker(
-            number = match.groupValues[1].toIntOrNull() ?: return null,
-            question = match.groupValues[2],
+            number = number,
+            question = if (status != null) raw.removeRange(prefix!!.range) else raw,
+            status = status ?: QuestionStatus.DEFAULT,
             start = offset,
             lineEnd = offset + line.length,
         )
     }
 
     /** 只替换当前 Q 块，文档其余内容保持原样。 */
-    fun replace(entry: Entry, question: String, answer: String): String {
+    fun replace(entry: Entry, question: String, answer: String, status: QuestionStatus = QuestionStatus.DEFAULT): String {
         require(question.isNotBlank()) { "题目不能为空" }
-        val rendered = "**Q${entry.number}: ${question.trim()}**\n\n${answer.trim()}"
+        val rendered = "**Q${entry.number}: ${status.markerPrefix()}${question.trim()}**\n\n${answer.trim()}"
         val suffix = if (entry.endOffset < entry.document.length) "\n\n" else ""
         return entry.document.substring(0, entry.startOffset) + rendered + suffix +
             entry.document.substring(entry.endOffset)

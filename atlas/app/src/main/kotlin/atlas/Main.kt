@@ -40,6 +40,10 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import atlas.ui.AtlasTheme
+import atlas.ui.AtlasThemes
+import atlas.ui.ColorSettingsPage
+import atlas.ui.CustomTheme
+import atlas.ui.ThemeSpec
 import atlas.ui.IndexerHit
 import atlas.ui.LearningView
 import atlas.ui.NavBadge
@@ -85,7 +89,11 @@ fun main() {
             state = windowState,
             undecorated = true,
         ) {
-            AtlasTheme(dark = store.settings.darkTheme, fontScale = store.settings.fontScale) {
+            AtlasTheme(
+            dark = store.settings.darkTheme,
+            fontScale = store.settings.fontScale,
+            spec = resolveTheme(store.settings),
+        ) {
                 AppRoot(store, windowState) { exitApplication() }
             }
         }
@@ -144,6 +152,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     }
     var tab by remember { mutableStateOf("工作台") }
     var learnSection by remember { mutableStateOf("复习") }
+    var settingsSection by remember { mutableStateOf("root") }
     var showPalette by remember { mutableStateOf(false) }
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(store.libraryReady) {
@@ -224,7 +233,11 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
                 "学习" -> LearningView(store, learnSection) { learnSection = it }
                 "题库" -> QuestionSection(store)
                 "工具" -> ToolsView(store)
-                "设置" -> SettingsView(store)
+                "设置" -> if (settingsSection == "配色") {
+                    ColorSettingsPage(store) { settingsSection = "root" }
+                } else {
+                    SettingsView(store) { settingsSection = "配色" }
+                }
                 else -> TodayView(store) { destination ->
                     when (destination) {
                         "学习" -> { learnSection = "复习"; tab = "学习" }
@@ -404,4 +417,20 @@ fun SetupView(store: AppStore) {
             fontSize = 12.sp, color = Theme.Muted, lineHeight = 18.sp,
         )
     }
+}
+
+/** 主题名 → [ThemeSpec]：先查用户自建主题，再查内置；都没有则用当前明暗下的默认主题。 */
+internal fun resolveTheme(s: atlas.core.AppSettings): ThemeSpec {
+    val name = s.themeName
+    if (name.isNotBlank()) {
+        // 自定义主题优先；同名内置主题其次。两者都没有才回落默认。
+        s.customThemes.asSequence()
+            .mapNotNull { CustomTheme.decode(it) }
+            .firstOrNull { it.name == name }
+            ?.let { return it.spec }
+        if (AtlasThemes.ALL.any { it.name == name }) {
+            return AtlasThemes.specOf(name, s.darkTheme)
+        }
+    }
+    return AtlasThemes.specOf(AtlasThemes.DEFAULT.name, s.darkTheme)
 }

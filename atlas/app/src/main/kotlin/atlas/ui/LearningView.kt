@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.TooltipArea
@@ -43,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -83,8 +86,11 @@ import atlas.core.QuestionListModel
 import atlas.core.QuestionReorder
 import atlas.core.QuestionTags
 import atlas.core.ReorderSlot
+import atlas.core.QuestionStatus
 import atlas.core.SourceQuestions
 import atlas.core.TextDiff
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 /** 学习页只负责闪卡复习与卡片浏览；题目管理位于独立的「题库」页。 */
 @Composable
@@ -626,8 +632,26 @@ fun QuestionSection(store: AppStore) {
             }
             Spacer(Modifier.width(12.dp))
             SelectionContainer {
-                Text("${store.selectedSourcePath} · 文件即题库", style = ui.typography.caption, color = Theme.Muted, maxLines = 1)
+                Text(
+                    store.selectedSourcePath,
+                    style = ui.typography.caption,
+                    color = Theme.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "复制",
+                style = ui.typography.caption,
+                color = Theme.Accent,
+                modifier = Modifier.clickable {
+                    val absolute = store.sourceQuestionFile().absolutePath
+                    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(absolute), null)
+                    Log.i("题库源文档绝对路径已复制 $absolute")
+                    store.showToast("已复制绝对路径")
+                },
+            )
         }
         Spacer(Modifier.height(6.dp))
         if (SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
@@ -816,11 +840,17 @@ fun QuestionSection(store: AppStore) {
                                 expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                             },
                         ) {
-                            Text(
-                                if (gitDirty) "Q${entry.number} ·有改动" else "Q${entry.number}",
-                                fontSize = 11.sp,
-                                color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    if (gitDirty) "Q${entry.number} ·有改动" else "Q${entry.number}",
+                                    fontSize = 11.sp,
+                                    color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
+                                )
+                                QuestionStatusMark(entry.status)
+                            }
                             Spacer(Modifier.height(2.dp))
                             SelectionContainer {
                                 Text(
@@ -1395,9 +1425,10 @@ private fun EditSourceQuestionDialog(
     val entry = stableEntries[safeIndex]
     var question by remember(entry.id) { mutableStateOf(entry.question) }
     var answer by remember(entry.id) { mutableStateOf(TextFieldValue(entry.answer)) }
+    var status by remember(entry.id) { mutableStateOf(entry.status) }
     fun saveAndMove(target: Int): Boolean {
         if (question.isBlank()) return false
-        if (!store.saveSourceQuestion(entry, question, answer.text)) return false
+        if (!store.saveSourceQuestion(entry, question, answer.text, status)) return false
         currentIndex = target
         return true
     }
@@ -1435,7 +1466,7 @@ private fun EditSourceQuestionDialog(
                     if (!isSaving && question.isNotBlank()) {
                         isSaving = true
                         try {
-                            if (store.saveSourceQuestion(entry, question, answer.text)) onDismiss()
+                            if (store.saveSourceQuestion(entry, question, answer.text, status)) onDismiss()
                         } finally {
                             isSaving = false
                         }
@@ -1450,6 +1481,14 @@ private fun EditSourceQuestionDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedTextField(question, { question = it }, Modifier.fillMaxWidth(), label = { Text("题目") }, minLines = 2)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("完成状态（写进 Q 行的 [key] 前缀，如 [done]；todo 不写标记）", fontSize = 11.sp, color = Theme.Muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuestionStatus.values().forEach { candidate ->
+                            QuestionStatusChoice(candidate, candidate == status) { status = candidate }
+                        }
+                    }
+                }
                 OutlinedTextField(
                     answer,
                     { answer = it },
@@ -1469,4 +1508,54 @@ private fun EditSourceQuestionDialog(
             }
         },
     )
+}
+
+@Composable
+private fun questionStatusAccent(status: QuestionStatus): Color = when (status) {
+    QuestionStatus.DONE -> Theme.OkGreen
+    QuestionStatus.LEARNING -> Theme.WarnOrange
+    QuestionStatus.TODO -> Theme.Muted
+}
+
+/**
+ * 列表里的状态标记用「圆点 + 文字」而不是圆角药丸：药丸底色在深色卡片上发灰发脏，
+ * 而一屏几十道题里绝大多数都是默认态，所以默认态直接不渲染——缺省即未完成，
+ * 只有需要被看见的进行中/已完成才占位。文案直接用文件里的英文 key，
+ * 界面上看到的词就是 Q 行里写的词，不用在脑子里维护一层翻译。
+ */
+@Composable
+private fun QuestionStatusMark(status: QuestionStatus) {
+    if (status == QuestionStatus.TODO) return
+    val accent = questionStatusAccent(status)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(accent))
+        Text(status.key, fontSize = 11.sp, color = accent)
+    }
+}
+
+@Composable
+private fun QuestionStatusChoice(status: QuestionStatus, selected: Boolean, onClick: () -> Unit) {
+    val accent = questionStatusAccent(status)
+    Surface(
+        color = if (selected) accent.copy(alpha = 0.14f) else Color.Transparent,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) accent else Theme.Muted.copy(alpha = 0.3f)),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Box(Modifier.size(7.dp).clip(CircleShape).background(accent))
+            Text(
+                status.key,
+                fontSize = 13.sp,
+                color = if (selected) accent else Theme.Muted,
+            )
+        }
+    }
 }

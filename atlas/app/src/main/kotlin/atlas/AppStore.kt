@@ -14,6 +14,7 @@ import atlas.core.MdStores.CardEntry
 import atlas.core.MdStores.QuestionEntry
 import atlas.core.NoteFile
 import atlas.core.OutboxTasks
+import atlas.core.QuestionStatus
 import atlas.core.SettingsStore
 import atlas.core.SourceQuestions
 import atlas.core.TextDiff
@@ -558,7 +559,12 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     }
 
     /** 只改写当前 Q 块；如果源文件已被外部修改，则拒绝覆盖并要求重新加载。 */
-    fun saveSourceQuestion(entry: SourceQuestions.Entry, question: String, answer: String): Boolean {
+    fun saveSourceQuestion(
+        entry: SourceQuestions.Entry,
+        question: String,
+        answer: String,
+        status: QuestionStatus = QuestionStatus.DEFAULT,
+    ): Boolean {
         val file = sourceQuestionFile()
         val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
         if (current != entry.document) {
@@ -567,7 +573,7 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
             showToast("源文档已被外部修改，已重新加载")
             return false
         }
-        MdStores.atomicWrite(file, SourceQuestions.replace(entry, question, answer))
+        MdStores.atomicWrite(file, SourceQuestions.replace(entry, question, answer, status))
         reloadKnowledgeFiles()
         Log.i("同源题目写回成功 path=${entry.sourcePath} Q${entry.number}")
         return true

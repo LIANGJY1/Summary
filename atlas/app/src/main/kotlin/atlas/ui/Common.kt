@@ -43,6 +43,13 @@ import androidx.compose.ui.unit.sp
 data class AtlasPalette(
     val accent: Color, val okGreen: Color, val warnOrange: Color,
     val badRed: Color, val muted: Color, val codeBg: Color,
+    val inlineCodeFg: Color,
+    /** 卡片/浮层底：由主题表面层派生，比页面底略凸以形成层次。 */
+    val elevated: Color,
+    /** 输入框/凹陷控件底。 */
+    val inputBg: Color,
+    /** 本主题生效后的 Markdown 语义色（已按基色补全）。 */
+    val md: MdSpec,
 )
 
 /** 页面级视觉规范，避免每个页面自行散落字号和间距常量。 */
@@ -126,14 +133,13 @@ internal fun parseMarkdownTable(lines: List<String>, start: Int): MarkdownTable?
     return MarkdownTable(headers, rows, index)
 }
 
-private val LIGHT_PALETTE = AtlasPalette(
-    accent = Color(0xFF4F6EF7), okGreen = Color(0xFF2E9E5B), warnOrange = Color(0xFFD98A2B),
-    badRed = Color(0xFFD9534F), muted = Color(0xFF8A8F98), codeBg = Color(0xFFF5F6F8),
-)
-
-private val DARK_PALETTE = AtlasPalette(
-    accent = Color(0xFF8AA2FF), okGreen = Color(0xFF63C98A), warnOrange = Color(0xFFE8AE5E),
-    badRed = Color(0xFFEF7B77), muted = Color(0xFF9AA3B2), codeBg = Color(0xFF1E2129),
+private fun ThemeSpec.toPalette(dark: Boolean) = AtlasPalette(
+    accent = accent, okGreen = okGreen, warnOrange = warnOrange,
+    badRed = badRed, muted = muted, codeBg = codeBg,
+    inlineCodeFg = inlineCodeFg,
+    elevated = elevatedSurface(dark),
+    inputBg = inputBg(dark),
+    md = md(),
 )
 
 /**
@@ -141,7 +147,7 @@ private val DARK_PALETTE = AtlasPalette(
  * 组合期调用的普通函数），主题切换后相关作用域自动重组。
  */
 object Theme {
-    private val palette = mutableStateOf(LIGHT_PALETTE)
+    private val palette = mutableStateOf(AtlasThemes.DEFAULT.spec.toPalette(dark = true))
 
     val Accent: Color get() = palette.value.accent
     val OkGreen: Color get() = palette.value.okGreen
@@ -149,21 +155,77 @@ object Theme {
     val BadRed: Color get() = palette.value.badRed
     val Muted: Color get() = palette.value.muted
     val CodeBg: Color get() = palette.value.codeBg
+    val InlineCodeFg: Color get() = palette.value.inlineCodeFg
+    val Elevated: Color get() = palette.value.elevated
+    val InputBg: Color get() = palette.value.inputBg
+
+    /**
+     * Markdown 语义色。用户没在「Markdown 配色」里显式指定时回落到**主题色**，
+     * 所以换主题时标题/加粗/链接/引用/行内代码会跟着变；有覆盖则以覆盖为准。
+     * 标题与加粗取强调色、引用取次要文字、行内代码取主题的行内代码色。
+     */
+    val MdHeading: Color get() = palette.value.md.heading
+    val MdBold: Color get() = palette.value.md.bold
+    val MdLink: Color get() = palette.value.md.link
+    val MdQuote: Color get() = palette.value.md.quote
+    val MdInlineCode: Color get() = palette.value.md.inlineCode
+    val MdInlineCodeBg: Color? get() = palette.value.md.inlineCodeBg
 
     /** 由 [AtlasTheme] 在 SideEffect 中调用（组合期间写状态不安全） */
-    fun apply(dark: Boolean) { palette.value = if (dark) DARK_PALETTE else LIGHT_PALETTE }
+    fun apply(dark: Boolean, spec: ThemeSpec) {
+        palette.value = spec.toPalette(dark)
+    }
+}
+
+/** 输入净化：只保留 `#` 与十六进制字符，统一大写，长度上限 9（`#AARRGGBB`）。 */
+fun sanitizeHexInput(raw: String): String {
+    val cleaned = raw.filter { it == '#' || it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
+        .replace("#", "").uppercase()
+    return if (cleaned.isEmpty()) "" else "#" + cleaned.take(8)
+}
+
+/**
+ * `#RGB` / `#RRGGBB` / `#AARRGGBB` → Color；空串、格式非法或构造出的颜色无法解析色彩空间时返回 null，
+ * 由调用方回退默认。这里多一道 `colorSpace` 校验：拼错内部布局的 Color 在绘制时才炸
+ * （`getColorSpace` 抛 `ArrayIndexOutOfBoundsException`）并崩掉整个界面，而本函数读的是持久化输入，
+ * 必须在返回前就挡掉。
+ */
+fun parseHexColor(raw: String): Color? {
+    val c = raw.colorOrNull() ?: return null
+    return if (runCatching { c.colorSpace }.isSuccess) c else null
+}
+
+private fun String.colorOrNull(): Color? {
+    val hex = trim().removePrefix("#")
+    if (!hex.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) return null
+    return when (hex.length) {
+        3 -> {
+            val r = hex[0].digitToInt(16).toLong() * 17
+            val g = hex[1].digitToInt(16).toLong() * 17
+            val b = hex[2].digitToInt(16).toLong() * 17
+            Color(0xFF000000L or (r shl 16) or (g shl 8) or b)
+        }
+        6 -> Color(0xFF000000L or (hex.toLongOrNull(16) ?: return null))
+        8 -> Color(hex.toLongOrNull(16) ?: return null)
+        else -> null
+    }
 }
 
 @Composable
-fun AtlasTheme(dark: Boolean, fontScale: Float = 1f, content: @Composable () -> Unit) {
+fun AtlasTheme(
+    dark: Boolean,
+    fontScale: Float = 1f,
+    spec: ThemeSpec = AtlasThemes.specOf(AtlasThemes.DEFAULT.name, dark),
+    content: @Composable () -> Unit,
+) {
     val baseDensity = LocalDensity.current
     val safeFontScale = fontScale.coerceIn(0.8f, 1.4f)
-    SideEffect { Theme.apply(dark) }
+    SideEffect { Theme.apply(dark, spec) }
     CompositionLocalProvider(
         LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density, safeFontScale),
         LocalAtlasUiTokens provides AtlasUiTokens.forTheme(dark),
     ) {
-        MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
+        MaterialTheme(colorScheme = spec.toMaterialScheme(dark)) {
             Surface(Modifier.fillMaxSize()) { content() }
         }
     }
@@ -203,14 +265,14 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
             s.startsWith("**", i) -> {
                 val end = s.indexOf("**", i + 2)
                 if (end > 0) {
-                    append(s.substring(i + 2, end)); addStyle(SpanStyle(fontWeight = FontWeight.Bold), length - (end - i - 2), length)
+                    append(s.substring(i + 2, end)); addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Theme.MdBold), length - (end - i - 2), length)
                     i = end + 2
                 } else { append(s[i]); i++ }
             }
             s[i] == '`' -> {
                 val end = s.indexOf('`', i + 1)
                 if (end > 0) {
-                    append(s.substring(i + 1, end)); addStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x14808080)), length - (end - i - 1), length)
+                    append(s.substring(i + 1, end)); addStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = Theme.MdInlineCode, background = Theme.MdInlineCodeBg ?: Color.Unspecified), length - (end - i - 1), length)
                     i = end + 1
                 } else { append(s[i]); i++ }
             }
@@ -220,7 +282,7 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
                     val urlEnd = s.indexOf(')', close + 2)
                     if (urlEnd > 0) {
                         append(s.substring(i + 1, close))
-                        addStyle(SpanStyle(color = Theme.Accent), length - (close - i - 1), length)
+                        addStyle(SpanStyle(color = Theme.MdLink), length - (close - i - 1), length)
                         i = urlEnd + 1
                     } else { append(s[i]); i++ }
                 } else { append(s[i]); i++ }
@@ -296,24 +358,24 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 line.startsWith("### ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 8.dp),
-                    style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 23.sp),
+                    style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 23.sp), color = Theme.MdHeading,
                 )
                 line.startsWith("## ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 12.dp),
-                    style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 27.sp),
+                    style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 27.sp), color = Theme.MdHeading,
                 )
                 line.startsWith("# ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines),
                     modifier = Modifier.padding(top = 14.dp),
-                    style = ui.typography.pageTitle.copy(fontSize = 24.sp, lineHeight = 32.sp),
+                    style = ui.typography.pageTitle.copy(fontSize = 24.sp, lineHeight = 32.sp), color = Theme.MdHeading,
                 )
                 line.startsWith("> ") -> Row(Modifier.fillMaxWidth()) {
                     Box(Modifier.width(3.dp).height(22.dp).background(Theme.Accent, RoundedCornerShape(2.dp)))
                     Text(
                         colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
                         Modifier.padding(start = 12.dp).fillMaxWidth(),
-                        color = Theme.Muted,
+                        color = Theme.MdQuote,
                         fontStyle = FontStyle.Italic,
                         fontSize = 14.sp,
                         lineHeight = 21.sp,
@@ -395,13 +457,13 @@ private fun ClassicMarkdownText(md: String, modifier: Modifier = Modifier, dirty
                         }
                     }
                 }
-                line.startsWith("### ") -> Text(colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                line.startsWith("## ") -> Text(colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                line.startsWith("# ") -> Text(colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines), fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                line.startsWith("### ") -> Text(colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines), color = Theme.MdHeading, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                line.startsWith("## ") -> Text(colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines), color = Theme.MdHeading, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                line.startsWith("# ") -> Text(colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines), color = Theme.MdHeading, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 line.startsWith("> ") -> Text(
                     colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
                     Modifier.padding(start = 10.dp).fillMaxWidth(),
-                    color = Theme.Muted, fontStyle = FontStyle.Italic, fontSize = 14.sp,
+                    color = Theme.MdQuote, fontStyle = FontStyle.Italic, fontSize = 14.sp,
                 )
                 line.trim() == "---" -> VDivider()
                 Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth()) {
