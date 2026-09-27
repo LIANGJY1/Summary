@@ -49,224 +49,216 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
     var clickAnswerToEdit by remember { mutableStateOf(store.settings.clickAnswerToEdit) }
     var showParams by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ui.spacing.page),
-        verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
-    ) {
-        Column(Modifier.fillMaxWidth().widthIn(max = 900.dp), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
-            Text("设置", style = ui.typography.pageTitle)
-
-            // 外观与阅读：主题、字号、答案点击行为
-            SettingsCard("外观与阅读") {
-                Text("配色主题", fontWeight = FontWeight.SemiBold)
-                SettingsEntryRow(
-                    title = "配色主题",
-                    subtitle = store.settings.themeName.ifBlank { AtlasThemes.DEFAULT.name },
-                    swatch = resolveTheme(store.settings).accent,
-                    onClick = { onOpenColors() },
-                )
-                Text("深浅色", fontWeight = FontWeight.SemiBold)
-                ChipSelector(
-                    options = listOf("light" to "浅色", "dark" to "深色"),
-                    selected = store.settings.theme,
-                ) { value, label ->
-                    Log.i("切换深浅色 → $label")
-                    store.settings = store.settings.copy(theme = value)
-                    store.saveSettings()
-                }
-
-                Text("全局文字大小", fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Slider(
-                        value = fontScale,
-                        onValueChange = { value ->
-                            fontScale = value
-                            store.settings = store.settings.copy(fontScale = value)
-                        },
-                        onValueChangeFinished = { store.saveSettings() },
-                        valueRange = 0.8f..1.4f,
-                        steps = 5,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text("${(fontScale * 100).roundToInt()}%", Modifier.width(48.dp), color = Theme.Accent)
-                }
-                Text("调整应用内所有文字大小，范围 80%–140%。", fontSize = 11.sp, color = Theme.Muted)
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = clickAnswerToEdit,
-                        onCheckedChange = { enabled ->
-                            clickAnswerToEdit = enabled
-                            store.settings = store.settings.copy(clickAnswerToEdit = enabled)
-                            store.saveSettings()
-                        },
-                    )
-                    Text("点击答案内容打开编辑弹窗")
-                }
-                Text("关闭后，答案仍可划词选择；需要编辑时点击“编辑”按钮。", fontSize = 11.sp, color = Theme.Muted)
-            }
-
-            // 复习：记忆参数
-            SettingsCard("复习") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { Log.d("打开 FSRS 参数"); showParams = true }) { Text("记忆参数（FSRS）") }
-                }
-            }
-
-            // 知识库：目录与扫描 + 题目源文档
-            SettingsCard("知识库") {
-                Text("知识库目录", fontWeight = FontWeight.SemiBold)
-                Text(store.settings.libraryPath, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        val chooser = JFileChooser(File(store.settings.libraryPath.ifBlank { System.getProperty("user.home") }))
-                        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                        chooser.dialogTitle = "选择知识库目录"
-                        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                            Log.i("设置页更换知识库目录 → ${chooser.selectedFile.absolutePath}")
-                            store.openLibrary(chooser.selectedFile.absolutePath, rescanIfNeeded = true)
-                        }
-                    }) { Text("更换知识库目录（会重新打开）") }
-                    OutlinedButton(onClick = { Log.i("手动触发增量扫描"); store.rescan(full = false) }) { Text("重新扫描") }
-                }
-                Text(store.scanMessage.value, fontSize = 11.sp, color = Theme.Muted)
-
-                Text("题目源文档", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                Text(
-                    "每行一个相对知识库根目录的 Markdown 路径；路径以 / 结尾时表示整个目录。保存后立即重新解析题库。",
-                    fontSize = 11.sp, color = Theme.Muted,
-                )
-                OutlinedTextField(
-                    sourceQuestionPaths,
-                    { sourceQuestionPaths = it },
-                    Modifier.fillMaxWidth(),
-                    label = { Text("支持解析的文档或目录（每行一个）") },
-                    minLines = 4,
-                )
-                Button(onClick = {
-                    val configured = sourceQuestionPaths.lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-                    Log.i("保存题目源文档配置：${configured.size}项")
-                    store.settings = store.settings.copy(
-                        sourceQuestionPaths = configured.ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS },
-                    )
-                    store.saveSettings()
-                    val effective = store.settings.sourceQuestionPaths
-                    if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, effective)) {
-                        val firstSupportedDocument = store.knowledgeDocuments.firstOrNull {
-                            SourceQuestions.isSupportedPath(it, effective)
-                        }
-                        if (firstSupportedDocument != null) {
-                            store.selectSourceDocument(firstSupportedDocument)
-                        } else {
-                            store.reloadKnowledgeFiles()
-                        }
-                    } else {
-                        store.reloadKnowledgeFiles()
+    var destination by remember { mutableStateOf(SettingsDestination.OVERVIEW) }
+    Row(Modifier.fillMaxSize()) {
+        SettingsSidebar(destination) { destination = it }
+        Box(
+            Modifier.fillMaxHeight()
+                .width(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        )
+        Column(
+            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(ui.spacing.page),
+            verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
+        ) {
+            Column(Modifier.fillMaxWidth().widthIn(max = 980.dp).align(Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Text("设置中心", fontSize = 12.sp, color = Theme.Accent, fontWeight = FontWeight.SemiBold)
+                Text(destination.title, style = ui.typography.pageTitle)
+                Text(destination.description, fontSize = 13.sp, color = Theme.Muted)
+                if (destination == SettingsDestination.OVERVIEW) {
+                    SettingsSummary(store)
+                    SettingsQuickLinks { destination = it }
+                } else {
+                    when (destination) {
+                        SettingsDestination.APPEARANCE -> SettingsAppearance(store, onOpenColors, fontScale, { fontScale = it }, clickAnswerToEdit, { clickAnswerToEdit = it })
+                        SettingsDestination.LIBRARY -> SettingsLibrary(store, sourceQuestionPaths, { sourceQuestionPaths = it })
+                        SettingsDestination.PRIVACY -> SettingsPrivacy(store, localOnly, { localOnly = it }, ignored, { ignored = it })
+                        SettingsDestination.REVIEW -> SettingsReview { showParams = true }
+                        SettingsDestination.RECORDING -> SettingsRecording(store)
+                        SettingsDestination.ABOUT -> SettingsAbout()
+                        SettingsDestination.OVERVIEW -> Unit
                     }
-                }) { Text("保存题目源文档配置") }
-            }
-
-            // 隐私边界：仅本地 / 额外忽略
-            SettingsCard("隐私边界") {
-                Text(
-                    "「仅本地」目录里的内容只在本机检索，永远不会作为上下文发给 AI——工作敏感仓库放这里。",
-                    fontSize = 11.sp, color = Theme.Muted,
-                )
-                OutlinedTextField(localOnly, { localOnly = it }, Modifier.fillMaxWidth(), label = { Text("仅本地目录（每行一个）") }, minLines = 3)
-                OutlinedTextField(ignored, { ignored = it }, Modifier.fillMaxWidth(), label = { Text("额外忽略目录（每行一个）") }, minLines = 2)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        Log.i("保存隐私边界设置：仅本地=${localOnly.lines().count { it.isNotBlank() }}行 忽略额外=${ignored.lines().count { it.isNotBlank() }}行，触发全量重建")
-                        store.settings = store.settings.copy(
-                            localOnlyExtra = localOnly.lines().map { it.trim() }.filter { it.isNotEmpty() },
-                            ignoredExtra = ignored.lines().map { it.trim() }.filter { it.isNotEmpty() },
-                        )
-                        store.saveSettings()
-                        store.rescan(full = true)
-                    }) { Text("保存") }
                 }
-                // 档位图例
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatusChip("全索引", Theme.OkGreen); StatusChip("仅本地 🔒", Theme.WarnOrange); StatusChip("忽略", Theme.Muted)
-                }
-            }
-
-            // 屏幕录制：保存目录 / 帧率 / 码率（保存时导出给 tools/screen_recorder 脚本）
-            SettingsCard("屏幕录制") {
-                val recDir = store.settings.recordingSaveDir.ifBlank {
-                    File(System.getProperty("user.home"), "Videos/Screencasts").absolutePath
-                }
-                Text("保存目录", fontWeight = FontWeight.SemiBold)
-                Text(recDir, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        val chooser = JFileChooser(File(recDir))
-                        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                        chooser.dialogTitle = "选择录屏保存目录"
-                        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                            val path = chooser.selectedFile.absolutePath
-                            Log.i("设置录屏保存目录 → $path")
-                            store.settings = store.settings.copy(recordingSaveDir = path)
-                            store.saveSettings()
-                        }
-                    }) { Text("选择目录") }
-                    OutlinedButton(onClick = {
-                        if (!File(RECORD_GUI).isFile) {
-                            Log.e("录屏脚本不存在：$RECORD_GUI")
-                            return@OutlinedButton
-                        }
-                        try {
-                            ProcessBuilder(RECORD_GUI)
-                                .redirectErrorStream(true)
-                                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                                .start()
-                            Log.i("已启动录屏界面")
-                        } catch (e: Exception) {
-                            Log.e("启动录屏界面失败", e)
-                        }
-                    }) { Text("打开录屏界面") }
-                }
-
-                Text("默认帧率（喂 AI 分析 15 足够，更高只增加文件体积）", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                ChipSelector(
-                    options = listOf("10" to "10 fps", "15" to "15 fps", "24" to "24 fps", "30" to "30 fps"),
-                    selected = store.settings.recordingFps.toString(),
-                ) { value, _ ->
-                    store.settings = store.settings.copy(recordingFps = value.toInt())
-                    store.saveSettings()
-                }
-
-                var bitrate by remember { mutableStateOf(store.settings.recordingBitrate.toString()) }
-                Text("x264 码率（kbps，决定清晰度与文件大小）", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(bitrate, { bitrate = it }, Modifier.width(160.dp), label = { Text("码率 kbps") })
-                    Button(onClick = {
-                        val v = bitrate.toIntOrNull()?.coerceIn(500, 20000) ?: 4000
-                        bitrate = v.toString()
-                        Log.i("设置录屏码率 → ${v}kbps")
-                        store.settings = store.settings.copy(recordingBitrate = v)
-                        store.saveSettings()
-                    }) { Text("保存") }
-                }
-                Text("参数保存时写入 ~/.local/share/atlas/screen-recorder.json，录屏脚本启动时读取。", fontSize = 11.sp, color = Theme.Muted)
-            }
-
-            // 关于：数据位置与产品说明
-            SettingsCard("关于") {
-                Text("应用数据", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "配置与数据库：${System.getProperty("user.home")}/.local/share/atlas（缓存可随时删除重建，你的笔记只在你库里）",
-                    fontSize = 12.sp,
-                )
-                Text("Atlas · 零模型 · 零网络 · AGPL-3.0", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                Text(
-                    "出题、批改等 AI 能力由你的编码代理完成；Atlas 负责检索、复习调度与学习纪律。",
-                    fontSize = 12.sp, color = Theme.Muted,
-                )
             }
         }
     }
     if (showParams) FsrsParamsDialog { showParams = false }
+}
+
+private enum class SettingsDestination(val title: String, val description: String) {
+    OVERVIEW("设置概览", "把 Atlas 调整成适合你工作节奏的学习工作台。"),
+    APPEARANCE("外观与阅读", "主题、字号和答案交互，决定每天使用 Atlas 的舒适度。"),
+    LIBRARY("知识库", "选择知识库、控制题目来源，并在需要时重新扫描。"),
+    PRIVACY("隐私边界", "明确哪些目录可被索引、哪些内容永远只留在本机。"),
+    REVIEW("复习", "调整 FSRS 记忆参数，让复习节奏贴合你的目标。"),
+    RECORDING("屏幕录制", "统一管理录屏目录、帧率与码率，方便制作复盘素材。"),
+    ABOUT("关于 Atlas", "产品定位、数据位置与本地优先原则。"),
+}
+
+@Composable
+private fun SettingsSidebar(selected: SettingsDestination, onSelect: (SettingsDestination) -> Unit) {
+    Column(Modifier.width(236.dp).fillMaxHeight().padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("设置中心", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Theme.MdH1)
+            Text("Atlas 工作站", fontSize = 12.sp, color = Theme.Muted)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SettingsDestination.values().forEach { item ->
+                val active = item == selected
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onSelect(item) }
+                        .background(if (active) Theme.Selected else Color.Transparent)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(if (active) Theme.Accent else Theme.Muted.copy(alpha = 0.5f)))
+                    Text(item.title, fontSize = 13.sp, color = if (active) Theme.Accent else Theme.Muted, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text("配置会立即保存到本机", fontSize = 11.sp, color = Theme.Muted)
+    }
+}
+
+@Composable
+private fun SettingsSummary(store: AppStore) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SettingsMetric("当前主题", store.settings.themeName.ifBlank { AtlasThemes.DEFAULT.name }, Theme.Accent, Modifier.weight(1f))
+        SettingsMetric("知识库", File(store.settings.libraryPath).name.ifBlank { "未设置" }, Theme.OkGreen, Modifier.weight(1f))
+        SettingsMetric("索引状态", store.scanMessage.value.ifBlank { "就绪" }, Theme.WarnOrange, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SettingsMetric(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.medium, color = Theme.Elevated, tonalElevation = 0.dp) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Box(Modifier.width(24.dp).height(3.dp).background(accent, RoundedCornerShape(2.dp)))
+            Text(label, fontSize = 11.sp, color = Theme.Muted)
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun SettingsQuickLinks(onSelect: (SettingsDestination) -> Unit) {
+    SettingsSection("常用入口", "从这里快速进入最常调整的设置") {
+        listOf(SettingsDestination.APPEARANCE, SettingsDestination.LIBRARY, SettingsDestination.PRIVACY).forEach { item ->
+            SettingsEntryRow(item.title, item.description, if (item == SettingsDestination.PRIVACY) Theme.WarnOrange else Theme.Accent, { onSelect(item) })
+        }
+    }
+}
+
+@Composable
+private fun SettingsAppearance(store: AppStore, onOpenColors: () -> Unit, fontScale: Float, setFontScale: (Float) -> Unit, clickAnswerToEdit: Boolean, setClickAnswerToEdit: (Boolean) -> Unit) {
+    SettingsSection("主题与阅读", "让界面在长时间阅读时保持清晰、克制") {
+        SettingsEntryRow("配色主题", store.settings.themeName.ifBlank { AtlasThemes.DEFAULT.name }, resolveTheme(store.settings).accent, onOpenColors)
+        SettingsGroup("深浅色") {
+            ChipSelector(listOf("light" to "浅色", "dark" to "深色"), store.settings.theme) { value, label ->
+                Log.i("切换深浅色 → $label"); store.settings = store.settings.copy(theme = value); store.saveSettings()
+            }
+        }
+        SettingsGroup("全局文字大小", "80%–140%，拖动后立即预览") {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Slider(value = fontScale, onValueChange = { setFontScale(it); store.settings = store.settings.copy(fontScale = it) }, onValueChangeFinished = { store.saveSettings() }, valueRange = 0.8f..1.4f, steps = 5, modifier = Modifier.weight(1f))
+                Text("${(fontScale * 100).roundToInt()}%", Modifier.width(48.dp), color = Theme.Accent, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = clickAnswerToEdit, onCheckedChange = { setClickAnswerToEdit(it); store.settings = store.settings.copy(clickAnswerToEdit = it); store.saveSettings() })
+            Text("点击答案内容打开编辑弹窗")
+        }
+        Text("关闭后仍可划词选择；需要编辑时使用答案卡片中的“编辑”按钮。", fontSize = 11.sp, color = Theme.Muted)
+    }
+}
+
+@Composable
+private fun SettingsLibrary(store: AppStore, sourceQuestionPaths: String, setSourceQuestionPaths: (String) -> Unit) {
+    SettingsSection("知识库目录", "默认知识库和已有设置会保留，不会因界面重构被清空") {
+        Text(store.settings.libraryPath, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Theme.MdH2)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                val chooser = JFileChooser(File(store.settings.libraryPath.ifBlank { System.getProperty("user.home") })); chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY; chooser.dialogTitle = "选择知识库目录"
+                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) { Log.i("设置页更换知识库目录 → ${chooser.selectedFile.absolutePath}"); store.openLibrary(chooser.selectedFile.absolutePath, rescanIfNeeded = true) }
+            }) { Text("更换目录") }
+            OutlinedButton(onClick = { Log.i("手动触发增量扫描"); store.rescan(full = false) }) { Text("重新扫描") }
+        }
+        Text(store.scanMessage.value, fontSize = 11.sp, color = Theme.Muted)
+    }
+    SettingsSection("题目源文档", "每行一个相对知识库根目录的 Markdown 路径；以 / 结尾表示整个目录") {
+        OutlinedTextField(sourceQuestionPaths, setSourceQuestionPaths, Modifier.fillMaxWidth(), label = { Text("支持解析的文档或目录") }, minLines = 5)
+        SettingsActionRow {
+            Button(onClick = {
+                val configured = sourceQuestionPaths.lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct(); Log.i("保存题目源文档配置：${configured.size}项")
+                store.settings = store.settings.copy(sourceQuestionPaths = configured.ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS }); store.saveSettings()
+                val effective = store.settings.sourceQuestionPaths
+                if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, effective)) {
+                    val first = store.knowledgeDocuments.firstOrNull { SourceQuestions.isSupportedPath(it, effective) }
+                    if (first != null) store.selectSourceDocument(first) else store.reloadKnowledgeFiles()
+                } else store.reloadKnowledgeFiles()
+            }) { Text("保存题目源文档配置") }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPrivacy(store: AppStore, localOnly: String, setLocalOnly: (String) -> Unit, ignored: String, setIgnored: (String) -> Unit) {
+    SettingsSection("隐私边界", "工作敏感仓库放入“仅本地”；忽略目录不会进入索引") {
+        OutlinedTextField(localOnly, setLocalOnly, Modifier.fillMaxWidth(), label = { Text("仅本地目录（每行一个）") }, minLines = 4)
+        OutlinedTextField(ignored, setIgnored, Modifier.fillMaxWidth(), label = { Text("额外忽略目录（每行一个）") }, minLines = 3)
+        SettingsActionRow {
+            Button(onClick = {
+                Log.i("保存隐私边界设置：仅本地=${localOnly.lines().count { it.isNotBlank() }}行 忽略额外=${ignored.lines().count { it.isNotBlank() }}行，触发全量重建")
+                store.settings = store.settings.copy(localOnlyExtra = localOnly.lines().map { it.trim() }.filter { it.isNotEmpty() }, ignoredExtra = ignored.lines().map { it.trim() }.filter { it.isNotEmpty() }); store.saveSettings(); store.rescan(full = true)
+            }) { Text("保存并重建索引") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { StatusChip("全索引", Theme.OkGreen); StatusChip("仅本地 🔒", Theme.WarnOrange); StatusChip("忽略", Theme.Muted) }
+    }
+}
+
+@Composable
+private fun SettingsReview(onOpenParams: () -> Unit) {
+    SettingsSection("复习节奏", "FSRS 参数影响每日新题与复习题的安排") {
+        SettingsEntryRow("记忆参数", "FSRS 调度器", Theme.Accent, onOpenParams)
+    }
+}
+
+@Composable
+private fun SettingsRecording(store: AppStore) {
+    val recDir = store.settings.recordingSaveDir.ifBlank { File(System.getProperty("user.home"), "Videos/Screencasts").absolutePath }
+    var bitrate by remember { mutableStateOf(store.settings.recordingBitrate.toString()) }
+    SettingsSection("保存位置", "录屏脚本会读取这里的目录和编码参数") {
+        Text(recDir, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Theme.MdH2)
+        SettingsActionRow {
+            Button(onClick = {
+                val chooser = JFileChooser(File(recDir)); chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY; chooser.dialogTitle = "选择录屏保存目录"
+                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) { val path = chooser.selectedFile.absolutePath; Log.i("设置录屏保存目录 → $path"); store.settings = store.settings.copy(recordingSaveDir = path); store.saveSettings() }
+            }) { Text("选择目录") }
+            OutlinedButton(onClick = {
+                if (!File(RECORD_GUI).isFile) { Log.e("录屏脚本不存在：$RECORD_GUI"); return@OutlinedButton }
+                try { ProcessBuilder(RECORD_GUI).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start(); Log.i("已启动录屏界面") } catch (e: Exception) { Log.e("启动录屏界面失败", e) }
+            }) { Text("打开录屏界面") }
+        }
+    }
+    SettingsSection("编码参数", "默认 15 fps 更适合喂给 AI 分析；码率越高文件越大") {
+        ChipSelector(listOf("10" to "10 fps", "15" to "15 fps", "24" to "24 fps", "30" to "30 fps"), store.settings.recordingFps.toString()) { value, _ -> store.settings = store.settings.copy(recordingFps = value.toInt()); store.saveSettings() }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(bitrate, { bitrate = it }, Modifier.width(160.dp), label = { Text("码率 kbps") })
+            Button(onClick = { val v = bitrate.toIntOrNull()?.coerceIn(500, 20000) ?: 4000; bitrate = v.toString(); Log.i("设置录屏码率 → ${v}kbps"); store.settings = store.settings.copy(recordingBitrate = v); store.saveSettings() }) { Text("保存码率") }
+        }
+    }
+}
+
+@Composable
+private fun SettingsAbout() {
+    SettingsSection("本地优先", "Atlas 不托管你的笔记，也不要求联网") {
+        Text("配置与数据库：${System.getProperty("user.home")}/.local/share/atlas", fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        Text("缓存可随时删除重建，你的笔记只在自己的知识库里。", fontSize = 12.sp, color = Theme.Muted)
+        Text("Atlas · 零模型 · 零网络 · AGPL-3.0", fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+        Text("出题、批改等 AI 能力由你的编码代理完成；Atlas 负责检索、复习调度与学习纪律。", fontSize = 12.sp, color = Theme.Muted)
+    }
 }
 
 /** 主设置页通往子页的一行入口：左侧色块 + 标题 + 当前值 + 右箭头。 */
@@ -299,9 +291,9 @@ internal fun SettingsEntryRow(
     }
 }
 
-/** 设置分区卡片：统一的标题与容器，替代裸排的分区标题 + VDivider。 */
+/** 设置分区：用单层容器承载一组相关控件，避免设置页出现层层嵌套的卡片。 */
 @Composable
-private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsSection(title: String, description: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val ui = atlasUiTokens()
     Surface(
         Modifier.fillMaxWidth(),
@@ -312,9 +304,29 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = ui.typography.sectionTitle, color = Theme.MdH2)
+            if (!description.isNullOrBlank()) Text(description, fontSize = 12.sp, color = Theme.Muted)
             content()
         }
     }
+}
+
+@Composable
+private fun SettingsGroup(title: String, description: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+        if (!description.isNullOrBlank()) Text(description, fontSize = 11.sp, color = Theme.Muted)
+        content()
+    }
+}
+
+@Composable
+internal fun SettingsActionRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 /** 单选芯片组：选中项高亮，再次点击已选中项不触发回调。 */

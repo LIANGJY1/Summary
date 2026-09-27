@@ -712,7 +712,7 @@ fun QuestionSection(store: AppStore) {
                     )
                 },
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
             items(documentItems, key = { item ->
@@ -801,15 +801,15 @@ fun QuestionSection(store: AppStore) {
                             MaterialTheme.shapes.small,
                         )
                         .border(
-                            1.dp,
+                            if (isExpanded) 1.5.dp else 1.dp,
                             if (isDragging) Theme.Accent
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
                             else if (isExpanded) Theme.BorderStrong.copy(alpha = 0.78f)
                             else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.55f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f),
                             MaterialTheme.shapes.small,
                         )
-                        .padding(ui.spacing.card)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -892,12 +892,20 @@ fun QuestionSection(store: AppStore) {
                                         .fillMaxWidth()
                                         .singleClickWithoutConsumingSelection {
                                             if (store.settings.clickAnswerToEdit) editingEntry = entry
-                                        },
+                                    },
                                     shape = MaterialTheme.shapes.small,
                                     color = Theme.Elevated,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
                                 ) {
-                                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                        Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
+                                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                Modifier.width(3.dp).height(14.dp)
+                                                    .background(Theme.MdH2, RoundedCornerShape(2.dp)),
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
+                                        }
                                         Spacer(Modifier.height(4.dp))
                                         CompositionLocalProvider(
                                             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
@@ -913,7 +921,11 @@ fun QuestionSection(store: AppStore) {
                                 }
                             }
                             Spacer(Modifier.height(7.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
                                 Text(
                                     "移动",

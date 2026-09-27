@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Atlas 一键更新：编译 → 测试 → 打包 deb → 安装到本机
+# Atlas 一键更新：编译 → 打包 deb → 安装到本机（完整测试可选）
 # 用法：./update.sh（任意目录下运行均可）
 # sudo 密码来源（按优先级）：环境变量 ATLAS_SUDO_PASS > ~/.atlas-sudo-pass > 交互式输入
 # 密码不写入本脚本，避免随仓库泄露；一次性配置：echo '你的密码' > ~/.atlas-sudo-pass && chmod 600 ~/.atlas-sudo-pass
 set -euo pipefail
 
 cd "$(dirname "$0")"
+
+# 本地迭代默认只编译并打包，避免每次改 UI 都重复跑整套测试。
+# 发布前/交付前使用：ATLAS_RUN_TESTS=1 bash update.sh
+RUN_TESTS="${ATLAS_RUN_TESTS:-0}"
+INSTALL_STAMP="$PWD/build/.last-installed-deb.sha256"
 
 die() {
   echo "✗ $*" >&2
@@ -74,58 +79,60 @@ launch_atlas() {
   echo "OK: Atlas 新版本已启动"
 }
 
-deb_writer_running() {
-  ps -eo args= | grep '[d]pkg-deb -b' | grep -F -- "$DEB" >/dev/null
-}
-
-wait_for_deb() {
-  local attempt previous_size=-1 current_size stable_invalid=0
-  for attempt in {1..60}; do
-    if deb_writer_running; then
-      sleep 1
-      continue
-    fi
-    current_size="$(stat -c '%s' "$DEB" 2>/dev/null || echo 0)"
-    if [[ "$current_size" == "$previous_size" && "$current_size" -gt 0 ]]; then
-      if dpkg-deb --info "$DEB" >/dev/null 2>&1 \
-        && dpkg-deb --contents "$DEB" >/dev/null 2>&1; then
-        return 0
-      fi
-      stable_invalid=$((stable_invalid + 1))
-      [[ "$stable_invalid" -ge 3 ]] && return 1
-    else
-      stable_invalid=0
-    fi
-    previous_size="$current_size"
-    sleep 1
-  done
-  return 1
-}
-
-echo "==> [1/3] 编译 + 测试 + 打包"
+echo "==> [1/3] 编译 + 打包"
 # 构建必须用「带 jpackage 的 JDK」。Android Studio 自带的 JBR 被打包补丁过（X11 下会向
 # 输入法设置 XNSpotLocation，候选框跟随光标的关键），但它被精简掉 jpackage 与 jmods，
 # 无法用于打包；所以这里用普通 JDK 打包，装完再把运行时替换成 JBR（见 [2/3]）。
 JAVA_HOME="${JAVA_HOME:-$HOME/jdk/jdk-17}"
 [[ -x "$JAVA_HOME/bin/jpackage" ]] || die "构建 JDK 缺 jpackage：$JAVA_HOME"
 GRADLE="${GRADLE:-$HOME/tools/gradle-8.14.3/bin/gradle}"
-JAVA_HOME="$JAVA_HOME" "$GRADLE" test packageReleaseDeb --console=plain
+GRADLE_TASKS=(packageReleaseDeb)
+if [[ "$RUN_TESTS" == "1" ]]; then
+  echo "==> 已启用完整测试：ATLAS_RUN_TESTS=1"
+  GRADLE_TASKS=(test packageReleaseDeb)
+else
+  echo "==> 跳过测试（本地迭代模式；发布前可用 ATLAS_RUN_TESTS=1）"
+fi
+JAVA_HOME="$JAVA_HOME" "$GRADLE" "${GRADLE_TASKS[@]}" --parallel --console=plain
 
 DEB="$(find "$PWD/build/compose/binaries/main-release/deb" -maxdepth 1 -type f -name '*.deb' -printf '%T@ %p\n' 2>/dev/null | sort -nr | sed -n '1s/^[^ ]* //p')"
 [[ -n "$DEB" ]] || die "没有找到 deb 打包产物"
-echo "==> 等待并校验 deb 产物"
-if ! wait_for_deb; then
+DEB_SHA="$(sha256sum "$DEB" | awk '{print $1}')"
+
+# Gradle 可能报告任务 up-to-date，但旧脚本仍会重复 apt 安装、复制 JBR 和重启。
+# 只有 deb 内容真正变化时才触碰系统安装，避免无变化运行耗时几十秒。
+if [[ -f "$INSTALL_STAMP" ]]; then
+  INSTALLED_SHA="$(<"$INSTALL_STAMP")"
+else
+  INSTALLED_SHA=""
+fi
+if [[ "$INSTALLED_SHA" == "$DEB_SHA" ]] \
+  && dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installed' \
+  && [[ -x /opt/atlas/bin/atlas ]]; then
+  echo "==> deb 未变化（$DEB_SHA），跳过安装、JBR 替换和重启"
+  if [[ -z "$(atlas_pids)" ]]; then
+    launch_atlas
+  else
+    echo "==> Atlas 已在运行，保持当前实例"
+  fi
+  echo "OK: 无需更新"
+  exit 0
+fi
+echo "==> 校验 deb 产物"
+# Gradle 命令同步返回，deb 已经写完；无需每秒轮询最多 60 次。
+if ! dpkg-deb --info "$DEB" >/dev/null 2>&1 || ! dpkg-deb --contents "$DEB" >/dev/null 2>&1; then
   echo "! deb 产物未通过完整性校验，强制重新打包"
   JAVA_HOME="$JAVA_HOME" "$GRADLE" packageReleaseDeb --rerun-tasks --console=plain
-  wait_for_deb || die "deb 打包产物未完成或已损坏：$DEB"
+  dpkg-deb --info "$DEB" >/dev/null 2>&1 && dpkg-deb --contents "$DEB" >/dev/null 2>&1 || die "deb 打包产物未完成或已损坏：$DEB"
 fi
 stop_running_atlas
 echo "==> [2/3] 安装 $DEB"
-# 先移除旧版：版本号不变时 apt 会跳过本地 deb 安装
-if dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installed'; then
-  sudo_run apt remove -y atlas
+# dpkg 直接升级当前包，避免 apt remove + apt install 的两次完整生命周期。
+# 依赖异常时再由 apt 自动修复，不影响正常增量更新。
+if ! sudo_run dpkg -i "$DEB"; then
+  sudo_run apt-get -f install -y
+  sudo_run dpkg -i "$DEB"
 fi
-sudo_run apt install -y "$DEB"
 
 # 把 deb 自带的 jlink 运行时换成 JBR。deb 里的 runtime 是用上面那个「能跑 jpackage 的
 # JDK」打的，必然不含 JetBrains 的 XIM 补丁；而 Android Studio 自带的 JBR 被精简过，没有
@@ -176,6 +183,9 @@ if sudo_run test -f "$ATLAS_DESKTOP" && ! sudo_run grep -q '^StartupWMClass=' "$
   sudo_run update-desktop-database /usr/share/applications 2>/dev/null || true
   echo "==> 已注入 StartupWMClass=atlas-MainKt（窗口与启动器图标合一）"
 fi
+
+mkdir -p "$(dirname "$INSTALL_STAMP")"
+printf '%s\n' "$DEB_SHA" > "$INSTALL_STAMP"
 
 echo "==> [3/3] 验证"
 # jpackage 的 deb 不建 PATH 链接，手工补一个，让终端可直接 atlas 启动

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：SELinux 拒绝（avc denial）的确认与处置——从"功能静默失效"到四元组定位、audit2allow 与 neverallow 的处理边界。语境：全局 enforcing 自 Android 5.0 起；启动期策略合成与装载见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)；沙箱三层（UID/SELinux/seccomp）见 [04-Sanbox.md](./04-Sanbox.md)。命令与流程已于 2026-09-25 与官方资料（source.android.com《Validate SELinux》）核对；Q3–Q8 的策略书写机制按 system/sepolicy 与 car_product/sepolicy 源码核对。2026-09-25 会话沉淀追加 Q9–Q18：service_manager 用户态检查链源码、avc 日志双路径与字段解剖、厂商域漏配 find 的崩溃循环案例与修复流程，按 AAOS13_study（Android 13）源码逐行核对。同日二轮并入《selinux 配置指南》与用户补充问题（Q19–Q26）：概念总览、原理与代码落点、应用/framework 两级开发者场景、ioctl allowxperm 双层授权、neverallow 两大编译场景与最小权限原则、工作模式与 ALLOW_PERMISSIVE_SELINUX、make selinux_policy 与 audit2allow 快速验证，均经 AAOS13_study 源码核对（材料笔误已修正，如 DALLOW_PERMISSIVE_SELINUX 实为 ALLOW_PERMISSIVE_SELINUX）。Q 序列即结构，供 atlas 同源直读。2026-09-26 修订 Q1：把首段三个术语「强制访问控制（MAC）」「域」「类型」展开到可核对粒度——三者只是主体、客体两个身份加一套判定机制；补 `user:role:type:level` 四元组的字段分工（`role` 在 Android 只有进程 `r`、对象 `object_r` 两值且不参与授权）、域按 uid 加 targetSdkVersion 选定、类型标签由 `file_contexts`/`genfs_contexts`/`property_contexts`/`service_contexts` 逐条正则匹配，以及「类」与「类型」的区别。全文按 [WRITING-GUIDE.md](../../WRITING-GUIDE.md) 验收：删除跨 Q 引用与无信息量的计数，改为扁平列表（Atlas 渲染器不表达嵌套层级）。2026-09-26 二轮：沙箱与 UID 的源码深讲并入 [04-Sanbox.md](./04-Sanbox.md)（Q5–Q12，来源掘金《Android UID》juejin.cn/post/7585013463859347506 与 AOSP 官方文档），本册保持 SELinux 排查与策略专题纯度。
 
-**Q1: [done] Android SELinux 是什么？怎么理解？**
+**Q1: [learning] Android SELinux 是什么？怎么理解？**
 
 Android 的进程隔离原本只有 uid 和文件权限位：每个应用独占一个 uid，而文件权限的授权单位是 `(uid, 路径, 位)` 三元组，uid 是它唯一的主体维度——同 uid 的进程之间判不出差别，共享 root 或 system 的那批系统进程只能彼此等同。
 

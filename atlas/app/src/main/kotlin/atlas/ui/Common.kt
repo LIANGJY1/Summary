@@ -108,7 +108,7 @@ data class AtlasUiTokens(
                 caption = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
             ),
             contentMaxWidth = 1440.dp,
-            readingMaxWidth = 860.dp,
+            readingMaxWidth = 760.dp,
         )
     }
 }
@@ -341,14 +341,30 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
             s.startsWith("**", i) -> {
                 val end = s.indexOf("**", i + 2)
                 if (end > 0) {
-                    append(s.substring(i + 2, end)); addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Theme.MdBold), length - (end - i - 2), length)
+                    append(s.substring(i + 2, end)); addStyle(
+                        SpanStyle(
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Theme.MdBold,
+                        ),
+                        length - (end - i - 2),
+                        length,
+                    )
                     i = end + 2
                 } else { append(s[i]); i++ }
             }
             s[i] == '`' -> {
                 val end = s.indexOf('`', i + 1)
                 if (end > 0) {
-                    append(s.substring(i + 1, end)); addStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = Theme.MdInlineCode, background = Theme.MdInlineCodeBg), length - (end - i - 1), length)
+                    append(s.substring(i + 1, end)); addStyle(
+                        SpanStyle(
+                            fontFamily = FontFamily.Monospace,
+                            // 行内代码是辅助结构：保留等宽与底色，但不再使用高饱和强调色抢正文焦点。
+                            color = Theme.Muted.copy(alpha = 0.92f),
+                            background = Theme.MdInlineCodeBg.copy(alpha = 0.22f),
+                        ),
+                        length - (end - i - 1),
+                        length,
+                    )
                     i = end + 1
                 } else { append(s[i]); i++ }
             }

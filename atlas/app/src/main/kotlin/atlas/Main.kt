@@ -283,34 +283,41 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     }
 }
 
-/** 顶栏导航页签：激活态为强调色胶囊、悬停有轻反馈；去掉旧版「胶囊+下划线」双重指示。 */
+/** 顶栏导航页签：激活态用底部指示线，悬停才使用轻量表面反馈。 */
 @Composable
 private fun NavTab(label: String, active: Boolean, onClick: () -> Unit, badge: (@Composable () -> Unit)? = null) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    Row(
+    Column(
         Modifier
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null) { onClick() }
             .background(
-                when {
-                    active -> Theme.Selected
-                    hovered -> Theme.Hover
-                    else -> Color.Transparent
-                },
+                if (hovered && !active) Theme.Hover else Color.Transparent,
                 RoundedCornerShape(8.dp),
             )
             .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            label,
-            fontSize = 13.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (active) Theme.Accent else Theme.Muted,
-        )
-        badge?.invoke()
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                label,
+                fontSize = 13.sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                color = if (active) Theme.Accent else Theme.Muted,
+            )
+            badge?.invoke()
+        }
+        if (active) {
+            Spacer(Modifier.height(4.dp))
+            Box(
+                Modifier.width(18.dp).height(2.dp)
+                    .background(Theme.Accent, RoundedCornerShape(2.dp)),
+            )
+        }
     }
 }
 

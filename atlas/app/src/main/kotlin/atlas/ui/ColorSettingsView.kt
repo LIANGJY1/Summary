@@ -48,7 +48,7 @@ fun ColorSettingsPage(store: AppStore, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
     ) {
         Column(
-            Modifier.fillMaxWidth().widthIn(max = 900.dp),
+            Modifier.fillMaxWidth().widthIn(max = 980.dp),
             verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -61,86 +61,43 @@ fun ColorSettingsPage(store: AppStore, onBack: () -> Unit) {
                 Text("配色主题", style = ui.typography.pageTitle, color = Theme.MdH1)
             }
 
-            Text("Atlas", fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
-            Text(
-                "以 Catppuccin Macchiato 为唯一色源，浅色与深色均为独立调校。",
-                fontSize = 11.sp,
-                color = Theme.Muted,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ThemeSwatch(
-                    label = "Atlas",
-                    sub = "浅色",
-                    spec = AtlasThemes.ATLAS.light,
-                    active = !dark && store.settings.themeName == AtlasThemes.NAME,
-                    onClick = {
-                        store.settings = store.settings.copy(theme = "light", themeName = AtlasThemes.NAME)
-                        store.saveSettings()
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-                ThemeSwatch(
-                    label = "Atlas",
-                    sub = "深色",
-                    spec = AtlasThemes.ATLAS.dark,
-                    active = dark && store.settings.themeName == AtlasThemes.NAME,
-                    onClick = {
-                        store.settings = store.settings.copy(theme = "dark", themeName = AtlasThemes.NAME)
-                        store.saveSettings()
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.weight(1f))
+            SettingsSection("Atlas 基线", "以统一的语义色服务界面与 Markdown 阅读；浅色和深色独立调校。") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ThemeSwatch(
+                        label = "Atlas", sub = "浅色", spec = AtlasThemes.ATLAS.light,
+                        active = !dark && store.settings.themeName == AtlasThemes.NAME,
+                        onClick = { store.settings = store.settings.copy(theme = "light", themeName = AtlasThemes.NAME); store.saveSettings() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    ThemeSwatch(
+                        label = "Atlas", sub = "深色", spec = AtlasThemes.ATLAS.dark,
+                        active = dark && store.settings.themeName == AtlasThemes.NAME,
+                        onClick = { store.settings = store.settings.copy(theme = "dark", themeName = AtlasThemes.NAME); store.saveSettings() },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("我的主题", fontSize = 12.sp, color = Theme.Muted, modifier = Modifier.weight(1f))
-                OutlinedButton(
-                    onClick = { showCreateTheme = true },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                ) { Text("基于 Atlas 新建", fontSize = 12.sp) }
-            }
-
-            if (custom.isEmpty()) {
-                Text("还没有自定义主题。可复制 Atlas 后分别调整浅色与深色。", fontSize = 11.sp, color = Theme.Muted)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    custom.forEach { theme ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ThemeSwatch(
-                                label = theme.name,
-                                sub = if (dark) "深色" else "浅色",
-                                spec = theme.spec(dark),
-                                active = store.settings.themeName == theme.name,
-                                onClick = { selectTheme(theme.name) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            Column {
-                                Text(
-                                    "编辑",
-                                    Modifier.clickable { editingTheme = theme.name },
-                                    fontSize = 12.sp,
-                                    color = Theme.Accent,
-                                )
-                                Text(
-                                    "删除",
-                                    Modifier.clickable { deletingTheme = theme.name },
-                                    fontSize = 12.sp,
-                                    color = Theme.BadRed,
-                                )
+            SettingsSection("我的主题", "自定义主题会保存在本机；内置 Atlas 始终保留为安全基线。") {
+                SettingsActionRow {
+                    OutlinedButton(onClick = { showCreateTheme = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("基于 Atlas 新建", fontSize = 12.sp) }
+                }
+                if (custom.isEmpty()) {
+                    Text("还没有自定义主题。可复制 Atlas 后分别调整浅色与深色。", fontSize = 11.sp, color = Theme.Muted)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        custom.forEach { theme ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ThemeSwatch(label = theme.name, sub = if (dark) "深色" else "浅色", spec = theme.spec(dark), active = store.settings.themeName == theme.name, onClick = { selectTheme(theme.name) }, modifier = Modifier.weight(1f))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("编辑", Modifier.clickable { editingTheme = theme.name }, fontSize = 12.sp, color = Theme.Accent)
+                                    Text("删除", Modifier.clickable { deletingTheme = theme.name }, fontSize = 12.sp, color = Theme.BadRed)
+                                }
                             }
                         }
                     }
                 }
             }
-            Text("点选即生效并记住；内置 Atlas 始终保留为安全基线。", fontSize = 11.sp, color = Theme.Muted)
         }
     }
 
