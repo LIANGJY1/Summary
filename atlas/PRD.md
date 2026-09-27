@@ -415,6 +415,396 @@ Markdown 只保留一套“阅读优化”样式，删除“经典样式”及�
 - 2026-09-19 合入 Summary 库审计结论：三档隐私边界（工作仓库"仅本地"）、`##` 小节一等锚点、D5 对齐既有周练规则（追加式批改/未答题延迟揭晓/可选不打分）、M0 以 Summary 为 dogfooding 库。
 - 2026-09-19 合入技术可行性调研（调研-T，见 `research/tech-feasibility/`）：CMP 路线**有条件可行**（Wayland 仅 XWayland、AppImage 降 P2、deb 唯一承诺格式）；中文检索方案落定 **FTS5 trigram + <3 字 LIKE 兜底**；FSRS 落定 **java-fsrs**（官方 MIT）；技术栈版本全部落定（NFR-6）；新增 IME 冒烟与 AppCDS 实测验收。
 
+## 附录 B.1：主题系统重构实施计划
+
+# Atlas Unified Theme Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 将现有 11 套运行时派生主题重构为唯一内置 Atlas 双模式主题，并为全应用和 Markdown 建立一致、可迁移、可验证的语义配色。
+
+**Architecture:** `ThemeSpec` 表示一种明暗模式下的 20 个完整语义色，`ThemeDefinition` 聚合独立的 `light` / `dark` 两个 `ThemeSpec`。业务组件继续只消费 `Theme.*` 和 Material 语义色；旧格式只在迁移边界解析一次，不进入运行时主题选择流程。
+
+**Tech Stack:** Kotlin 2.2.20、Compose Multiplatform 1.12.0、Material 3 1.9.0、JUnit 5、Gradle 8.14.3。
+
+**Spec:** `atlas/PRD.md` §6.4。
+
+### Global Constraints
+
+- 内置主题只有 `Atlas`，Catppuccin Macchiato 是唯一色彩来源。
+- 每个主题保存独立浅色和深色色板，运行时禁止明暗机械派生。
+- 每套模式色板固定 20 个字段；普通文本对比度不低于 4.5:1，交互轮廓和非文本状态不低于 3:1。
+- Markdown 只有阅读优化样式，不新增语法高亮。
+- 旧内置主题安全回退，合法旧自定义主题必须迁移，非法单条记录不得阻止启动。
+- 不新增依赖，不引入网络能力，不修改知识库内容协议。
+
+---
+
+### Task 1: 建立双模式主题领域模型与 Atlas 基准色板
+
+**Files:**
+
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Theme.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Common.kt`
+- Replace: `atlas/app/src/test/kotlin/atlas/ThemeDeriveTest.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/ThemeContrastTest.kt`
+
+**Interfaces:**
+
+- Produces: `ThemeSpec`, `ThemeDefinition(name: String, light: ThemeSpec, dark: ThemeSpec)`, `ThemeDefinition.spec(dark: Boolean): ThemeSpec`、`AtlasThemes.ATLAS`。
+- Preserves: `AtlasTheme(dark, fontScale, spec, content)`、`Theme.Accent` 等业务消费入口。
+
+- [ ] **Step 1: 先写唯一内置主题与精确色值的失败测试**
+
+```kotlin
+@Test
+fun `内置主题只有 Atlas 且两套色板为人工定值`() {
+    assertEquals(listOf("Atlas"), AtlasThemes.ALL.map { it.name })
+    assertEquals("#FF181926", hexOf(AtlasThemes.ATLAS.dark.background))
+    assertEquals("#FFF6F6F9", hexOf(AtlasThemes.ATLAS.light.background))
+    assertEquals("#FFC6A0F6", hexOf(AtlasThemes.ATLAS.dark.md().h1))
+    assertEquals("#FF4969B2", hexOf(AtlasThemes.ATLAS.light.md().h2))
+}
+```
+
+- [ ] **Step 2: 运行测试并确认因 `ATLAS` / `ThemeDefinition` 尚不存在而失败**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeDeriveTest'`
+
+Expected: `compileTestKotlin` 失败，指出新接口尚不存在。
+
+- [ ] **Step 3: 用完整模式色板替换原始主题列表和派生模型**
+
+```kotlin
+data class ThemeDefinition(
+    val name: String,
+    val light: ThemeSpec,
+    val dark: ThemeSpec,
+) {
+    fun spec(dark: Boolean): ThemeSpec = if (dark) this.dark else light
+}
+
+object AtlasThemes {
+    const val NAME = "Atlas"
+    val ATLAS = ThemeDefinition(NAME, light = atlasLight(), dark = atlasDark())
+    val ALL = listOf(ATLAS)
+    val DEFAULT = ATLAS
+    fun specOf(name: String, dark: Boolean): ThemeSpec = ATLAS.spec(dark)
+}
+```
+
+删除运行时 `lighten()` / `darken()`、11 套 `RAW` 和自动 `readable()` 修色；`ThemeSpec` 改为 12 个界面字段与 8 个 Markdown 字段，具体色值逐项采用 §6.4.2–§6.4.3。
+
+- [ ] **Step 4: 扩充对比度测试，分别检查页面底、内容面和交互轮廓**
+
+```kotlin
+AtlasThemes.ALL.flatMap { listOf(it.light to "浅", it.dark to "深") }.forEach { (s, mode) ->
+    need(mode, "正文/页面", hexOf(s.onSurface), hexOf(s.background), 4.5)
+    need(mode, "正文/内容面", hexOf(s.onSurface), hexOf(s.surface), 4.5)
+    need(mode, "交互轮廓/页面", hexOf(s.outline), hexOf(s.background), 3.0)
+    need(mode, "链接/内容面", hexOf(s.md().link), hexOf(s.surface), 4.5)
+}
+```
+
+- [ ] **Step 5: 运行主题模型与对比度测试并确认通过**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeDeriveTest' --tests 'atlas.ThemeContrastTest'`
+
+Expected: 两个测试类全部通过，无对比度失败列表。
+
+- [ ] **Step 6: 提交主题模型**
+
+```bash
+git add atlas/app/src/main/kotlin/atlas/ui/Theme.kt atlas/app/src/main/kotlin/atlas/ui/Common.kt atlas/app/src/test/kotlin/atlas/ThemeDeriveTest.kt atlas/app/src/test/kotlin/atlas/ThemeContrastTest.kt
+git commit -m "refactor(atlas): establish paired Atlas palettes"
+```
+
+### Task 2: 版本化自定义主题并迁移旧配置
+
+**Files:**
+
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Theme.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/Main.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/core/Settings.kt`
+- Replace: `atlas/app/src/test/kotlin/atlas/ThemeMdTest.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/ThemeSwitchTest.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/SettingsTest.kt`
+
+**Interfaces:**
+
+- Consumes: `ThemeDefinition` 和 20 字段 `ThemeSpec`。
+- Produces: `CustomTheme(name, light, dark)`、`CustomTheme.encode()`、`CustomTheme.decode(raw)`、`migrateThemeSettings(AppSettings): AppSettings`。
+
+- [ ] **Step 1: 写新格式往返、旧 18 色迁移和非法记录隔离的失败测试**
+
+```kotlin
+@Test
+fun `v2 自定义主题完整往返双模式`() {
+    val original = CustomTheme("夜航", AtlasThemes.ATLAS.light, AtlasThemes.ATLAS.dark)
+    val encoded = original.encode()
+    assertTrue(encoded.startsWith("v2|夜航|"))
+    assertEquals(original, CustomTheme.decode(encoded))
+}
+
+@Test
+fun `旧内置选择与旧自定义主题一次迁移`() {
+    val old = "markdown|" + legacyEighteenHexes.joinToString("|")
+    val migrated = migrateThemeSettings(AppSettings(themeName = "Nord", customThemes = listOf(old, "broken")))
+    assertEquals("Atlas", migrated.themeName)
+    assertEquals(1, migrated.customThemes.size)
+    assertTrue(migrated.customThemes.single().startsWith("v2|markdown|"))
+}
+```
+
+- [ ] **Step 2: 运行测试并确认新构造器、新格式和迁移函数缺失**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeMdTest' --tests 'atlas.ThemeSwitchTest' --tests 'atlas.SettingsTest'`
+
+Expected: 编译或断言失败，原因对应尚未实现的 V2 接口。
+
+- [ ] **Step 3: 实现 V2 编解码与只用于迁移的旧格式转换**
+
+```kotlin
+data class CustomTheme(val name: String, val light: ThemeSpec, val dark: ThemeSpec) {
+    fun spec(dark: Boolean) = if (dark) this.dark else light
+    fun encode(): String = (listOf("v2", safeName(name)) + light.hexList() + dark.hexList()).joinToString("|")
+
+    companion object {
+        fun decode(raw: String): CustomTheme? = when {
+            raw.startsWith("v2|") -> decodeV2(raw)
+            else -> decodeLegacy(raw)
+        }
+    }
+}
+```
+
+旧 12/18 色只在 `decodeLegacy` 中映射成新版字段，再分别执行冻结的旧版浅色、深色转换一次；V2 记录必须严格校验 42 段和全部必填字段。
+
+- [ ] **Step 4: 实现启动前迁移和解析优先级**
+
+```kotlin
+internal fun migrateThemeSettings(s: AppSettings): AppSettings {
+    val migrated = s.customThemes.mapNotNull(CustomTheme::decode).map(CustomTheme::encode)
+    val customNames = migrated.map(CustomTheme::nameOf).toSet()
+    val selected = if (s.themeName in customNames || s.themeName == AtlasThemes.NAME) s.themeName else AtlasThemes.NAME
+    return s.copy(themeName = selected, customThemes = migrated)
+}
+```
+
+在 Compose `application {}` 启动前调用一次；只有返回值变化时写回设置。`resolveTheme` 保持“同名自定义优先”，否则只返回 Atlas 对应模式。
+
+- [ ] **Step 5: 删除 `AppSettings.markdownStyle`，读取旧键时自然忽略且保存时不再写出**
+
+测试先把旧 `markdownStyle=classic` 写入 properties，再保存加载后的设置，断言输出文件不含 `markdownStyle=`。
+
+- [ ] **Step 6: 运行迁移与设置测试并确认通过**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeMdTest' --tests 'atlas.ThemeSwitchTest' --tests 'atlas.SettingsTest'`
+
+Expected: 三个测试类全部通过，合法旧主题转为 V2，非法记录被隔离。
+
+- [ ] **Step 7: 提交迁移层**
+
+```bash
+git add atlas/app/src/main/kotlin/atlas/ui/Theme.kt atlas/app/src/main/kotlin/atlas/Main.kt atlas/app/src/main/kotlin/atlas/core/Settings.kt atlas/app/src/test/kotlin/atlas/ThemeMdTest.kt atlas/app/src/test/kotlin/atlas/ThemeSwitchTest.kt atlas/app/src/test/kotlin/atlas/SettingsTest.kt
+git commit -m "feat(atlas): migrate themes to paired palettes"
+```
+
+### Task 3: 把配色页重构为 Atlas 主题工作区
+
+**Files:**
+
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/ColorSettingsView.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/SettingsView.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/ThemeSwitchTest.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/SettingsTest.kt`
+
+**Interfaces:**
+
+- Consumes: `CustomTheme.spec(dark)`、`AtlasThemes.ATLAS.light/dark`、V2 编解码。
+- Produces: `createCustomTheme(name, base): CustomTheme`、按模式编辑并原子保存双模式主题的 UI 流程。
+
+- [ ] **Step 1: 写“基于 Atlas 创建时复制两套模式、编辑一侧不改变另一侧”的失败测试**
+
+```kotlin
+@Test
+fun `基于 Atlas 新建会复制独立双模式`() {
+    val created = createCustomTheme("我的主题", AtlasThemes.ATLAS)
+    val changed = created.copy(dark = created.dark.copy(accent = parseHexColor("#FF112233")!!))
+    assertEquals(AtlasThemes.ATLAS.light.hexList(), changed.light.hexList())
+    assertNotEquals(created.dark.hexList(), changed.dark.hexList())
+}
+```
+
+- [ ] **Step 2: 运行测试并确认创建 helper 尚不存在**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeSwitchTest' --tests 'atlas.SettingsTest'`
+
+Expected: `createCustomTheme` 未定义导致失败。
+
+- [ ] **Step 3: 重构配色二级页**
+
+删除“内置 N 套”三列画廊，顶部显示 Atlas 的浅色、深色双预览和当前模式说明；“我的主题”保留选择、编辑、删除；创建动作固定为“基于 Atlas 新建”。内置 Atlas 不显示编辑或删除入口。
+
+- [ ] **Step 4: 重构主题编辑器**
+
+一级切换“浅色 / 深色”，二级分组“界面配色 / Markdown 配色”；每次编辑只替换目标模式的 `ThemeSpec`，随后把完整 `CustomTheme` V2 记录原子写回。保留色块取色、格式校验和错误反馈。
+
+- [ ] **Step 5: 运行主题与设置测试并确认通过**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.Theme*' --tests 'atlas.SettingsTest'`
+
+Expected: 所有主题与设置测试通过。
+
+- [ ] **Step 6: 提交主题设置界面**
+
+```bash
+git add atlas/app/src/main/kotlin/atlas/ui/ColorSettingsView.kt atlas/app/src/main/kotlin/atlas/ui/SettingsView.kt atlas/app/src/test/kotlin/atlas/ThemeSwitchTest.kt atlas/app/src/test/kotlin/atlas/SettingsTest.kt
+git commit -m "refactor(atlas): turn color settings into theme workspace"
+```
+
+### Task 4: 收敛 Markdown 渲染并应用分级语义色
+
+**Files:**
+
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Common.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/LearnView.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/LearningView.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/PreviewDialog.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/SettingsView.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/ThemeMdTest.kt`
+- Modify: `atlas/app/src/test/kotlin/atlas/ui/MarkdownTableTest.kt`
+
+**Interfaces:**
+
+- Consumes: `Theme.MdH1`、`Theme.MdH2`、`Theme.MdH3`、`Theme.MdBold`、`Theme.MdLink`、`Theme.MdQuote`、`Theme.MdInlineCode`、`Theme.MdInlineCodeBg`。
+- Produces: `MarkdownText(md, modifier, dirtyLines)` 单一阅读渲染入口。
+
+- [ ] **Step 1: 写 Markdown 分级语义色与单一入口的失败测试**
+
+```kotlin
+@Test
+fun `Atlas markdown 语义具有稳定层级`() {
+    val md = AtlasThemes.ATLAS.dark.md()
+    assertEquals("#FFC6A0F6", hexOf(md.h1))
+    assertEquals("#FF8AADF4", hexOf(md.h2))
+    assertEquals("#FFCAD3F5", hexOf(md.h3))
+    assertEquals(hexOf(md.h3), hexOf(md.bold))
+    assertNotEquals(hexOf(md.h2), hexOf(md.link))
+}
+```
+
+- [ ] **Step 2: 运行测试并确认旧 `MdSpec.heading` 无法满足新接口**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeMdTest' --tests 'atlas.ui.MarkdownTableTest'`
+
+Expected: 新的 `h1` / `h2` / `h3` 属性尚不存在或断言失败。
+
+- [ ] **Step 3: 删除 Classic 渲染分支和所有 `markdownStyle` 调用**
+
+```kotlin
+@Composable
+fun MarkdownText(
+    md: String,
+    modifier: Modifier = Modifier,
+    dirtyLines: Set<Int> = emptySet(),
+) = ReaderMarkdownText(md, modifier, dirtyLines)
+```
+
+设置首页删除“Markdown 展示”选择器；题库答案、预览和卡片背面统一调用单一入口，不再按 classic 改答案标题色或 `LocalContentColor`。
+
+- [ ] **Step 4: 将 H1/H2/H3、粗体、链接、引用、列表、表格与代码映射到 §6.4.3**
+
+H1 使用 `Theme.MdH1`，H2 使用 `Theme.MdH2`，H3 使用 `Theme.MdH3`；粗体保持正文语义；链接使用青绿色；引用结构线使用 H1 的克制透明色；列表标记与表头使用 H2；代码块正文显式使用 `onSurface`。
+
+- [ ] **Step 5: 运行 Markdown 和主题测试并确认通过**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeMdTest' --tests 'atlas.ui.MarkdownTableTest' --tests 'atlas.SettingsTest'`
+
+Expected: 三个测试类全部通过，代码中 `rg -n 'markdownStyle|ClassicMarkdown' atlas/app/src` 无结果。
+
+- [ ] **Step 6: 提交 Markdown 收敛**
+
+```bash
+git add atlas/app/src/main/kotlin/atlas/ui/Common.kt atlas/app/src/main/kotlin/atlas/ui/LearnView.kt atlas/app/src/main/kotlin/atlas/ui/LearningView.kt atlas/app/src/main/kotlin/atlas/ui/PreviewDialog.kt atlas/app/src/main/kotlin/atlas/ui/SettingsView.kt atlas/app/src/test/kotlin/atlas/ThemeMdTest.kt atlas/app/src/test/kotlin/atlas/ui/MarkdownTableTest.kt
+git commit -m "refactor(atlas): unify markdown reading colors"
+```
+
+### Task 5: 审计全应用颜色并完成视觉与回归验收
+
+**Files:**
+
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Theme.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/Common.kt`
+- Modify: `atlas/app/src/main/kotlin/atlas/ui/TreeIcons.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/Main.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/CardsBrowse.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/Dashboard.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/InboxView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/LearnView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/LearningView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/MermaidChart.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/SettingsView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/TodayView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/ToolsView.kt`
+- Inspect and modify only when the literal is a product color rather than an algorithm color: `atlas/app/src/main/kotlin/atlas/ui/WindowChrome.kt`
+- Preserve algorithm literals in `atlas/app/src/main/kotlin/atlas/ui/ColorPicker.kt` unless they escape the picker preview.
+- Modify: `atlas/PRD.md`
+
+**Interfaces:**
+
+- Consumes: 完整 Atlas 语义 token 和 Material `ColorScheme`。
+- Produces: 不依赖黑白硬编码的全应用配色、最终验证记录。
+
+- [ ] **Step 1: 先增加 Material 映射和装饰/交互轮廓分离的失败断言**
+
+```kotlin
+@Test
+fun `Material 颜色映射保持三级表面与双轮廓`() {
+    val spec = AtlasThemes.ATLAS.dark
+    val scheme = spec.toMaterialScheme(dark = true)
+    assertEquals(hexOf(spec.background), hexOf(scheme.background))
+    assertEquals(hexOf(spec.surfaceVariant), hexOf(scheme.surfaceVariant))
+    assertEquals(hexOf(spec.outline), hexOf(scheme.outline))
+    assertEquals(hexOf(spec.outlineVariant), hexOf(scheme.outlineVariant))
+}
+```
+
+- [ ] **Step 2: 运行断言并确认旧映射把 `outline` 错接到次要文字**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle test --tests 'atlas.ThemeSwitchTest'`
+
+Expected: `scheme.outline` 与新版 `spec.outline` 不一致。
+
+- [ ] **Step 3: 审计并替换业务 UI 中无语义的硬编码颜色**
+
+Run: `rg -n 'Color\.(Black|White)|Color\(0x|copy\(alpha' atlas/app/src/main/kotlin/atlas atlas/app/src/main/kotlin/atlas/ui`
+
+保留颜色选择器自身的 HSV 彩虹和透明棋盘等算法色；图标描边、窗口控件、卡片、输入框、选中态、危险操作全部改用 `Theme.*` 或 `MaterialTheme.colorScheme.*`。透明度只用于弱背景，不降低正文对比度。
+
+- [ ] **Step 4: 运行全量测试和编译**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle clean test compileKotlin`
+
+Expected: Gradle `BUILD SUCCESSFUL`，所有测试零失败。
+
+- [ ] **Step 5: 启动应用并检查六个关键页面的浅深模式**
+
+Run: `cd atlas/app && JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle run`
+
+检查工作台、题库、设置、主题编辑器、Markdown 预览、通用弹窗：三级表面可辨、文字无低对比、状态不只依赖颜色、浅深切换不闪回旧主题、自定义主题重启后仍生效。
+
+- [ ] **Step 6: 将 PRD §6.4 从“待实现”更新为实现状态并记录测试数量**
+
+仅在 Step 4 和 Step 5 均完成后修改；变更日志记录迁移结果、最终测试命令与实际通过数量，不使用预估数字。
+
+- [ ] **Step 7: 提交全应用收口**
+
+```bash
+git add atlas/app/src/main atlas/app/src/test atlas/PRD.md
+git commit -m "feat(atlas): complete unified visual theme"
+```
+
 ## 附录 C：变更日志
 
 | 日期 | 版本 | 变更 |
