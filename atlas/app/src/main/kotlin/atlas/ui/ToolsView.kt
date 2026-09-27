@@ -104,12 +104,13 @@ private fun HcLogDecryptCard(store: AppStore) {
     Surface(
         Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+        color = Theme.Panel,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // 卡片头：绘制图标（避免字体缺字）+ 标题 + 一句话说明
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(shape = RoundedCornerShape(10.dp), color = Theme.Accent.copy(alpha = 0.14f)) {
+                Surface(shape = RoundedCornerShape(10.dp), color = Theme.Selected) {
                     Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { DropInIcon() }
                 }
                 Column {
@@ -119,8 +120,8 @@ private fun HcLogDecryptCard(store: AppStore) {
             }
 
             // 拖入区：运行中显示进度，否则显示拖放提示 + 文件选择
-            val zoneColor = if (dragHover.value) Theme.Accent.copy(alpha = 0.07f) else Color.Transparent
-            val borderColor = if (dragHover.value) Theme.Accent else MaterialTheme.colorScheme.outlineVariant
+            val zoneColor = if (dragHover.value) Theme.Selected else Color.Transparent
+            val borderColor = if (dragHover.value) Theme.Focus else MaterialTheme.colorScheme.outlineVariant
             Column(
                 Modifier.fillMaxWidth()
                     .height(120.dp)
@@ -193,7 +194,7 @@ private fun HcLogDecryptCard(store: AppStore) {
                     }
                     Text(shortenHome(r.inputPath), style = ui.typography.caption, color = Theme.Muted)
                     if (r.tail.isNotEmpty()) {
-                        Surface(shape = RoundedCornerShape(8.dp), color = Theme.CodeBg, tonalElevation = 1.dp) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = Theme.CodeBlock, tonalElevation = 1.dp) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 r.tail.forEach { line ->
                                     Text(

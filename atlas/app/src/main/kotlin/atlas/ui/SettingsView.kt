@@ -47,7 +47,6 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
     var sourceQuestionPaths by remember { mutableStateOf(store.settings.sourceQuestionPaths.joinToString("\n")) }
     var fontScale by remember { mutableStateOf(store.settings.fontScale) }
     var clickAnswerToEdit by remember { mutableStateOf(store.settings.clickAnswerToEdit) }
-    var markdownStyle by remember { mutableStateOf(store.settings.markdownStyle) }
     var showParams by remember { mutableStateOf(false) }
 
     Column(
@@ -57,7 +56,7 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
         Column(Modifier.fillMaxWidth().widthIn(max = 900.dp), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
             Text("设置", style = ui.typography.pageTitle)
 
-            // 外观与阅读：主题、字号、Markdown 样式、答案点击行为
+            // 外观与阅读：主题、字号、答案点击行为
             SettingsCard("外观与阅读") {
                 Text("配色主题", fontWeight = FontWeight.SemiBold)
                 SettingsEntryRow(
@@ -92,17 +91,6 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
                     Text("${(fontScale * 100).roundToInt()}%", Modifier.width(48.dp), color = Theme.Accent)
                 }
                 Text("调整应用内所有文字大小，范围 80%–140%。", fontSize = 11.sp, color = Theme.Muted)
-
-                Text("Markdown 展示", fontWeight = FontWeight.SemiBold)
-                ChipSelector(
-                    options = listOf("reader" to "阅读优化", "classic" to "经典样式"),
-                    selected = markdownStyle,
-                ) { value, _ ->
-                    markdownStyle = value
-                    store.settings = store.settings.copy(markdownStyle = value)
-                    store.saveSettings()
-                }
-                Text("阅读优化强调层级、留白和代码可读性；经典样式保留旧版 Markdown 外观。", fontSize = 11.sp, color = Theme.Muted)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
@@ -323,7 +311,7 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
         shadowElevation = 0.dp,
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = ui.typography.sectionTitle, color = Theme.Accent)
+            Text(title, style = ui.typography.sectionTitle, color = Theme.MdH2)
             content()
         }
     }
@@ -343,7 +331,7 @@ private fun ChipSelector(
                 label,
                 Modifier
                     .clickable { if (!active) onSelect(value, label) }
-                    .background(if (active) Theme.Accent.copy(alpha = 0.18f) else Color.Transparent, MaterialTheme.shapes.small)
+                    .background(if (active) Theme.Selected else Color.Transparent, MaterialTheme.shapes.small)
                     .padding(horizontal = 12.dp, vertical = 5.dp),
                 fontSize = 13.sp,
                 color = if (active) Theme.Accent else Theme.Muted,
@@ -368,7 +356,12 @@ internal fun ThemeSwatch(
         modifier
             .width(150.dp)
             .clip(MaterialTheme.shapes.small)
-            .background(if (active) Theme.Accent.copy(alpha = 0.16f) else Color.Transparent)
+            .background(if (active) Theme.Selected else Color.Transparent)
+            .border(
+                1.dp,
+                if (active) Theme.Accent else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                MaterialTheme.shapes.small,
+            )
             .clickable(onClick = onClick)
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -378,7 +371,7 @@ internal fun ThemeSwatch(
             Box(Modifier.weight(1f).fillMaxHeight().background(spec.surface))
         }
         Row(Modifier.fillMaxWidth().height(10.dp).clip(MaterialTheme.shapes.small)) {
-            listOf(spec.accent, spec.okGreen, spec.warnOrange, spec.badRed, spec.inlineCodeFg)
+            listOf(spec.mdH1, spec.mdH2, spec.mdLink, spec.okGreen, spec.mdInlineCode)
                 .forEach { c -> Box(Modifier.weight(1f).fillMaxHeight().background(c)) }
         }
         Text(
@@ -392,10 +385,7 @@ internal fun ThemeSwatch(
     }
 }
 
-/**
- * 自定义主题编辑弹窗：12 个语义色逐项改 hex，实时写回 settings。
- * 只允许编辑「我的主题」；内置主题不可改，要改就先复制一份。
- */
+/** 自定义主题编辑器：浅色、深色分别编辑，完整 V2 记录始终原子写回。 */
 @Composable
 internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -> Unit) {
     val custom = store.settings.customThemes.mapNotNull { CustomTheme.decode(it) }
@@ -404,12 +394,13 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
         onDismiss()
         return
     }
-    var spec by remember(target.name) { mutableStateOf(target.spec) }
+    var draft by remember(target.name) { mutableStateOf(target) }
+    var editingDark by remember(target.name) { mutableStateOf(store.settings.darkTheme) }
     val ui = atlasUiTokens()
-    // `editing` 优先于 spec：它承载尚未解析完成的输入中间态
-    var editing by remember(target.name) { mutableStateOf<List<String>?>(null) }
-    var problem by remember(target.name) { mutableStateOf<String?>(null) }
+    var editing by remember(target.name, editingDark) { mutableStateOf<List<String>?>(null) }
+    var problem by remember(target.name, editingDark) { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<Int?>(null) }
+    val spec = draft.spec(editingDark)
     val hexes = editing ?: spec.hexList()
 
     fun put(index: Int, raw: String) {
@@ -421,9 +412,9 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
             problem = "${ThemeSpec.LABELS[bad.index]}：色值格式不对（需 #RRGGBB 或 #AARRGGBB）"
             return
         }
-        val blankBase = (0 until ThemeSpec.BASE).firstOrNull { next[it].isBlank() }
-        if (blankBase != null) {
-            problem = "${ThemeSpec.LABELS[blankBase]} 是必填项，不能留空"
+        val blank = next.indexOfFirst { it.isBlank() }
+        if (blank >= 0) {
+            problem = "${ThemeSpec.LABELS[blank]} 是必填项，不能留空"
             return
         }
         val parsed = ThemeSpec.fromHexList(next)
@@ -432,10 +423,10 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
             return
         }
         problem = null
-        spec = parsed
+        draft = if (editingDark) draft.copy(dark = parsed) else draft.copy(light = parsed)
         store.settings = store.settings.copy(
             customThemes = store.settings.customThemes.map { raw2 ->
-                if (CustomTheme.nameOf(raw2) == target.name) CustomTheme(target.name, parsed).encode() else raw2
+                if (CustomTheme.nameOf(raw2) == target.name) draft.encode() else raw2
             },
         )
         store.saveSettings()
@@ -444,8 +435,29 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
     Dialog(onDismissRequest = onDismiss) {
         Surface(Modifier.width(520.dp), shape = MaterialTheme.shapes.medium, color = Theme.Elevated) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("编辑主题 · ${target.name}", style = ui.typography.sectionTitle, color = Theme.Accent)
-                Text("留空 = 跟随内置默认；改动立即生效并保存。", fontSize = 11.sp, color = Theme.Muted)
+                Text("编辑主题 · ${target.name}", style = ui.typography.sectionTitle, color = Theme.MdH1)
+                Text("浅色与深色独立保存；改动立即生效。", fontSize = 11.sp, color = Theme.Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(false to "浅色", true to "深色").forEach { (dark, label) ->
+                        val active = editingDark == dark
+                        Text(
+                            label,
+                            Modifier
+                                .clickable {
+                                    editingDark = dark
+                                    editing = null
+                                    problem = null
+                                }
+                                .background(
+                                    if (active) Theme.Selected else Color.Transparent,
+                                    MaterialTheme.shapes.small,
+                                )
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            color = if (active) Theme.Accent else Theme.Muted,
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
                 var group by remember { mutableStateOf(0) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("界面配色" to 0, "Markdown 配色" to 1).forEach { (label, idx) ->
@@ -454,7 +466,7 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
                             Modifier
                                 .clickable { group = idx }
                                 .background(
-                                    if (group == idx) Theme.Accent.copy(alpha = 0.16f) else Color.Transparent,
+                                    if (group == idx) Theme.Selected else Color.Transparent,
                                     MaterialTheme.shapes.small,
                                 )
                                 .padding(horizontal = 12.dp, vertical = 5.dp),
@@ -464,8 +476,8 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
                     }
                 }
                 Text(
-                    if (group == 0) "改动立即生效并保存。"
-                    else "留空则按主题基色推导：标题/加粗/链接=强调色，引用=次要文字，行内代码=行内代码色。",
+                    if (group == 0) "三级表面与状态色按用途命名。"
+                    else "标题、链接、引用与代码分别使用独立语义色。",
                     fontSize = 11.sp, color = Theme.Muted,
                 )
                 if (problem != null) {
@@ -498,7 +510,6 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
                                 value = hexes[i],
                                 onValueChange = { put(i, it) },
                                 singleLine = true,
-                                placeholder = { Text("默认", fontSize = 12.sp, color = Theme.Muted) },
                                 modifier = Modifier.width(132.dp),
                             )
                         }
@@ -510,7 +521,7 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
                             customThemes = store.settings.customThemes.filterNot {
                                 CustomTheme.nameOf(it) == target.name
                             },
-                            themeName = if (store.settings.themeName == target.name) "" else store.settings.themeName,
+                            themeName = if (store.settings.themeName == target.name) AtlasThemes.NAME else store.settings.themeName,
                         )
                         store.saveSettings()
                         Log.i("删除自定义主题 → ${target.name}")
@@ -523,9 +534,7 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
         }
     }
     picking?.let { idx ->
-        val here = parseHexColor(hexes[idx]) ?: spec.hexListOfMd().getOrNull(idx - ThemeSpec.BASE)
-            ?.let(::parseHexColor)
-            ?: Color.White
+        val here = parseHexColor(hexes[idx]) ?: spec.hexList().getOrNull(idx)?.let(::parseHexColor) ?: Color.White
         ColorPickerDialog(
             title = "${ThemeSpec.LABELS[idx]} · ${target.name}",
             initial = here,
@@ -539,13 +548,14 @@ internal fun ThemeEditDialog(store: AppStore, themeName: String, onDismiss: () -
     }
 }
 
-/** 新建自定义主题：命名 + 选母版，命名唯一且永久保留。 */
+internal fun createCustomTheme(name: String): CustomTheme =
+    CustomTheme(name.trim(), AtlasThemes.ATLAS.light, AtlasThemes.ATLAS.dark)
+
+/** 新建自定义主题：固定复制 Atlas 的完整浅深双模式。 */
 @Composable
 internal fun CreateThemeDialog(store: AppStore, onCreated: (String) -> Unit, onDismiss: () -> Unit) {
-    val dark = store.settings.darkTheme
     val existing = store.settings.customThemes.mapNotNull { CustomTheme.decode(it) }.map { it.name }.toSet()
     var name by remember { mutableStateOf("") }
-    var base by remember { mutableStateOf(store.settings.themeName.ifBlank { AtlasThemes.DEFAULT.name }) }
     val trimmed = name.trim()
     val dup = trimmed.isNotEmpty() && trimmed in existing
     val valid = trimmed.isNotEmpty() && !dup
@@ -563,31 +573,10 @@ internal fun CreateThemeDialog(store: AppStore, onCreated: (String) -> Unit, onD
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (dup) Text("已有同名主题，换个名字", fontSize = 11.sp, color = Theme.BadRed)
-                Text("基于哪套配色", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Column(Modifier.height(180.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (AtlasThemes.ALL.map { it.name } + existing).distinct().forEach { n ->
-                        val spec = if (n in AtlasThemes.ALL.map { it.name }) {
-                            AtlasThemes.specOf(n, dark)
-                        } else {
-                            CustomTheme.decode(
-                                store.settings.customThemes.first { CustomTheme.nameOf(it) == n },
-                            )?.spec ?: return@forEach
-                        }
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .background(if (n == base) Theme.Accent.copy(alpha = 0.14f) else Color.Transparent,
-                                    MaterialTheme.shapes.small)
-                                .clickable { base = n }
-                                .padding(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(Modifier.size(16.dp).background(spec.accent, RoundedCornerShape(4.dp))
-                                .border(1.dp, Theme.Muted.copy(alpha = 0.4f), RoundedCornerShape(4.dp)))
-                            Spacer(Modifier.width(8.dp))
-                            Text(n, fontSize = 13.sp, color = if (n == base) Theme.Accent else Theme.Muted)
-                        }
-                    }
+                Text("将复制 Atlas 的浅色与深色配色，创建后可分别编辑。", fontSize = 12.sp, color = Theme.Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeSwatch("Atlas", "浅色", AtlasThemes.ATLAS.light, false, {}, Modifier.weight(1f))
+                    ThemeSwatch("Atlas", "深色", AtlasThemes.ATLAS.dark, false, {}, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spacer(Modifier.weight(1f))
@@ -595,19 +584,13 @@ internal fun CreateThemeDialog(store: AppStore, onCreated: (String) -> Unit, onD
                     Button(
                         enabled = valid,
                         onClick = {
-                            val spec = if (base in AtlasThemes.ALL.map { it.name }) {
-                                AtlasThemes.specOf(base, dark)
-                            } else {
-                                CustomTheme.decode(
-                                    store.settings.customThemes.first { CustomTheme.nameOf(it) == base },
-                                )?.spec ?: return@Button
-                            }
+                            val theme = createCustomTheme(trimmed)
                             store.settings = store.settings.copy(
-                                customThemes = store.settings.customThemes + CustomTheme(trimmed, spec).encode(),
+                                customThemes = store.settings.customThemes + theme.encode(),
                                 themeName = trimmed,
                             )
                             store.saveSettings()
-                            Log.i("新建自定义主题 → $trimmed（母版 $base）")
+                            Log.i("基于 Atlas 新建自定义主题 → $trimmed")
                             onCreated(trimmed)
                             onDismiss()
                         },
@@ -634,7 +617,7 @@ internal fun DeleteThemeDialog(store: AppStore, name: String, onDismiss: () -> U
                             customThemes = store.settings.customThemes.filterNot {
                                 CustomTheme.nameOf(it) == name
                             },
-                            themeName = if (store.settings.themeName == name) "" else store.settings.themeName,
+                            themeName = if (store.settings.themeName == name) AtlasThemes.NAME else store.settings.themeName,
                         )
                         store.saveSettings()
                         Log.i("删除自定义主题 → $name")

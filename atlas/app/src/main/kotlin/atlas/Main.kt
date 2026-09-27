@@ -16,7 +16,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,10 +89,10 @@ fun main() {
             undecorated = true,
         ) {
             AtlasTheme(
-            dark = store.settings.darkTheme,
-            fontScale = store.settings.fontScale,
-            spec = resolveTheme(store.settings),
-        ) {
+                dark = store.settings.darkTheme,
+                fontScale = store.settings.fontScale,
+                spec = resolveTheme(store.settings),
+            ) {
                 AppRoot(store, windowState) { exitApplication() }
             }
         }
@@ -149,6 +148,12 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     val ui = atlasUiTokens()
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
+        // 必须在 boot() 读取持久化设置之后迁移主题；启动前迁移会把已有设置覆盖成默认值。
+        migrateThemeSettings(store.settings).takeIf { it != store.settings }?.let { migrated ->
+            store.settings = migrated
+            store.saveSettings()
+            Log.i("主题设置已迁移到双模式 V2")
+        }
     }
     var tab by remember { mutableStateOf("工作台") }
     var learnSection by remember { mutableStateOf("复习") }
@@ -170,7 +175,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
             Row(
                 Modifier.fillMaxWidth()
                     .appTitleBarDrag(windowState)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                    .background(Theme.Panel)
                     .padding(horizontal = ui.spacing.page, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -199,7 +204,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         Row(
             Modifier.fillMaxWidth()
                 .appTitleBarDrag(windowState)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                .background(Theme.Panel)
                 .padding(horizontal = ui.spacing.page, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -250,7 +255,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         // 状态栏
         Row(
             Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                .background(Theme.Panel)
                 .padding(horizontal = ui.spacing.page, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -289,8 +294,8 @@ private fun NavTab(label: String, active: Boolean, onClick: () -> Unit, badge: (
             .clickable(interactionSource = interaction, indication = null) { onClick() }
             .background(
                 when {
-                    active -> Theme.Accent.copy(alpha = 0.16f)
-                    hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                    active -> Theme.Selected
+                    hovered -> Theme.Hover
                     else -> Color.Transparent
                 },
                 RoundedCornerShape(8.dp),
@@ -339,6 +344,8 @@ fun CommandPalette(store: AppStore, onDismiss: () -> Unit) {
                     } else false
                 },
             shape = MaterialTheme.shapes.medium,
+            color = Theme.Panel,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
             tonalElevation = 8.dp,
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -355,10 +362,10 @@ fun CommandPalette(store: AppStore, onDismiss: () -> Unit) {
                                     Log.i("命令面板点击打开 → ${h.path}##${h.section}")
                                     store.requestPreview(h.path); onDismiss()
                                 }
-                                .background(if (i == idx) Theme.Accent.copy(alpha = 0.12f) else Color.Transparent)
+                                .background(if (i == idx) Theme.Selected else Color.Transparent)
                                 .padding(6.dp),
                         ) {
-                            Text("${h.path}  ##${h.section}", fontSize = 11.sp, color = Theme.Accent, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Text("${h.path}  ##${h.section}", fontSize = 11.sp, color = Theme.Info, fontFamily = FontFamily.Monospace, maxLines = 1)
                             Text(h.snippet, fontSize = 12.sp, maxLines = 2)
                         }
                     }
@@ -419,18 +426,27 @@ fun SetupView(store: AppStore) {
     }
 }
 
-/** 主题名 → [ThemeSpec]：先查用户自建主题，再查内置；都没有则用当前明暗下的默认主题。 */
+/** 合法旧自定义主题升级为 V2；已删除的内置主题与坏记录安全回落到 Atlas。 */
+internal fun migrateThemeSettings(s: atlas.core.AppSettings): atlas.core.AppSettings {
+    val decoded = s.customThemes.mapNotNull { CustomTheme.decode(it) }
+    val migrated = decoded.map { it.encode() }
+    val customNames = decoded.map { it.name }.toSet()
+    val selected = when {
+        s.themeName in customNames -> s.themeName
+        s.themeName == AtlasThemes.NAME -> AtlasThemes.NAME
+        else -> AtlasThemes.NAME
+    }
+    return s.copy(themeName = selected, customThemes = migrated)
+}
+
+/** 主题名 → [ThemeSpec]：同名自定义优先，否则使用唯一内置 Atlas。 */
 internal fun resolveTheme(s: atlas.core.AppSettings): ThemeSpec {
     val name = s.themeName
     if (name.isNotBlank()) {
-        // 自定义主题优先；同名内置主题其次。两者都没有才回落默认。
         s.customThemes.asSequence()
             .mapNotNull { CustomTheme.decode(it) }
             .firstOrNull { it.name == name }
-            ?.let { return it.spec }
-        if (AtlasThemes.ALL.any { it.name == name }) {
-            return AtlasThemes.specOf(name, s.darkTheme)
-        }
+            ?.let { return it.spec(s.darkTheme) }
     }
-    return AtlasThemes.specOf(AtlasThemes.DEFAULT.name, s.darkTheme)
+    return AtlasThemes.ATLAS.spec(s.darkTheme)
 }

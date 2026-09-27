@@ -699,8 +699,11 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
     // ---------- 文件监听：第三方进程（agent/编辑器）改库后 ≤3s 自动重载 ----------
     fun startWatching() {
         if (!watching.getAndSet(true)) {
+            // 基线必须在启动函数返回前建立。若把首次签名放进协程，调用方可能在协程
+            // 第一次运行前写入文件，这次外部修改会被错误地当成初始状态而永久漏掉。
+            val initialSignature = knowledgeSignature()
             watchJob = scope.launch {
-                var lastSig = knowledgeSignature()
+                var lastSig = initialSignature
                 while (isActive) {
                     delay(3000)
                     try {

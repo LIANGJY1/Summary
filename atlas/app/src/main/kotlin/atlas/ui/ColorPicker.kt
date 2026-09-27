@@ -144,7 +144,7 @@ fun ColorPickerDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(Modifier.width(360.dp), shape = MaterialTheme.shapes.medium, color = Theme.Elevated) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(title, style = ui.typography.sectionTitle, color = Theme.Accent)
+                Text(title, style = ui.typography.sectionTitle, color = Theme.MdH2)
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(

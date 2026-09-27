@@ -97,7 +97,7 @@ import java.awt.datatransfer.StringSelection
 fun LearningView(store: AppStore, section: String, onSectionChange: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(8.dp)) {
-            Text("复习", color = Theme.Accent, fontWeight = FontWeight.Bold)
+            Text("复习", color = Theme.MdH1, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
         }
         VDivider()
@@ -157,7 +157,7 @@ private fun GenerateQuestionSetDialog(
                                 tag,
                                 Modifier
                                     .clickable { sourceTag = tag }
-                                    .background(if (sourceTag == tag) Theme.Accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
+                                    .background(if (sourceTag == tag) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
                                     .padding(horizontal = 8.dp, vertical = 5.dp),
                                 fontSize = 11.sp,
                                 color = if (sourceTag == tag) Theme.Accent else Theme.Muted,
@@ -177,7 +177,7 @@ private fun GenerateQuestionSetDialog(
                     generated.forEachIndexed { index, question ->
                         Column(
                             Modifier.fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), MaterialTheme.shapes.small)
+                                .background(Theme.Panel, MaterialTheme.shapes.small)
                                 .padding(10.dp),
                         ) {
                             Text("${index + 1}. ${question.q}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -236,7 +236,7 @@ private fun LegacyQuestionSection(store: AppStore) {
             tags.forEach { tag ->
                 Text(tag, Modifier
                     .clickable { tagFilter = tag }
-                    .background(if (tagFilter == tag) Theme.Accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
+                    .background(if (tagFilter == tag) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
                     .padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 11.sp,
                     color = if (tagFilter == tag) Theme.Accent else Theme.Muted)
             }
@@ -260,7 +260,7 @@ private fun LegacyQuestionSection(store: AppStore) {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(
-                            if (expanded) Theme.Accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            if (expanded) Theme.Selected else Theme.Panel,
                             MaterialTheme.shapes.small,
                         )
                         .clickable {
@@ -301,19 +301,15 @@ private fun LegacyQuestionSection(store: AppStore) {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.small,
-                                color = Theme.OkGreen.copy(alpha = 0.08f),
+                                color = Theme.Elevated,
                             ) {
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
+                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
                                     Spacer(Modifier.height(4.dp))
                                     CompositionLocalProvider(
-                                        LocalContentColor provides if (store.settings.markdownStyle == "classic") {
-                                            Theme.OkGreen.copy(alpha = 0.92f)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        },
+                                        LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                     ) {
-                                        MarkdownText(q.answer, style = store.settings.markdownStyle)
+                                        MarkdownText(q.answer)
                                     }
                                 }
                             }
@@ -491,7 +487,7 @@ fun QuestionSection(store: AppStore) {
     Row(Modifier.fillMaxSize().padding(ui.spacing.page)) {
         Column(Modifier.width(treeWidth).clipToBounds().fillMaxHeight()) {
             if (sidebarExpanded) {
-                Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.Accent)
+                Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.MdH1)
                 Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
                 if (mappedDocuments.isEmpty()) {
                     Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
@@ -583,7 +579,7 @@ fun QuestionSection(store: AppStore) {
                     scope.label,
                     Modifier
                         .clickable { searchScope = scope }
-                        .background(if (active) Theme.Accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
+                        .background(if (active) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     fontSize = ui.typography.secondary.fontSize,
                     color = if (active) Theme.Accent else Theme.Muted,
@@ -593,7 +589,7 @@ fun QuestionSection(store: AppStore) {
         }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("同源题库", style = ui.typography.sectionTitle, color = Theme.Accent)
+            Text("同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
             Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
             if (query.isBlank()) {
@@ -729,13 +725,13 @@ fun QuestionSection(store: AppStore) {
                     Row(
                         Modifier.animateItem()
                             .fillMaxWidth()
-                            .background(Theme.Accent.copy(alpha = 0.1f), MaterialTheme.shapes.small)
+                            .background(Theme.Selected, MaterialTheme.shapes.small)
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("§", color = Theme.Accent, fontWeight = FontWeight.Bold)
+                        Text("§", color = Theme.MdH2, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
-                        Text(item.heading.title, color = Theme.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(item.heading.title, color = Theme.MdH2, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                     return@items
                 }
@@ -795,11 +791,12 @@ fun QuestionSection(store: AppStore) {
                         .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
                             when {
-                                // 展开态保持主题色底不变；拖拽中不透明浮起（下层文字不透出重影）；悬停仅给收起态叠蒙层
-                                isExpanded -> Theme.Accent.copy(alpha = 0.08f)
-                                isDragging -> MaterialTheme.colorScheme.surfaceVariant
-                                cardHovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                // 展开态保持中性内容面，只用边框和左侧语义标记表达当前焦点；
+                                // 拖拽中不透明浮起（下层文字不透出重影）；悬停仅给收起态叠蒙层。
+                                isExpanded -> Theme.Panel
+                                isDragging -> Theme.Pressed
+                                cardHovered -> Theme.Hover
+                                else -> Theme.Panel
                             },
                             MaterialTheme.shapes.small,
                         )
@@ -807,7 +804,7 @@ fun QuestionSection(store: AppStore) {
                             1.dp,
                             if (isDragging) Theme.Accent
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
-                            else if (isExpanded) Theme.Accent.copy(alpha = 0.42f)
+                            else if (isExpanded) Theme.BorderStrong.copy(alpha = 0.78f)
                             else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.55f)
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
                             MaterialTheme.shapes.small,
@@ -820,7 +817,7 @@ fun QuestionSection(store: AppStore) {
                     ) {
                         if (reorderMode) {
                             Surface(
-                                color = if (isDragging) Theme.Accent.copy(alpha = 0.22f) else Theme.Accent.copy(alpha = 0.10f),
+                                color = if (isDragging) Theme.Pressed else Theme.Selected,
                                 shape = MaterialTheme.shapes.small,
                             ) {
                                 Text(
@@ -897,26 +894,17 @@ fun QuestionSection(store: AppStore) {
                                             if (store.settings.clickAnswerToEdit) editingEntry = entry
                                         },
                                     shape = MaterialTheme.shapes.small,
-                                    color = if (store.settings.markdownStyle == "classic") {
-                                        Theme.OkGreen.copy(alpha = 0.10f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                                    },
+                                    color = Theme.Elevated,
                                 ) {
                                     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                        Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (store.settings.markdownStyle == "classic") Theme.OkGreen else Theme.Accent)
+                                        Text("答案", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
                                         Spacer(Modifier.height(4.dp))
                                         CompositionLocalProvider(
-                                            LocalContentColor provides if (store.settings.markdownStyle == "classic") {
-                                                Theme.OkGreen.copy(alpha = 0.92f)
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface
-                                            },
+                                            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                         ) {
                                             SelectionContainer {
                                                 MarkdownText(
                                                     entry.answer,
-                                                    style = store.settings.markdownStyle,
                                                     dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
                                                 )
                                             }
@@ -1079,8 +1067,8 @@ private fun KnowledgeTreeNodeView(
                 .hoverable(interactionSource)
                 .background(
                     when {
-                        selected -> Theme.Accent.copy(alpha = 0.16f)
-                        hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                        selected -> Theme.Selected
+                        hovered -> Theme.Hover
                         else -> androidx.compose.ui.graphics.Color.Transparent
                     },
                     RoundedCornerShape(7.dp),
@@ -1227,7 +1215,7 @@ private fun CreateSourceQuestionDialog(
                     minLines = 3,
                 )
                 if (question.isNotBlank()) {
-                    Surface(color = Theme.Accent.copy(alpha = 0.08f), shape = MaterialTheme.shapes.small) {
+                    Surface(color = Theme.Selected, shape = MaterialTheme.shapes.small) {
                         Text("将新建题目：${question.trim()}", Modifier.padding(10.dp), color = Theme.Accent)
                     }
                 }
@@ -1374,7 +1362,7 @@ private fun MoveSourceQuestionDialog(
                         Modifier.fillMaxWidth()
                             .clickable { selected = path }
                             .background(
-                                if (selected == path) Theme.Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent,
+                                if (selected == path) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent,
                                 MaterialTheme.shapes.small,
                             )
                             .padding(horizontal = 10.dp, vertical = 8.dp),

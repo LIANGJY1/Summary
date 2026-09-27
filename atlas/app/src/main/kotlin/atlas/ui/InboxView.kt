@@ -38,7 +38,7 @@ fun CandidateList(store: AppStore) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             Modifier.fillMaxWidth()
-                .background(Theme.Accent.copy(alpha = 0.08f), MaterialTheme.shapes.small)
+                .background(Theme.Selected, MaterialTheme.shapes.small)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -60,7 +60,11 @@ fun CandidateList(store: AppStore) {
                     }, fontSize = 11.sp, color = Theme.BadRed)
                 }
             cs.forEach { c ->
-                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), MaterialTheme.shapes.small).padding(10.dp)) {
+                Column(
+                    Modifier.fillMaxWidth()
+                        .background(Theme.Panel, MaterialTheme.shapes.small)
+                        .padding(10.dp),
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatusChip("题目", Theme.Accent)
                         Text(c.file.name, fontSize = 10.sp, color = Theme.Muted, maxLines = 1)

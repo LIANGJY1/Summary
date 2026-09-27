@@ -45,7 +45,7 @@ private fun DailyBars(daily: List<Pair<String, Int>>) {
                 Text(day.substring(5), fontSize = 10.sp, color = Theme.Muted, modifier = Modifier.width(40.dp))
                 Box(
                     Modifier.weight(1f).height(10.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
+                        .background(Theme.InputBg, MaterialTheme.shapes.extraSmall)
                 ) {
                     if (n > 0) {
                         Box(
@@ -62,7 +62,7 @@ private fun DailyBars(daily: List<Pair<String, Int>>) {
 
 @Composable
 fun MetricCard(title: String, value: String, note: String) {
-    Column(Modifier.width(200.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), MaterialTheme.shapes.small).padding(12.dp)) {
+    Column(Modifier.width(200.dp).background(Theme.Panel, MaterialTheme.shapes.small).padding(12.dp)) {
         Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Theme.Accent)
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Text(note, fontSize = 10.sp, color = Theme.Muted)

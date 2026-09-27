@@ -29,14 +29,14 @@ class ThemeContrastTest {
     }
 
     @Test
-    fun `所有主题两版的文字与强调色均达 WCAG AA`() {
+    fun `Atlas 两种模式的文字与交互色均达 WCAG AA`() {
         val fails = mutableListOf<String>()
         fun need(tag: String, label: String, fg: String, bg: String, min: Double) {
             val r = ratio(fg, bg)
             if (r < min) fails += "%s %s %.2f < %.1f".format(tag, label, r, min)
         }
         AtlasThemes.ALL.forEach { e ->
-            listOf(e.spec.lighten() to "浅", e.spec.darken() to "深").forEach { (s, mode) ->
+            listOf(e.light to "浅", e.dark to "深").forEach { (s, mode) ->
                 val t = "${e.name}/$mode"
                 val bg = hexOf(s.background)
                 val sf = hexOf(s.surface)
@@ -46,8 +46,11 @@ class ThemeContrastTest {
                 need(t, "次要/底", hexOf(s.muted), bg, 4.5)
                 need(t, "次要/面", hexOf(s.muted), sf, 4.5)
                 need(t, "强调/底", hexOf(s.accent), bg, 3.0)
-                need(t, "标题/底", hexOf(m.heading), bg, 3.0)
-                need(t, "链接/底", hexOf(m.link), bg, 3.0)
+                need(t, "轮廓/底", hexOf(s.outline), bg, 3.0)
+                need(t, "H1/底", hexOf(m.h1), bg, 3.0)
+                need(t, "H2/底", hexOf(m.h2), bg, 3.0)
+                need(t, "H3/底", hexOf(m.h3), bg, 4.5)
+                need(t, "链接/底", hexOf(m.link), bg, 4.5)
                 need(t, "引用/底", hexOf(m.quote), bg, 4.5)
                 need(t, "行内码/底", hexOf(m.inlineCode), bg, 4.5)
                 need(t, "行内码/面", hexOf(m.inlineCode), sf, 4.5)

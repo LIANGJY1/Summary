@@ -1,6 +1,7 @@
 package atlas.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -43,7 +44,7 @@ fun ReviewSection(store: AppStore) {
     Row(Modifier.fillMaxSize()) {
         Column(
             Modifier.width(248.dp).fillMaxHeight()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                .background(Theme.Panel)
                 .padding(16.dp),
         ) {
             Text("复习卡组", style = ui.typography.sectionTitle)
@@ -56,7 +57,7 @@ fun ReviewSection(store: AppStore) {
                     Row(
                         Modifier.fillMaxWidth()
                             .background(
-                                if (deck == d) Theme.Accent.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent,
+                                if (deck == d) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent,
                                 RoundedCornerShape(10.dp),
                             )
                             .clickable { Log.i("学习页切换卡组 → $d"); store.reviewDeckFilter = d; store.rebuildDueQueue() }
@@ -106,7 +107,8 @@ fun ReviewSection(store: AppStore) {
                 Spacer(Modifier.height(18.dp))
                 Column(
                     Modifier.weight(1f).fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(18.dp))
+                        .background(Theme.Elevated, RoundedCornerShape(18.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
                         .padding(horizontal = 30.dp, vertical = 26.dp)
                         .onPreviewKeyEvent { e ->
                             if (e.type == KeyEventType.KeyUp) {
@@ -123,16 +125,16 @@ fun ReviewSection(store: AppStore) {
                         .focusable()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    Text("问题", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.Accent)
+                        Text("问题", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
                     Spacer(Modifier.height(10.dp))
                     Text(card.front, fontSize = 25.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp)
                     if (store.showingBack) {
                         Spacer(Modifier.height(22.dp))
                         VDivider()
                         Spacer(Modifier.height(20.dp))
-                        Text("参考答案", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.Accent)
+                        Text("参考答案", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Theme.MdH2)
                         Spacer(Modifier.height(8.dp))
-                        MarkdownText(card.back, style = store.settings.markdownStyle)
+                        MarkdownText(card.back)
                     } else {
                         Spacer(Modifier.height(22.dp))
                         Text(answerPromptLabel(), fontSize = 13.sp, color = Theme.Muted)
@@ -176,9 +178,9 @@ private fun SourceRow(store: AppStore, card: CardEntry) {
     val relPath = card.source.substringBefore("##").trim()
     val jumpable = relPath.isNotBlank() && store.notes.any { it.relPath == relPath }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("来源：${card.source}", fontSize = 11.sp, color = Theme.Accent, maxLines = 1)
+        Text("来源：${card.source}", fontSize = 11.sp, color = Theme.MdLink, maxLines = 1)
         if (jumpable) {
-            Text("跳回原文", Modifier.clickable { store.requestPreview(relPath) }, fontSize = 11.sp, color = Theme.Accent, fontWeight = FontWeight.Bold)
+            Text("跳回原文", Modifier.clickable { store.requestPreview(relPath) }, fontSize = 11.sp, color = Theme.MdLink, fontWeight = FontWeight.Bold)
         }
     }
 }

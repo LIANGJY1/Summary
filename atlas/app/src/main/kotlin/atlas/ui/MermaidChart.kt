@@ -200,7 +200,7 @@ fun MermaidFlowchartView(lines: List<String>, modifier: Modifier = Modifier) {
     val nodeTextColor = MaterialTheme.colorScheme.onSurface
     val edgeLabelColor = Theme.Muted
     val lineColor = MaterialTheme.colorScheme.outlineVariant
-    val nodeFill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val nodeFill = Theme.Panel
     val chipColor = Theme.CodeBg
 
     Box(modifier.fillMaxWidth().clipToBounds().horizontalScroll(rememberScrollState())) {

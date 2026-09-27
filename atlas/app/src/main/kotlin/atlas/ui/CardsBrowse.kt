@@ -41,14 +41,14 @@ fun CardsBrowseDialog(store: AppStore, onDismiss: () -> Unit) {
                     decks.forEach { d ->
                         Text(d, Modifier
                             .clickable { deck = d }
-                            .background(if (deck == d) Theme.Accent.copy(alpha = 0.18f) else Color.Transparent, MaterialTheme.shapes.small)
+                            .background(if (deck == d) Theme.Selected else Color.Transparent, MaterialTheme.shapes.small)
                             .padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 12.sp,
                             color = if (deck == d) Theme.Accent else Theme.Muted)
                     }
                 }
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(list, key = { it.id }) { c ->
-                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), MaterialTheme.shapes.small).padding(8.dp)) {
+                        Column(Modifier.fillMaxWidth().background(Theme.Panel, MaterialTheme.shapes.small).padding(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(c.front, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 2)
                                 if (c.suspended) StatusChip("已暂停", Theme.WarnOrange)

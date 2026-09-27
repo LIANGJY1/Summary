@@ -46,7 +46,10 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = { Log.d("预览浮层关闭 $relPath"); onDismiss() }) {
         Surface(
             Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f),
-            shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp,
+            shape = MaterialTheme.shapes.medium,
+            color = Theme.Panel,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
+            tonalElevation = 8.dp,
         ) {
             Column(Modifier.padding(ui.spacing.page), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -67,12 +70,12 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
                 if (note?.marker == DocMarker.RETROSPECTIVE || note?.marker == DocMarker.PROJECT_EXPERIENCE) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         StatusChip(if (note.marker == DocMarker.RETROSPECTIVE) "复盘" else "项目经验", Theme.OkGreen)
-                        Text("让 AI 通读并提议题目", Modifier.clickable { store.proposeFromRetro(note, asCards = true) }, fontSize = 12.sp, color = Theme.Accent)
+                        Text("让 AI 通读并提议题目", Modifier.clickable { store.proposeFromRetro(note, asCards = true) }, fontSize = 12.sp, color = Theme.MdLink)
                     }
                 }
                 VDivider()
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                    MarkdownText(text, style = store.settings.markdownStyle)
+                    MarkdownText(text)
                 }
             }
         }

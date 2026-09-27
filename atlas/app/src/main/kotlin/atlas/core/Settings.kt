@@ -2,6 +2,9 @@ package atlas.core
 
 import java.io.File
 
+/** 首次启动且尚未保存过路径时使用的默认知识库。 */
+const val DEFAULT_LIBRARY_PATH = "/home/liang/Project/MyProject/Summary/knowledge-base"
+
 /**
  * 三档隐私边界（PRD FR-A1）：
  *  - IGNORED：完全忽略（.git/node_modules/构建产物/app 协作目录等）
@@ -41,7 +44,7 @@ class IgnoreRules(
 }
 
 data class AppSettings(
-    val libraryPath: String = "",
+    val libraryPath: String = DEFAULT_LIBRARY_PATH,
     /** 支持解析为题目的源文档；路径以知识库根目录为基准，目录规则以 / 结尾。 */
     val sourceQuestionPaths: List<String> = SourceQuestions.DEFAULT_SUPPORTED_PATHS,
     val ignoredExtra: List<String> = emptyList(),
@@ -50,13 +53,11 @@ data class AppSettings(
     val theme: String = "light", // light | dark
     /** 主题名：内置名（见 ui.AtlasThemes）或 customThemes 里的自定义主题名。 */
     val themeName: String = "",
-    /** 用户自建主题，逐条 `名称|h1|…|h12`，多条之间用 `;` 分隔。 */
+    /** 用户自建主题，逐条 `v2|名称|浅色20项|深色20项`，多条之间用 `;` 分隔。 */
     val customThemes: List<String> = emptyList(),
     val fontScale: Float = 1f,
     /** 题库答案区域单击时是否打开编辑弹窗；关闭后仍可划词，编辑按钮不受影响。 */
     val clickAnswerToEdit: Boolean = true,
-    /** Markdown 内容展示样式：reader 为阅读优化样式，classic 为旧版样式。 */
-    val markdownStyle: String = "reader",
     /** 屏幕录制（tools/screen_recorder）参数：保存目录（空=默认 ~/Videos/Screencasts）、帧率、码率 kbps。 */
     val recordingSaveDir: String = "",
     val recordingFps: Int = 15,
@@ -81,7 +82,8 @@ class SettingsStore(private val file: File) {
         file.inputStream().use { p.load(it.reader(Charsets.UTF_8)) }
         fun list(k: String) = (p.getProperty(k) ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val s = AppSettings(
-            libraryPath = p.getProperty("libraryPath") ?: "",
+            // 旧版本可能已经写入空路径；空路径不应让用户每次重新选择知识库。
+            libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { DEFAULT_LIBRARY_PATH },
             sourceQuestionPaths = list("sourceQuestionPaths").ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS },
             ignoredExtra = list("ignoredExtra"),
             localOnlyExtra = list("localOnlyExtra"),
@@ -92,7 +94,6 @@ class SettingsStore(private val file: File) {
                 .map { it.trim() }.filter { it.isNotEmpty() },
             fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
             clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
-            markdownStyle = p.getProperty("markdownStyle")?.takeIf { it == "reader" || it == "classic" } ?: "reader",
             recordingSaveDir = p.getProperty("recordingSaveDir") ?: "",
             recordingFps = p.getProperty("recordingFps")?.toIntOrNull()?.coerceIn(5, 60) ?: 15,
             recordingBitrate = p.getProperty("recordingBitrate")?.toIntOrNull()?.coerceIn(500, 20000) ?: 4000,
@@ -115,7 +116,6 @@ class SettingsStore(private val file: File) {
         p.setProperty("customThemes", s.customThemes.joinToString(";"))
         p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
         p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
-        p.setProperty("markdownStyle", if (s.markdownStyle == "classic") "classic" else "reader")
         p.setProperty("recordingSaveDir", s.recordingSaveDir)
         p.setProperty("recordingFps", s.recordingFps.toString())
         p.setProperty("recordingBitrate", s.recordingBitrate.toString())
