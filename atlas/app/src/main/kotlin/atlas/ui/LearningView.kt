@@ -858,11 +858,16 @@ fun QuestionSection(store: AppStore) {
                                 QuestionStatusMark(entry.status)
                             }
                             Spacer(Modifier.height(4.dp))
-                            SelectionContainer {
-                                Text(
-                                    remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                    style = ui.typography.itemTitle,
-                                )
+                            // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
+                            // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
+                            // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）
+                            key(entryKey, entry.question) {
+                                SelectionContainer {
+                                    Text(
+                                        remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
+                                        style = ui.typography.itemTitle,
+                                    )
+                                }
                             }
                             if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
                                 Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
@@ -913,11 +918,14 @@ fun QuestionSection(store: AppStore) {
                                         CompositionLocalProvider(
                                             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                         ) {
-                                            SelectionContainer {
-                                                MarkdownText(
-                                                    entry.answer,
-                                                    dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
-                                                )
+                                            // 同题面：内容变化时重建选区容器，避免旧选区越界崩溃
+                                            key(entryKey, entry.answer) {
+                                                SelectionContainer {
+                                                    MarkdownText(
+                                                        entry.answer,
+                                                        dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
+                                                    )
+                                                }
                                             }
                                         }
                                     }

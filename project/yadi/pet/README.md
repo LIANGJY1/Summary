@@ -19,9 +19,9 @@
 
 ## 当前状态（2026-09-20）
 
-- SRS_001~006、008~012 已编码；SRS_007 已定稿并编码（72h、上层计时，2026-09-21 修订为不依赖 MCU 信号：冷启/SCREEN_ON 直接判定；场景表 93 行含其 8 行，另有 PetIdleClock 域测试 9 例），剩新版入口启用与真机联调（见 [SRS_007 条目](./entries/SRS_007.md)）。阶段 7 的生日、天气、节日链路已落代码。
-- 双版本入口开关（D003）：`Myapplication.USE_NEW_PET_SERVICE=false`，当前默认仍运行展车版；新版代码编译通过不等于已在车机启用。`LauncherLib` 是已注册的 Android Library Gradle 模块（`com.android.library`），不是 Java Library 或普通目录；它交付 AAR，不包含 Launcher 进程内的业务实现。模块构建与交付见代码仓库的 `component/LauncherLib/README.md`。
-- 待办：推荐方接口联签、天气与 Kanzi 真机联调、节日正式音效资源替换；新版入口启用需按 D003 单独安排。电量信号已接入（`ENERGY_DISPSOC` 显示电量，口径见 SRS_008）。
+- SRS_001~006、008~012 已编码；SRS_007 已定稿并编码（72h、上层计时，2026-09-21 修订为不依赖 MCU 信号：冷启/SCREEN_ON 直接判定；场景表 93 行含其 8 行，另有 PetIdleClock 域测试 9 例），剩真机联调（见 [SRS_007 条目](./entries/SRS_007.md)）。阶段 7 的生日、天气、节日链路已落代码。
+- **2026-09-28 正式切换（D003 收口）**：`USE_NEW_PET_SERVICE` 开关与双版分支已全部移除，展车版 `control/pet` 已删除（D001），main 唯一萌宠实现＝新版 `pet/`。`LauncherLib` 是已注册的 Android Library Gradle 模块（`com.android.library`），交付 AAR，不包含 Launcher 进程内的业务实现；模块构建与交付见代码仓库的 `component/LauncherLib/README.md`。
+- 待办：推荐方接口联签、天气与 Kanzi 真机联调、节日正式音效资源替换。电量信号已接入（`ENERGY_DISPSOC` 显示电量，口径见 SRS_008）。
 - 悬置项一览：01 §6（跨条目）＋各条目档案"开放点"（目录见 03）。
 
 ## 维护规则（4 条）

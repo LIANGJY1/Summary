@@ -68,7 +68,7 @@
     },
     {
       "name": "萌宠服务QA",
-      "content": "1. 开机动画大概多长时间，开机动画之后会给回调0。"
+      "content": "1. 开机动画大概多长时间，开机动画之后会给回调0。\n\nadb shell am broadcast -a com.yadea.petipctest.SEND --ei event 14 -p com.yadea.petipctest -f 0x20"
     }
   ],
   "_schedules": [
