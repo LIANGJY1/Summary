@@ -61,7 +61,7 @@ fun SettingsView(store: AppStore, onOpenColors: () -> Unit = {}) {
             Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(ui.spacing.page),
             verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
         ) {
-            Column(Modifier.fillMaxWidth().widthIn(max = 980.dp).align(Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Column(Modifier.widthIn(max = 980.dp).fillMaxWidth().align(Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 Text("设置中心", fontSize = 12.sp, color = Theme.Accent, fontWeight = FontWeight.SemiBold)
                 Text(destination.title, style = ui.typography.pageTitle)
                 Text(destination.description, fontSize = 13.sp, color = Theme.Muted)

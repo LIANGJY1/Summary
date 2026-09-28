@@ -48,7 +48,7 @@ fun ColorSettingsPage(store: AppStore, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
     ) {
         Column(
-            Modifier.fillMaxWidth().widthIn(max = 980.dp),
+            Modifier.widthIn(max = 980.dp).fillMaxWidth().align(Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

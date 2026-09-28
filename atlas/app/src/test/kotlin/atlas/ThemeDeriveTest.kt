@@ -13,10 +13,10 @@ class ThemeDeriveTest {
     @Test
     fun `内置主题只有 Atlas 且两套色板为人工定值`() {
         assertEquals(listOf("Atlas"), AtlasThemes.ALL.map { it.name })
-        assertEquals("#FF1B1B1C", hexOf(AtlasThemes.ATLAS.dark.background))
-        assertEquals("#FFF3F3F1", hexOf(AtlasThemes.ATLAS.light.background))
-        assertEquals("#FFC8CDD4", hexOf(AtlasThemes.ATLAS.dark.md().h1))
-        assertEquals("#FF536477", hexOf(AtlasThemes.ATLAS.light.md().h2))
+        assertEquals("#FF1E2126", hexOf(AtlasThemes.ATLAS.dark.background))
+        assertEquals("#FFF2F3F1", hexOf(AtlasThemes.ATLAS.light.background))
+        assertEquals("#FFE9EDF2", hexOf(AtlasThemes.ATLAS.dark.md().h1))
+        assertEquals("#FF3E5B7F", hexOf(AtlasThemes.ATLAS.light.md().h2))
         assertNotEquals(AtlasThemes.ATLAS.light.hexList(), AtlasThemes.ATLAS.dark.hexList())
     }
 

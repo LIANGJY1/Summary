@@ -92,22 +92,22 @@ data class AtlasUiTokens(
     companion object {
         fun forTheme(dark: Boolean): AtlasUiTokens = AtlasUiTokens(
             spacing = AtlasSpacing(
-                page = 16.dp,
-                section = 12.dp,
-                card = 14.dp,
+                page = 20.dp,
+                section = 16.dp,
+                card = 16.dp,
                 item = 8.dp,
                 control = 40.dp,
             ),
             typography = AtlasTypography(
-                pageTitle = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
-                sectionTitle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-                itemTitle = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.SansSerif),
-                body = TextStyle(fontSize = 15.sp, lineHeight = 26.sp, fontFamily = FontFamily.SansSerif, letterSpacing = 0.1.sp),
-                secondary = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, fontFamily = FontFamily.SansSerif),
-                caption = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
+                pageTitle = TextStyle(fontSize = 21.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+                sectionTitle = TextStyle(fontSize = 16.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold),
+                itemTitle = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif),
+                body = TextStyle(fontSize = 14.sp, lineHeight = 23.sp, fontFamily = FontFamily.SansSerif),
+                secondary = TextStyle(fontSize = 13.sp, lineHeight = 19.sp, fontFamily = FontFamily.SansSerif),
+                caption = TextStyle(fontSize = 11.sp, lineHeight = 16.sp),
             ),
-            contentMaxWidth = 1440.dp,
-            readingMaxWidth = 760.dp,
+            contentMaxWidth = 1240.dp,
+            readingMaxWidth = 1280.dp,
         )
     }
 }
@@ -346,7 +346,7 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
                 if (end > 0) {
                     append(s.substring(i + 2, end)); addStyle(
                         SpanStyle(
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             color = Theme.MdBold,
                         ),
                         length - (end - i - 2),
@@ -415,8 +415,8 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
     val lines = md.lines()
     Box(modifier.fillMaxWidth()) {
         Column(
-            Modifier.fillMaxWidth().widthIn(max = ui.readingMaxWidth).align(Alignment.Center),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             var i = 0
             while (i < lines.size) {
@@ -553,10 +553,10 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     MermaidFlowchartView(block)
                     i = j - 1
                 }
-                line.isBlank() -> Spacer(Modifier.height(4.dp))
+                line.isBlank() -> Spacer(Modifier.height(3.dp))
                 else -> Text(
                     colorIfDirty(renderInline(line), i, dirtyLines),
-                    style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.96f)),
+                    style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface),
                 )
             }
                 i++

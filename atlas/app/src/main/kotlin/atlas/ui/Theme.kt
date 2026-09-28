@@ -44,20 +44,20 @@ data class ThemeSpec(
     fun md() = MdSpec(mdH1, mdH2, mdH3, mdBold, mdLink, mdQuote, mdInlineCode, mdInlineCodeBg)
 
     fun elevatedSurface(@Suppress("UNUSED_PARAMETER") dark: Boolean): Color =
-        lerp(surface, surfaceVariant, 0.34f)
+        lerp(surface, surfaceVariant, 0.68f)
 
-    fun inputBg(@Suppress("UNUSED_PARAMETER") dark: Boolean): Color = surfaceVariant
+    fun inputBg(@Suppress("UNUSED_PARAMETER") dark: Boolean): Color = lerp(background, surface, 0.72f)
 
     /** Derived interaction surfaces keep the persisted palette small while making state styling consistent. */
-    fun panelSurface(): Color = lerp(surface, surfaceVariant, 0.20f)
+    fun panelSurface(): Color = lerp(background, surface, 0.65f)
 
-    fun hoverSurface(): Color = lerp(surfaceVariant, accent, 0.025f)
+    fun hoverSurface(): Color = lerp(surfaceVariant, accent, 0.045f)
 
-    fun selectedSurface(): Color = lerp(surfaceVariant, accent, 0.05f)
+    fun selectedSurface(): Color = lerp(surfaceVariant, accent, 0.12f)
 
-    fun pressedSurface(): Color = lerp(surfaceVariant, accent, 0.10f)
+    fun pressedSurface(): Color = lerp(surfaceVariant, accent, 0.18f)
 
-    fun codeBlockSurface(): Color = lerp(codeBg, surfaceVariant, 0.14f)
+    fun codeBlockSurface(): Color = lerp(codeBg, surfaceVariant, 0.18f)
 
     /** Accent is reserved for actions and focus; status colors stay quiet and local to their semantic role. */
     fun infoColor(): Color = mdH2
@@ -119,7 +119,7 @@ data class ThemeSpec(
         }
 
         val LABELS = listOf(
-            "主强调薰衣草", "成功绿", "警告黄", "错误红", "次要文字", "代码块底",
+            "主强调钢蓝", "成功绿", "警告黄", "错误红", "次要文字", "代码块底",
             "页面底色", "内容面", "悬浮与输入面", "正文色", "交互轮廓", "装饰分隔",
             "一级标题", "二级标题", "三级标题", "加粗", "链接", "引用", "行内代码字", "行内代码底",
         )
@@ -182,35 +182,35 @@ data class CustomTheme(
     }
 }
 
-/** 唯一内置主题：Atlas 中性编辑器色板，浅深两版均为人工校准值。 */
+/** 唯一内置主题：中性石墨与柔白纸面，浅深两版均为人工校准值。 */
 object AtlasThemes {
     const val NAME = "Atlas"
 
     val ATLAS = ThemeDefinition(
         name = NAME,
         dark = ThemeSpec(
-            accent = color("#9BAEC8"), okGreen = color("#9BB6A0"),
-            warnOrange = color("#BDA782"), badRed = color("#C18F93"),
-            muted = color("#A0A0A0"), codeBg = color("#1F2022"),
-            background = color("#1B1B1C"), surface = color("#202122"),
-            surfaceVariant = color("#27282A"), onSurface = color("#D0D1D2"),
-            outline = color("#62656A"), outlineVariant = color("#383A3D"),
-            mdH1 = color("#C8CDD4"), mdH2 = color("#B9C1CC"),
-            mdH3 = color("#D0D1D2"), mdBold = color("#E0E1E2"),
-            mdLink = color("#9EBAB4"), mdQuote = color("#AEB2B8"),
-            mdInlineCode = color("#C1C4C8"), mdInlineCodeBg = color("#313336"),
+            accent = color("#9EBCE8"), okGreen = color("#9BC9AE"),
+            warnOrange = color("#D4B486"), badRed = color("#DA9B9E"),
+            muted = color("#A3ADB9"), codeBg = color("#1B2026"),
+            background = color("#1E2126"), surface = color("#252A31"),
+            surfaceVariant = color("#2E353E"), onSurface = color("#DDE2E8"),
+            outline = color("#6B788A"), outlineVariant = color("#373F49"),
+            mdH1 = color("#E9EDF2"), mdH2 = color("#B7C8E0"),
+            mdH3 = color("#DDE2E8"), mdBold = color("#F4F6F8"),
+            mdLink = color("#A9C4E8"), mdQuote = color("#AEB9C7"),
+            mdInlineCode = color("#B7C1CE"), mdInlineCodeBg = color("#2D343C"),
         ),
         light = ThemeSpec(
-            accent = color("#526782"), okGreen = color("#487254"),
-            warnOrange = color("#806538"), badRed = color("#94545B"),
-            muted = color("#66696D"), codeBg = color("#F0F0ED"),
-            background = color("#F3F3F1"), surface = color("#FAFAF8"),
-            surfaceVariant = color("#EAEAE7"), onSurface = color("#303236"),
-            outline = color("#70747A"), outlineVariant = color("#D2D2CE"),
-            mdH1 = color("#46576F"), mdH2 = color("#536477"),
-            mdH3 = color("#303236"), mdBold = color("#25272B"),
-            mdLink = color("#396B66"), mdQuote = color("#626A72"),
-            mdInlineCode = color("#565B61"), mdInlineCodeBg = color("#E9E9E6"),
+            accent = color("#365F91"), okGreen = color("#2F7453"),
+            warnOrange = color("#875A28"), badRed = color("#A4474F"),
+            muted = color("#586270"), codeBg = color("#F2F3F1"),
+            background = color("#F2F3F1"), surface = color("#FCFCFB"),
+            surfaceVariant = color("#E7E9E7"), onSurface = color("#252A31"),
+            outline = color("#6E7A88"), outlineVariant = color("#D5D9D8"),
+            mdH1 = color("#20272F"), mdH2 = color("#3E5B7F"),
+            mdH3 = color("#30373E"), mdBold = color("#171C22"),
+            mdLink = color("#245A88"), mdQuote = color("#505C68"),
+            mdInlineCode = color("#46525E"), mdInlineCodeBg = color("#E8ECEF"),
         ),
     )
 

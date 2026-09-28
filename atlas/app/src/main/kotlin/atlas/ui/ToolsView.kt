@@ -56,7 +56,7 @@ fun ToolsView(store: AppStore) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ui.spacing.page),
         verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
     ) {
-        Column(Modifier.fillMaxWidth().widthIn(max = 900.dp), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
+        Column(Modifier.widthIn(max = 900.dp).fillMaxWidth().align(Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(ui.spacing.section)) {
             Text("工具", style = ui.typography.pageTitle)
             Text("把日常小工具收进 Atlas：拖入文件即可运行，全部本地执行。", style = ui.typography.secondary, color = Theme.Muted)
             HcLogDecryptCard(store)

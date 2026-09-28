@@ -24,35 +24,37 @@ fun TodayView(store: AppStore, onNavigate: (String) -> Unit) {
     val inbox = store.candidates.size
     val actions = workbenchActions(0, untested, retest, inbox)
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ui.spacing.page)
-            .widthIn(max = ui.contentMaxWidth),
-        verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
-    ) {
-        Text("工作台", style = ui.typography.pageTitle)
-        Text("只显示现在需要处理的事项。", style = ui.typography.secondary, color = Theme.Muted)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricTile("待处理", actions.sumOf { it.count }, Theme.Accent, Modifier.weight(1f))
-            MetricTile("待确认", inbox, Theme.WarnOrange, Modifier.weight(1f))
-            MetricTile("题目总数", store.sourceQuestions.size, Theme.MdH2, Modifier.weight(1f))
-        }
-        if (actions.isEmpty()) {
-            AtlasPanel(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("今天没有待处理事项", style = ui.typography.sectionTitle)
-                    Text("新内容或题目进入队列后，会在这里显示下一步动作。", style = ui.typography.secondary, color = Theme.Muted)
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.widthIn(max = ui.contentMaxWidth).fillMaxWidth().fillMaxHeight()
+                .align(Alignment.TopCenter).verticalScroll(rememberScrollState()).padding(ui.spacing.page),
+            verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
+        ) {
+            Text("工作台", style = ui.typography.pageTitle)
+            Text("只显示现在需要处理的事项。", style = ui.typography.secondary, color = Theme.Muted)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("待处理", actions.sumOf { it.count }, Theme.Accent, Modifier.weight(1f))
+                MetricTile("待确认", inbox, Theme.WarnOrange, Modifier.weight(1f))
+                MetricTile("题目总数", store.sourceQuestions.size, Theme.MdH2, Modifier.weight(1f))
+            }
+            if (actions.isEmpty()) {
+                AtlasPanel(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("今天没有待处理事项", style = ui.typography.sectionTitle)
+                        Text("新内容或题目进入队列后，会在这里显示下一步动作。", style = ui.typography.secondary, color = Theme.Muted)
+                    }
+                }
+            } else {
+                Text("下一步", style = ui.typography.sectionTitle)
+                actions.forEach { item ->
+                    WorkbenchRow(item) { onNavigate(item.target) }
                 }
             }
-        } else {
-            Text("下一步", style = ui.typography.sectionTitle)
-            actions.forEach { item ->
-                WorkbenchRow(item) { onNavigate(item.target) }
+            VDivider()
+            if (inbox > 0) {
+                Text("待确认内容", style = ui.typography.sectionTitle)
+                CandidateList(store)
             }
-        }
-        VDivider()
-        if (inbox > 0) {
-            Text("待确认内容", style = ui.typography.sectionTitle)
-            CandidateList(store)
         }
     }
 }

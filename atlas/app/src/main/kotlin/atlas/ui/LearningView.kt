@@ -222,6 +222,13 @@ private fun LegacyQuestionSection(store: AppStore) {
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("搜索题目关键词…") },
             singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Theme.InputBg,
+                unfocusedContainerColor = Theme.InputBg,
+                focusedBorderColor = Theme.Accent.copy(alpha = 0.82f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
+                cursorColor = Theme.Accent,
+            ),
         )
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -299,19 +306,13 @@ private fun LegacyQuestionSection(store: AppStore) {
                         Spacer(Modifier.height(6.dp))
                         // 展开后直接显示答案，不再增加“显示答案”的二次点击。
                         if (q.answer.isNotBlank()) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.small,
-                                color = Theme.Elevated,
-                            ) {
-                                Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                                    Text("答案", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
-                                    Spacer(Modifier.height(4.dp))
-                                    CompositionLocalProvider(
-                                        LocalContentColor provides MaterialTheme.colorScheme.onSurface,
-                                    ) {
-                                        MarkdownText(q.answer)
-                                    }
+                            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                Text("答案", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+                                Spacer(Modifier.height(6.dp))
+                                CompositionLocalProvider(
+                                    LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+                                ) {
+                                    MarkdownText(q.answer)
                                 }
                             }
                         } else {
@@ -393,7 +394,7 @@ fun QuestionSection(store: AppStore) {
     var showMoreActions by remember { mutableStateOf(false) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
     var sidebarExpanded by remember { mutableStateOf(true) }
-    var sidebarWidth by remember { mutableStateOf(280.dp) }
+    var sidebarWidth by remember { mutableStateOf(320.dp) }
     var sidebarDragging by remember { mutableStateOf(false) }
     var reorderMode by remember { mutableStateOf(false) }
     var draggingKey by remember { mutableStateOf<String?>(null) }
@@ -532,7 +533,7 @@ fun QuestionSection(store: AppStore) {
                     ) { change, dragAmount ->
                         change.consume()
                         sidebarWidth = with(sidebarDensity) { sidebarWidth + dragAmount.toDp() }
-                            .coerceIn(180.dp, 520.dp)
+                            .coerceIn(220.dp, 520.dp)
                     }
                 },
         ) {
@@ -562,7 +563,7 @@ fun QuestionSection(store: AppStore) {
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Column(
-                Modifier.fillMaxSize().widthIn(max = 1440.dp).align(Alignment.Center),
+                Modifier.widthIn(max = ui.contentMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
             ) {
         OutlinedTextField(
             value = query,
@@ -570,6 +571,13 @@ fun QuestionSection(store: AppStore) {
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("搜索题目关键词…") },
             singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Theme.InputBg,
+                unfocusedContainerColor = Theme.InputBg,
+                focusedBorderColor = Theme.Accent.copy(alpha = 0.82f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
+                cursorColor = Theme.Accent,
+            ),
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -713,7 +721,7 @@ fun QuestionSection(store: AppStore) {
                     )
                 },
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
             items(documentItems, key = { item ->
@@ -805,12 +813,12 @@ fun QuestionSection(store: AppStore) {
                             if (isExpanded) 1.dp else 1.dp,
                             if (isDragging) Theme.Accent
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
-                            else if (isExpanded) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f)
+                            else if (isExpanded) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
                             else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.36f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f),
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
                             MaterialTheme.shapes.small,
                         )
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -849,11 +857,11 @@ fun QuestionSection(store: AppStore) {
                                 )
                                 QuestionStatusMark(entry.status)
                             }
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
                             SelectionContainer {
                                 Text(
                                     remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                    style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                    style = ui.typography.itemTitle,
                                 )
                             }
                             if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
@@ -884,8 +892,8 @@ fun QuestionSection(store: AppStore) {
                         ) + fadeOut(tween(90)),
                     ) {
                         Column {
-                            Spacer(Modifier.height(10.dp))
                             if (entry.answer.isBlank()) {
+                                Spacer(Modifier.height(10.dp))
                                 Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
                             } else {
                                 Surface(
@@ -895,19 +903,13 @@ fun QuestionSection(store: AppStore) {
                                             if (store.settings.clickAnswerToEdit) editingEntry = entry
                                     },
                                     shape = MaterialTheme.shapes.small,
-                                    color = Theme.Elevated,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)),
+                                    color = Color.Transparent,
                                 ) {
-                                    Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                                    Column(Modifier.padding(top = 14.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                Modifier.width(2.dp).height(14.dp)
-                                                    .background(Theme.MdH2.copy(alpha = 0.8f), RoundedCornerShape(2.dp)),
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("答案", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+                                            Text("答案", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.Muted)
                                         }
-                                        Spacer(Modifier.height(4.dp))
+                                        Spacer(Modifier.height(8.dp))
                                         CompositionLocalProvider(
                                             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                         ) {
@@ -1075,7 +1077,7 @@ private fun KnowledgeTreeNodeView(
     val row: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxWidth()
-                .height(30.dp)
+                .height(29.dp)
                 .bringIntoViewRequester(bringIntoViewRequester)
                 .hoverable(interactionSource)
                 .background(
@@ -1100,11 +1102,11 @@ private fun KnowledgeTreeNodeView(
                         }
                     }
                 }
-                .padding(start = (depth * 14).dp, end = 8.dp),
+                .padding(start = (depth * 12).dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 箭头槽位对目录和文件等宽，保证各级名称左对齐；文件占位不画箭头
-            Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) {
                 if (node.isDirectory) {
                     Icon(
                         TreeChevronIcon,
@@ -1120,7 +1122,7 @@ private fun KnowledgeTreeNodeView(
                 modifier = Modifier.size(15.dp),
                 tint = if (selected) Theme.Accent else Theme.Muted,
             )
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
                 node.name,
                 onTextLayout = { nameTruncated = it.hasVisualOverflow },
