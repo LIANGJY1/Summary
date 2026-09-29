@@ -58,6 +58,7 @@ import atlas.AppStore
 import atlas.core.DeviceTools
 import atlas.core.FeishuCheckin
 import atlas.core.Log
+import atlas.core.PetDebugTools
 import atlas.core.Prompts
 import atlas.core.Tools
 import atlas.core.WmsParser
@@ -79,6 +80,7 @@ enum class ToolsDestination(val title: String, val description: String) {
     LOG_DECRYPT("日志解密", "27HM 日志压缩包 / 目录 → 解压·解密·解压，一键出可读日志"),
     PHONE_AUTO("任务自动化", "adb 控制手机一键执行常用流程，无线优先、USB 兜底"),
     DEVICE_TOOLS("设备工具箱", "推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
+    PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 98 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
     PROMPTS("提示词库", "常用提示词集中管理，一键复制给任意 AI"),
 }
@@ -119,6 +121,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
                     ToolsDestination.LOG_DECRYPT -> HcLogDecryptCard(store)
                     ToolsDestination.PHONE_AUTO -> FeishuCheckinCard(store)
                     ToolsDestination.DEVICE_TOOLS -> DeviceToolboxCard(store)
+                    ToolsDestination.PET_DEBUG -> PetDebugCard(store)
                     ToolsDestination.WMS_VIEWER -> WmsViewerCard(store)
                     ToolsDestination.PROMPTS -> PromptsCard(store, Modifier.weight(1f))
                 }
@@ -669,6 +672,10 @@ private fun DeviceToolboxCard(store: AppStore) {
     var shotDir by remember { mutableStateOf(store.settings.screenshotSaveDir) }
     var avd by remember { mutableStateOf(store.settings.emulatorAvd) }
     var logcatFilter by remember { mutableStateOf("") }
+    var deviceMenu by remember { mutableStateOf(false) }
+
+    // 进卡片即刷新在线设备列表并按默认规则选中（优先非无线）；下拉打开时再刷一次
+    LaunchedEffect(Unit) { store.refreshToolboxDevices() }
 
     Surface(
         Modifier.fillMaxWidth(),
@@ -687,6 +694,45 @@ private fun DeviceToolboxCard(store: AppStore) {
                     Text("推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行", style = ui.typography.secondary, color = Theme.Muted)
                 }
                 TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起设置" else "设置") }
+            }
+
+            // 目标设备行：任务自动化的无线手机长期在线后，多设备并存时 adb 必须带 -s（此前全部命令
+            // 报 more than one device/emulator）。默认选中避开无线手机（USB/模拟器优先），下拉可手动切换
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("目标", style = ui.typography.secondary, color = Theme.Muted, modifier = Modifier.width(44.dp))
+                Box {
+                    OutlinedButton(onClick = { store.refreshToolboxDevices(); deviceMenu = true }, enabled = !running) {
+                        val selected = store.toolboxSerial
+                        Text(
+                            when {
+                                selected == null -> "未检测到设备"
+                                ':' in selected -> "$selected（无线）"
+                                else -> selected
+                            },
+                            maxLines = 1,
+                            fontSize = 12.sp,
+                            modifier = Modifier.widthIn(max = 260.dp),
+                        )
+                    }
+                    DropdownMenu(expanded = deviceMenu, onDismissRequest = { deviceMenu = false }) {
+                        if (store.toolboxDevices.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("未检测到在线设备", fontSize = 12.sp, color = Theme.Muted) },
+                                onClick = { deviceMenu = false },
+                            )
+                        }
+                        store.toolboxDevices.forEach { serial ->
+                            DropdownMenuItem(
+                                text = { Text(if (':' in serial) "$serial（无线）" else serial, fontSize = 12.sp) },
+                                onClick = {
+                                    store.toolboxSerial = serial
+                                    deviceMenu = false
+                                },
+                            )
+                        }
+                    }
+                }
+                Text("多设备时默认避开无线手机，点击切换", style = ui.typography.caption, color = Theme.Muted)
             }
 
             // 工具按钮按组分块
@@ -760,6 +806,242 @@ private fun DeviceToolboxCard(store: AppStore) {
             // logcat 输出尾部（保留最近 12 行，全量在内存缓冲 500 行）
             if (store.logcatLines.isNotEmpty()) {
                 MonoOutputBlock(store.logcatLines.takeLast(12), color = Theme.Muted)
+            }
+        }
+    }
+}
+
+/** 萌宠调试：单事件、正式 IPC、环境命令与 98 行场景在同一设备上下文中执行。 */
+@Composable
+private fun PetDebugCard(store: AppStore) {
+    val ui = atlasUiTokens()
+    val run = store.petDebugRun.value
+    val running = run.running
+    val logcatOn = store.logcatRunning.value
+    var deviceMenu by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var selectedStage by remember { mutableStateOf("全部") }
+    var expandedCase by remember { mutableStateOf<Int?>(null) }
+    var pendingAction by remember { mutableStateOf<PetDebugTools.QuickAction?>(null) }
+    var pendingScenario by remember { mutableStateOf<PetDebugTools.Scenario?>(null) }
+
+    LaunchedEffect(Unit) { store.refreshToolboxDevices() }
+
+    val stages = remember { listOf("全部") + PetDebugTools.scenarios.map { it.stage }.distinct() }
+    val filtered = PetDebugTools.scenarios.filter { scenario ->
+        (selectedStage == "全部" || scenario.stage == selectedStage) &&
+            (query.isBlank() || query.trim().let { q ->
+                q in scenario.name || q in scenario.expected || q == scenario.number.toString()
+            })
+    }
+
+    fun requestAction(action: PetDebugTools.QuickAction) {
+        if (action.confirmation != null) pendingAction = action else store.runPetQuickAction(action)
+    }
+
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = Theme.Panel,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(shape = RoundedCornerShape(10.dp), color = Theme.Selected) {
+                    Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { PetDebugIcon() }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("萌宠调试", style = ui.typography.itemTitle)
+                    Text("Settings 直注 + PetIpcTest 正式链路；命令串行执行并自动处理间隔", style = ui.typography.secondary, color = Theme.Muted)
+                }
+                if (running) {
+                    Button(
+                        onClick = store::stopPetDebug,
+                        colors = ButtonDefaults.buttonColors(containerColor = Theme.BadRed),
+                    ) { Text("停止") }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("目标", style = ui.typography.secondary, color = Theme.Muted, modifier = Modifier.width(44.dp))
+                Box {
+                    OutlinedButton(onClick = { store.refreshToolboxDevices(); deviceMenu = true }, enabled = !running) {
+                        Text(
+                            store.toolboxSerial?.let { if (':' in it) "$it（无线）" else it } ?: "未检测到设备",
+                            maxLines = 1,
+                            fontSize = 12.sp,
+                            modifier = Modifier.widthIn(max = 280.dp),
+                        )
+                    }
+                    DropdownMenu(expanded = deviceMenu, onDismissRequest = { deviceMenu = false }) {
+                        if (store.toolboxDevices.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("未检测到在线设备", fontSize = 12.sp, color = Theme.Muted) },
+                                onClick = { deviceMenu = false },
+                            )
+                        }
+                        store.toolboxDevices.forEach { serial ->
+                            DropdownMenuItem(
+                                text = { Text(if (':' in serial) "$serial（无线）" else serial, fontSize = 12.sp) },
+                                onClick = { store.toolboxSerial = serial; deviceMenu = false },
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = { if (logcatOn) store.stopLogcat() else store.startPetLogcat() },
+                    enabled = !running,
+                ) { Text(if (logcatOn) "停止日志" else "萌宠日志") }
+                Surface(shape = RoundedCornerShape(999.dp), color = Theme.Selected) {
+                    Text("要求 DEBUG_INJECTION_ENABLED=true", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 11.sp, color = Theme.Accent)
+                }
+            }
+
+            PetSectionTitle("环境与构建", "安装、重启与日志操作会作用于上方选中的设备")
+            PetActionGroups(
+                actions = PetDebugTools.quickActions.filter { it.group in setOf("环境", "构建安装") },
+                enabled = !running,
+                onAction = ::requestAction,
+            )
+
+            PetSectionTitle("单事件控制台", "点击即发；生日和节日使用 PetIpcTest 正式 IPC")
+            PetActionGroups(
+                actions = PetDebugTools.quickActions.filterNot { it.group in setOf("环境", "构建安装") },
+                enabled = !running,
+                onAction = ::requestAction,
+            )
+
+            if (run.target != null) {
+                Surface(shape = RoundedCornerShape(10.dp), color = Theme.CodeBlock) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (running) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Theme.Accent)
+                            Text(run.target, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (run.exitCode != null && run.exitCode != 0) Theme.BadRed else Theme.Accent)
+                            Spacer(Modifier.weight(1f))
+                            Text("${run.step}/${run.totalSteps}", fontSize = 11.sp, color = Theme.Muted)
+                        }
+                        if (run.lines.isNotEmpty()) {
+                            run.lines.takeLast(10).forEach { line ->
+                                Text(line, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp, color = Theme.Muted, maxLines = 3)
+                            }
+                        }
+                    }
+                }
+            }
+
+            PetSectionTitle("场景运行器", "${filtered.size}/98 个 case；每条默认先建立干净 Launcher 进程周期")
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("搜索编号、英文 case 名或预期") },
+                singleLine = true,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                stages.forEach { stage ->
+                    FilterChip(
+                        selected = selectedStage == stage,
+                        onClick = { selectedStage = stage },
+                        label = { Text(stage, fontSize = 11.sp) },
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                filtered.forEach { scenario ->
+                    val expanded = expandedCase == scenario.number
+                    Surface(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
+                            expandedCase = if (expanded) null else scenario.number
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (expanded) Theme.Selected.copy(alpha = 0.55f) else Theme.CodeBlock.copy(alpha = 0.72f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
+                    ) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Text("#${scenario.number}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Theme.Accent, fontWeight = FontWeight.Bold)
+                                Text(scenario.name, Modifier.weight(1f), fontSize = 12.sp, maxLines = if (expanded) 3 else 1, overflow = TextOverflow.Ellipsis)
+                                Text(scenario.stage, fontSize = 10.sp, color = Theme.Muted)
+                            }
+                            if (expanded) {
+                                Text("命令", fontSize = 10.sp, color = Theme.Muted)
+                                Text(scenario.sequence, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 16.sp, color = Theme.MdInlineCode)
+                                Text("预期：${scenario.expected}", fontSize = 12.sp, color = Theme.Muted)
+                                scenario.limitation?.let {
+                                    Surface(shape = RoundedCornerShape(6.dp), color = Theme.WarnOrange.copy(alpha = 0.12f)) {
+                                        Text("限制：$it", Modifier.fillMaxWidth().padding(8.dp), fontSize = 11.sp, color = Theme.WarnOrange)
+                                    }
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    Button(onClick = { pendingScenario = scenario }, enabled = !running) { Text("运行此 case") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (store.logcatLines.isNotEmpty()) {
+                PetSectionTitle("实时日志", "保留最近 500 行，界面展示尾部 20 行")
+                MonoOutputBlock(store.logcatLines.takeLast(20), color = Theme.Muted)
+            }
+        }
+    }
+
+    val confirmAction = pendingAction
+    val confirmScenario = pendingScenario
+    if (confirmAction != null || confirmScenario != null) {
+        AlertDialog(
+            onDismissRequest = { pendingAction = null; pendingScenario = null },
+            title = { Text(if (confirmScenario != null) "运行场景 #${confirmScenario.number}" else "确认执行") },
+            text = {
+                Text(
+                    confirmScenario?.let { "该场景会强制停止并重新启动 Launcher，然后依次执行 ${it.sequence}." }
+                        ?: confirmAction?.confirmation.orEmpty(),
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    confirmScenario?.let(store::runPetScenario)
+                    confirmAction?.let(store::runPetQuickAction)
+                    pendingAction = null
+                    pendingScenario = null
+                }) { Text("执行") }
+            },
+            dismissButton = { TextButton(onClick = { pendingAction = null; pendingScenario = null }) { Text("取消") } },
+        )
+    }
+}
+
+@Composable
+private fun PetSectionTitle(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+        Text(subtitle, fontSize = 11.sp, color = Theme.Muted)
+    }
+}
+
+@Composable
+private fun PetActionGroups(
+    actions: List<PetDebugTools.QuickAction>,
+    enabled: Boolean,
+    onAction: (PetDebugTools.QuickAction) -> Unit,
+) {
+    actions.groupBy { it.group }.forEach { (group, groupActions) ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(group, Modifier.width(62.dp).padding(top = 9.dp), fontSize = 11.sp, color = Theme.Muted)
+            FlowRow(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                groupActions.forEach { action ->
+                    OutlinedButton(
+                        onClick = { onAction(action) },
+                        enabled = enabled,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) { Text(action.label, fontSize = 11.sp) }
+                }
             }
         }
     }
@@ -1140,6 +1422,19 @@ private fun ToolboxIcon() {
         // 扳手轮廓：C 形 + 柄
         drawArc(c, startAngle = -60f, sweepAngle = 270f, useCenter = false, style = Stroke(stroke, cap = cap))
         drawLine(c, Offset(size.width * 0.72f, size.height * 0.72f), Offset(size.width * 0.18f, size.height * 0.18f), stroke, cap)
+    }
+}
+
+@Composable
+private fun PetDebugIcon() {
+    Canvas(Modifier.size(22.dp)) {
+        val c = Theme.Accent
+        val stroke = 1.8.dp.toPx()
+        drawCircle(c, radius = size.minDimension * 0.31f, center = center, style = Stroke(stroke))
+        drawCircle(c, radius = size.minDimension * 0.09f, center = Offset(size.width * 0.28f, size.height * 0.27f))
+        drawCircle(c, radius = size.minDimension * 0.09f, center = Offset(size.width * 0.72f, size.height * 0.27f))
+        drawCircle(c, radius = size.minDimension * 0.08f, center = Offset(size.width * 0.18f, size.height * 0.5f))
+        drawCircle(c, radius = size.minDimension * 0.08f, center = Offset(size.width * 0.82f, size.height * 0.5f))
     }
 }
 

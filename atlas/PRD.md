@@ -400,6 +400,14 @@ Markdown 只保留一套“阅读优化”样式，删除“经典样式”及�
 
 - `NavTab` 重构为单一胶囊语言：所有页签固定等高（28dp，内容垂直居中），默认透明底+次要字色，悬停 `Hover` 底，激活 `Selected` 抬升底 + 强调字色（SemiBold）；下划线指示条删除，工作台徽标位置不变。与 Codex/ZCode 顶栏/侧栏的静默胶囊导航同语言。
 
+#### 6.4.21 设备工具箱目标设备选择：默认避开无线手机（2026-09-29）
+
+用户截图反馈：任务自动化「USB 一键转无线」把手机转无线后长期在线，工具箱全部 adb 命令按无 serial 组装，无线手机与模拟器/USB 设备并存时 `adb root` 等一律报 `more than one device/emulator`（exit=1）。处理：工具箱新增「目标」设备下拉，选中 serial 贯穿工具页全部 adb 命令——
+
+- **设备列表与默认规则**：`AppStore` 新增 `toolboxDevices`（`adb devices` 过滤 state=device 的 serial 列表）与 `toolboxSerial`；进卡片与点开下拉时各刷新一次。默认选择走纯函数 `DeviceTools.pickDefaultSerial`：优先 serial 无冒号的 USB/模拟器条目（语义同 `FeishuCheckin.usbSerial`），无线 ip:port 靠后——多设备在线时默认选中的就是「除无线连接手机之外的另一台」；仅无线手机在线时选它。下拉手动切换仅会话内有效（设备是易变状态不持久化）；选中设备在后续刷新中掉线时自动回默认规则。
+- **serial 贯穿**：`DeviceTools` 命令构造（推送序列/ps/kill/screencap/logcat -c/logcat 流）统一加 `serial` 参数，非空即插 `-s`；推送 APK、重启 Launcher、截屏、清缓冲四个工具与日志捕获无在线设备时直接以中文提示失败，不再放给 adb 报错。WMS 查看器 `loadWmsDump` 共用同一选中设备（载入前同步刷新一次设备列表再拼命令，管道分支拼进 sh -c 串、普通分支插 argv）。
+- 不变：单并发、单命令 30s 超时、工具语义与按钮布局；启动/冷启动模拟器与剪贴板清理不涉及设备，不在此列。
+
 ## 7. 功能需求（P0）
 
 ### A. 库、索引与内容管理
@@ -968,6 +976,7 @@ git commit -m "feat(atlas): complete unified visual theme"
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-09-29 | — | **设备工具箱目标设备选择，默认避开无线手机（用户截图反馈）**：「USB 一键转无线」后无线手机长期在线，工具箱 adb 命令无 `-s` 组装，多设备并存时全部报 `more than one device/emulator`。新增「目标」设备下拉（`adb devices` 在线设备，进卡片与点开下拉刷新；默认规则 `pickDefaultSerial` 优先 USB/模拟器无冒号 serial、无线 ip:port 靠后）；选中 serial 贯穿四个设备工具与 logcat 捕获，WMS 查看器共用同一选中设备；无在线设备时工具以中文提示直接失败。新增 2 项单测。遵用户要求未编译、未运行测试。详见 §6.4.21。 |
 | 2026-09-29 | — | **缩小题库列表滚到底的底部空白**：上一条的 28dp contentPadding 实测缝隙仍大——题库内容列自带 `bottom = page` 整圈留白，两层叠加达 36dp。内容列底部 padding 收至 4dp，滚到底总余量 = 4+12=16dp；拖拽/搜索交互不受影响。全套测试通过。 |
 | 2026-09-29 | — | **题库列表底部增加留白**：列表滚到底时最后一张卡片紧贴视口底边、上方无余量，观感如同被截断。题库 LazyColumn 增加 28dp 底部 contentPadding，滚动到底后最后一张卡片与底边保持呼吸空间；拖拽命中测试基于 item offset 体系不受影响。全套测试通过。 |
 | 2026-09-29 | — | **提示词库「Name:」标签对齐修正（用户截图反馈）**：名称行 `Alignment.Top` 布局下，56dp 高的 `OutlinedTextField` 内文字垂直居中，而「Name:」标签贴行顶、压在输入框上边框上。标签下压 18dp 与框内首行文字对齐；名称折行与按钮贴顶行为不变。遵用户要求未编译、未运行测试。 |

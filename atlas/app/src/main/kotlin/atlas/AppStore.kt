@@ -16,6 +16,7 @@ import atlas.core.MdStores.CardEntry
 import atlas.core.MdStores.QuestionEntry
 import atlas.core.NoteFile
 import atlas.core.OutboxTasks
+import atlas.core.PetDebugTools
 import atlas.core.Prompts
 import atlas.core.QuestionStatus
 import atlas.core.WmsParser
@@ -288,6 +289,39 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     private val toolMutex = Mutex()
 
+    /** 在线设备列表（adb devices 过滤 state=device，serial）；目标设备选择跨页签保留 */
+    val toolboxDevices = mutableStateListOf<String>()
+
+    /** 设备工具箱目标设备：工具页全部 adb 命令带 -s；默认避开无线手机（多设备在线场景，2026-09-29 用户反馈）。无线判定用 serial 冒号（语义同 FeishuCheckin.usbSerial） */
+    var toolboxSerial by mutableStateOf<String?>(null)
+
+    /** 刷新在线设备列表；当前选中已失效（掉线）时按默认规则重选（优先非无线） */
+    fun refreshToolboxDevices() {
+        val adbPath = FeishuCheckin.findAdb() ?: return
+        scope.launch {
+            val (_, out) = execCapture(DeviceTools.devicesArgs(adbPath))
+            applyToolboxDevices(out)
+        }
+    }
+
+    /** 同步变体：WMS 载入前先解析目标设备再拼命令（adb devices 秒级，放调用方协程） */
+    private fun resolveToolboxSerial(): String? {
+        val adbPath = FeishuCheckin.findAdb() ?: return null
+        val (_, out) = execCapture(DeviceTools.devicesArgs(adbPath))
+        applyToolboxDevices(out)
+        return toolboxSerial
+    }
+
+    private fun applyToolboxDevices(devicesOutput: String) {
+        val online = FeishuCheckin.parseDevices(devicesOutput)
+            .filter { it.second == "device" }.map { it.first }
+        toolboxDevices.clear()
+        toolboxDevices.addAll(online)
+        if (toolboxSerial == null || toolboxSerial !in online) {
+            toolboxSerial = DeviceTools.pickDefaultSerial(online)
+        }
+    }
+
     fun runTool(tool: DeviceTools.Tool) {
         if (toolRun.value.running) {
             showToast("已有工具在运行，请稍候")
@@ -325,26 +359,29 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     return 1
                 }
                 val adb = adbPath ?: return failNoAdb(progress)
-                runSequence(DeviceTools.pushLauncherCommands(adb, apk), progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                runSequence(DeviceTools.pushLauncherCommands(adb, apk, serial), progress)
             }
             DeviceTools.Tool.REBOOT_LAUNCHER -> {
                 val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
                 progress("查找 ${DeviceTools.LAUNCHER_PACKAGE} 进程…")
-                val (_, psOut) = execCapture(DeviceTools.listProcessesArgs(adb))
+                val (_, psOut) = execCapture(DeviceTools.listProcessesArgs(adb, serial))
                 val pid = DeviceTools.parsePid(psOut, DeviceTools.LAUNCHER_PACKAGE)
                 if (pid == null) {
                     progress("未找到运行中的 Launcher 进程")
                     return 1
                 }
                 progress("结束进程 PID=$pid")
-                execCapture(DeviceTools.killPidArgs(adb, pid))
+                execCapture(DeviceTools.killPidArgs(adb, pid, serial))
                 0
             }
             DeviceTools.Tool.SCREENSHOT -> {
                 val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
                 val dir = File(settings.screenshotSaveDir.ifBlank { File(System.getProperty("user.home"), "Desktop").absolutePath })
                 val target = DeviceTools.nextScreenshotFile(dir)
-                val (code, png) = execCaptureBytes(DeviceTools.screenshotArgs(adb))
+                val (code, png) = execCaptureBytes(DeviceTools.screenshotArgs(adb, serial))
                 if (code != 0 || png.isEmpty()) {
                     progress("截屏失败（设备未连接？）")
                     return 1
@@ -355,7 +392,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             }
             DeviceTools.Tool.CLEAR_LOGCAT -> {
                 val adb = adbPath ?: return failNoAdb(progress)
-                execCapture(DeviceTools.clearLogcatArgs(adb))
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                execCapture(DeviceTools.clearLogcatArgs(adb, serial))
                 0
             }
             DeviceTools.Tool.START_EMULATOR, DeviceTools.Tool.COLD_BOOT_EMULATOR -> {
@@ -389,6 +427,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     private fun failNoAdb(progress: (String) -> Unit): Int {
         progress("未找到 adb，请确认 Android platform-tools 已安装")
+        return 1
+    }
+
+    private fun failNoDevice(progress: (String) -> Unit): Int {
+        progress("未检测到在线设备：请连接设备，或在「目标」下拉刷新后重选")
         return 1
     }
 
@@ -435,7 +478,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     val logcatRunning = mutableStateOf(false)
     private var logcatProcess: Process? = null
 
-    /** 开始捕获（Kotlin 侧过滤，替代原 grep --line-buffered 管道） */
+    /** 开始捕获（Kotlin 侧过滤，替代原 grep --line-buffered 管道）；目标是当前选中设备 */
     fun startLogcat(filter: String) {
         if (logcatRunning.value) return
         val adbPath = FeishuCheckin.findAdb()
@@ -443,8 +486,12 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             showToast("未找到 adb，请确认 Android platform-tools 已安装")
             return
         }
+        val serial = toolboxSerial ?: run {
+            showToast("未检测到在线设备：请连接设备，或在「目标」下拉刷新后重试")
+            return
+        }
         val f = filter.trim()
-        val proc = ProcessBuilder(DeviceTools.logcatArgs(adbPath)).redirectErrorStream(true).start()
+        val proc = ProcessBuilder(DeviceTools.logcatArgs(adbPath, serial)).redirectErrorStream(true).start()
         logcatProcess = proc
         logcatLines.clear()
         logcatRunning.value = true
@@ -472,6 +519,130 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         logcatLines.add(line)
     }
 
+    // ---------- 工具页：萌宠调试 ----------
+
+    val petDebugRun = mutableStateOf(PetDebugTools.RunState())
+    private var petDebugJob: Job? = null
+
+    fun runPetQuickAction(action: PetDebugTools.QuickAction) {
+        runPetDebug(action.label) { adb, serial -> PetDebugTools.quickActionSteps(action, adb, serial) }
+    }
+
+    fun runPetScenario(scenario: PetDebugTools.Scenario) {
+        runPetDebug("#${scenario.number} ${scenario.name}") { adb, serial ->
+            PetDebugTools.scenarioSteps(scenario, adb, serial)
+        }
+    }
+
+    private fun runPetDebug(
+        target: String,
+        steps: (adbPath: String, serial: String) -> List<PetDebugTools.Step>,
+    ) {
+        if (petDebugRun.value.running) {
+            showToast("已有萌宠命令正在执行")
+            return
+        }
+        val adbPath = FeishuCheckin.findAdb() ?: run {
+            showToast("未找到 adb，请确认 Android platform-tools 已安装")
+            return
+        }
+        val serial = toolboxSerial ?: run {
+            showToast("未检测到在线设备：请先刷新并选择目标")
+            return
+        }
+        val allSteps = steps(adbPath, serial)
+        petDebugJob = scope.launch {
+            val lines = mutableListOf<String>()
+            fun update(step: Int, message: String? = null, exitCode: Int? = null, running: Boolean = true) {
+                message?.let { lines += it }
+                petDebugRun.value = PetDebugTools.RunState(
+                    target = target,
+                    running = running,
+                    step = step,
+                    totalSteps = allSteps.size,
+                    lines = lines.takeLast(80),
+                    exitCode = exitCode,
+                )
+            }
+            update(0, "目标设备：$serial")
+            var exit = 0
+            try {
+                for ((index, step) in allSteps.withIndex()) {
+                    when (step) {
+                        is PetDebugTools.Step.Wait -> {
+                            update(index + 1, "等待 ${step.millis} ms")
+                            delay(step.millis)
+                        }
+                        is PetDebugTools.Step.Note -> update(index + 1, step.text)
+                        is PetDebugTools.Step.Run -> {
+                            val command = step.command
+                            update(index + 1, "==> ${command.label}\n${command.args.joinToString(" ")}")
+                            val (code, out) = execPetCommand(command)
+                            out.trim().takeIf { it.isNotEmpty() }?.let { update(index + 1, it) }
+                            if (code != 0) {
+                                exit = code
+                                update(index + 1, "命令失败 exit=$code", exitCode = code, running = false)
+                                break
+                            }
+                        }
+                    }
+                }
+                if (exit == 0) {
+                    update(allSteps.size, "执行完成", exitCode = 0, running = false)
+                    showToast("$target 执行完成")
+                } else {
+                    showToast("$target 未成功（exit $exit）")
+                }
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                update(petDebugRun.value.step, "已停止后续步骤", exitCode = -2, running = false)
+                showToast("萌宠命令已停止")
+            } finally {
+                petDebugJob = null
+            }
+        }
+    }
+
+    fun stopPetDebug() {
+        petDebugJob?.cancel()
+    }
+
+    private fun execPetCommand(command: PetDebugTools.Command): Pair<Int, String> {
+        val builder = ProcessBuilder(command.args).redirectErrorStream(true)
+        command.workingDirectory?.let { builder.directory(File(it)) }
+        val proc = builder.start()
+        val future = CompletableFuture.supplyAsync { proc.inputStream.bufferedReader().readText() }
+        if (!proc.waitFor(command.timeoutMs, TimeUnit.MILLISECONDS)) {
+            proc.destroyForcibly()
+            future.cancel(true)
+            return -1 to "命令超时(${command.timeoutMs}ms)"
+        }
+        return proc.exitValue() to runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
+    }
+
+    /** 使用 logcat 的 tag 过滤能力，避免萌宠页面被整机日志淹没。 */
+    fun startPetLogcat() {
+        if (logcatRunning.value) return
+        val adbPath = FeishuCheckin.findAdb() ?: run {
+            showToast("未找到 adb，请确认 Android platform-tools 已安装")
+            return
+        }
+        val serial = toolboxSerial ?: run {
+            showToast("未检测到在线设备：请先刷新并选择目标")
+            return
+        }
+        val proc = ProcessBuilder(PetDebugTools.petLogcatCommand(adbPath, serial).args)
+            .redirectErrorStream(true).start()
+        logcatProcess = proc
+        logcatLines.clear()
+        logcatRunning.value = true
+        scope.launch {
+            proc.inputStream.bufferedReader().useLines { seq -> seq.forEach(::appendLogcatLine) }
+            logcatRunning.value = false
+            if (logcatProcess === proc) logcatProcess = null
+            showToast("萌宠日志流已结束")
+        }
+    }
+
     // ---------- 工具页：WMS 查看器 ----------
     // 树/diff/详情状态放 AppStore：侧栏切换分区后不丢已拉取的窗口树（dumpsys 重取成本高）
 
@@ -483,7 +654,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     var wmsRightDiff by mutableStateOf<Map<Int, WmsParser.Diff>>(emptyMap())
     var wmsDetail by mutableStateOf<String?>(null)
 
-    /** 载入 dumpsys 输出到指定栏位（0=左 1=右）；管道命令走 sh -c 保留 shell 语义（与 python 版一致） */
+    /** 载入 dumpsys 输出到指定栏位（0=左 1=右）；目标是设备工具箱选中的设备（同页共享），载入前刷新一次设备列表；管道命令走 sh -c 保留 shell 语义（与 python 版一致） */
     fun loadWmsDump(command: String, slot: Int) {
         if (wmsLoading.value) return
         val adbPath = FeishuCheckin.findAdb()
@@ -494,10 +665,16 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         wmsLoading.value = true
         wmsError.value = null
         scope.launch {
+            val serial = resolveToolboxSerial()
+            if (serial == null) {
+                wmsError.value = "未检测到在线设备：请连接设备，或在设备工具箱「目标」下拉刷新"
+                wmsLoading.value = false
+                return@launch
+            }
             val cmd = if ('|' in command || '\'' in command) {
-                listOf("sh", "-c", "$adbPath shell '${command.replace("'", "'\\''")}'")
+                listOf("sh", "-c", "$adbPath -s $serial shell '${command.replace("'", "'\\''")}'")
             } else {
-                listOf(adbPath, "shell") + command.split(" ")
+                listOf(adbPath, "-s", serial, "shell") + command.split(" ")
             }
             val (code, text) = execCapture(cmd)
             if (code != 0) {

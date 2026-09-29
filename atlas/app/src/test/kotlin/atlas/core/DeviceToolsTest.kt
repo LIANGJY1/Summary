@@ -79,4 +79,32 @@ class DeviceToolsTest {
         assertEquals(listOf("/sdk/adb", "exec-out", "screencap", "-p"), DeviceTools.screenshotArgs("/sdk/adb"))
         assertNotNull(DeviceTools.logcatArgs("/sdk/adb"))
     }
+
+    @Test
+    fun `指定 serial 时命令插入 -s 参数`() {
+        val cmds = DeviceTools.pushLauncherCommands("/sdk/adb", "/data/NsrLauncher.apk", serial = "emulator-5554")
+        assertEquals(5, cmds.size)
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "root"), cmds[0])
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "wait-for-device"), cmds[1])
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "remount"), cmds[2])
+        assertEquals(
+            listOf("/sdk/adb", "-s", "emulator-5554", "push", "/data/NsrLauncher.apk", "/system_ext/priv-app/NsrLauncher"),
+            cmds[3],
+        )
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "reboot"), cmds[4])
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "shell", "ps", "-A"), DeviceTools.listProcessesArgs("/sdk/adb", "emulator-5554"))
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "shell", "kill", "1234"), DeviceTools.killPidArgs("/sdk/adb", "1234", "emulator-5554"))
+        assertEquals(listOf("/sdk/adb", "-s", "192.168.1.8:5555", "logcat"), DeviceTools.logcatArgs("/sdk/adb", "192.168.1.8:5555"))
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "logcat", "-c"), DeviceTools.clearLogcatArgs("/sdk/adb", "emulator-5554"))
+        assertEquals(listOf("/sdk/adb", "-s", "emulator-5554", "exec-out", "screencap", "-p"), DeviceTools.screenshotArgs("/sdk/adb", "emulator-5554"))
+        assertEquals(listOf("/sdk/adb", "devices"), DeviceTools.devicesArgs("/sdk/adb"))
+    }
+
+    @Test
+    fun `默认设备优先非无线条目`() {
+        assertEquals("emulator-5554", DeviceTools.pickDefaultSerial(listOf("192.168.1.8:5555", "emulator-5554")))
+        assertEquals("15564219080011W", DeviceTools.pickDefaultSerial(listOf("15564219080011W", "192.168.1.8:5555")))
+        assertEquals("192.168.1.8:5555", DeviceTools.pickDefaultSerial(listOf("192.168.1.8:5555")))
+        assertNull(DeviceTools.pickDefaultSerial(emptyList()))
+    }
 }

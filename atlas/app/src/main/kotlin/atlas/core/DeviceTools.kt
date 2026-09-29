@@ -40,25 +40,46 @@ object DeviceTools {
 
     // ---------- 命令构造 ----------
 
+    /** 目标设备前缀：serial 非空插 -s（多设备在线——如任务自动化的无线手机——没有它 adb 全部报错）；null 不插 */
+    private fun withSerial(adbPath: String, serial: String?, vararg args: String): List<String> =
+        if (serial == null) listOf(adbPath) + args
+        else listOf(adbPath, "-s", serial) + args
+
     /** 推送 APK 序列（push_launcher.sh 原生移植：root → wait-for-device → remount → push → reboot） */
-    fun pushLauncherCommands(adbPath: String, apkPath: String, destDir: String = DEFAULT_PUSH_DEST): List<List<String>> =
+    fun pushLauncherCommands(
+        adbPath: String,
+        apkPath: String,
+        serial: String? = null,
+        destDir: String = DEFAULT_PUSH_DEST,
+    ): List<List<String>> =
         listOf(
-            listOf(adbPath, "root"),
-            listOf(adbPath, "wait-for-device"),
-            listOf(adbPath, "remount"),
-            listOf(adbPath, "push", apkPath, destDir),
-            listOf(adbPath, "reboot"),
+            withSerial(adbPath, serial, "root"),
+            withSerial(adbPath, serial, "wait-for-device"),
+            withSerial(adbPath, serial, "remount"),
+            withSerial(adbPath, serial, "push", apkPath, destDir),
+            withSerial(adbPath, serial, "reboot"),
         )
 
-    fun listProcessesArgs(adbPath: String): List<String> = listOf(adbPath, "shell", "ps", "-A")
+    fun listProcessesArgs(adbPath: String, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "shell", "ps", "-A")
 
-    fun killPidArgs(adbPath: String, pid: String): List<String> = listOf(adbPath, "shell", "kill", pid)
+    fun killPidArgs(adbPath: String, pid: String, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "shell", "kill", pid)
 
-    fun screenshotArgs(adbPath: String): List<String> = listOf(adbPath, "exec-out", "screencap", "-p")
+    fun screenshotArgs(adbPath: String, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "exec-out", "screencap", "-p")
 
-    fun clearLogcatArgs(adbPath: String): List<String> = listOf(adbPath, "logcat", "-c")
+    fun clearLogcatArgs(adbPath: String, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "logcat", "-c")
 
-    fun logcatArgs(adbPath: String): List<String> = listOf(adbPath, "logcat")
+    fun logcatArgs(adbPath: String, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "logcat")
+
+    fun devicesArgs(adbPath: String): List<String> = listOf(adbPath, "devices")
+
+    /** 多设备默认选择：优先 USB/模拟器条目（serial 无冒号，语义同 FeishuCheckin.usbSerial），无线 ip:port 靠后；无在线设备返回 null */
+    fun pickDefaultSerial(onlineSerials: List<String>): String? =
+        onlineSerials.firstOrNull { ':' !in it } ?: onlineSerials.firstOrNull()
 
     fun emulatorArgs(emulatorPath: String, avd: String, coldBoot: Boolean): List<String> =
         buildList {
