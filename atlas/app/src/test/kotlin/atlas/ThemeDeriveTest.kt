@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 class ThemeDeriveTest {
     @Test
     fun `内置主题包含 Atlas 与黑曜且两套色板为人工定值`() {
-        assertEquals(listOf("Atlas", "黑曜"), AtlasThemes.ALL.map { it.name })
+        assertEquals(listOf("Atlas", "黑曜", "雪白"), AtlasThemes.ALL.map { it.name })
         assertEquals("#FF1E2126", hexOf(AtlasThemes.ATLAS.dark.background))
         assertEquals("#FFF2F3F1", hexOf(AtlasThemes.ATLAS.light.background))
         assertEquals("#FFE9EDF2", hexOf(AtlasThemes.ATLAS.dark.md().h1))
@@ -25,6 +25,13 @@ class ThemeDeriveTest {
         assertEquals("#FFE0E0E0", hexOf(AtlasThemes.BLACK.dark.md().bold))
         assertEquals("#FF9BB1CE", hexOf(AtlasThemes.BLACK.dark.md().link))
         assertEquals("#FFF4F4F2", hexOf(AtlasThemes.BLACK.light.background))
+        // 雪白：亮色为纯中性纸白；暗色与黑曜深色共用同一色板
+        assertEquals("#FFF7F7F7", hexOf(AtlasThemes.SNOW.light.background))
+        assertEquals("#FFFFFFFF", hexOf(AtlasThemes.SNOW.light.surface))
+        assertEquals("#FF242424", hexOf(AtlasThemes.SNOW.light.onSurface))
+        assertEquals("#FF1A1A1A", hexOf(AtlasThemes.SNOW.light.md().bold))
+        assertEquals("#FF3E5B7A", hexOf(AtlasThemes.SNOW.light.md().link))
+        assertEquals(AtlasThemes.BLACK.dark, AtlasThemes.SNOW.dark)
     }
 
     @Test

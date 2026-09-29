@@ -17,6 +17,8 @@ class ThemeSwitchTest {
         assertEquals(AtlasThemes.ATLAS.dark, resolveTheme(AppSettings(theme = "dark", themeName = "Atlas")))
         assertEquals(AtlasThemes.BLACK.light, resolveTheme(AppSettings(theme = "light", themeName = AtlasThemes.BLACK_NAME)))
         assertEquals(AtlasThemes.BLACK.dark, resolveTheme(AppSettings(theme = "dark", themeName = AtlasThemes.BLACK_NAME)))
+        assertEquals(AtlasThemes.SNOW.light, resolveTheme(AppSettings(theme = "light", themeName = AtlasThemes.SNOW_NAME)))
+        assertEquals(AtlasThemes.SNOW.dark, resolveTheme(AppSettings(theme = "dark", themeName = AtlasThemes.SNOW_NAME)))
     }
 
     @Test

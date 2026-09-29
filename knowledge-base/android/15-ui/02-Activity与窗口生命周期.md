@@ -92,3 +92,19 @@ Activity 属于用户与显示两个维度：它在自己的用户空间里运�
 - **首帧前弹 Toast/Dialog**：改变窗口层级与 insets，可能让首帧时间变长、动画被推迟，甚至引发一帧额外重排（输入法场景见 01 册 Q13）。
 - **onPause 里提交 UI 变更**：onPause 之后界面不再可见，此时的布局与刷新都白做，还可能干扰动画。
 - **异步回调直接更新已重建的界面**：Activity 重建后旧回调仍持有旧实例引用，要么空指针要么写到不可见界面；对策是生命周期感知的数据源（08 册给出同类排查路径）。
+
+**Q15: Fragment 的生命周期与宿主 Activity 怎么对应？"视图生命周期分离"解决什么问题？**
+
+Fragment 的生命周期跟随宿主走一遍，中间插入自己的视图环节：`onAttach → onCreate → onCreateView → onViewCreated → onStart → onResume → onPause → onStop → onDestroyView → onDestroy → onDetach`（androidx Fragment 库行为，非平台源码，以下均官方文档口径）。**视图生命周期分离**（Fragment 1.2.0 起）指 Fragment 实例生命周期与它的视图树生命周期独立：视图可以被销毁而实例保留（回退栈、ViewPager2 离屏页），再次显示时经 `onCreateView` 重建新视图。由此 `onViewCreated` 成为视图相关初始化（绑定视图、注册观察者）的标准位置，且观察者必须绑定 `getViewLifecycleOwner()` 而不是 Fragment 自身——用 Fragment 做 LifecycleOwner 的话，视图销毁后旧观察者仍持有旧视图引用，重建后新视图收不到更新，是内存泄漏与"界面不刷新"的共同根源；在 `onDestroyView` 解除视图绑定也是同一原因。
+
+**Q16: show/hide、replace、ViewPager2 + FragmentStateAdapter 三种切换，状态与生命周期各走哪条路？**
+
+三种切换的生命周期代价完全不同：`FragmentTransaction.show()/hide()` 只切换视图可见性，不触发任何生命周期回调——切换最快、状态天然保留，代价是两份视图树常驻内存；`replace()` 不加回退栈时旧 Fragment 走完整销毁（`onDestroyView` 到 `onDestroy`/`onDetach`），加了回退栈则只销毁视图、实例保留在栈里；ViewPager2 的 `FragmentStateAdapter` 介于两者之间——离屏页实例保留、视图走 `onDestroyView`，回滑时重建视图并恢复状态，内存与流畅度平衡最好（adapter 官方行为口径）。选型规则：高频平级切换用 show/hide（注意双份视图内存）或 ViewPager2，销毁语义明确的导航用 replace+回退栈；"切回来界面空白/状态丢了"多半是误用了 replace 而业务需要的是保留视图。
+
+**Q17: commit、commitNow、commitAllowingStateLoss 三个提交有什么差别？"after onSaveInstanceState 崩溃"是怎么回事？**
+
+`commit()` 把事务投递到主线程队列**异步**执行，可以加入回退栈；`commitNow()` 在当前调用点**同步**执行完毕，但不允许加入回退栈（同步执行与回退栈的语义冲突）；`commitAllowingStateLoss()` 与 commit 相同但**不检查状态保存**。崩溃的根源：`onSaveInstanceState()` 之后系统已为该 Activity 记录了状态快照，此时再 commit 事务，若进程被回收重建，这次事务的状态不会出现在快照里——framework 主动抛 `IllegalStateException: Can not perform this action after onSaveInstanceState` 防止这种不一致（androidx 行为口径）。工程规则：异步回调/网络返回触发的界面切换要判断生命周期状态（用 lifecycle 已是 RESUMED 再提交），不要用 `commitAllowingStateLoss()` 掩盖时序问题——丢状态比崩溃更难排查。
+
+**Q18: Fragment 的 ViewModel 作用域有几种？观察者为什么常绑定错 owner？**
+
+三种作用域：Fragment 自身（`this`，仅本 Fragment，随 Fragment 销毁）、宿主 Activity（`activityViewModels()`，跨 Fragment 共享、随 Activity 销毁）、导航图（`navigationGraphViewModels()`，随导航图回退栈清空）。常见错误是作用域与观察 owner 不配套：用 `activityViewModels()` 共享数据却把观察绑在 Fragment 自身生命周期上——视图重建（回退栈、ViewPager2 翻页）后收不到后续更新；正确组合是"数据取自所需作用域的 ViewModel，观察绑定 `viewLifecycleOwner`"（官方架构指南口径）。另一个坑：ViewModel 持有 Fragment 或 View 引用会造成实例级泄漏——ViewModel 活得比单个 Fragment 视图长，引用会把整个已销毁视图树钉在内存里。

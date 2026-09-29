@@ -186,6 +186,7 @@ data class CustomTheme(
 object AtlasThemes {
     const val NAME = "Atlas"
     const val BLACK_NAME = "黑曜"
+    const val SNOW_NAME = "雪白"
 
     val ATLAS = ThemeDefinition(
         name = NAME,
@@ -244,7 +245,25 @@ object AtlasThemes {
         ),
     )
 
-    val ALL: List<ThemeDefinition> = listOf(ATLAS, BLACK)
+    /** 黑曜的白色姊妹皮肤：亮色板同为 R=G=B 纯中性（纸灰画布 + 纯白内容面），暗色板与黑曜深色共用。 */
+    val SNOW = ThemeDefinition(
+        name = SNOW_NAME,
+        dark = BLACK.dark,
+        light = ThemeSpec(
+            accent = color("#4B4E53"), okGreen = color("#2F7453"),
+            warnOrange = color("#875A28"), badRed = color("#A4474F"),
+            muted = color("#6E6E6E"), codeBg = color("#F0F0F0"),
+            background = color("#F7F7F7"), surface = color("#FFFFFF"),
+            surfaceVariant = color("#ECECEC"), onSurface = color("#242424"),
+            outline = color("#767676"), outlineVariant = color("#DEDEDE"),
+            mdH1 = color("#262626"), mdH2 = color("#595959"),
+            mdH3 = color("#3A3A3A"), mdBold = color("#1A1A1A"),
+            mdLink = color("#3E5B7A"), mdQuote = color("#6B6B6B"),
+            mdInlineCode = color("#474747"), mdInlineCodeBg = color("#E9E9E9"),
+        ),
+    )
+
+    val ALL: List<ThemeDefinition> = listOf(ATLAS, BLACK, SNOW)
     val DEFAULT: ThemeDefinition = ATLAS
 
     fun byName(name: String): ThemeDefinition = ALL.firstOrNull { it.name == name } ?: DEFAULT
