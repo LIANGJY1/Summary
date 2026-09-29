@@ -29,7 +29,7 @@ class ThemeContrastTest {
     }
 
     @Test
-    fun `Atlas 两种模式的文字与交互色均达 WCAG AA`() {
+    fun `内置主题两种模式的文字与交互色均达 WCAG AA`() {
         val fails = mutableListOf<String>()
         fun need(tag: String, label: String, fg: String, bg: String, min: Double) {
             val r = ratio(fg, bg)

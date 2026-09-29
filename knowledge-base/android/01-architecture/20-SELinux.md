@@ -15,6 +15,8 @@ SELinux 用与 uid 无关的标签把细粒度判定下沉到内核，正好补�
 
 版本与价值：Android 4.3 引入，5.0 起全局 enforcing，CTS 强制校验 enforcing 且禁止修改原生策略；效果是越权访问从"运行时漏洞"变成"编译期失败或 avc 日志可见的失败"。
 
+
+
 **Q2: [done] SELinux 的判定机制分哪几步？一次访问是怎么被放行或拒绝的？**
 
 判定机制分三步——打标签、写规则、逐次判定：前两步是准备（标签在进程启动与文件系统挂载时打定，规则在构建期编译进策略库），第三步由内核在运行时对每次访问执行，没有匹配规则即拒绝。
@@ -24,6 +26,8 @@ SELinux 用与 uid 无关的标签把细粒度判定下沉到内核，正好补�
 3. **判定**：内核在每次 open/read/connect 前拿"源域 + 目标类型 + 类 + 操作"查策略——查到 allow 放行，查不到即拒绝；属主与 root 都不能自行放宽，这是 MAC（Mandatory Access Control，强制访问控制）与 DAC"属主自主"的根本对立。
 
 以一次真实访问走查全流程：普通应用（域 `untrusted_app`）读另一应用的私有目录（类型 `app_data_file`）——策略中不存在 `allow untrusted_app app_data_file:file read`，open 返回 EACCES，内核留下一条 avc denied；读自己的数据目录时对象类型相同、存在放行规则，访问通过。两次结果的差别不依赖路径与 uid，只依赖标签与策略——这正是 SELinux 与 DAC 的思维分野。
+
+
 
 **Q3: Android SELinux 原理？以及代码实现？**
 
@@ -61,7 +65,9 @@ SELinux 用与 uid 无关的标签把细粒度判定下沉到内核，正好补�
 
 
 
-**Q4: 作为上层应用开发者，SELinux的实际应用场景都是什么？**
+
+
+**Q4: [done] 作为上层应用开发者，SELinux的实际应用场景都是什么？**
 
 应用开发者通常"被 SELinux 约束"而不是配置它：能做的是识别拒绝、改走合规通道，改 sepolicy 不是应用侧的选项。应用无法自选域，决定它的是两个安装期输入：
 
@@ -84,28 +90,6 @@ SELinux 用与 uid 无关的标签把细粒度判定下沉到内核，正好补�
 4. **需要新能力**——由平台团队把能力做成服务并把服务类型挂 `app_api_service` 属性，应用经 Binder 调用，而不是申请直访硬件或节点。
 
 应用侧可用的动作只有三个：`ps -Z` 看自己落在哪个域、`logcat -b all` 抓 avc 定位拒绝、把合理需求提给系统组。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 **Q5: 作为framework开发者，SELinux的实际应用场景都是什么？**
 
@@ -139,7 +123,24 @@ framework/系统开发者的日常是"新增进程、服务、属性、节点之
 
 
 
-**Q6: 功能静默失效——读不到 /sys 节点、打不开 /dev 设备、跨进程共享文件失败，却没有任何 Java 异常。怎么确认是 SELinux 拒绝？确认后怎么处理？**
+
+
+**Q6: [done] 一条 avc 日志里 pid、uid、name、scontext、tcontext、permissive 各字段分别由谁拼出？**
+
+每个字段的拼装者分三层：libselinux 的 `avc_audit` 拼模板与上下文段，servicemanager 注册的审计回调拼业务字段，logcat 行首的 tag 与 pid 来自写入进程自身。
+
+以 `auditd : avc:  denied  { find } for pid=7283 uid=10093 name=audio scontext=u:r:nsr_appstore:s0 tcontext=u:object_r:audio_service:s0 tclass=service_manager permissive=0` 为例，按日志阅读顺序逐段拆：
+
+1. **`avc:  denied  { find }`**：说的是"什么操作被拒"——模板串由 `avc_audit` 生成（双空格是模板自带），`{ find }` 由 `avc_dump_av` 把被拒权限位图按类定义翻译回权限名。find 是 `service_manager` 类定义的权限之一，指"在 servicemanager 注册表里查询服务句柄"（同类的还有 add 注册、list 列举）；权限名跟着类走——file 类则是 open/read/write 那组。→ 一句话：本例被拒的是"查询服务"这个动作，规则末段的权限就写 `find`；
+2. **`pid=7283 uid=10093 name=audio`**：说的是"谁在访问"——servicemanager 在 `Access.cpp` 构造时注册的审计回调填入，pid/uid 取自 binder 事务附带的调用者身份，name 是 `canFind` 的入参（服务名）；内核类 avc 的同类字段由内核自己拼，两类日志长得一样、字段来源不同。→ 一句话：本例被拒的是 pid 7283、uid 10093 的进程，它想找的是叫 `audio` 的服务；
+3. **`scontext=` / `tcontext=`**：说的是"从哪个域访问哪个对象"——`avc_dump_query` 把源与目标的 SID 反查回上下文字符串，tcontext 正是 `service_contexts` 里该服务名对应的标签；标签随对象类别取自对应 contexts 表——文件来自 file_contexts、服务来自 service_contexts。→ 一句话：本例是 `nsr_appstore` 域想访问 `audio_service` 标签——规则前两段照抄这两个值；
+4. **`tclass=service_manager`**：说的是"对象属于哪类"——对象管理器做检查时写死的类名。→ 一句话：本例动的是"服务注册条目"这一类，规则第三段写 `service_manager`，`find` 也只有在这个类里才是"查服务"的意思；
+5. **`permissive=0`**：说的是"当前是否强制"——`setenforce 0` 后同样的拒绝照记日志但放行（显示 permissive=1），调试时靠它区分"真拦了"还是"只记了"。→ 一句话：本例是动真格拦截——应用商店真的拿不到 audio 句柄，这就是它反复崩溃的直接原因；
+6. **行首 `auditd` 与 pid 555**：是日志外壳——tag 来自 libselinux 的 `AUDITD_LOG_TAG` 常量，pid 是写入进程（servicemanager）自己，不是被拒的 7283。→ 一句话：排查别去盯 555——那只是写日志的 servicemanager，被拒的应用是 pid=7283。
+
+修复时的用法：scontext 的域、tcontext 的类型、tclass、被拒权限四段照抄就是一条 allow 规则，`allow nsr_appstore audio_service:service_manager find;`。
+
+**Q7: 功能静默失效——读不到 /sys 节点、打不开 /dev 设备、跨进程共享文件失败，却没有任何 Java 异常。怎么确认是 SELinux 拒绝？确认后怎么处理？**
 
 确认手法是抓内核审计日志：SELinux 拒绝不抛异常，只在内核日志里留 avc denial——`adb logcat -b all | grep avc` 或 `dmesg | grep avc`，有 denial 记录即坐实。
 
@@ -168,7 +169,9 @@ framework/系统开发者的日常是"新增进程、服务、属性、节点之
 
 
 
-**Q7: 开机早期 setprop 总是失败、OTA 后首次开机明显变慢——属性标签（property_contexts）和策略装载有什么关系？**
+
+
+**Q8: 开机早期 setprop 总是失败、OTA 后首次开机明显变慢——属性标签（property_contexts）和策略装载有什么关系？**
 
 属性写权限由 SELinux 控制到"哪个域能写哪个前缀"，前缀到标签的映射来自各分区的 property_contexts：init 按序加载 plat/system_ext/vendor/product/odm 的 property_contexts 构建查找树写入共享属性区——属性要么命中某个标签，要么落 `default_prop`，对无标签前缀的早期 setprop 会直接失败。
 
@@ -196,7 +199,9 @@ framework/系统开发者的日常是"新增进程、服务、属性、节点之
 
 
 
-**Q8: allow 规则到底该写在哪个文件？为什么在 public/*.te 里加规则会被编译拒绝？**
+
+
+**Q9: allow 规则到底该写在哪个文件？为什么在 public/*.te 里加规则会被编译拒绝？**
 
 sepolicy 目录按可见性分层：`public` 是 vendor 可见的平台接口层（类型、attribute、宏），`private` 是平台自用规则区——`public/app.te` 文件头明文警告"不要在这里加 allow/neverallow/dontaudit"，具体规则写 `private/*.te`；vendor 侧只能引用 public 暴露的类型加自有类型。
 
@@ -224,7 +229,9 @@ sepolicy 目录按可见性分层：`public` 是 vendor 可见的平台接口层
 
 
 
-**Q9: 新设备节点打了标签还是 avc denied，tcontext 显示 unlabeled——file_contexts 的求值规则是什么？**
+
+
+**Q10: 新设备节点打了标签还是 avc denied，tcontext 显示 unlabeled——file_contexts 的求值规则是什么？**
 
 file_contexts 三条求值规则：静态条目先求值、第一条命中即用、**从文件底部向上**评估——越靠底的条目越优先，宽泛规则写前面、具体规则放底部。
 
@@ -253,7 +260,9 @@ file_contexts 三条求值规则：静态条目先求值、第一条命中即用
 
 
 
-**Q10: 新增一个系统属性，SELinux 侧要改哪几处？**
+
+
+**Q11: 新增一个系统属性，SELinux 侧要改哪几处？**
 
 四处：定义类型、加映射、授权写入方与读取方、过 neverallow。property_contexts 只负责"属性名 → 标签"映射，写权限在 .te 里用宏声明。
 
@@ -284,7 +293,9 @@ file_contexts 三条求值规则：静态条目先求值、第一条命中即用
 
 
 
-**Q11: 新的 Binder/HIDL 服务注册被拒（avc denied { add }）——服务标签在哪些文件里声明？**
+
+
+**Q12: 新的 Binder/HIDL 服务注册被拒（avc denied { add }）——服务标签在哪些文件里声明？**
 
 三类标签文件各管一类：`service_contexts` 管 Binder 服务（按服务名，AIDL 用"接口全名/实例"），`hwservice_contexts` 管 HIDL/AIDL HAL（按 `包::接口`，无版本号），`seapp_contexts` 管应用进程落域——配合域侧的 add/find 权限才完整。
 
@@ -312,7 +323,9 @@ file_contexts 三条求值规则：静态条目先求值、第一条命中即用
 
 
 
-**Q12: 想让三方应用直读自研驱动节点，neverallow 直接编译失败——正确的解法路径是什么？**
+
+
+**Q13: 想让三方应用直读自研驱动节点，neverallow 直接编译失败——正确的解法路径是什么？**
 
 不要放开 app 域：平台侧建服务、把服务类型挂 `app_api_service` 属性，应用经 Binder 调服务；确需硬件访问就 HAL 化（`hal_attribute` + `hal_client_domain`）。app_neverallows 对全部 untrusted 域禁掉了应用数据目录执行、debugfs 读、注册服务、vndbinder 等一整组权限，这些禁令是平台安全模型的编译期保证，不可绕过。
 
@@ -340,7 +353,9 @@ file_contexts 三条求值规则：静态条目先求值、第一条命中即用
 
 
 
-**Q13: vendor sepolicy 改动"不生效"、同名 .te 被吞、升级平台后 avc 暴增——板级策略的组织与版本化要点是什么？**
+
+
+**Q14: vendor sepolicy 改动"不生效"、同名 .te 被吞、升级平台后 avc 暴增——板级策略的组织与版本化要点是什么？**
 
 vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺序决定同名文件的取舍**；平台与 vendor 的兼容靠 `prebuilts/api/<版本>/` 快照加 mapping 版本化文件支撑。
 
@@ -371,7 +386,9 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
-**Q14: service_manager find 被拒时，SELinux 为什么不抛异常而是把应用打崩？——"静默 null"链路与文件类拒绝的差异**
+
+
+**Q15: service_manager find 被拒时，SELinux 为什么不抛异常而是把应用打崩？——"静默 null"链路与文件类拒绝的差异**
 
 因为 `service_manager` 类的检查由 servicemanager 在用户态完成，拒绝的表现形式是"返回 null 而不报错"：`ServiceManager.getService` 拿到 null binder，AIDL 生成的 `asInterface(null)` 按约定返回 null 代理，framework 调用方不判空——下一次对该代理调方法就是 NPE，直接击穿 main 线程。文件类拒绝走内核 LSM，`open` 返回 EACCES 错误码，调用方通常有错误处理分支，所以表现为功能失效而非崩溃。
 
@@ -404,7 +421,9 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
-**Q15: 从 ServiceManager.getService("audio") 到策略拒绝，binder 两侧完整经过了哪些代码？**
+
+
+**Q16: 从 ServiceManager.getService("audio") 到策略拒绝，binder 两侧完整经过了哪些代码？**
 
 链路是：Java 侧查缓存未命中后经 bootstrap 代理发起 binder 调用，servicemanager 收到事务、恢复调用者身份、查表命中后做 SELinux 检查，拒绝时返回 null 且事务状态仍为 ok。逐跳展开：
 
@@ -437,7 +456,9 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
-**Q16: tclass=service_manager 的 avc 拒绝为什么在 dmesg 里搜不到？两类 avc 日志各走哪条路径？**
+
+
+**Q17: tclass=service_manager 的 avc 拒绝为什么在 dmesg 里搜不到？两类 avc 日志各走哪条路径？**
 
 因为 `service_manager` 是 userspace 类：`security_classes` 里它带 userspace 标记，访问检查不在内核 LSM 执行，而由对象管理器（servicemanager 进程）自己做——内核对这次拒绝毫无感知，自然不会产生内核审计记录。要看这条日志得用 `logcat -b events | grep auditd`。
 
@@ -468,20 +489,7 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
-**Q17: 一条 avc 日志里 pid、uid、name、scontext、tcontext、permissive 各字段分别由谁拼出？**
 
-每个字段的拼装者分三层：libselinux 的 `avc_audit` 拼模板与上下文段，servicemanager 注册的审计回调拼业务字段，logcat 行首的 tag 与 pid 来自写入进程自身。
-
-以 `auditd : avc:  denied  { find } for pid=7283 uid=10093 name=audio scontext=u:r:nsr_appstore:s0 tcontext=u:object_r:audio_service:s0 tclass=service_manager permissive=0` 为例，按日志阅读顺序逐段拆：
-
-1. **`avc:  denied  { find }`**：说的是"什么操作被拒"——模板串由 `avc_audit` 生成（双空格是模板自带），`{ find }` 由 `avc_dump_av` 把被拒权限位图按类定义翻译回权限名。find 是 `service_manager` 类定义的权限之一，指"在 servicemanager 注册表里查询服务句柄"（同类的还有 add 注册、list 列举）；权限名跟着类走——file 类则是 open/read/write 那组。→ 一句话：本例被拒的是"查询服务"这个动作，规则末段的权限就写 `find`；
-2. **`pid=7283 uid=10093 name=audio`**：说的是"谁在访问"——servicemanager 在 `Access.cpp` 构造时注册的审计回调填入，pid/uid 取自 binder 事务附带的调用者身份，name 是 `canFind` 的入参（服务名）；内核类 avc 的同类字段由内核自己拼，两类日志长得一样、字段来源不同。→ 一句话：本例被拒的是 pid 7283、uid 10093 的进程，它想找的是叫 `audio` 的服务；
-3. **`scontext=` / `tcontext=`**：说的是"从哪个域访问哪个对象"——`avc_dump_query` 把源与目标的 SID 反查回上下文字符串，tcontext 正是 `service_contexts` 里该服务名对应的标签；标签随对象类别取自对应 contexts 表——文件来自 file_contexts、服务来自 service_contexts。→ 一句话：本例是 `nsr_appstore` 域想访问 `audio_service` 标签——规则前两段照抄这两个值；
-4. **`tclass=service_manager`**：说的是"对象属于哪类"——对象管理器做检查时写死的类名。→ 一句话：本例动的是"服务注册条目"这一类，规则第三段写 `service_manager`，`find` 也只有在这个类里才是"查服务"的意思；
-5. **`permissive=0`**：说的是"当前是否强制"——`setenforce 0` 后同样的拒绝照记日志但放行（显示 permissive=1），调试时靠它区分"真拦了"还是"只记了"。→ 一句话：本例是动真格拦截——应用商店真的拿不到 audio 句柄，这就是它反复崩溃的直接原因；
-6. **行首 `auditd` 与 pid 555**：是日志外壳——tag 来自 libselinux 的 `AUDITD_LOG_TAG` 常量，pid 是写入进程（servicemanager）自己，不是被拒的 7283。→ 一句话：排查别去盯 555——那只是写日志的 servicemanager，被拒的应用是 pid=7283。
-
-修复时的用法：scontext 的域、tcontext 的类型、tclass、被拒权限四段照抄就是一条 allow 规则，`allow nsr_appstore audio_service:service_manager find;`。
 
 **Q18: SELinux 运行时会读 .te 或 service_contexts 文件吗？策略与映射分别何时进入内存？**
 
@@ -492,6 +500,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 3. **每次检查**：先查进程内 AVC 缓存（按"源域 + 目标标签 + 类"三元组键控），未命中才写 `/sys/fs/selinux/access` 向内核查询。同进程对同一服务的重复检查命中缓存、不再打印 avc，但拒绝判定照样生效；缓存随进程销亡，所以崩溃循环里每个新进程都会再打一条 avc。
 
 "什么时候查看权限文件"的正确答案是：编译期编译进二进制、开机灌进内核、首次检查加载进 servicemanager，此后全部是微秒级内存操作。
+
+
 
 
 
@@ -546,6 +556,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
+
+
 **Q20: 普通应用域为什么天然能 find audio 服务？属性批量授权体系如何展开生效？**
 
 因为 `audio_service` 类型声明时挂了 `app_api_service` 属性，而 `untrusted_app_all.te` 有一条按属性批量放行的规则 `allow untrusted_app_all app_api_service:service_manager find;`——编译期 checkpolicy 把属性规则展开成具体的 type×type 规则写进 policydb，运行时只查展开后的位图，"属性"这个概念在运行期不存在。
@@ -558,6 +570,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 4. **厂商自建域缺环节**：自定义域不调用宏、也没有等价 allow，批量授权对它整批失效——audio/clipboard 等全部查不到。真机车机平台的厂商 App 域（nsr_appstore 这类自定义域）连环崩溃循环正是这个缺口，修法是补调宏或逐条写 allow。
 
 对照样本：`platform_app`（地图类系统签名 App 的域）不在 untrusted_app_all 集合里，它在自己的 te 里写了同型的批量 allow——同一台设备上"地图查 audio 永远成功、商店一查就崩"的差异全部来自这两份文件的取舍。
+
+
 
 
 
@@ -612,6 +626,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
+
+
 **Q22: 策略里确实发生了拒绝，avc 日志却一条都没有——dontaudit 的静音机制与排查方法是什么？**
 
 `dontaudit` 在策略编译期把对应访问的 auditdeny 位清零：运行时拒绝照旧生效，但 libselinux 判定"该拒绝无需审计"直接跳过日志生成——dmesg 和 logcat 都不会有记录。遇到"行为明显被拒、日志里却找不到 avc"，第一怀疑对象就是它。
@@ -644,11 +660,15 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
+
+
 **Q23: neverallow 与运行时拒绝是什么关系？撞上 default_android_service 的 neverallow 该怎么解？**
 
 `neverallow` 是编译期断言：checkpolicy 编译时发现任何 allow 规则与之相交，整个策略编译失败、镜像出不来；编译产物里不存在这条规则，运行时不参与任何判定。它的价值是把安全设计变成"编译不过就上不了机"，让违规策略在构建期而不是渗透测试时暴露。
 
 典型场景是 `default_android_service` 兜底标签：`service_contexts` 末行的 `*` 通配把一切未映射服务名落到这个标签，而平台策略里有 `neverallow * default_android_service:service_manager *`——任何域都不许对兜底标签 add 或 find。这形成"注册即拒绝"的哨兵：厂商 HAL 服务若不建专属类型，注册方 add 与使用方 find 双双被拒，服务永远注册不上（真机案例：车机平台的 SOME/IP HAL 服务因此从未注册成功，依赖它的 RPC 通道从开机起无限重试）。正确解法是按官方口径三步走：新类型进 service.te、名字映射进 service_contexts、然后给服务方 add 权与使用方 find 权配对授权——而不是删除 neverallow。
+
+
 
 
 
@@ -704,6 +724,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
+
+
 **Q25: 新增设备节点或 HAL 执行外部程序撞 neverallow 编译失败——两大典型场景与最小权限原则的解法是什么？**
 
 编译期 neverallow 报错几乎都出自两类场景：对通用标签授权、HAL 域要 execute_no_trans——两者的正解都不是删断言，而是"换更具体的类型"或"换执行方式"。
@@ -713,6 +735,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 场景二，HAL 的 execute_no_trans：HAL 进程用 execv 系列、fork 执行 `/vendor/bin/sh` 等外部程序时以"不换域"方式执行，需要 `execute_no_trans` 权——但 hal_neverallows.te 明文 `neverallow { halserverdomain ... } {file_type fs_type}:file execute_no_trans;`（仅 hal_dumpstate、hal_telephony_server 豁免），原因是 HAL 域的能力是多个 HAL 的并集，禁止跨安全边界原地执行任意程序。正解：`domain_auto_trans(hal_gnss_unicore, vendor_shell_exec, vendor_shell)`——执行瞬间自动域转换到目标域，既完成执行又保住隔离。
 
 最小权限原则（平台评审口径）：不得直接对 `socket_device`、`device`、`block_device`、`default_service`、`system_data_file`、`tmpfs` 这类通用标签授权——一律为对象建更具体的类型。收束判断：neverallow 报错行号指向的是设计意图，先读懂断言注释再动手，删断言永远不是选项。
+
+
 
 
 
@@ -772,6 +796,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 
 
 
+
+
 **Q27: 策略改完如何快速编译与验证？audit2allow 的正确用法是什么？**
 
 快速迭代链是：`make selinux_policy` 只编策略、确认产物落在正确分区、adb remount 推送重启验证、audit2allow 批量生成候选规则再人工审读。
@@ -782,6 +808,8 @@ vendor 策略经 `BOARD_VENDOR_SEPOLICY_DIRS` 目录列表拼接，**列表顺�
 4. **audit2allow**：`external/selinux/prebuilts/bin/audit2allow -i avc.log -p out/target/product/<device>/root/sepolicy`——`-i` 喂 denial 日志，`-p` 带上设备现有策略让工具排除已放行的规则；输出按域分组、每组给出候选 allow。它是候选不是终稿：必须理解每条"为什么需要"、剔除设计性拒绝后再落盘。
 
 注意：日志里的 "avc: granted" 不是错误——那是 auditallow 或宽容模式下放行决策的留痕，排查 denied 时可以直接忽略。
+
+
 
 **Q28: avc 里的 tcontext=audio_service 是指 audioserver 进程吗？**
 

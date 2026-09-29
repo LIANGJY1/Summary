@@ -13,12 +13,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -28,17 +32,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -107,7 +115,7 @@ data class AtlasUiTokens(
                 caption = TextStyle(fontSize = 11.sp, lineHeight = 16.sp),
             ),
             contentMaxWidth = 1240.dp,
-            readingMaxWidth = 1280.dp,
+            readingMaxWidth = 1040.dp,
         )
     }
 }
@@ -295,8 +303,8 @@ private fun CodeLanguageLabel(text: String) {
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
-                .background(Theme.MdInlineCodeBg.copy(alpha = 0.18f))
-                .padding(horizontal = 16.dp, vertical = 7.dp),
+                .background(Theme.MdInlineCodeBg.copy(alpha = 0.20f))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -306,9 +314,9 @@ private fun CodeLanguageLabel(text: String) {
             Spacer(Modifier.width(9.dp))
             Text(
                 text.uppercase(),
-                color = Theme.Muted,
+                color = Theme.MdQuote,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.8.sp,
             )
@@ -335,8 +343,14 @@ fun NavBadge(text: String, color: Color = Theme.Accent) {
     }
 }
 
-/** 行内标记：**粗体**、`代码`、[文本](url) 渲染为带样式文本（链接仅展示） */
-fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
+/**
+ * 行内标记：**粗体**、`代码`、[文本](url) 渲染为带样式文本（链接仅展示）。
+ *
+ * [codeSink] 非 null 时，`代码` 段以 `mdcN` 占位符发出、原始文本收进 sink，
+ * 由 [mdCodeInlineContents] 提供圆角芯片内容（SpanStyle 背景贴字矩形做不出药丸，
+ * 2026-09-29 用户裁决）；为 null 时退化为等宽着色文本（无芯片）。
+ */
+fun renderInline(text: String, codeSink: MutableList<String>? = null): AnnotatedString = buildAnnotatedString {
     var i = 0
     val s = text
     while (i < s.length) {
@@ -346,7 +360,9 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
                 if (end > 0) {
                     append(s.substring(i + 2, end)); addStyle(
                         SpanStyle(
-                            fontWeight = FontWeight.Bold,
+                            // ExtraBold：黑曜深色正文偏柔灰，仅 Bold 字重差在长文里区分度不足
+                            // （2026-09-29 用户反馈）；字重拉大比提亮颜色更稳，不与链接/警示色争语义。
+                            fontWeight = FontWeight.ExtraBold,
                             color = Theme.MdBold,
                         ),
                         length - (end - i - 2),
@@ -358,16 +374,18 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
             s[i] == '`' -> {
                 val end = s.indexOf('`', i + 1)
                 if (end > 0) {
-                    append(s.substring(i + 1, end)); addStyle(
-                        SpanStyle(
-                            fontFamily = FontFamily.Monospace,
-                            // 行内代码是辅助结构：保留等宽与底色，但不再使用高饱和强调色抢正文焦点。
-                            color = Theme.MdInlineCode.copy(alpha = 0.92f),
-                            background = Theme.MdInlineCodeBg.copy(alpha = 0.18f),
-                        ),
-                        length - (end - i - 1),
-                        length,
-                    )
+                    val code = s.substring(i + 1, end)
+                    if (codeSink != null) {
+                        appendInlineContent("mdc${codeSink.size}", code)
+                        codeSink.add(code)
+                    } else {
+                        append(code)
+                        addStyle(
+                            SpanStyle(fontFamily = FontFamily.Monospace, color = Theme.MdInlineCode),
+                            length - code.length,
+                            length,
+                        )
+                    }
                     i = end + 1
                 } else { append(s[i]); i++ }
             }
@@ -390,6 +408,78 @@ fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
 private val markdownBulletPattern = Regex("^\\s*[-*] ")
 private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)(.+)$")
 private val markdownTaskPattern = Regex("^\\s*[-*] \\[([ xX])\\] (.+)$")
+
+// 行内代码芯片宽度估算：芯片字取正文 0.92 倍，等宽步进 ≈0.62em（DejaVu 0.602/JBMono 0.60），
+// CJK 回退字形 ≈1.1em，加 12sp 水平内边距 + 2sp 余量——占位符宽度不足会让 Surface 裁字。
+private const val MD_CHIP_ASCII_EM = 0.62f
+private const val MD_CHIP_CJK_EM = 1.1f
+
+/** 光学下沉量：对冲 TextCenter 按字体 metrics 居中在 CJK 混排行里的「骑高」观感（可调） */
+private val MD_CHIP_OPTICAL_DROP = 2.dp
+
+private fun mdChipWidthSp(code: String, chipFontSize: TextUnit): TextUnit =
+    (code.sumOf { c -> (if (c.code > 0x2E80) MD_CHIP_CJK_EM else MD_CHIP_ASCII_EM).toDouble() }.toFloat()
+        * chipFontSize.value + 14f).sp
+
+/** 行内代码芯片的 inlineContent 表：圆角 Surface 药丸，贴身包裹代码文本 */
+@Composable
+private fun mdCodeInlineContents(codes: List<String>, fontSize: TextUnit): Map<String, InlineTextContent> =
+    if (codes.isEmpty()) {
+        emptyMap()
+    } else {
+        // 图二基准：芯片字比正文略小（0.92×）、药丸同高且垂直严格居中——
+        // 占位符高度只取 1.5em 且所有芯片共用同一 spec，同一行内的药丸才会齐平不忽高忽低。
+        // TextCenter 按字体 metrics 居中，中英混排（CJK 回退 ascent 大）的视觉中心比 metrics
+        // 中心低，药丸会整体骑高——绘制层统一下沉补偿（offset 不影响布局，全部药丸同量保持齐平）。
+        val chipFont = fontSize * 0.92f
+        codes.mapIndexed { idx, code ->
+            "mdc$idx" to InlineTextContent(
+                Placeholder(
+                    width = mdChipWidthSp(code, chipFont),
+                    height = fontSize * 1.5f,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                ),
+            ) {
+                Surface(
+                    Modifier.offset(y = MD_CHIP_OPTICAL_DROP).wrapContentSize(Alignment.Center),
+                    shape = RoundedCornerShape(4.dp),
+                    color = Theme.MdInlineCodeBg,
+                ) {
+                    Text(
+                        code,
+                        Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = chipFont,
+                        lineHeight = chipFont * 1.2f,
+                        color = Theme.MdInlineCode,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+        }.toMap()
+    }
+
+/** renderInline + 芯片 map 的组合入口：所有行内文本 Text 调用统一走这里 */
+@Composable
+private fun MdInlineText(
+    raw: String,
+    lineIndex: Int,
+    dirtyLines: Set<Int>,
+    modifier: Modifier = Modifier,
+    style: TextStyle = TextStyle.Default,
+    color: Color = Color.Unspecified,
+) {
+    val codes = remember(raw) { mutableListOf<String>() }
+    val annotated = remember(raw) { renderInline(raw, codes) }
+    Text(
+        colorIfDirty(annotated, lineIndex, dirtyLines),
+        modifier = modifier,
+        style = style,
+        color = color,
+        inlineContent = mdCodeInlineContents(codes, style.fontSize.takeIf { it != TextUnit.Unspecified } ?: 14.sp),
+    )
+}
 
 /** 答案 diff 行着色：相对 git HEAD 变化的行整行文字标橙（追加在内联样式之上） */
 private fun colorIfDirty(annotated: AnnotatedString, lineIndex: Int, dirtyLines: Set<Int>): AnnotatedString =
@@ -466,18 +556,18 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         }
                     }
                 }
-                line.startsWith("### ") -> Text(
-                    colorIfDirty(renderInline(line.removePrefix("### ")), i, dirtyLines),
+                line.startsWith("### ") -> MdInlineText(
+                    line.removePrefix("### "), i, dirtyLines,
                     modifier = Modifier.padding(top = 7.dp),
                     style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 24.sp), color = Theme.MdH3,
                 )
-                line.startsWith("## ") -> Text(
-                    colorIfDirty(renderInline(line.removePrefix("## ")), i, dirtyLines),
+                line.startsWith("## ") -> MdInlineText(
+                    line.removePrefix("## "), i, dirtyLines,
                     modifier = Modifier.padding(top = 10.dp),
                     style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 28.sp), color = Theme.MdH2,
                 )
-                line.startsWith("# ") -> Text(
-                    colorIfDirty(renderInline(line.removePrefix("# ")), i, dirtyLines),
+                line.startsWith("# ") -> MdInlineText(
+                    line.removePrefix("# "), i, dirtyLines,
                     modifier = Modifier.padding(top = 12.dp),
                     style = ui.typography.pageTitle.copy(fontSize = 25.sp, lineHeight = 34.sp), color = Theme.MdH1,
                 )
@@ -487,12 +577,11 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         .padding(horizontal = 12.dp, vertical = 11.dp),
                 ) {
                     Box(Modifier.width(2.dp).height(24.dp).background(Theme.MdQuote.copy(alpha = 0.75f), RoundedCornerShape(2.dp)))
-                    Text(
-                        colorIfDirty(renderInline(line.removePrefix("> ")), i, dirtyLines),
-                        Modifier.padding(start = 12.dp).fillMaxWidth(),
+                    MdInlineText(
+                        line.removePrefix("> "), i, dirtyLines,
+                        modifier = Modifier.padding(start = 12.dp).fillMaxWidth(),
+                        style = TextStyle(fontSize = 15.sp, lineHeight = 25.sp),
                         color = Theme.MdQuote,
-                        fontSize = 15.sp,
-                        lineHeight = 25.sp,
                     )
                 }
                 line.trim() == "---" -> VDivider()
@@ -510,18 +599,19 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                                 Text(if (checked) "✓" else "", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Theme.OkGreen)
                             }
                         }
-                        Text(
-                            colorIfDirty(renderInline(task.groupValues[2]), i, dirtyLines),
-                            Modifier.padding(start = 10.dp).fillMaxWidth(),
+                        MdInlineText(
+                            task.groupValues[2], i, dirtyLines,
+                            modifier = Modifier.padding(start = 10.dp).fillMaxWidth(),
                             style = ui.typography.body.copy(color = if (checked) Theme.Muted else MaterialTheme.colorScheme.onSurface),
                         )
                     }
                 }
                 Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
-                    Text("•", color = Theme.MdH2, fontSize = 15.sp)
-                    Text(
-                        colorIfDirty(renderInline(line.trimStart().removePrefix("- ").removePrefix("* ")), i, dirtyLines),
-                        Modifier.padding(start = 10.dp),
+                    // 序号/圆点是结构标记：常态弱化为次要色、不加字重，把强调层级留给内容自身的 **粗体**
+                    Text("•", color = Theme.Muted, fontSize = 15.sp)
+                    MdInlineText(
+                        line.trimStart().removePrefix("- ").removePrefix("* "), i, dirtyLines,
+                        modifier = Modifier.padding(start = 10.dp),
                         style = ui.typography.body,
                     )
                 }
@@ -531,13 +621,12 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         Text(
                             "${numbered.groupValues[1]}.",
                             Modifier.width(26.dp),
-                            color = Theme.MdH2,
-                            fontWeight = FontWeight.SemiBold,
+                            color = Theme.Muted,
                             style = ui.typography.body,
                         )
-                        Text(
-                            colorIfDirty(renderInline(numbered.groupValues[2]), i, dirtyLines),
-                            Modifier.fillMaxWidth(),
+                        MdInlineText(
+                            numbered.groupValues[2], i, dirtyLines,
+                            modifier = Modifier.fillMaxWidth(),
                             style = ui.typography.body,
                         )
                     }
@@ -554,8 +643,8 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     i = j - 1
                 }
                 line.isBlank() -> Spacer(Modifier.height(3.dp))
-                else -> Text(
-                    colorIfDirty(renderInline(line), i, dirtyLines),
+                else -> MdInlineText(
+                    line, i, dirtyLines,
                     style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface),
                 )
             }
@@ -583,18 +672,16 @@ private fun ReaderMarkdownTableRow(cells: List<String>, header: Boolean, columnC
     // IntrinsicSize.Min + fillMaxHeight：换行格撑起整行高度，其余格子的背景/边框同步拉伸对齐
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         repeat(columnCount) { index ->
-            Text(
-                renderInline(cells.getOrNull(index).orEmpty()),
-                Modifier
+            MdInlineText(
+                cells.getOrNull(index).orEmpty(), 0, emptySet(),
+                modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (header) 0.8f else 0.4f))
                     .background(if (header) Theme.MdH2.copy(alpha = 0.12f) else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 9.dp),
-                fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }

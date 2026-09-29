@@ -1,6 +1,6 @@
 # HAL
 
-> 学习资料（文章模式沉淀）。主线：HAL 三种存在形态与 Treble/VINTF 兼容边界。车机 VHAL 的服务侧机制见 [../06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q28–Q34；2026-09-25 增补实用调试题（Q2–Q3，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：HAL 三种存在形态与 Treble/VINTF 兼容边界。车机 VHAL 的服务侧机制见 [../06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q28–Q33；2026-09-25 增补实用调试题（Q2–Q3，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: HAL 有哪几种存在形态？Treble 之后 system 与 vendor 的边界靠什么维持兼容？**
 

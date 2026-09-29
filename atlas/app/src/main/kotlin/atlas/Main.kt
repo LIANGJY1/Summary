@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -51,6 +52,7 @@ import atlas.ui.QuestionSection
 import atlas.ui.SettingsView
 import atlas.ui.Theme
 import atlas.ui.TodayView
+import atlas.ui.ToolsDestination
 import atlas.ui.ToolsView
 import atlas.ui.VDivider
 import atlas.ui.WindowControlButtons
@@ -158,6 +160,7 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     var tab by remember { mutableStateOf("工作台") }
     var learnSection by remember { mutableStateOf("复习") }
     var settingsSection by remember { mutableStateOf("root") }
+    var toolsDestination by remember { mutableStateOf(ToolsDestination.LOG_DECRYPT) }
     var showPalette by remember { mutableStateOf(false) }
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(store.libraryReady) {
@@ -195,9 +198,19 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown && e.key == Key.K && e.isCtrlPressed) {
-                    Log.d("Ctrl+K 打开命令面板"); showPalette = true; true
-                } else false
+                when {
+                    e.type == KeyEventType.KeyDown && e.key == Key.K && e.isCtrlPressed -> {
+                        Log.d("Ctrl+K 打开命令面板"); showPalette = true; true
+                    }
+                    // 题库页搜索栏默认隐藏，Ctrl+Shift+F 召出/收起（§6.4.19）；
+                    // 收起时的焦点归位统一由 QuestionSection 的可见性联动负责（覆盖键盘/点击全部路径）
+                    e.type == KeyEventType.KeyDown && e.key == Key.F && e.isCtrlPressed && e.isShiftPressed && tab == "题库" -> {
+                        store.questionSearchVisible.value = !store.questionSearchVisible.value
+                        Log.d("Ctrl+Shift+F 题库搜索栏 → ${store.questionSearchVisible.value}")
+                        true
+                    }
+                    else -> false
+                }
             },
     ) {
         // 顶栏（兼自定义标题栏：拖动移动窗口，双击最大化）
@@ -236,8 +249,8 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         Box(Modifier.weight(1f)) {
             when (tab) {
                 "学习" -> LearningView(store, learnSection) { learnSection = it }
-                "题库" -> QuestionSection(store)
-                "工具" -> ToolsView(store)
+                "题库" -> QuestionSection(store, rootFocus)
+                "工具" -> ToolsView(store, toolsDestination) { toolsDestination = it }
                 "设置" -> if (settingsSection == "配色") {
                     ColorSettingsPage(store) { settingsSection = "root" }
                 } else {
@@ -256,13 +269,14 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         Row(
             Modifier.fillMaxWidth()
                 .background(Theme.Panel)
-                .padding(horizontal = ui.spacing.page, vertical = 5.dp),
+                .padding(horizontal = ui.spacing.page, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("条目 ${store.notes.size}", fontSize = 11.sp, color = Theme.Muted)
-            Text("待确认 $inbox", fontSize = 11.sp, color = Theme.Muted)
+            // 行高显式收紧：裸 fontSize 会继承默认字体的行盒（~20sp），把整条状态栏撑高（2026-09-29 反馈）
+            Text("条目 ${store.notes.size}", fontSize = 11.sp, lineHeight = 13.sp, color = Theme.Muted)
+            Text("待确认 $inbox", fontSize = 11.sp, lineHeight = 13.sp, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
-            store.toast.value?.let { Text(it, fontSize = 11.sp, color = Theme.OkGreen) }
+            store.toast.value?.let { Text(it, fontSize = 11.sp, lineHeight = 13.sp, color = Theme.OkGreen) }
         }
     }
     }
@@ -283,41 +297,36 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     }
 }
 
-/** 顶栏导航页签：激活态用底部指示线，悬停才使用轻量表面反馈。 */
+/** 顶栏导航页签：所有状态共用同一枚等高胶囊（默认/悬停轻底/激活抬升底+强调字），不做下划线——
+ * 之前激活项内联追加指示条使页签高度不一致，顶栏垂直居中后文字基线错位。 */
 @Composable
 private fun NavTab(label: String, active: Boolean, onClick: () -> Unit, badge: (@Composable () -> Unit)? = null) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    Column(
+    Row(
         Modifier
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null) { onClick() }
             .background(
-                if (hovered && !active) Theme.Hover else Color.Transparent,
+                when {
+                    active -> Theme.Selected
+                    hovered -> Theme.Hover
+                    else -> Color.Transparent
+                },
                 RoundedCornerShape(8.dp),
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 12.dp)
+            .height(28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                label,
-                fontSize = 13.sp,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (active) Theme.Accent else Theme.Muted,
-            )
-            badge?.invoke()
-        }
-        if (active) {
-            Spacer(Modifier.height(4.dp))
-            Box(
-                Modifier.width(18.dp).height(2.dp)
-                    .background(Theme.Accent, RoundedCornerShape(2.dp)),
-            )
-        }
+        Text(
+            label,
+            fontSize = 13.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (active) Theme.Accent else Theme.Muted,
+        )
+        badge?.invoke()
     }
 }
 
@@ -433,20 +442,21 @@ fun SetupView(store: AppStore) {
     }
 }
 
-/** 合法旧自定义主题升级为 V2；已删除的内置主题与坏记录安全回落到 Atlas。 */
+/** 合法旧自定义主题升级为 V2；未知内置名与坏记录安全回落到 Atlas。 */
 internal fun migrateThemeSettings(s: atlas.core.AppSettings): atlas.core.AppSettings {
     val decoded = s.customThemes.mapNotNull { CustomTheme.decode(it) }
     val migrated = decoded.map { it.encode() }
     val customNames = decoded.map { it.name }.toSet()
+    val builtInNames = AtlasThemes.ALL.map { it.name }.toSet()
     val selected = when {
         s.themeName in customNames -> s.themeName
-        s.themeName == AtlasThemes.NAME -> AtlasThemes.NAME
-        else -> AtlasThemes.NAME
+        s.themeName in builtInNames -> s.themeName
+        else -> AtlasThemes.DEFAULT.name
     }
     return s.copy(themeName = selected, customThemes = migrated)
 }
 
-/** 主题名 → [ThemeSpec]：同名自定义优先，否则使用唯一内置 Atlas。 */
+/** 主题名 → [ThemeSpec]：同名自定义优先，其次内置主题，未知名称回退 Atlas。 */
 internal fun resolveTheme(s: atlas.core.AppSettings): ThemeSpec {
     val name = s.themeName
     if (name.isNotBlank()) {
@@ -454,6 +464,7 @@ internal fun resolveTheme(s: atlas.core.AppSettings): ThemeSpec {
             .mapNotNull { CustomTheme.decode(it) }
             .firstOrNull { it.name == name }
             ?.let { return it.spec(s.darkTheme) }
+        AtlasThemes.ALL.firstOrNull { it.name == name }?.let { return it.spec(s.darkTheme) }
     }
-    return AtlasThemes.ATLAS.spec(s.darkTheme)
+    return AtlasThemes.DEFAULT.spec(s.darkTheme)
 }

@@ -64,6 +64,14 @@ data class AppSettings(
     val recordingBitrate: Int = 4000,
     /** 题库上次选中的源文档路径（重启恢复）；空 = 未记录，用默认文档。 */
     val selectedSourcePath: String = "",
+    /** 任务自动化（工具页）：连接模式 auto（无线优先、USB 兜底）|wireless|usb，与无线模式的 IP、端口。PIN 存独立 0600 文件，不在此。 */
+    val feishuMode: String = "auto",
+    val feishuIp: String = "",
+    val feishuPort: Int = 5555,
+    /** 设备工具箱（工具页）：推送 APK 的本机路径、设备截图保存目录、模拟器 AVD 名。 */
+    val pushApkPath: String = "",
+    val screenshotSaveDir: String = "",
+    val emulatorAvd: String = "3DAA",
 ) {
     val darkTheme: Boolean get() = theme == "dark"
 
@@ -98,6 +106,12 @@ class SettingsStore(private val file: File) {
             recordingFps = p.getProperty("recordingFps")?.toIntOrNull()?.coerceIn(5, 60) ?: 15,
             recordingBitrate = p.getProperty("recordingBitrate")?.toIntOrNull()?.coerceIn(500, 20000) ?: 4000,
             selectedSourcePath = p.getProperty("selectedSourcePath") ?: "",
+            feishuMode = p.getProperty("feishuMode") ?: "auto",
+            feishuIp = p.getProperty("feishuIp") ?: "",
+            feishuPort = p.getProperty("feishuPort")?.toIntOrNull()?.coerceIn(1024, 65535) ?: 5555,
+            pushApkPath = p.getProperty("pushApkPath") ?: "",
+            screenshotSaveDir = p.getProperty("screenshotSaveDir") ?: "",
+            emulatorAvd = p.getProperty("emulatorAvd") ?: "3DAA",
         )
         Log.d("设置已读取 ${file.absolutePath} library=${s.libraryPath} theme=${s.theme}")
         return s
@@ -120,6 +134,12 @@ class SettingsStore(private val file: File) {
         p.setProperty("recordingFps", s.recordingFps.toString())
         p.setProperty("recordingBitrate", s.recordingBitrate.toString())
         if (s.selectedSourcePath.isNotEmpty()) p.setProperty("selectedSourcePath", s.selectedSourcePath)
+        p.setProperty("feishuMode", s.feishuMode)
+        if (s.feishuIp.isNotEmpty()) p.setProperty("feishuIp", s.feishuIp)
+        p.setProperty("feishuPort", s.feishuPort.toString())
+        if (s.pushApkPath.isNotEmpty()) p.setProperty("pushApkPath", s.pushApkPath)
+        if (s.screenshotSaveDir.isNotEmpty()) p.setProperty("screenshotSaveDir", s.screenshotSaveDir)
+        p.setProperty("emulatorAvd", s.emulatorAvd)
         file.outputStream().use { p.store(it, "Atlas settings") }
         Log.i("设置已写入 ${file.absolutePath}")
     }

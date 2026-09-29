@@ -279,7 +279,7 @@ CarService 起链路（Android 13 批注）：
 2. new ICarImpl：构造约 30 个车机子服务进 mAllServices 表，init() 先 VHAL 再按表序逐个初始化，依赖顺序由表序表达（与 SystemServer 四波装配同构）；
 3. ServiceManager.addService("car_service") 并置 `boot.car_service_created=1`，与 CarServiceHelperService 互持 Binder。
 
-设计与边界：车辆数据是一切车机决策的源头，VehicleDeathRecipient 检测到 VHAL 死亡就 kill 整个 CarService 进程、靠绑定者重新拉起——数据完整性优先于可用性，普通应用服务不宜如此激进。VHAL 死亡自毁的触发细节、AIDL/HIDL 兜底选择与订阅契约的服务侧展开见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q28–Q34。框架侧宿主 CarServiceHelperService（com.android.internal.car 包）不在标注仓库内，其启动时序与绑定重试行为属推断，深入需另查完整源码树。
+设计与边界：车辆数据是一切车机决策的源头，VehicleDeathRecipient 检测到 VHAL 死亡就 kill 整个 CarService 进程、靠绑定者重新拉起——数据完整性优先于可用性，普通应用服务不宜如此激进。VHAL 死亡自毁的触发细节、AIDL/HIDL 兜底选择与订阅契约的服务侧展开见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q28–Q33。框架侧宿主 CarServiceHelperService（com.android.internal.car 包）不在标注仓库内，其启动时序与绑定重试行为属推断，深入需另查完整源码树。
 
 
 
@@ -292,7 +292,7 @@ CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原�
 1. **换图定制点**：Dagger 化的代码用根组件替换当主定制点，比继承或复制源码可维护；前提是目标代码已 Dagger 化、组件边界清晰；
 2. **TaskView 行为差异**：地图是另一个进程的 Activity，崩溃与焦点行为和普通 View 完全不同，`autoRestartOnCrash=false` 意味着地图崩溃后卡片留白、需用户手动重进；
 3. **多用户边界**：CarSystemUIInitializer 只给 system user 注入 RootTaskDisplayAreaOrganizer（副驾屏等按用户隔离）；headless system user 0 的设备上 CarLauncher 不显示地图卡片；
-4. **崩溃连锁**：car_service 进程被杀会连带 CarSystemUI/CarLauncher 的依赖（它们经 CarServiceProvider 等待重连），调试时 kill CarService 进程应预期 UI 层短暂异常。TaskView/CarSystemUI 的公开故障案例与官方修复清单见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q35–Q36。
+4. **崩溃连锁**：car_service 进程被杀会连带 CarSystemUI/CarLauncher 的依赖（它们经 CarServiceProvider 等待重连），调试时 kill CarService 进程应预期 UI 层短暂异常。TaskView/CarSystemUI 的公开故障案例与官方修复清单见 [06-system/02-OEM与设备差异.md](../06-system/02-OEM与设备差异.md) Q34–Q35。
 
 **Q21: ramdisk 是什么？明明有真分区，开机为什么还要一块内存里的临时根文件系统？**
 

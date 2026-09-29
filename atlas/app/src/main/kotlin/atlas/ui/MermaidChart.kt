@@ -3,6 +3,7 @@ package atlas.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
@@ -116,7 +118,7 @@ internal fun mermaidLayerRows(graph: MermaidGraph): List<List<String>>? {
 
 private class MermaidLayout(
     val nodeTopLefts: Map<String, Offset>,
-    val nodeSize: Size,
+    val nodeSizes: Map<String, Size>,
     val labelLayouts: Map<String, TextLayoutResult>,
     val edges: List<MermaidEdgePlacement>,
     val widthPx: Float,
@@ -132,29 +134,39 @@ private class MermaidEdgePlacement(
 
 private fun computeMermaidLayout(graph: MermaidGraph, rows: List<List<String>>, textMeasurer: TextMeasurer, density: Density): MermaidLayout {
     fun px(dp: androidx.compose.ui.unit.Dp) = with(density) { dp.toPx() }
-    val padH = px(20.dp)
-    val padV = px(12.dp)
-    val nodeGap = px(36.dp)
-    val layerGap = px(64.dp)
+    val padH = px(16.dp)
+    val padV = px(10.dp)
+    val nodeGap = px(28.dp)
+    val layerGap = px(44.dp)
     val margin = px(10.dp)
-    val maxTextWidth = px(230.dp).toInt()
+    val maxTextWidth = px(260.dp).toInt()
 
     val nodeTextStyle = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium)
     val measured = graph.nodes.associate { (id, label) ->
         id to textMeasurer.measure(label, nodeTextStyle, maxLines = 2, overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = maxTextWidth))
     }
-    val nodeW = measured.values.maxOf { it.size.width } + padH * 2
-    val nodeH = measured.values.maxOf { it.size.height } + padV * 2
-    val rowWidths = rows.map { row -> row.size * nodeW + (row.size - 1) * nodeGap }
-    val totalW = maxOf(rowWidths.max(), nodeW) + margin * 2
-    val totalH = rows.size * nodeH + (rows.size - 1) * layerGap + margin * 2
+    // 节点各自贴合标签尺寸：短标签不再被最宽节点撑成大框（否则框内大片留白，图显得空且大）
+    val nodeSizes = graph.nodes.associate { (id, _) ->
+        val m = measured.getValue(id)
+        id to Size(m.size.width + padH * 2, m.size.height + padV * 2)
+    }
+    val rowWidths = rows.map { row -> row.sumOf { nodeSizes.getValue(it).width.toDouble() }.toFloat() + (row.size - 1) * nodeGap }
+    val rowHeights = rows.map { row -> row.maxOf { nodeSizes.getValue(it).height } }
+    val totalW = rowWidths.max() + margin * 2
+    val totalH = rowHeights.sum() + (rows.size - 1) * layerGap + margin * 2
 
     val topLefts = mutableMapOf<String, Offset>()
+    var y = margin
     rows.forEachIndexed { rIdx, row ->
-        row.forEachIndexed { cIdx, id ->
-            val x = margin + (totalW - margin * 2 - rowWidths[rIdx]) / 2 + cIdx * (nodeW + nodeGap)
-            topLefts[id] = Offset(x, margin + rIdx * (nodeH + layerGap))
+        val rowX = margin + (totalW - margin * 2 - rowWidths[rIdx]) / 2
+        var x = rowX
+        row.forEach { id ->
+            val s = nodeSizes.getValue(id)
+            // 同层节点在层带内垂直居中：高矮不一的框共享一条视觉中线
+            topLefts[id] = Offset(x, y + (rowHeights[rIdx] - s.height) / 2)
+            x += s.width + nodeGap
         }
+        y += rowHeights[rIdx] + layerGap
     }
     val edges = graph.edges.map { (from, to, label) ->
         val f = topLefts.getValue(from)
@@ -163,15 +175,15 @@ private fun computeMermaidLayout(graph: MermaidGraph, rows: List<List<String>>, 
             textMeasurer.measure(it, TextStyle(fontSize = 10.sp), maxLines = 1)
         }
         MermaidEdgePlacement(
-            start = Offset(f.x + nodeW / 2, f.y + nodeH),
-            end = Offset(t.x + nodeW / 2, t.y),
-            midY = (f.y + nodeH + t.y) / 2,
+            start = Offset(f.x + nodeSizes.getValue(from).width / 2, f.y + nodeSizes.getValue(from).height),
+            end = Offset(t.x + nodeSizes.getValue(to).width / 2, t.y),
+            midY = (f.y + nodeSizes.getValue(from).height + t.y) / 2,
             labelLayout = labelLayout,
         )
     }
     return MermaidLayout(
         nodeTopLefts = topLefts,
-        nodeSize = Size(nodeW, nodeH),
+        nodeSizes = nodeSizes,
         labelLayouts = measured,
         edges = edges,
         widthPx = totalW,
@@ -203,13 +215,29 @@ fun MermaidFlowchartView(lines: List<String>, modifier: Modifier = Modifier) {
     val nodeFill = Theme.Panel
     val chipColor = Theme.CodeBg
 
-    Box(modifier.fillMaxWidth().clipToBounds().horizontalScroll(rememberScrollState())) {
-        Canvas(
-            Modifier
-                .width(with(density) { layout.widthPx.toDp() })
-                .height(with(density) { layout.heightPx.toDp() }),
-        ) {
-            drawMermaid(layout, nodeTextColor, edgeLabelColor, lineColor, nodeFill, chipColor)
+    BoxWithConstraints(modifier.fillMaxWidth().clipToBounds()) {
+        val viewportWidthPx = with(density) { maxWidth.toPx() }
+        // 图永不放大：窄于视口按原尺寸居中留白，宽于视口才等比缩小（§6.4.16 推翻 §6.4.10 的 1.35 倍放大——
+        // 放大把节点文字与间距同步撑大，架构图占满整屏，喧宾夺主）
+        val scale = if (layout.widthPx > viewportWidthPx && layout.widthPx > 0f) {
+            viewportWidthPx / layout.widthPx
+        } else {
+            1f
+        }
+        val drawnWidthPx = layout.widthPx * scale
+        val canvasWidth = maxOf(maxWidth, with(density) { drawnWidthPx.toDp() })
+        val canvasHeight = with(density) { (layout.heightPx * scale).toDp() }
+
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            Canvas(Modifier.width(canvasWidth).height(canvasHeight)) {
+                val left = ((size.width - drawnWidthPx) / 2f).coerceAtLeast(0f)
+                withTransform({
+                    translate(left = left)
+                    scale(scaleX = scale, scaleY = scale, pivot = Offset.Zero)
+                }) {
+                    drawMermaid(layout, nodeTextColor, edgeLabelColor, lineColor, nodeFill, chipColor)
+                }
+            }
         }
     }
 }
@@ -222,7 +250,7 @@ private fun DrawScope.drawMermaid(
     nodeFill: Color,
     chipColor: Color,
 ) {
-    val corner = CornerRadius(10.dp.toPx())
+    val corner = CornerRadius(8.dp.toPx())
     layout.edges.forEach { edge ->
         val elbow = Path().apply {
             moveTo(edge.start.x, edge.start.y)
@@ -251,15 +279,16 @@ private fun DrawScope.drawMermaid(
         }
     }
     layout.nodeTopLefts.forEach { (id, topLeft) ->
-        drawRoundRect(nodeFill, topLeft, layout.nodeSize, corner)
-        drawRoundRect(lineColor, topLeft, layout.nodeSize, corner, style = Stroke(width = 1.dp.toPx()))
+        val size = layout.nodeSizes.getValue(id)
+        drawRoundRect(nodeFill, topLeft, size, corner)
+        drawRoundRect(lineColor, topLeft, size, corner, style = Stroke(width = 1.dp.toPx()))
         // 直接绘制布局阶段缓存的 TextLayoutResult：几何与节点框一致，不会重新测量导致文字溢出重叠
         drawText(
             layout.labelLayouts.getValue(id),
             color = nodeTextColor,
             topLeft = Offset(
-                topLeft.x + (layout.nodeSize.width - layout.labelLayouts.getValue(id).size.width) / 2,
-                topLeft.y + (layout.nodeSize.height - layout.labelLayouts.getValue(id).size.height) / 2,
+                topLeft.x + (size.width - layout.labelLayouts.getValue(id).size.width) / 2,
+                topLeft.y + (size.height - layout.labelLayouts.getValue(id).size.height) / 2,
             ),
         )
     }

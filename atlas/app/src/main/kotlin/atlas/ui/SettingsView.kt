@@ -366,7 +366,8 @@ internal fun ThemeSwatch(
 ) {
     Column(
         modifier
-            .width(150.dp)
+            .widthIn(min = 120.dp, max = 260.dp)
+            .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
             .background(if (active) Theme.Selected else Color.Transparent)
             .border(
@@ -569,7 +570,8 @@ internal fun CreateThemeDialog(store: AppStore, onCreated: (String) -> Unit, onD
     val existing = store.settings.customThemes.mapNotNull { CustomTheme.decode(it) }.map { it.name }.toSet()
     var name by remember { mutableStateOf("") }
     val trimmed = name.trim()
-    val dup = trimmed.isNotEmpty() && trimmed in existing
+    val reserved = trimmed in AtlasThemes.ALL.map { it.name }
+    val dup = trimmed.isNotEmpty() && (trimmed in existing || reserved)
     val valid = trimmed.isNotEmpty() && !dup
 
     Dialog(onDismissRequest = onDismiss) {
@@ -584,7 +586,7 @@ internal fun CreateThemeDialog(store: AppStore, onCreated: (String) -> Unit, onD
                     isError = dup,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (dup) Text("已有同名主题，换个名字", fontSize = 11.sp, color = Theme.BadRed)
+                if (dup) Text("主题名称已被占用或属于内置主题，请换一个名字", fontSize = 11.sp, color = Theme.BadRed)
                 Text("将复制 Atlas 的浅色与深色配色，创建后可分别编辑。", fontSize = 12.sp, color = Theme.Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThemeSwatch("Atlas", "浅色", AtlasThemes.ATLAS.light, false, {}, Modifier.weight(1f))

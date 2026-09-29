@@ -1,6 +1,6 @@
 # CarService 服务速览
 
-> 学习资料（文章模式沉淀）。主线：packages/services/Car 中除核心链路（电源/属性/音频/多用户/UXR，见 [02-OEM与设备差异.md](./02-OEM与设备差异.md)）之外的其余系统服务——媒体源管理、蓝牙策略、遥测、诊断、车机 bugreport、设备策略、存储监控与投影宿主。机制按 LineageOS `lineage-21.0` 镜像（AOSP Android 14）源码逐服务核对（2026-09-25）；CarUxRestrictions 定制与驾驶状态推导的专项题亦在 OEM 册（Q37–Q39）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：packages/services/Car 中除核心链路（电源/属性/多用户/UXR 见 [02-OEM与设备差异.md](./02-OEM与设备差异.md)，音频见 [../13-audio/](../13-audio/)）之外的其余系统服务——媒体源管理、蓝牙策略、遥测、诊断、车机 bugreport、设备策略、存储监控与投影宿主。机制按 LineageOS `lineage-21.0` 镜像（AOSP Android 14）源码逐服务核对（2026-09-25）；CarUxRestrictions 定制与驾驶状态推导的专项题亦在 OEM 册（Q36–Q38）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: CarService 里除了电源/属性/音频这些核心服务，还有哪些系统服务？怎么快速建立全景？**
 

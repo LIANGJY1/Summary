@@ -69,7 +69,10 @@ object SourceQuestions {
     private val boldPattern = Regex("^\\s*\\*\\*Q(\\d+)\\s*[:：]\\s*(.*?)\\*\\*\\s*$")
     private val headingPattern = Regex("^\\s*#{1,6}\\s*Q(\\d+)\\s*[:：]\\s*(.*?)\\s*$")
     private val plainPattern = Regex("^\\s*Q(\\d+)\\s*[:：]\\s*(.*?)\\s*$")
-    private val sectionPattern = Regex("^\\s*第\\s*[0-9一二三四五六七八九十百]+\\s*[章节]\\s+(.+?)\\s*$")
+    // 允许 Markdown 标题前缀（"## 第 2 章 …"）：知识库文档的章标题常带 # 写法，
+    // 不识别的话章标题既不出 § 分隔行、也不作为答案边界，会被上一题的答案整个吞掉
+    // （答案结束边界 = 下一个题目标记或下一个章标题，2026-09-28 用户截图复现）
+    private val sectionPattern = Regex("^\\s*(?:#{1,6}\\s+)?第\\s*[0-9一二三四五六七八九十百]+\\s*[章节]\\s+(.+?)\\s*$")
     private val statusPrefixPattern = Regex("^\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*")
 
     fun isSupportedPath(path: String, supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS): Boolean {

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """无线 ADB 远程控制手机进行飞书打卡。
 
+用法与故障排查见同目录 README.md（连接通道现状、坏线抢窗口、已知坑）。
+
 前置条件：
 1. 手机已开启开发者选项和无线调试（或已通过 USB 执行过 adb tcpip 5555）
 2. 手机和电脑在同一 Wi-Fi 下
@@ -199,11 +201,51 @@ def _find_adb() -> str:
     return "adb"
 
 
+def link_test(device, pin: str):
+    """链路测试：唤醒 →（有 PIN 时）解锁 → 启动应用 → 截图。
+
+    只验证通路，不 force-stop、不进入目标页面；结束后不熄屏（留在应用页面供人工确认）。
+    """
+    awake = "mWakefulness=Awake" in device._run(
+        ["shell", "dumpsys", "power"], check=False
+    ).stdout
+    if awake:
+        print("屏幕已亮，跳过唤醒")
+    else:
+        device.wake()
+    if pin:
+        device.unlock(pin)
+    else:
+        print("未提供 PIN，跳过解锁（锁屏下仅验证到应用拉起）")
+    print("启动应用 com.ss.android.lark")
+    device._run(
+        ["shell", "monkey", "-p", "com.ss.android.lark",
+         "-c", "android.intent.category.LAUNCHER", "1"],
+        check=False,
+    )
+    time.sleep(2.5)
+    device.screenshot("/tmp/feishu_checkin_linktest.png")
+    print("链路测试完成（不熄屏）")
+
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--link-test":
+        # 链路测试模式：--link-test [usb|手机IP] [PIN]
+        ip = sys.argv[2] if len(sys.argv) > 2 else "usb"
+        pin = sys.argv[3] if len(sys.argv) > 3 else ""
+        adb_path = _find_adb()
+        device = AdbDevice(ip, 5555, adb_path)
+        if not device.connect():
+            print("连接失败：USB 未插线或无线地址不可达")
+            sys.exit(1)
+        link_test(device, pin)
+        return
+
     if len(sys.argv) < 2:
         print("用法: python feishu_checkin.py <手机IP|usb> [端口] [PIN]")
+        print("      python feishu_checkin.py --link-test [usb|手机IP] [PIN]")
         print("示例: python feishu_checkin.py 192.168.1.100 5555 1234")
-        print("       python feishu_checkin.py usb 5555 1234")
+        print("      python feishu_checkin.py usb 5555 1234")
         sys.exit(1)
 
     ip = sys.argv[1]

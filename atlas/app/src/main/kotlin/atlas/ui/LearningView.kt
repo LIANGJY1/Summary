@@ -51,12 +51,18 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -380,7 +386,7 @@ internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, tota
     !isSaving && targetIndex in 0 until total
 
 @Composable
-fun QuestionSection(store: AppStore) {
+fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -401,6 +407,23 @@ fun QuestionSection(store: AppStore) {
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
+    // 搜索栏默认隐藏，Ctrl+Shift+F 召出/收起（状态在 store：跨页签保留，根窗口统一处理按键）。
+    // 收起即清词与范围——否则会留下看不见的过滤条件继续生效。
+    val searchFocusRequester = remember { FocusRequester() }
+    // 搜索区与页面根的窗口坐标：供"点击搜索区之外自动收起"判定
+    var searchRectInWindow by remember { mutableStateOf<Rect?>(null) }
+    var pageOriginInWindow by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(store.questionSearchVisible.value) {
+        if (store.questionSearchVisible.value) {
+            searchFocusRequester.requestFocus()
+        } else {
+            query = ""
+            searchScope = QuestionSearchScope.ALL
+            // 收起可能来自键盘、点击外部等多条路径，但都汇到这一个状态：无论哪条都要把焦点
+            // 交还根节点——焦点悬空后后续按键到不了任何处理层，Ctrl+Shift+F 会"失灵"
+            runCatching { rootFocus.requestFocus() }
+        }
+    }
     // 拖拽几何一律现读 layoutInfo：它只含本帧已组合的项，随滚动自然失效，不会残留陈旧坐标。
     // 绝不要为它再挂一份逐卡缓存——卡片滚出组合范围后缓存会冻结，目标位次就会跟着漂移。
     val listState = rememberLazyListState()
@@ -486,8 +509,37 @@ fun QuestionSection(store: AppStore) {
         animationSpec = tween(200),
         label = "tree-sidebar-chevron",
     )
-    Row(Modifier.fillMaxSize().padding(ui.spacing.page)) {
-        Column(Modifier.width(treeWidth).clipToBounds().fillMaxHeight()) {
+    // 目录侧栏通栏到窗沿（无页面留白、无圆角），右缘分隔线即面板边界——与设置/工具页侧栏同构；
+    // 页面留白改由内容区自担，避免「圆角浮岛」四周割离的观感（2026-09-29 用户反馈）。
+    Row(
+        Modifier.fillMaxSize()
+            .onGloballyPositioned { pageOriginInWindow = it.positionInWindow() }
+            // 搜索栏可见时，点击搜索区之外（树、题卡、空白处）即收起；不消费事件，点击照常生效
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val press = event.changes.firstOrNull()
+                        if (
+                            event.type == PointerEventType.Press &&
+                            store.questionSearchVisible.value &&
+                            press != null
+                        ) {
+                            val rect = searchRectInWindow
+                            if (rect?.contains(pageOriginInWindow + press.position) != true) {
+                                Log.d("点击搜索区之外，收起题库搜索栏")
+                                store.questionSearchVisible.value = false
+                            }
+                        }
+                    }
+                }
+            },
+    ) {
+        Column(
+            Modifier.width(treeWidth).clipToBounds().fillMaxHeight()
+                .background(Theme.Panel)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
             if (sidebarExpanded) {
                 Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.MdH1)
                 Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
@@ -495,24 +547,24 @@ fun QuestionSection(store: AppStore) {
                     Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
                 }
                 Spacer(Modifier.height(10.dp))
-            }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                item(key = knowledgeTree.path) {
-                    KnowledgeTreeNodeView(
-                        node = knowledgeTree,
-                        depth = 0,
-                        expandedDirs = expandedDirs,
-                        selectedPath = store.selectedSourcePath,
-                        onToggleDirectory = { path ->
-                            expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
-                        },
-                        onSelectFile = { path ->
-                            expanded = emptySet()
-                            query = ""
-                            locateSource(path)
-                        },
-                        onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
-                    )
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    item(key = knowledgeTree.path) {
+                        KnowledgeTreeNodeView(
+                            node = knowledgeTree,
+                            depth = 0,
+                            expandedDirs = expandedDirs,
+                            selectedPath = store.selectedSourcePath,
+                            onToggleDirectory = { path ->
+                                expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
+                            },
+                            onSelectFile = { path ->
+                                expanded = emptySet()
+                                query = ""
+                                locateSource(path)
+                            },
+                            onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
+                        )
+                    }
                 }
             }
         }
@@ -561,39 +613,54 @@ fun QuestionSection(store: AppStore) {
             }
         }
         Spacer(Modifier.width(10.dp))
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+        Box(
+            // 侧栏改通栏后页面留白由内容区自担（左侧间距已由手柄+间隔提供）
+            // 底部只留 4dp：滚到底的余量由列表 contentPadding（12dp）一层提供，
+            // 两层叠加会让最后一张卡片与底边之间出现大段空白（2026-09-29 用户反馈）
+            Modifier.weight(1f).fillMaxHeight()
+                .padding(top = ui.spacing.page, end = ui.spacing.page, bottom = 4.dp),
+        ) {
             Column(
-                Modifier.widthIn(max = ui.contentMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
+                // 页面列（搜索/工具行/题卡）与库内阅读流共用 1040dp 阅读网格，宽窗下整列居中；
+                // 卡片边框因此贴合内容，不再出现 1240 宽卡 + 卡内 1040 文字的两侧空带
+                Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
             ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索题目关键词…") },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Theme.InputBg,
-                unfocusedContainerColor = Theme.InputBg,
-                focusedBorderColor = Theme.Accent.copy(alpha = 0.82f),
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
-                cursorColor = Theme.Accent,
-            ),
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("搜索范围", style = ui.typography.secondary, color = Theme.Muted)
-            QuestionSearchScope.entries.forEach { scope ->
-                val active = searchScope == scope
-                Text(
-                    scope.label,
-                    Modifier
-                        .clickable { searchScope = scope }
-                        .background(if (active) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    fontSize = ui.typography.secondary.fontSize,
-                    color = if (active) Theme.Accent else Theme.Muted,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+        // 搜索栏（输入框 + 范围行）默认隐藏，Ctrl+Shift+F 召出并聚焦；点击其外任意区域自动收起
+        if (store.questionSearchVisible.value) {
+            Column(
+                Modifier.fillMaxWidth().onGloballyPositioned { searchRectInWindow = it.boundsInWindow() },
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                    placeholder = { Text("搜索题目关键词…") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Theme.InputBg,
+                        unfocusedContainerColor = Theme.InputBg,
+                        focusedBorderColor = Theme.Accent.copy(alpha = 0.82f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f),
+                        cursorColor = Theme.Accent,
+                    ),
                 )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("搜索范围", style = ui.typography.secondary, color = Theme.Muted)
+                    QuestionSearchScope.entries.forEach { scope ->
+                        val active = searchScope == scope
+                        Text(
+                            scope.label,
+                            Modifier
+                                .clickable { searchScope = scope }
+                                .background(if (active) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            fontSize = ui.typography.secondary.fontSize,
+                            color = if (active) Theme.Accent else Theme.Muted,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -722,6 +789,8 @@ fun QuestionSection(store: AppStore) {
                 },
             state = listState,
             verticalArrangement = Arrangement.spacedBy(7.dp),
+            // 底部留白：滚到底时最后一张卡片不贴死视口底边（否则看起来像被截断）
+            contentPadding = PaddingValues(bottom = 12.dp),
         ) {
             if (visible.isEmpty()) item { Text("没有匹配的题目。", fontSize = 13.sp, color = Theme.Muted) }
             items(documentItems, key = { item ->
@@ -731,16 +800,22 @@ fun QuestionSection(store: AppStore) {
                 }
             }) { item ->
                 if (item is SourceDocumentItem.Section) {
+                    // 章节分隔：标签式细线（小竖条 + 强调色小标题 + 延伸细线），不再是整宽填充横幅——
+                    // 章节是文档结构元数据，安静但可扫读，不与题目卡片争层级（2026-09-29 用户反馈）。
                     Row(
                         Modifier.animateItem()
                             .fillMaxWidth()
-                            .background(Theme.Selected, MaterialTheme.shapes.small)
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                            .padding(top = 12.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("§", color = Theme.MdH2, fontWeight = FontWeight.Bold)
+                        Box(Modifier.width(3.dp).height(13.dp).background(Theme.Accent.copy(alpha = 0.8f), RoundedCornerShape(2.dp)))
                         Spacer(Modifier.width(8.dp))
-                        Text(item.heading.title, color = Theme.MdH2, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(item.heading.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.Accent)
+                        Spacer(Modifier.width(10.dp))
+                        Box(
+                            Modifier.weight(1f).height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
+                        )
                     }
                     return@items
                 }
@@ -800,9 +875,9 @@ fun QuestionSection(store: AppStore) {
                         .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
                             when {
-                                // 展开态保持中性内容面，只用边框和左侧语义标记表达当前焦点；
-                                // 拖拽中不透明浮起（下层文字不透出重影）；悬停仅给收起态叠蒙层。
-                                isExpanded -> Theme.Panel
+                                // 展开态抬升为 Elevated 内容面：与收起卡一眼可辨（2026-09-29 用户反馈），
+                                // 悬停仍只作用于收起卡；拖拽中不透明浮起（下层文字不透出重影）。
+                                isExpanded -> Theme.Elevated
                                 isDragging -> Theme.Pressed
                                 cardHovered -> Theme.Hover
                                 else -> Theme.Panel
@@ -820,8 +895,12 @@ fun QuestionSection(store: AppStore) {
                         )
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
+                    // 整卡内容列（题干+答案+操作行）共用 1040 阅读度量并在卡面内居中：
+                    // 落实 §6.4.9/§6.4.10「题目与答案共享同一内容边缘」，超宽屏下留白对称分布，
+                    // 不再出现答案列被单独钉在 1040 左对齐造成的右侧空白带。
+                    // 顺序不能错：widthIn 必须在 fillMaxWidth 之前经 wrapContentWidth 生效（§6.4.8 教训）。
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = ui.readingMaxWidth),
                         verticalAlignment = Alignment.Top,
                     ) {
                         if (reorderMode) {
@@ -860,13 +939,27 @@ fun QuestionSection(store: AppStore) {
                             Spacer(Modifier.height(4.dp))
                             // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
                             // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
-                            // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）
-                            key(entryKey, entry.question) {
-                                SelectionContainer {
-                                    Text(
-                                        remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                        style = ui.typography.itemTitle,
-                                    )
+                            // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）。
+                            // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
+                            // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
+                            // 排序时文字选择无意义，整卡都是拖拽热区。
+                            // 题面降档：onSurface 全亮度（黑曜 #DDE2E8）+ SemiBold 在深色下刺眼
+                            // （2026-09-29 用户反馈），0.86 透明度回到柔白档，对比度仍远超 AA。
+                            if (reorderMode) {
+                                Text(
+                                    remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
+                                    style = ui.typography.itemTitle,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
+                                )
+                            } else {
+                                key(entryKey, entry.question) {
+                                    SelectionContainer {
+                                        Text(
+                                            remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
+                                            style = ui.typography.itemTitle,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
+                                        )
+                                    }
                                 }
                             }
                             if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
@@ -942,7 +1035,8 @@ fun QuestionSection(store: AppStore) {
                                     "移动",
                                     Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
                                     fontSize = 13.sp,
-                                    color = Theme.WarnOrange,
+                                    // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
+                                    color = Theme.Muted,
                                 )
                                 Text(
                                     "删除",
@@ -1134,10 +1228,12 @@ private fun KnowledgeTreeNodeView(
             Text(
                 node.name,
                 onTextLayout = { nameTruncated = it.hasVisualOverflow },
+                // 树行三级层次：目录=结构锚点用正文色，文件常态压到次级灰避免整列亮字，
+                // 选中项才用强调色提亮（低眩光导航，悬停/选中底色不变）
                 color = when {
                     selected -> Theme.Accent
                     node.isDirectory -> MaterialTheme.colorScheme.onSurface
-                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f)
+                    else -> Theme.Muted
                 },
                 fontSize = 13.sp,
                 fontWeight = when {

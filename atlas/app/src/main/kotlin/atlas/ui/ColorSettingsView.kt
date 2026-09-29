@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import atlas.AppStore
 import atlas.core.Log
 
-/** Atlas 双模式预览与用户主题管理；唯一内置主题不提供编辑和删除入口。 */
+/** 内置主题与用户主题管理；内置主题不提供编辑和删除入口。 */
 @Composable
 fun ColorSettingsPage(store: AppStore, onBack: () -> Unit) {
     val ui = atlasUiTokens()
@@ -61,24 +61,27 @@ fun ColorSettingsPage(store: AppStore, onBack: () -> Unit) {
                 Text("配色主题", style = ui.typography.pageTitle, color = Theme.MdH1)
             }
 
-            SettingsSection("Atlas 基线", "以统一的语义色服务界面与 Markdown 阅读；浅色和深色独立调校。") {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ThemeSwatch(
-                        label = "Atlas", sub = "浅色", spec = AtlasThemes.ATLAS.light,
-                        active = !dark && store.settings.themeName == AtlasThemes.NAME,
-                        onClick = { store.settings = store.settings.copy(theme = "light", themeName = AtlasThemes.NAME); store.saveSettings() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    ThemeSwatch(
-                        label = "Atlas", sub = "深色", spec = AtlasThemes.ATLAS.dark,
-                        active = dark && store.settings.themeName == AtlasThemes.NAME,
-                        onClick = { store.settings = store.settings.copy(theme = "dark", themeName = AtlasThemes.NAME); store.saveSettings() },
-                        modifier = Modifier.weight(1f),
-                    )
+            SettingsSection("内置主题", "主题皮肤与浅深模式分别选择；当前模式下的预览会即时生效。") {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AtlasThemes.ALL.forEach { definition ->
+                        val sameNameCustomExists = custom.any { it.name == definition.name }
+                        ThemeSwatch(
+                            label = definition.name,
+                            sub = when {
+                                sameNameCustomExists && store.settings.themeName == definition.name -> "同名自定义主题生效"
+                                dark -> "深色"
+                                else -> "浅色"
+                            },
+                            spec = definition.spec(dark),
+                            active = store.settings.themeName == definition.name && !sameNameCustomExists,
+                            onClick = { selectTheme(definition.name) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
 
-            SettingsSection("我的主题", "自定义主题会保存在本机；内置 Atlas 始终保留为安全基线。") {
+            SettingsSection("我的主题", "自定义主题会保存在本机；内置主题始终保留为安全基线。") {
                 SettingsActionRow {
                     OutlinedButton(onClick = { showCreateTheme = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("基于 Atlas 新建", fontSize = 12.sp) }
                 }

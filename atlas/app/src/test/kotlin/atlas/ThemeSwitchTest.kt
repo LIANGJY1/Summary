@@ -15,6 +15,8 @@ class ThemeSwitchTest {
     fun `深浅切换解析 Atlas 对应模式`() {
         assertEquals(AtlasThemes.ATLAS.light, resolveTheme(AppSettings(theme = "light", themeName = "Atlas")))
         assertEquals(AtlasThemes.ATLAS.dark, resolveTheme(AppSettings(theme = "dark", themeName = "Atlas")))
+        assertEquals(AtlasThemes.BLACK.light, resolveTheme(AppSettings(theme = "light", themeName = AtlasThemes.BLACK_NAME)))
+        assertEquals(AtlasThemes.BLACK.dark, resolveTheme(AppSettings(theme = "dark", themeName = AtlasThemes.BLACK_NAME)))
     }
 
     @Test
@@ -29,7 +31,7 @@ class ThemeSwitchTest {
     }
 
     @Test
-    fun `旧内置选择回退 Atlas 且合法旧主题升级为 V2`() {
+    fun `黑曜内置选择保留而未知主题回退 Atlas且合法旧主题升级为 V2`() {
         val legacy = "markdown|" + listOf(
             "#FF8AADF4", "#FFA6DA95", "#FFF5A97F", "#FFED8796", "#FFA5ADCB", "#FF1E2030",
             "#FFC6A0F6", "#FF24273A", "#FF1E2030", "#FF181926", "#FFCAD3F5", "#FF5B6078",
@@ -38,6 +40,7 @@ class ThemeSwitchTest {
         assertEquals("Atlas", migrated.themeName)
         assertEquals(1, migrated.customThemes.size)
         assertEquals(true, migrated.customThemes.single().startsWith("v2|markdown|"))
+        assertEquals(AtlasThemes.BLACK_NAME, migrateThemeSettings(AppSettings(themeName = AtlasThemes.BLACK_NAME)).themeName)
     }
 
     @Test

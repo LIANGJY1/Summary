@@ -182,9 +182,10 @@ data class CustomTheme(
     }
 }
 
-/** 唯一内置主题：中性石墨与柔白纸面，浅深两版均为人工校准值。 */
+/** 内置主题色板：每套主题的浅深模式均为独立人工校准值。 */
 object AtlasThemes {
     const val NAME = "Atlas"
+    const val BLACK_NAME = "黑曜"
 
     val ATLAS = ThemeDefinition(
         name = NAME,
@@ -214,11 +215,40 @@ object AtlasThemes {
         ),
     )
 
-    val ALL: List<ThemeDefinition> = listOf(ATLAS)
+    /** 中性炭黑灰阶画布（R=G=B，无色相偏移）与柔和文字层级；低彩蓝灰只用于链接及少量焦点提示。 */
+    val BLACK = ThemeDefinition(
+        name = BLACK_NAME,
+        dark = ThemeSpec(
+            accent = color("#AEB3BA"), okGreen = color("#84A78D"),
+            warnOrange = color("#B49A73"), badRed = color("#BC8588"),
+            muted = color("#919191"), codeBg = color("#131313"),
+            background = color("#151515"), surface = color("#1B1B1B"),
+            surfaceVariant = color("#222222"), onSurface = color("#D2D2D2"),
+            outline = color("#686868"), outlineVariant = color("#2A2A2A"),
+            mdH1 = color("#DBDBDB"), mdH2 = color("#C1C1C1"),
+            mdH3 = color("#D0D0D0"), mdBold = color("#E0E0E0"),
+            mdLink = color("#9BB1CE"), mdQuote = color("#A6A6A6"),
+            mdInlineCode = color("#B2B2B2"), mdInlineCodeBg = color("#262626"),
+        ),
+        light = ThemeSpec(
+            accent = color("#4B5058"), okGreen = color("#2F7453"),
+            warnOrange = color("#875A28"), badRed = color("#A4474F"),
+            muted = color("#62666D"), codeBg = color("#F0F0EE"),
+            background = color("#F4F4F2"), surface = color("#FFFFFF"),
+            surfaceVariant = color("#E9E9E7"), onSurface = color("#25272B"),
+            outline = color("#70757E"), outlineVariant = color("#D8D9D7"),
+            mdH1 = color("#202226"), mdH2 = color("#4A5058"),
+            mdH3 = color("#292C30"), mdBold = color("#101214"),
+            mdLink = color("#3E5B7A"), mdQuote = color("#565B62"),
+            mdInlineCode = color("#484D54"), mdInlineCodeBg = color("#EBECEA"),
+        ),
+    )
+
+    val ALL: List<ThemeDefinition> = listOf(ATLAS, BLACK)
     val DEFAULT: ThemeDefinition = ATLAS
 
-    fun byName(@Suppress("UNUSED_PARAMETER") name: String): ThemeDefinition = ATLAS
-    fun specOf(@Suppress("UNUSED_PARAMETER") name: String, dark: Boolean): ThemeSpec = ATLAS.spec(dark)
+    fun byName(name: String): ThemeDefinition = ALL.firstOrNull { it.name == name } ?: DEFAULT
+    fun specOf(name: String, dark: Boolean): ThemeSpec = byName(name).spec(dark)
 }
 
 /** 将旧单模式记录映射到新版字段；仅供 [CustomTheme.decode] 的迁移分支使用。 */

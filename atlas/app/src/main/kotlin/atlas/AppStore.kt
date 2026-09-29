@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import atlas.core.AppSettings
+import atlas.core.DeviceTools
 import atlas.core.DocMarker
+import atlas.core.FeishuCheckin
 import atlas.core.Inbox
 import atlas.core.Log
 import atlas.core.MdStores
@@ -14,7 +16,9 @@ import atlas.core.MdStores.CardEntry
 import atlas.core.MdStores.QuestionEntry
 import atlas.core.NoteFile
 import atlas.core.OutboxTasks
+import atlas.core.Prompts
 import atlas.core.QuestionStatus
+import atlas.core.WmsParser
 import atlas.core.SettingsStore
 import atlas.core.SourceQuestions
 import atlas.core.TextDiff
@@ -27,11 +31,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.awt.Desktop
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -51,7 +59,7 @@ internal fun sourceQuestionGitKey(entry: SourceQuestions.Entry): String =
 /**
  * 应用中枢：持有全部状态与动作。UI 只读状态 + 调动作。
  */
-class AppStore(private val configDir: File = File(System.getProperty("user.home"), ".local/share/atlas")) {
+class AppStore(val configDir: File = File(System.getProperty("user.home"), ".local/share/atlas")) {
 
     val scope = CoroutineScope(Dispatchers.IO)
 
@@ -147,6 +155,421 @@ class AppStore(private val configDir: File = File(System.getProperty("user.home"
                 showToast("解密运行失败：${e.message}")
             }
         }
+    }
+
+    /** 工具页：任务自动化运行状态（跨页签保留，阻塞流程在 scope 的 IO 协程里跑） */
+    val feishuRun = mutableStateOf<FeishuCheckin.FeishuRun?>(null)
+
+    /** 工具页：手机链路连通状态（卡片可见时由 UI 定时刷新） */
+    val feishuLink = mutableStateOf<FeishuCheckin.LinkStatus?>(null)
+
+    /** 链路预检（幂等，秒级），结果回写 feishuLink；执行期间跳过 */
+    fun refreshFeishuLink() {
+        if (feishuRun.value?.running == true) return
+        scope.launch { refreshFeishuLinkNow() }
+    }
+
+    /** 手动重检的挂起变体：完成后返回结果（feishuLink 已同步更新），UI 据此报告检测结果 */
+    suspend fun refreshFeishuLinkNow(): FeishuCheckin.LinkStatus? {
+        if (feishuRun.value?.running == true) return feishuLink.value
+        val link = runCatching { FeishuCheckin.checkLink(feishuConfig()) }.getOrNull()
+        if (link != null) {
+            feishuLink.value = link
+            Log.d("工具页：链路检测 ${link.describe()}")
+        }
+        return link
+    }
+
+    /** 题库页：搜索栏可见性（默认隐藏，Ctrl+Shift+F 召出/收起；跨页签保留） */
+    val questionSearchVisible = mutableStateOf(false)
+
+    /** 工具页：USB 一键转无线进行中（按钮禁用 + 文案切换） */
+    val feishuWirelessBusy = mutableStateOf(false)
+
+    /** USB 一键转无线：读手机 Wi-Fi 地址 → tcpip → connect，成功即落配置并刷新链路（§6.4.18） */
+    fun feishuUsbToWireless() {
+        if (feishuRun.value?.running == true || feishuWirelessBusy.value) return
+        feishuWirelessBusy.value = true
+        scope.launch {
+            val result = runCatching { FeishuCheckin.usbToWireless(feishuConfig()) }
+                .getOrElse { FeishuCheckin.UsbWirelessResult(false, "转换失败：${it.message}") }
+            if (result.ok && result.ip != null) {
+                saveFeishuConfig(settings.feishuMode, result.ip, settings.feishuPort)
+                Log.i("工具页：USB 转无线成功，配置已保存 ${result.ip}:${settings.feishuPort}")
+            }
+            feishuWirelessBusy.value = false
+            showToast(result.message)
+            if (result.ok) refreshFeishuLink()
+        }
+    }
+
+    private fun feishuConfig(pin: String = "") = FeishuCheckin.FeishuConfig(
+        mode = settings.feishuMode,
+        deviceIp = settings.feishuIp,
+        devicePort = settings.feishuPort,
+        pin = pin,
+    )
+
+    fun runFeishuCheckin() {
+        if (feishuRun.value?.running == true) return
+        val pin = FeishuCheckin.readPin(configDir)
+        if (pin.isBlank()) {
+            showToast("请先在「设置」里保存手机锁屏 PIN")
+            return
+        }
+        Log.i("工具页：运行任务自动化 mode=${settings.feishuMode} ip=${settings.feishuIp}")
+        feishuRun.value = FeishuCheckin.FeishuRun(running = true)
+        scope.launch {
+            runCatching {
+                FeishuCheckin.runCheckin(feishuConfig(pin), configDir) { line ->
+                    Log.i("工具页：$line")
+                    appendFeishuLine(line)
+                }
+            }.onSuccess { run ->
+                feishuRun.value = run
+                if (run.exitCode == 0) showToast("流程执行完毕，请确认截图")
+                else showToast(run.summary ?: "未成功，请看输出详情")
+                refreshFeishuLink()
+            }.onFailure { e ->
+                Log.e("工具页：自动化运行异常", e)
+                feishuRun.value = FeishuCheckin.FeishuRun(
+                    running = false, exitCode = -1, summary = "运行异常：${e.message}",
+                )
+                showToast("运行失败：${e.message}")
+            }
+        }
+    }
+
+    /** 链路测试：唤醒 → 解锁（有 PIN 时）→ 启动应用 → 截图，只验证通路不进入目标页面 */
+    fun runFeishuLinkTest() {
+        if (feishuRun.value?.running == true) return
+        val pin = FeishuCheckin.readPin(configDir)
+        Log.i("工具页：链路测试 mode=${settings.feishuMode} ip=${settings.feishuIp} pin=${pin.isNotBlank()}")
+        feishuRun.value = FeishuCheckin.FeishuRun(running = true)
+        scope.launch {
+            runCatching {
+                FeishuCheckin.runLinkTest(feishuConfig(pin), configDir) { line ->
+                    Log.i("工具页：$line")
+                    appendFeishuLine(line)
+                }
+            }.onSuccess { run ->
+                feishuRun.value = run
+                if (run.exitCode == 0) showToast("通路正常，请看手机或截图")
+                else showToast(run.summary ?: "链路测试未成功")
+                refreshFeishuLink()
+            }.onFailure { e ->
+                Log.e("工具页：链路测试异常", e)
+                feishuRun.value = FeishuCheckin.FeishuRun(
+                    running = false, exitCode = -1, summary = "链路测试异常：${e.message}",
+                )
+                showToast("链路测试失败：${e.message}")
+            }
+        }
+    }
+
+    private fun appendFeishuLine(line: String) {
+        val cur = feishuRun.value ?: return
+        feishuRun.value = cur.copy(lines = (cur.lines + line).takeLast(30))
+    }
+
+    fun saveFeishuConfig(mode: String, ip: String, port: Int) {
+        settings = settings.copy(feishuMode = mode, feishuIp = ip.trim(), feishuPort = port)
+        saveSettings()
+    }
+
+    fun saveFeishuPin(pin: String) {
+        FeishuCheckin.writePin(configDir, pin)
+        Log.i("工具页：锁屏 PIN 已更新（独立 0600 文件）")
+    }
+
+    // ---------- 工具页：设备工具箱（launcher_tool 原生移植，单并发沿用原约束） ----------
+
+    val toolRun = mutableStateOf(DeviceTools.ToolRun())
+
+    private val toolMutex = Mutex()
+
+    fun runTool(tool: DeviceTools.Tool) {
+        if (toolRun.value.running) {
+            showToast("已有工具在运行，请稍候")
+            return
+        }
+        scope.launch {
+            toolMutex.withLock {
+                val lines = mutableListOf<String>()
+                fun progress(msg: String) {
+                    lines += msg
+                    toolRun.value = DeviceTools.ToolRun(tool.id, running = true, lines = lines.takeLast(50))
+                }
+                Log.i("工具页：运行工具 ${tool.id}")
+                toolRun.value = DeviceTools.ToolRun(tool.id, running = true)
+                val exit = runCatching { executeTool(tool, ::progress) }
+                    .getOrElse { e ->
+                        Log.e("工具页：工具运行异常 ${tool.id}", e)
+                        progress("运行异常：${e.message}")
+                        -1
+                    }
+                toolRun.value = DeviceTools.ToolRun(tool.id, running = false, lines = lines.takeLast(50), exitCode = exit)
+                showToast(if (exit == 0) "${tool.label} 完成" else "${tool.label} 未成功（exit $exit）")
+            }
+        }
+    }
+
+    /** 单个工具的执行体，返回退出码（0=成功） */
+    private fun executeTool(tool: DeviceTools.Tool, progress: (String) -> Unit): Int {
+        val adbPath = FeishuCheckin.findAdb()
+        return when (tool) {
+            DeviceTools.Tool.PUSH_LAUNCHER -> {
+                val apk = settings.pushApkPath
+                if (apk.isBlank() || !File(apk).isFile) {
+                    progress("APK 不存在：${apk.ifBlank { "未配置路径，请在设置里填写" }}")
+                    return 1
+                }
+                val adb = adbPath ?: return failNoAdb(progress)
+                runSequence(DeviceTools.pushLauncherCommands(adb, apk), progress)
+            }
+            DeviceTools.Tool.REBOOT_LAUNCHER -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                progress("查找 ${DeviceTools.LAUNCHER_PACKAGE} 进程…")
+                val (_, psOut) = execCapture(DeviceTools.listProcessesArgs(adb))
+                val pid = DeviceTools.parsePid(psOut, DeviceTools.LAUNCHER_PACKAGE)
+                if (pid == null) {
+                    progress("未找到运行中的 Launcher 进程")
+                    return 1
+                }
+                progress("结束进程 PID=$pid")
+                execCapture(DeviceTools.killPidArgs(adb, pid))
+                0
+            }
+            DeviceTools.Tool.SCREENSHOT -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                val dir = File(settings.screenshotSaveDir.ifBlank { File(System.getProperty("user.home"), "Desktop").absolutePath })
+                val target = DeviceTools.nextScreenshotFile(dir)
+                val (code, png) = execCaptureBytes(DeviceTools.screenshotArgs(adb))
+                if (code != 0 || png.isEmpty()) {
+                    progress("截屏失败（设备未连接？）")
+                    return 1
+                }
+                target.writeBytes(png)
+                progress("已保存 ${target.absolutePath}")
+                0
+            }
+            DeviceTools.Tool.CLEAR_LOGCAT -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                execCapture(DeviceTools.clearLogcatArgs(adb))
+                0
+            }
+            DeviceTools.Tool.START_EMULATOR, DeviceTools.Tool.COLD_BOOT_EMULATOR -> {
+                val emu = DeviceTools.findEmulator() ?: run {
+                    progress("未找到模拟器（~/Android/Sdk/emulator/emulator）")
+                    return 1
+                }
+                val cold = tool == DeviceTools.Tool.COLD_BOOT_EMULATOR
+                ProcessBuilder(DeviceTools.emulatorArgs(emu, settings.emulatorAvd, cold))
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectErrorStream(false)
+                    .start()
+                progress("模拟器启动中（${settings.emulatorAvd}${if (cold) "，冷启动" else ""}）")
+                0
+            }
+            DeviceTools.Tool.STRIP_SLASHES -> {
+                val cb = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                val text = runCatching {
+                    cb.getData(java.awt.datatransfer.DataFlavor.stringFlavor) as? String
+                }.getOrNull()
+                if (text.isNullOrBlank()) {
+                    progress("剪贴板为空，请先复制要处理的内容")
+                    return 1
+                }
+                cb.setContents(java.awt.datatransfer.StringSelection(DeviceTools.stripCommentSlashes(text)), null)
+                progress("已处理并写回剪贴板，可直接粘贴")
+                0
+            }
+        }
+    }
+
+    private fun failNoAdb(progress: (String) -> Unit): Int {
+        progress("未找到 adb，请确认 Android platform-tools 已安装")
+        return 1
+    }
+
+    /** 顺序执行命令序列并流式收集输出；单条 30s 超时强杀；首条失败即停 */
+    private fun runSequence(cmds: List<List<String>>, progress: (String) -> Unit): Int {
+        for ((index, cmd) in cmds.withIndex()) {
+            progress("==> [${index + 1}/${cmds.size}] ${cmd.drop(1).joinToString(" ")}")
+            val (code, out) = execCapture(cmd)
+            out.trim().takeIf { it.isNotEmpty() }?.let { progress(it.trim()) }
+            if (code != 0) {
+                progress("命令失败 exit=$code")
+                return code
+            }
+        }
+        return 0
+    }
+
+    /** 执行一条命令收集合并输出；30s 超时强杀（先异步读满再等退出，防挂死） */
+    private fun execCapture(cmd: List<String>, timeoutMs: Long = 30_000L): Pair<Int, String> {
+        val proc = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val future = CompletableFuture.supplyAsync { proc.inputStream.bufferedReader().readText() }
+        if (!proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+            proc.destroyForcibly()
+            future.cancel(true)
+            return -1 to "命令超时(${timeoutMs}ms)"
+        }
+        return proc.exitValue() to runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
+    }
+
+    private fun execCaptureBytes(cmd: List<String>, timeoutMs: Long = 30_000L): Pair<Int, ByteArray> {
+        val proc = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val future = CompletableFuture.supplyAsync { proc.inputStream.readBytes() }
+        if (!proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+            proc.destroyForcibly()
+            future.cancel(true)
+            return -1 to ByteArray(0)
+        }
+        return proc.exitValue() to runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault(ByteArray(0))
+    }
+
+    // ---------- 工具页：logcat 流式捕获 ----------
+
+    val logcatLines = mutableStateListOf<String>()
+    val logcatRunning = mutableStateOf(false)
+    private var logcatProcess: Process? = null
+
+    /** 开始捕获（Kotlin 侧过滤，替代原 grep --line-buffered 管道） */
+    fun startLogcat(filter: String) {
+        if (logcatRunning.value) return
+        val adbPath = FeishuCheckin.findAdb()
+        if (adbPath == null) {
+            showToast("未找到 adb，请确认 Android platform-tools 已安装")
+            return
+        }
+        val f = filter.trim()
+        val proc = ProcessBuilder(DeviceTools.logcatArgs(adbPath)).redirectErrorStream(true).start()
+        logcatProcess = proc
+        logcatLines.clear()
+        logcatRunning.value = true
+        scope.launch {
+            proc.inputStream.bufferedReader().useLines { seq ->
+                for (line in seq) {
+                    if (f.isEmpty() || f in line) appendLogcatLine(line)
+                }
+            }
+            // 流自然结束 = 设备断开
+            logcatRunning.value = false
+            if (logcatProcess === proc) logcatProcess = null
+            showToast("日志流已结束")
+        }
+    }
+
+    fun stopLogcat() {
+        logcatProcess?.destroy()
+        logcatProcess = null
+        logcatRunning.value = false
+    }
+
+    private fun appendLogcatLine(line: String) {
+        if (logcatLines.size >= 500) logcatLines.removeAt(0)
+        logcatLines.add(line)
+    }
+
+    // ---------- 工具页：WMS 查看器 ----------
+    // 树/diff/详情状态放 AppStore：侧栏切换分区后不丢已拉取的窗口树（dumpsys 重取成本高）
+
+    val wmsLoading = mutableStateOf(false)
+    val wmsError = mutableStateOf<String?>(null)
+    var wmsLeftRoot by mutableStateOf<WmsParser.Node?>(null)
+    var wmsRightRoot by mutableStateOf<WmsParser.Node?>(null)
+    var wmsLeftDiff by mutableStateOf<Map<Int, WmsParser.Diff>>(emptyMap())
+    var wmsRightDiff by mutableStateOf<Map<Int, WmsParser.Diff>>(emptyMap())
+    var wmsDetail by mutableStateOf<String?>(null)
+
+    /** 载入 dumpsys 输出到指定栏位（0=左 1=右）；管道命令走 sh -c 保留 shell 语义（与 python 版一致） */
+    fun loadWmsDump(command: String, slot: Int) {
+        if (wmsLoading.value) return
+        val adbPath = FeishuCheckin.findAdb()
+        if (adbPath == null) {
+            wmsError.value = "未找到 adb，请确认 Android platform-tools 已安装"
+            return
+        }
+        wmsLoading.value = true
+        wmsError.value = null
+        scope.launch {
+            val cmd = if ('|' in command || '\'' in command) {
+                listOf("sh", "-c", "$adbPath shell '${command.replace("'", "'\\''")}'")
+            } else {
+                listOf(adbPath, "shell") + command.split(" ")
+            }
+            val (code, text) = execCapture(cmd)
+            if (code != 0) {
+                wmsError.value = "命令失败 exit=$code${if (text.isBlank()) "" else "：${text.take(200)}"}"
+            } else {
+                val root = WmsParser.parse(text.lines())
+                if (slot == 0) {
+                    wmsLeftRoot = root
+                    wmsLeftDiff = emptyMap()
+                } else {
+                    wmsRightRoot = root
+                    wmsRightDiff = emptyMap()
+                }
+                wmsDetail = null
+            }
+            wmsLoading.value = false
+        }
+    }
+
+    /** 双栏对比：按展平序列对齐写回 diff 标记；返回 是否有差异（未载齐两栏返回 null） */
+    fun compareWmsTrees(): Boolean? {
+        val left = wmsLeftRoot ?: return null
+        val right = wmsRightRoot ?: return null
+        val (ld, rd) = WmsParser.diff(WmsParser.flatten(left), WmsParser.flatten(right))
+        wmsLeftDiff = WmsParser.flatten(left)
+            .mapIndexed { i, node -> System.identityHashCode(node) to ld[i] }
+            .filter { it.second != WmsParser.Diff.NONE }.toMap()
+        wmsRightDiff = WmsParser.flatten(right)
+            .mapIndexed { i, node -> System.identityHashCode(node) to rd[i] }
+            .filter { it.second != WmsParser.Diff.NONE }.toMap()
+        return !(ld.all { it == WmsParser.Diff.NONE } && rd.all { it == WmsParser.Diff.NONE })
+    }
+
+    // ---------- 工具页：提示词库 ----------
+
+    val prompts = mutableStateListOf<Prompts.Entry>()
+    private var promptsLoaded = false
+
+    fun loadPrompts() {
+        if (promptsLoaded) return
+        promptsLoaded = true
+        val entries = Prompts.load(promptsFile())
+        prompts.clear()
+        prompts.addAll(entries)
+    }
+
+    private fun promptsFile() = File(configDir, "prompts.md")
+
+    fun savePrompts() = Prompts.save(promptsFile(), prompts.toList())
+
+    fun addPrompt(title: String, body: String) {
+        prompts.add(Prompts.Entry(title.trim(), body.trim()))
+        savePrompts()
+    }
+
+    fun updatePrompt(index: Int, title: String, body: String) {
+        if (index !in prompts.indices) return
+        prompts[index] = Prompts.Entry(title.trim(), body.trim())
+        savePrompts()
+    }
+
+    fun deletePrompt(index: Int) {
+        if (index !in prompts.indices) return
+        prompts.removeAt(index)
+        savePrompts()
+    }
+
+    fun copyPromptToClipboard(index: Int) {
+        val entry = prompts.getOrNull(index) ?: return
+        val cb = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+        cb.setContents(java.awt.datatransfer.StringSelection(entry.title + "\n\n" + entry.body), null)
+        showToast("已复制「${entry.title}」")
     }
 
     private var watchJob: Job? = null

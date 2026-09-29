@@ -2,6 +2,7 @@ package atlas
 
 import atlas.core.SourceQuestions
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -94,6 +95,31 @@ class SourceQuestionsTest {
 
         assertEquals("第一题答案。", questions[0].answer)
         assertEquals("函数与集合", sections.single().title)
+        assertTrue(sections.single().startOffset >= questions[0].endOffset)
+    }
+
+    @Test
+    fun `Markdown 标题形式的章标题同样切断答案`() {
+        // 01-语法基础.md 的实际写法是 "## 第 2 章 函数与集合"：不识别时章标题会被
+        // 上一题答案吞掉（答案一直延伸到下一题标记）
+        val text = """
+            **Q3: 上一题？**
+
+            上一题答案。
+
+            ## 第 2 章 函数与集合
+
+            **Q4: 下一题？**
+
+            下一题答案。
+        """.trimIndent()
+
+        val questions = SourceQuestions.parse("language/kotlin/01-语法基础.md", text)
+        val sections = SourceQuestions.parseSections("language/kotlin/01-语法基础.md", text)
+
+        assertEquals("上一题答案。", questions[0].answer, "章标题不得混入上一题答案")
+        assertFalse(questions[0].answer.contains("函数与集合"))
+        assertEquals(listOf("函数与集合"), sections.map { it.title })
         assertTrue(sections.single().startOffset >= questions[0].endOffset)
     }
 

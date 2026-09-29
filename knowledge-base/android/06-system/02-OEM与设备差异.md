@@ -1,6 +1,6 @@
 # OEM 与设备差异
 
-> 学习资料（文章模式沉淀）。主线：OEM 在调度、内存、功耗、温控与设备能力分级上的实现空间，以及应用如何用公开 API 与可复现证据和厂商策略协作——从 OEM 归因流程、SoC 平台差异、游戏模式与输入优先级，到 Power HAL 与 Power Stats、Media Performance Class、Private Space 边界，再到 Android Auto 与 Android Automotive OS 性能。源文档：android-internals-wiki 第 19 章《OEM 与设备差异》§19.1–§19.7；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（freezer debounce 默认值、lmkd oom_adj 协议、GAME_LOADING 传递、CarPropertyManager registerCallback、Private Space 不在本地树等），厂商闭源实现（Power HAL、SoC 私有服务）不做事源码级断言、内核 6.18 专属内容按材料口径转写、不确定处已弱化；Private Space 为 Android 15+、Android 17 CDD 新增 MPC 等级、AAOS App Lock 为车载特权组件等版本敏感结论按材料已核对官方文档的口径标注。调度、DVFS 与温控的机制层见 [../cpu-power/01-调度与功耗框架.md](../08-cpu-power/01-调度与功耗框架.md)；2026-09-25 增补 Q28–Q41（VHAL/CarService 服务侧机制与 AAOS UX/多用户/TaskView 案例，按 packages/services/Car、Car SystemUI/Car Launcher 与 frameworks/base 镜像源码核对）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：OEM 在调度、内存、功耗、温控与设备能力分级上的实现空间，以及应用如何用公开 API 与可复现证据和厂商策略协作——从 OEM 归因流程、SoC 平台差异、游戏模式与输入优先级，到 Power HAL 与 Power Stats、Media Performance Class、Private Space 边界，再到 Android Auto 与 Android Automotive OS 性能。源文档：android-internals-wiki 第 19 章《OEM 与设备差异》§19.1–§19.7；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（freezer debounce 默认值、lmkd oom_adj 协议、GAME_LOADING 传递、CarPropertyManager registerCallback、Private Space 不在本地树等），厂商闭源实现（Power HAL、SoC 私有服务）不做事源码级断言、内核 6.18 专属内容按材料口径转写、不确定处已弱化；Private Space 为 Android 15+、Android 17 CDD 新增 MPC 等级、AAOS App Lock 为车载特权组件等版本敏感结论按材料已核对官方文档的口径标注。调度、DVFS 与温控的机制层见 [../cpu-power/01-调度与功耗框架.md](../08-cpu-power/01-调度与功耗框架.md)；2026-09-25 增补 Q28–Q41（VHAL/CarService 服务侧机制与 AAOS UX/多用户/TaskView 案例，按 packages/services/Car、Car SystemUI/Car Launcher 与 frameworks/base 镜像源码核对）；原 Q31（CarAudioService 多音区焦点）已于 2026-09-28 移入 [../13-audio/02-AAOS车机音频.md](../13-audio/02-AAOS车机音频.md)，其后题号相应前移。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 同一个 APK 在两台设备上启动、掉帧或后台行为不同，怎样把差异归因到具体层而不是笼统的"ROM 优化"？**
 
@@ -209,17 +209,7 @@ VHAL 死亡会连带 CarService 自杀：`VehicleDeathRecipient` 收到死亡回
 4. **恢复语义**：属性从 NOT_AVAILABLE 恢复时，VHAL 必须为每个恢复的 area 各发一条 AVAILABLE 事件，缺失就表现为"长期不更新"；
 5. **诊断**：`dumpsys car_service --services CarPropertyService` 看 listener 与速率；比对 VehicleHal eventLog 的事件计数与实际取值。
 
-**Q31: 乘客屏应用"抢"了主驾媒体焦点、焦点请求进了错误音区——CarAudioService 的多音区焦点模型是怎样的？**
-
-音频焦点按 audio zone 完全隔离：每个 zone 一个独立的焦点管理器实例，主驾的焦点竞争不会跨到副驾；应用落错 zone 的常见原因是 display/seat 到 zone 的映射配置与应用预期不一致。
-
-1. **入区判定**：默认按调用方的 display/occupant 映射到 zone；可用 AudioAttributes 的 `AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID` 显式指定——fallback 日志 "dispatching audio focus request to zoneId %d" 就是未映射上时的落点；
-2. **primary zone 特例**：主区媒体焦点有唯一持有者（重复请求报 "already owns the primary audio zone"）；音频镜像不允许指向主区；
-3. **音量**：按 (zone, volume group) 二维管理；AudioControl HAL 支持 gain 回调时，音量变化经 `onAudioDeviceGainsChanged` 联动回来；
-4. **配置链**：优先 AudioControl HAL 配置，失败回退解析 `/vendor/etc/car_audio_configuration.xml`，最后过 zones 校验器——多音区异常先核对这份配置与 occupant zone 映射的一致性；
-5. **诊断**：`dumpsys audio` 看焦点条目的 zoneId；`dumpsys car_service --services CarAudioService` 看 zone/occupant 映射与音量组。
-
-**Q32: 挂 R 后倒车影像出得慢甚至黑屏——CarEvsService 的触发链有哪两条？延迟差在哪？**
+**Q31: 挂 R 后倒车影像出得慢甚至黑屏——CarEvsService 的触发链有哪两条？延迟差在哪？**
 
 两条触发链：推荐的 `EVS_SERVICE_REQUEST` 直通（VHAL 直接通知 EVS 服务）与传统 `GEAR_SELECTION==REVERSE` 间接链；后者要经过"VHAL 事件 → CarPropertyService → 状态机 → 启动 EvsActivity → 分配 Surface → 首帧"，链路明显更长。
 
@@ -228,7 +218,7 @@ VHAL 死亡会连带 CarService 自杀：`VehicleDeathRecipient` 收到死亡回
 3. **停帧根因**：EVS 帧必须逐帧归还（doneWithFrame），buffer 不归还是丢帧/停帧的常见原因；
 4. **诊断**：`logcat -s CAR.EVS` 与 VHAL 事件时间戳对齐，量"挂 R 到首帧"耗时；`dumpsys car_service --services CarEvsService` 看状态机停留位置。
 
-**Q33: 仪表相关接口抛 "Service is not enabled"、cluster UI 停更但不崩——ClusterHomeService 的机制要点是什么？**
+**Q32: 仪表相关接口抛 "Service is not enabled"、cluster UI 停更但不崩——ClusterHomeService 的机制要点是什么？**
 
 ClusterHomeService 是 ClusterOS 与 ClusterHome 渲染端之间的中介：客户端经它上报状态（CLUSTER_REPORT_STATE）与请求显示（CLUSTER_REQUEST_DISPLAY），HAL 侧的 CLUSTER_SWITCH_UI/CLUSTER_DISPLAY_STATE 驱动 UI 切换；导航态走 navstate2 proto 并可回写 NAVIGATION_STATE 属性。
 
@@ -237,7 +227,7 @@ ClusterHomeService 是 ClusterOS 与 ClusterHome 渲染端之间的中介：客�
 3. **FixedActivity**：ClusterHome 以 FixedActivity 方式固定在 cluster display 上，启动失败先核对 displayId 与 userId；
 4. **OEM 落点**：渲染侧继承 car-lib 的 `InstrumentClusterRenderingService`；诊断入口 `dumpsys car_service --services ClusterHomeService`。
 
-**Q34: HIDL VHAL 迁移到 AIDL 后 get/set 偶发超时、大数据传输失败——两代 VHAL 接口的契约差异有哪些？**
+**Q33: HIDL VHAL 迁移到 AIDL 后 get/set 偶发超时、大数据传输失败——两代 VHAL 接口的契约差异有哪些？**
 
 AIDL VHAL 的批量接口是"可能多次回调、每次子集、不保证顺序"——与 HIDL 的逐条语义不同，迁移时最容易踩的是时序与错误处理的假设。
 
@@ -247,7 +237,7 @@ AIDL VHAL 的批量接口是"可能多次回调、每次子集、不保证顺序
 4. **能力差异**：supportedValues/MinMax 仅 AIDL 支持；sample rate 同样只是 guidance、新订阅覆盖旧订阅（见 Q30）；
 5. **回归工具**：接口仓库自带 aidl_test 验证"HIDL 属性在 AIDL 全部支持"；对照 aidl_api 冻结版本检查属性签名。
 
-**Q35: CarLauncher 里嵌入的地图"按返回后空白/打不开"——TaskView 嵌入任务有哪些官方修复案例？**
+**Q34: CarLauncher 里嵌入的地图"按返回后空白/打不开"——TaskView 嵌入任务有哪些官方修复案例？**
 
 TaskView 嵌入任务的常见故障大多有对应的 AOSP 修复提交，排查时按现象对号入座，再确认目标版本的框架是否已含修复：
 
@@ -258,22 +248,22 @@ TaskView 嵌入任务的常见故障大多有对应的 AOSP 修复提交，排�
 5. **obscure region 不生效**：设置局部遮罩后必须 invalidate 才会应用到 ViewRoot（Bug 382535017）；
 6. **释放泄漏**：TaskViewTaskController 在构造时就注册进 transitions，未初始化的实例也必须走 removeTask 清理（Bug 369995920）。
 
-**Q36: SystemUI 崩溃重启后车机面板空白、rotary 旋钮失效——CarSystemUI 有哪些值得对照的官方修复与结构要点？**
+**Q35: SystemUI 崩溃重启后车机面板空白、rotary 旋钮失效——CarSystemUI 有哪些值得对照的官方修复与结构要点？**
 
 1. **崩溃后面板空白**：崩溃重启后不会再有 user unlock 事件驱动恢复——官方修复在 rootTask 创建时主动检查用户已解锁并重置 TaskPanel（Bug 394411179）；同族还有 day/night 切换崩溃、车未连接时配置变更 NPE 等修复；
 2. **ScalableUI 焦点**：car-scalable-ui 新窗口管理下 TaskPanel 需要独立焦点逻辑（flag `scalable_ui_task_focus` 灰度），否则内嵌应用无法被按键/rotary 操作（Bug 422571603）；
 3. **rotary 失效**：keyguard 上"允许 rotary focus"后视图处于 paused 态，必须 resume 才能重新获焦（Bug 263440452）——rotary 问题按 keyguard → HUN → 列表分层排查；
 4. **Dagger 替换结构**：CarSystemUI 把 platform SystemUI 编进同一 APK，用 `CarSysUIComponent extends SysUIComponent` 子组件替换依赖图，OEM 只能追加 Binder/Module、不能私造平行 component；仓库自带 daggervis 脚本可导出组件图——MissingBinding 或注入错单例先看新绑定挂在哪个 module（RRO 只改资源、不改绑定）。
 
-**Q37: 驾驶分心限制（UXR）到底能禁什么？FULLY_RESTRICTED 的位标志清单是什么？**
+**Q36: 驾驶分心限制（UXR）到底能禁什么？FULLY_RESTRICTED 的位标志清单是什么？**
 
 应用按 `isRequiresDistractionOptimization()` 加各限制位裁剪 UI，而不是按车速自行判断；`FULLY_RESTRICTED` 是九个限制位的按位或——键盘、视频、拨号盘、设置、长文本全部被禁。
 
 1. **限制位清单**：NO_DIALPAD、NO_FILTERING、NO_KEYBOARD、NO_VIDEO（大于 1fps 的动画即算视频）、NO_SETUP、NO_TEXT_MESSAGE、NO_VOICE_TRANSCRIPTION、LIMIT_STRING_LENGTH（默认 120 字符）、LIMIT_CONTENT（单任务默认 21 条、层级默认 3）；
 2. **取配额**：长文本用 `getMaxRestrictedStringLength()` 拿实际允许长度，不要硬编码 120；
-3. **执行层**：UXR 框架是分心治理的最终执行层（检测链见 Q39）。
+3. **执行层**：UXR 框架是分心治理的最终执行层（检测链见 Q38）。
 
-**Q38: OEM 怎么定制分心限制规则？为什么改了 car_ux_restrictions_map.xml 没立即生效？**
+**Q37: OEM 怎么定制分心限制规则？为什么改了 car_ux_restrictions_map.xml 没立即生效？**
 
 OEM 用 RRO overlay 覆盖 `car_ux_restrictions_map.xml`；服务端配置有三级加载优先级——已保存的生产配置 > R.xml 资源 > 硬编码默认，且保存的配置要等合适的驾驶状态才晋升替换，所以改动常常"下次启动才生效"。
 
@@ -281,7 +271,7 @@ OEM 用 RRO overlay 覆盖 `car_ux_restrictions_map.xml`；服务端配置有三
 2. **兜底语义（高危）**：配置缺失或畸形时按"完全限制"兜底——requiresDistractionOptimization 默认 true、uxr 默认 fully_restricted；只要 uxr 不等于 baseline，即使声明 false 也会被提升为 true——写坏 xml 的表现就是全车 UI 被锁死；
 3. **诊断**：`dumpsys car_service --services CarUxRestrictionsManagerService` 看 transition log（驾驶状态/速度/mode）；`cmd overlay list` 确认 RRO 生效；上线前覆盖全部驾驶状态分段并实车验证。
 
-**Q39: 行驶中打开应用被全屏遮罩挡住——系统怎么判定和阻断？"IDENTIFY_DISTRACTION 权限"是真的吗？**
+**Q38: 行驶中打开应用被全屏遮罩挡住——系统怎么判定和阻断？"IDENTIFY_DISTRACTION 权限"是真的吗？**
 
 行驶中非 DO（distraction optimized）应用会被 ActivityBlockingActivity 顶住——其宿主就是 CarSystemUI，判定依据是应用是否声明了 `distractionOptimized` meta-data。重要勘误：公开代码里不存在 `IDENTIFY_DISTRACTION` 权限（frameworks 的 AndroidManifest 全文无此词），Android 14/15 的驾驶员分心检测走的是 VHAL 属性链。
 
@@ -289,7 +279,7 @@ OEM 用 RRO overlay 覆盖 `car_ux_restrictions_map.xml`；服务端配置有三
 2. **分心检测的真实机制**：VHAL 属性链 `DRIVER_DISTRACTION_SYSTEM_ENABLED/STATE/WARNING_ENABLED/WARNING`，car-lib 侧对应 DriverDistractionState/DriverDistractionWarning（FlaggedApi）与 experimental 的 CarDriverDistractionManager；UXR 框架仍是最终执行层；
 3. **边界**：凡资料里出现 "IDENTIFY_DISTRACTION" 一律按讹传处理；实车核验用 dumpsys 看 VHAL 属性订阅。
 
-**Q40: AAOS 的 headless system user 是什么？切驾驶员的完整流程和失败语义是什么？**
+**Q39: AAOS 的 headless system user 是什么？切驾驶员的完整流程和失败语义是什么？**
 
 headless 模式下 user 0 不可见、始终视为已解锁，前台是代表当前驾驶员的全（非系统）用户；驾驶员切换由 CarUserService 与 VHAL 的 SWITCH_USER 流程协作，失败语义按状态码区分。
 
@@ -298,10 +288,10 @@ headless 模式下 user 0 不可见、始终视为已解锁，前台是代表当
 3. **初始用户**：上电进谁由 InitialUserSetter 决定（默认行为/切换/创建/替换 guest 四类动作，ON_BOOT/ON_RESUME/ON_SUSPEND 三个时机），可被 HAL 的 InitialUserInfoResponse 覆盖；AAOS 用户默认禁用锁屏；
 4. **诊断**：`dumpsys car_service --services CarUserService` 看 Initial user 与切换状态；切不动时按状态码对号，并确认 VHAL 实现了 SWITCH_USER。
 
-**Q41: OEM 服务在 AAOS 多用户下"切用户后消失/重复多份"——组件该跑在 system user 还是前台用户？**
+**Q40: OEM 服务在 AAOS 多用户下"切用户后消失/重复多份"——组件该跑在 system user 还是前台用户？**
 
 AAOS 的 OEM 服务注入点 `config_earlyStartupServices` 允许每个服务声明用户作用域：需要单实例（跨用户存活、绑定 HAL）的放 system（u0），UI/前台组件放 foreground——CarService 本体就运行在 system user。
 
 1. **scope 关键字**：all/system/foreground/visible/backgroundVisible 加 bind 选项（含 startForeground）；服务"消失/重复"先查 scope 声明，再 `dumpsys activity services` 按 userId 过滤确认实际实例；
-2. **任务与 Recents**：Recents 按 (user, task) 管理——切用户后嵌入应用白屏，先确认目标任务是否还在该 user 下（TaskView 修剪问题见 Q35）；不要假设进程或任务跨用户存活，切换后用正确的 UserHandle 重新绑定；
-3. **初始用户与 guest**：上电进哪个用户的决策链见 Q40。
+2. **任务与 Recents**：Recents 按 (user, task) 管理——切用户后嵌入应用白屏，先确认目标任务是否还在该 user 下（TaskView 修剪问题见 Q34）；不要假设进程或任务跨用户存活，切换后用正确的 UserHandle 重新绑定；
+3. **初始用户与 guest**：上电进哪个用户的决策链见 Q39。
