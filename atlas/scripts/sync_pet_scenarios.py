@@ -114,8 +114,8 @@ def parse_commands(path: Path) -> list[dict[str, str]]:
             "expected": unmarkdown(expected_cell),
             "limitation": limitation,
         })
-    if len(rows) != 99 or [int(row["number"]) for row in rows] != list(range(1, 100)):
-        fail(f"command list must contain ordered cases 1..99; found {len(rows)} rows")
+    if len(rows) != 100 or [int(row["number"]) for row in rows] != list(range(1, 101)):
+        fail(f"command list must contain ordered cases 1..100; found {len(rows)} rows")
     if any(not row["stage"] for row in rows):
         fail("one or more command rows have no stage heading")
     return rows
@@ -126,8 +126,8 @@ def parse_source_names(path: Path) -> list[str]:
         fail(f"missing PetScenarios source: {path}")
     source = path.read_text(encoding="utf-8")
     names = re.findall(r"\bCase\(\"([^\"]+)\"", source)
-    if len(names) != 99:
-        fail(f"PetScenarios must contain 99 cases; found {len(names)}")
+    if len(names) != 100:
+        fail(f"PetScenarios must contain 100 cases; found {len(names)}")
     return names
 
 
@@ -145,8 +145,8 @@ def parse_localized(path: Path) -> dict[int, str]:
         if number in result:
             fail(f"{path}:{line_no}: duplicate case number {number}")
         result[number] = title
-    if set(result) != set(range(1, 100)):
-        fail("localized titles must contain exactly cases 1..99")
+    if set(result) != set(range(1, 101)):
+        fail("localized titles must contain exactly cases 1..100")
     return result
 
 

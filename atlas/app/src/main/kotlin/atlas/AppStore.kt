@@ -44,6 +44,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
+private const val DEFAULT_TOOL_COMMAND_TIMEOUT_MS = 30_000L
+private const val APK_PUSH_TIMEOUT_MS = 10 * 60_000L
+
 /** 单道题相对 git HEAD 的内容差异，行内着色用：题面给字符区间，答案给行号集合。 */
 data class SourceQuestionGitDiff(
     val changed: Boolean,
@@ -367,7 +370,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 }
                 val adb = adbPath ?: return failNoAdb(progress)
                 val serial = toolboxSerial ?: return failNoDevice(progress)
-                runSequence(DeviceTools.pushLauncherCommands(adb, apk, serial), progress)
+                runSequence(
+                    DeviceTools.pushLauncherCommands(adb, apk, serial),
+                    progress,
+                    commandTimeoutsMs = mapOf(3 to APK_PUSH_TIMEOUT_MS),
+                )
             }
             DeviceTools.Tool.REBOOT_LAUNCHER -> {
                 val adb = adbPath ?: return failNoAdb(progress)
@@ -442,11 +449,15 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         return 1
     }
 
-    /** 顺序执行命令序列并流式收集输出；单条 30s 超时强杀；首条失败即停 */
-    private fun runSequence(cmds: List<List<String>>, progress: (String) -> Unit): Int {
+    /** 顺序执行命令序列并流式收集输出；可为耗时步骤单独延长超时；首条失败即停 */
+    private fun runSequence(
+        cmds: List<List<String>>,
+        progress: (String) -> Unit,
+        commandTimeoutsMs: Map<Int, Long> = emptyMap(),
+    ): Int {
         for ((index, cmd) in cmds.withIndex()) {
             progress("==> [${index + 1}/${cmds.size}] ${cmd.drop(1).joinToString(" ")}")
-            val (code, out) = execCapture(cmd)
+            val (code, out) = execCapture(cmd, commandTimeoutsMs[index] ?: DEFAULT_TOOL_COMMAND_TIMEOUT_MS)
             out.trim().takeIf { it.isNotEmpty() }?.let { progress(it.trim()) }
             if (code != 0) {
                 progress("命令失败 exit=$code")
@@ -456,14 +467,14 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         return 0
     }
 
-    /** 执行一条命令收集合并输出；30s 超时强杀（先异步读满再等退出，防挂死） */
-    private fun execCapture(cmd: List<String>, timeoutMs: Long = 30_000L): Pair<Int, String> {
+    /** 执行一条命令收集合并输出；超时强杀（先异步读满再等退出，防挂死） */
+    private fun execCapture(cmd: List<String>, timeoutMs: Long = DEFAULT_TOOL_COMMAND_TIMEOUT_MS): Pair<Int, String> {
         val proc = ProcessBuilder(cmd).redirectErrorStream(true).start()
         val future = CompletableFuture.supplyAsync { proc.inputStream.bufferedReader().readText() }
         if (!proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
             proc.destroyForcibly()
             future.cancel(true)
-            return -1 to "命令超时(${timeoutMs}ms)"
+            return -1 to "命令超时（${timeoutMs / 1_000}s）"
         }
         return proc.exitValue() to runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
     }

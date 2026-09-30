@@ -80,7 +80,7 @@ enum class ToolsDestination(val title: String, val description: String) {
     LOG_DECRYPT("日志解密", "27HM 日志压缩包 / 目录 → 解压·解密·解压，一键出可读日志"),
     PHONE_AUTO("任务自动化", "adb 控制手机一键执行常用流程，无线优先、USB 兜底"),
     DEVICE_TOOLS("设备工具箱", "推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
-    PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 99 个场景 · 专用日志，一键执行"),
+    PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 100 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
     PROMPTS("提示词库", "常用提示词集中管理，一键复制给任意 AI"),
 }
@@ -98,7 +98,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
         Column(
             Modifier.weight(1f).fillMaxHeight()
                 // 提示词库与萌宠调试是工作台型工具：占满右侧可用区域，不做限宽与竖向滚动
-                // （萌宠调试 99 个场景卡片只有放进自身 LazyColumn 虚拟化才能避免进页卡顿）
+                // （萌宠调试 100 个场景卡片只有放进自身 LazyColumn 虚拟化才能避免进页卡顿）
                 .then(
                     if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG) Modifier
                     else Modifier.verticalScroll(rememberScrollState()),
@@ -815,7 +815,7 @@ private fun DeviceToolboxCard(store: AppStore) {
     }
 }
 
-/** 萌宠调试：单事件、正式 IPC、环境命令与 99 行场景在同一设备上下文中执行。 */
+/** 萌宠调试：单事件、正式 IPC、环境命令与 100 行场景在同一设备上下文中执行。 */
 @Composable
 private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
     val ui = atlasUiTokens()
@@ -954,7 +954,7 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
                 label = { Text("搜索中文名称、编号、事件、英文原名或预期") },
                 singleLine = true,
             ) }
-            item { Text(if (scenarios == null) "正在加载场景…" else "${filtered.size} / 99 条场景", fontSize = 11.sp, color = Theme.Muted) }
+            item { Text(if (scenarios == null) "正在加载场景…" else "${filtered.size} / 100 条场景", fontSize = 11.sp, color = Theme.Muted) }
             item { FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 stages.forEach { stage ->
                     FilterChip(

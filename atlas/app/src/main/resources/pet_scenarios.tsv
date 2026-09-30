@@ -98,3 +98,4 @@
 97	长期未登录	long idle rejected while music dancing	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet long_idle	舞动保持，长期未登录拒绝。	
 98	长期未登录	long idle ignored when switch off	fresh_on; pet switch_off; pet long_idle	开关关闭时忽略长期未登录，不播放动作。	
 99	显示门控补充策略（99）	switch reopened before ivi ready -> remain hidden	fresh_on; pet switch_off; pet switch_on	未收到 IviReady 时关开关再重开，萌宠仍隐藏；不显示、不播放出场或常驻动作。	
+100	SRS_002：开机未收到车机就绪信号（100）	boot with switch on and no ivi ready -> remain hidden	fresh_on	开机默认开关开启；启动后持续未收到 IviReady 时，萌宠保持隐藏，不播放出场或常驻动作。	（注意：真机可能自动上报真实 IviReady，执行前请先看日志确认未收到；精确无信号路径由同名 JVM 场景覆盖。）

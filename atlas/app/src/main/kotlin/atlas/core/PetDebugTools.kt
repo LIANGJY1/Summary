@@ -254,7 +254,7 @@ object PetDebugTools {
                 val (number, title) = line.split('	', limit = 2)
                 number.toInt() to title
             }
-        require(sourceRows.size == 99 && titles.size == 99) { "萌宠场景资源必须完整包含 99 条" }
+        require(sourceRows.size == 100 && titles.size == 100) { "萌宠场景资源必须完整包含 100 条" }
         return sourceRows.map { c ->
             require(c.size == 6) { "萌宠场景资源列数异常: ${c.firstOrNull()}" }
             val number = c[0].toInt()
@@ -268,7 +268,7 @@ object PetDebugTools {
                 titleZh = titles[number] ?: error("缺少场景 #$number 的中文标题"),
             )
         }.also { rows ->
-            require(rows.map { it.number } == (1..99).toList()) { "萌宠场景编号/顺序必须为 1..99" }
+            require(rows.map { it.number } == (1..100).toList()) { "萌宠场景编号/顺序必须为 1..100" }
         }
     }
 
