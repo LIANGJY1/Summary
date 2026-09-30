@@ -14,7 +14,7 @@
 
 ## 文档索引
 
-1. [Testing Fundamentals](01-testing-basics.md) — Q1 defines smoke testing and distinguishes it from full regression testing.
+1. [Testing Fundamentals](01-testing-basics.md) — Q1–Q10 cover smoke testing, unit test structure, JUnit, Mockito, parameterization and static mocks.
 
 ## 写作约定
 

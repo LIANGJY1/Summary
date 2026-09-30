@@ -129,3 +129,34 @@ ViewBinding 按"所有变体的字段并集"生成绑定类：某个控件只在
 3. **文件层**：用调试手段反查某个 id 实际落在哪个资源文件/条目，确认命中的是变体还是默认项（思路与 [../../android-ui.md](../../android-ui.md) 的资源探针一致）。
 
 这套流程的价值在于把"看起来没生效"变成"输入配置不对 / 取值不对 / 命中了被定制改写的项"三种可区分的结论，而不是继续在布局文件里找。
+
+**Q16: ViewBinding 解决了什么问题，Fragment 中的 Binding 应在什么生命周期边界释放？**
+
+ViewBinding 为每个 XML 布局生成类型化绑定类，提供对布局内 View 的直接引用，减少手写 `findViewById()` 和错误强转；开启模块级配置后，按布局文件名生成对应的 Binding 类型。Activity 的 Binding 通常与 Activity 内容视图同寿命；Fragment 的 View 可以先于 Fragment 实例销毁，因此 Binding 字段必须在 `onDestroyView()` 置空，不能一直保留旧视图树。
+
+若多个资源变体使用同一个布局名，各变体的 View 集合可能不同：只出现在部分变体的字段会成为可空字段，访问前要按实际布局处理。相关资源契约见 Q13。
+**Q17: Android Drawable 表示什么，为什么它不等同于位图？**
+
+Drawable 是可由 Android 绘制到屏幕上的图形资源抽象，可以来自位图文件，也可以由颜色、形状、图层或状态规则构成。View 背景、图标和按钮外观都可使用 Drawable，因此“一个 Drawable 就是一张图片”并不成立。
+
+**Q18: 常见 Drawable 类型各适合表达什么？**
+
+不同 Drawable 把绘制内容或组合规则封装成可复用资源：
+
+1. **BitmapDrawable**：显示位图图像。
+2. **NinePatchDrawable**：按可拉伸区域缩放 `.9.png`，适合尺寸随内容变化的边框或气泡背景。
+3. **ShapeDrawable**：用颜色、渐变、描边等描述简单几何外观。
+4. **LayerDrawable**：按顺序叠放多个子 Drawable，后面的图层绘制在前面图层之上。
+5. **ColorDrawable**：用单色填充。
+6. **StateListDrawable**：按 pressed、focused 等 View 状态选择子 Drawable。
+7. **VectorDrawable**：用矢量路径描述可缩放图形。
+
+可用位图文件或 XML Drawable 资源声明这些图形，也可在代码中组合或实现自定义 Drawable；自定义实现需按 Drawable 契约响应 bounds、状态和 Canvas 绘制。
+
+选择时依据需要表达的是图像内容、可拉伸区域、简单形状还是多层组合；复杂照片仍适合位图资源。
+
+**Q19: Drawable 的 intrinsic width 和 intrinsic height 表示什么？**
+
+Drawable 的 intrinsic 尺寸是该 Drawable 自身报告的推荐固有尺寸，不是其当前实际绘制边界，也不保证每种 Drawable 都有正值。容器尺寸、布局参数、缩放规则和 Drawable 的实现都会影响最终显示大小。
+
+不能把 intrinsic 尺寸直接当成 View 的测量结果；需要固定界面尺寸时，应由布局或调用方明确设置尺寸与缩放策略。

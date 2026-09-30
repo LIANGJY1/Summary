@@ -34,6 +34,9 @@
 ## 应用实践（源书第五部分）
 
 - [app-practice/](09-app-practice/) — 稳定性治理（度量崩溃/资源泄漏/线程 IPC/Native 与 SDK）、启动优化、渲染实战（View 与 Compose/图像显示/媒体混合栈）、内存实践、I/O 与存储、网络与连接、功耗优化、CPU 与体积、可观测性（体系治理/线上诊断）
+  - [17-资源与值域注解.md](09-app-practice/17-资源与值域注解.md) — AndroidX 资源注解与 `@IntDef` 的静态检查边界
+  - [18-应用开发机制与常用API.md](09-app-practice/18-应用开发机制与常用API.md) — SparseArray、View Tag、Parcelable/Serializable、SharedPreferences 与 Retrofit
+  - [19-MVP架构.md](09-app-practice/19-MVP架构.md) — Android MVP 职责边界、异步协作、生命周期与测试性
 
 ## 缺陷复盘（yadi 项目）
 
@@ -47,7 +50,7 @@
 
 - [13-audio/](13-audio/) — 音频专项（2026-09-28 新增并全网扩写，机制按本地 AAOS13 源码核对；16 册音频部分、08-cpu-power 的 LE Audio 题与 09-app-practice 的 Offload 题已并入本目录）：[01-AOSP音频子系统](13-audio/01-AOSP音频子系统.md)——audioserver、输出线程选型、策略引擎、混音管线与 FastMixer/NBAIO、音量与效果链、AAudio 服务端内部、时间戳与 TeeSink；[02-AAOS车机音频](13-audio/02-AAOS车机音频.md)——多音区配置、context 路由、落区判定、硬件增益、焦点矩阵与延迟焦点、duck/mute、HalAudioFocus、AudioControl 版本差异、13/14 版本边界；[03-音频延迟与应用实践](13-audio/03-音频延迟与应用实践.md)——延迟口径与实测、FAST 轨、AAudio 回退与缓冲调优、xrun、Offload 取舍、AudioTrack/SoundPool 语义；[04-蓝牙音频](13-audio/04-蓝牙音频.md)——蓝牙延迟实测、LC3、单播/广播、LE Audio、ASHA/HAP、A2DP/SCO 切换与绝对音量；[05-手机侧音频焦点与路由](13-audio/05-手机侧音频焦点与路由.md)——焦点栈仲裁、丢失处理、音量滑条与 usage、BECOMING_NOISY、通信路由、并发录音与隐私
 
-- [14-network/](14-network/) — 网络专项（2026-09-28 新增）：[01-Android网络框架](14-network/01-Android网络框架.md)——"已连接"分层语义、默认网络评分与切换、多网络绑定、captive portal 验证、NetworkAgent、DNS 与 Private DNS、策略路由、车机以太网；[02-车机多APN与虚拟网卡](14-network/02-车机多APN与虚拟网卡.md)——多 APN 与 rmnet、veth+SNAT 业务隔离拓扑（项目实例已脱敏）、网卡绑定两套机制、DNS 分流与五段定位、双公网切换、APN 定制链与流量策略；[03-Android-VPN](14-network/03-Android-VPN.md)——VpnService tun 数据面、protect 防回环、分应用、always-on/lockdown、平台 IKEv2、与多 APN 共存、配置存储与诊断（V1.0，2026-09-28）；[04-蜂窝数据与无线连接](14-network/04-蜂窝数据与无线连接.md)——APN 类型与配置链、DataNetwork 模型、数据开关分层、蜂窝验证器、热点共享、Wi-Fi 编程面、NSC、网络库切换坑；[05-车载网络架构与设计](14-network/05-车载网络架构与设计.md)——E/E 分域与座舱职责、车载以太网骨干与 TSN/gPTP、时间同步三层、域融合演进、跨域隔离、mDNS 服务发现、eBPF 流量统计与计费、多路径传输、长连接推送、远程运维通道；[06-网络排查工具与实践](14-network/06-网络排查工具与实践.md)——抓包权限边界、tcpdump SLL 语义与过滤器、ip/ss 工具族、无 root 取证、Perfetto 网络轨迹、ICMP 工具误读、DNS 诊断替代、弱网模拟测试矩阵；[07-车机网络安全](14-network/07-车机网络安全.md)——攻击面盘点、指令防重放与完整性、传输安全基线、固件下发校验与防降级、量产调试接口治理、检测与响应（V1.0，2026-09-28）；[08-应用网络编程与系统约束](14-network/08-应用网络编程与系统约束.md)——Doze/App Standby 网络限制、WorkManager 网络约束、HTTPS 校验失败分类与时钟坑、IPv6 双栈 socket 坑、车机 eSIM/LPA、连接竞速、网络指标监控体系；[09-传输细节与协议设计](14-network/09-传输细节与协议设计.md)——TCP 粘包与协议定界（长度前缀/TLV）、Nagle 与延迟 ACK、keepalive 参数真相、证书链不完整事故、拥塞控制启示、字节序与版本兼容、车云通道选型、热点网段冲突、TCP 半开假在线、DNS 劫持与 HTTPDNS、流量控制与零窗口、UDP 选型、TIME_WAIT、ARP 排查、HTTP·2 取舍、多通道保序、连接池 key、0-RTT、HTTP 缓存；[10-网络分层原理与地基机制](14-network/10-网络分层原理与地基机制.md)——分层模型与包的旅行、DNS 层级与递归、TLS 握手、TCP 状态机、IP 分片、NAT 与 conntrack、全链路走读、分层校验
+- [14-network/](14-network/) — 网络专项（2026-09-28 新增）：[01-Android网络框架](14-network/01-Android网络框架.md)——"已连接"分层语义、默认网络评分与切换、多网络绑定、captive portal 验证、NetworkAgent、DNS 与 Private DNS、策略路由、车机以太网；[02-车机多APN与虚拟网卡](14-network/02-车机多APN与虚拟网卡.md)——多 APN 与 rmnet、veth+SNAT 业务隔离拓扑（项目实例已脱敏）、网卡绑定两套机制、DNS 分流与五段定位、双公网切换、APN 定制链与流量策略；[03-Android-VPN](14-network/03-Android-VPN.md)——VpnService tun 数据面、protect 防回环、分应用、always-on/lockdown、平台 IKEv2、与多 APN 共存、配置存储与诊断（V1.0，2026-09-28）；[04-蜂窝数据与无线连接](14-network/04-蜂窝数据与无线连接.md)——APN 类型与配置链、DataNetwork 模型、数据开关分层、蜂窝验证器、热点共享、Wi-Fi 编程面、NSC、网络库切换坑；[05-车载网络架构与设计](14-network/05-车载网络架构与设计.md)——E/E 分域与座舱职责、车载以太网骨干与 TSN/gPTP、时间同步三层、域融合演进、跨域隔离、mDNS 服务发现、eBPF 流量统计与计费、多路径传输、长连接推送、远程运维通道；[06-网络排查工具与实践](14-network/06-网络排查工具与实践.md)——抓包权限边界、tcpdump SLL 语义与过滤器、ip/ss 工具族、无 root 取证、Perfetto 网络轨迹、ICMP 工具误读、DNS 诊断替代、弱网模拟测试矩阵；[07-车机网络安全](14-network/07-车机网络安全.md)——攻击面盘点、指令防重放与完整性、传输安全基线、固件下发校验与防降级、量产调试接口治理、检测与响应（V1.0，2026-09-28）；[08-应用网络编程与系统约束](14-network/08-应用网络编程与系统约束.md)——Doze/App Standby 网络限制、WorkManager 网络约束、HTTPS 校验失败分类与时钟坑、IPv6 双栈 socket 坑、车机 eSIM/LPA、连接竞速、网络指标监控体系；[09-传输细节与协议设计](14-network/09-传输细节与协议设计.md)——TCP 粘包与协议定界（长度前缀/TLV）、Nagle 与延迟 ACK、keepalive 参数真相、证书链不完整事故、拥塞控制启示、字节序与版本兼容、车云通道选型、热点网段冲突、TCP 半开假在线、DNS 劫持与 HTTPDNS、流量控制与零窗口、UDP 选型、TIME_WAIT、ARP 排查、HTTP·2 取舍、多通道保序、连接池 key、0-RTT、HTTP 缓存；[10-网络分层原理与地基机制](14-network/10-网络分层原理与地基机制.md)——网络组成与分类、标准化与 RFC、分层模型与包的旅行、OSI/TCP-IP 参考模型、网络性能指标、DNS 层级与递归、TLS 握手、TCP 状态机、IP 分片、NAT 与 conntrack、全链路走读、分层校验
 
 ## UI 专题（AOSP + AAOS）
 
@@ -55,8 +58,8 @@
 
 ## 早期文档
 
-- [framework/](../others/framework/) — Android 13 长文专题：addWindow 全链路、渲染架构解析、显示系统、电源、时间、硬按键
-- 根级：[性能优化.md](../others/性能优化.md)、[Launcher3_Technical_Document.md](../others/Launcher3_Technical_Document.md)、[OTA_LIFECYCLE.md](../others/OTA_LIFECYCLE.md)、[MVVM_Optimization_Report.md](../others/MVVM_Optimization_Report.md)
+- [framework/](../../docs/others/framework/) — Android 13 长文专题：addWindow 全链路、渲染架构解析、显示系统、电源、时间、硬按键
+- 根级：[性能优化.md](../../docs/others/性能优化.md)、[Launcher3_Technical_Document.md](../../docs/others/Launcher3_Technical_Document.md)、[OTA_LIFECYCLE.md](../../docs/others/OTA_LIFECYCLE.md)、[MVVM_Optimization_Report.md](../../docs/others/MVVM_Optimization_Report.md)
 
 ## 全册速览（2026-09-25 快照，题数随修订变化）
 
@@ -75,6 +78,7 @@
 | [01-architecture/11-版本演进与图形栈预加载.md](01-architecture/11-版本演进与图形栈预加载.md) | 版本演进与图形栈预加载 | 14 |  |
 | [01-architecture/12-类加载ART编译与JNI链接.md](01-architecture/12-类加载ART编译与JNI链接.md) | 类加载、ART 编译与 JNI 链接 | 16 |  |
 | [01-architecture/13-MessageQueue锁竞争与Binder深化.md](01-architecture/13-MessageQueue锁竞争与Binder深化.md) | MessageQueue 锁竞争与 Binder 深化 | 19 |  |
+| [01-architecture/23-Handler消息机制.md](01-architecture/23-Handler消息机制.md) | Handler 消息机制 | 4 | Looper 与消息队列 / 子线程 Handler / 内存泄漏 / HandlerThread |
 | [01-architecture/14-系统服务调度核心.md](01-architecture/14-系统服务调度核心.md) | 系统服务调度核心 | 17 |  |
 | [01-architecture/15-安装归档与资源配置.md](01-architecture/15-安装归档与资源配置.md) | 安装归档与资源配置 | 13 |  |
 | [01-architecture/16-显示与窗口链路.md](01-architecture/16-显示与窗口链路.md) | 显示与窗口链路 | 6 |  |
@@ -82,6 +86,7 @@
 | [01-architecture/18-Notification-Biometric-Location.md](01-architecture/18-Notification-Biometric-Location.md) | 通知、生物识别与位置系统服务链路 | 16 |  |
 | [01-architecture/19-AVF可观测与AI手机技术栈.md](01-architecture/19-AVF可观测与AI手机技术栈.md) | AVF 虚拟化、logd 日志、BPF 与端侧 AI 技术栈 | 16 |  |
 | [01-architecture/20-SELinux.md](01-architecture/20-SELinux.md) | Android SELinux | 8 |  |
+| [16-project-architecture/01-应用进程启动与全局服务生命周期.md](16-project-architecture/01-应用进程启动与全局服务生命周期.md) | Launcher 项目架构案例：全局车辆服务与首页 Activity 的协作 | 1 | 单题完整分析：VehicleService 启动调用链、Activity 时序、车辆 ready 边界与 MainService 生命周期宿主的项目取舍 |
 | [02-rendering/01-渲染管线与VSync调度.md](02-rendering/01-渲染管线与VSync调度.md) | 渲染管线与 VSync 调度 | 30 |  |
 | [02-rendering/02-GPU合成与显示管线.md](02-rendering/02-GPU合成与显示管线.md) | GPU 合成与显示管线 | 30 |  |
 | [02-rendering/03-多窗口折叠屏与显示服务.md](02-rendering/03-多窗口折叠屏与显示服务.md) | 多窗口、折叠屏与显示服务 | 25 |  |
@@ -124,6 +129,8 @@
 | [09-app-practice/14-CPU与体积优化.md](09-app-practice/14-CPU与体积优化.md) | CPU 与体积优化 | 27 |  |
 | [09-app-practice/15-可观测性-体系与治理.md](09-app-practice/15-可观测性-体系与治理.md) | 可观测性体系与治理 | 27 |  |
 | [09-app-practice/16-可观测性-线上诊断.md](09-app-practice/16-可观测性-线上诊断.md) | 可观测性线上诊断 | 33 |  |
+| [09-app-practice/17-资源与值域注解.md](09-app-practice/17-资源与值域注解.md) | 资源与值域注解 | 2 | `@DrawableRes` / `@IntDef` 静态约束 |
+| [09-app-practice/18-应用开发机制与常用API.md](09-app-practice/18-应用开发机制与常用API.md) | 应用开发机制与常用 API | 6 | SparseArray / View Tag / 序列化 / Retrofit / Notification 渠道 |
 | [10-tools/01-Perfetto-采集与SQL分析.md](10-tools/01-Perfetto-采集与SQL分析.md) | Perfetto 采集与 SQL 分析 | 35 |  |
 | [10-tools/02-Perfetto-进阶与SDK.md](10-tools/02-Perfetto-进阶与SDK.md) | Perfetto 进阶：Profile 火焰图、CPU 频率、BufferQueue、Agent 协议、SDK 与 FrameTimeline | 30 |  |
 | [10-tools/03-性能分析工具.md](10-tools/03-性能分析工具.md) | 性能分析工具 | 36 |  |
@@ -157,11 +164,15 @@
 | [14-network/07-车机网络安全.md](14-network/07-车机网络安全.md) | 车机网络安全 | 8 | 攻击面盘点 / 指令防重放 / 传输基线 / 固件校验防降级 / 调试接口治理 / 信任锚管理 / 近场通道加固 / 检测响应 |
 | [14-network/08-应用网络编程与系统约束.md](14-network/08-应用网络编程与系统约束.md) | 应用网络编程与系统约束 | 14 | Doze 网络限制 / WorkManager 约束 / HTTPS 诊断 / 双栈 socket / eSIM / 连接竞速 / 指标监控 / 重试与幂等 / 主线程网络异常 / 权限之辨 / TrafficStats |
 | [14-network/09-传输细节与协议设计.md](14-network/09-传输细节与协议设计.md) | 传输细节与协议设计 | 11 | 粘包与协议定界 / Nagle 延迟 / keepalive 参数 / 证书链事故 / 拥塞控制 / 字节序与版本 / 通道选型 / 网段冲突 / 半开假在线 / DNS 劫持 |
-| [15-ui/01-activity.md](15-ui/01-activity.md) | Activity 启动与窗口生命周期 | 18 | 启动到首帧 / 窗口焦点与首帧 / 配置变化 / 状态恢复 / 任务栈 / Fragment 视图与状态 |
+| [15-ui/01-activity.md](15-ui/01-activity.md) | Activity 启动与窗口生命周期 | 19 | 启动到首帧 / 窗口焦点与首帧 / 配置变化 / 状态恢复 / 任务栈 / Fragment 视图与状态 |
 | [15-ui/02-view.md](15-ui/02-view.md) | View 测量、布局与绘制 | 17 | MeasureSpec / requestLayout 与 invalidate / display list / 绘制顺序 / 图层 / SurfaceView 与 TextureView |
-| [15-ui/03-resources.md](15-ui/03-resources.md) | 资源、主题与多屏适配 | 15 | 限定符 / 默认资源 / 深色模式 / 主题与 RRO / 字号与 RTL / 多显示 / Configuration |
+| [15-ui/03-resources.md](15-ui/03-resources.md) | 资源、主题与多屏适配 | 16 | 限定符 / 默认资源 / 深色模式 / 主题与 RRO / 字号与 RTL / 多显示 / Configuration |
 | [15-ui/04-compose.md](15-ui/04-compose.md) | Compose 运行期与 View 互操作 | 15 | 重组与状态 / remember / derivedStateOf / 稳定性 / Effect / ComposeView 与 AndroidView / 掉帧 |
 | [15-ui/05-window-system.md](15-ui/05-window-system.md) | 窗口系统与 WindowManagerService | 17 | 窗口层级 / token 与 addWindow / relayout / Insets / Configuration / IME / 多窗口 / 黑屏排查 |
 | [15-ui/06-aaos-ui.md](15-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 15 | UI 定制分层 / CarService / 模板与原生应用 / occupant zone / 多用户 / 电源策略 / 仪表 / 投影 |
 | [15-ui/07-driving-safety.md](15-ui/07-driving-safety.md) | 车机交互安全与驾驶分心 | 15 | UX 限制 / 驾驶状态 / restriction mode / 应用声明 / 乘员屏 / 受限交互 / 验证 |
 | [15-ui/08-ui-debugging.md](15-ui/08-ui-debugging.md) | UI 疑难排查与体验踩坑 | 15 | 白屏与黑屏 / 首帧 / 掉帧归因 / 绘制诊断 / Insets / 输入超时 / 多显示 / 回归检查 |
+
+## 项目架构设计
+
+- [16-project-architecture/](16-project-architecture/) — 特定项目、特定场景的架构方案与问题分析；结论以案例源码为边界，不概括为通用 Android 规则：[Launcher 项目架构案例：全局车辆服务与首页 Activity 的协作](16-project-architecture/01-应用进程启动与全局服务生命周期.md)（以一个问题完整串联 VehicleService 启动链、Activity 时序、车辆 ready 边界与 MainService 生命周期宿主的项目取舍）

@@ -18,6 +18,7 @@
 | `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `03-language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；session-to-knowledge 调用即出题——复盘题以 `**Qn:**` 同源格式直接写入知识文档，atlas 同源直读；新内容先按 profile 与路由规则处理 |
 | `knowledge-base/04-exp/` | 项目经验（非技术）目录：项目阶段定位、质量投入、度量口径、流程治理、协作联调的跨项目判断规则，Q 序列供 atlas 直读 | 复盘或沉淀非技术项目经验、找"项目怎么跑"的现成判断时 | session-to-knowledge 文章模式写入；技术根因归 `01-android/11-defects/`，项目事实档案归 `career/work-project-analysis/`，单次事件归 `issue/`；项目名脱敏沿用"某车机项目"惯例 |
 | `knowledge-base/02-testing/` | 跨项目测试学习资料：测试基础、策略、用例设计、执行与自动化实践 | 查测试术语、设计方法或验证策略时 | 按目录 README 的边界组织 Q&A；Android 平台机制归 `01-android/`，项目治理经验归 `04-exp/` |
+| `knowledge-base/os/` | 通用操作系统学习资料：运行机制、进程与调度、内存及文件系统；Android 专属实现仍归 `01-android/` | 学操作系统通用概念，先读目录 README 选择主题册 | 按 `WRITING-GUIDE.md` 写成连续 Q&A；语言运行时归 `03-language/`，Android 实现归 `01-android/` |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
 | `knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、`weekly/`、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 总路线在 `plans/roadmaps/`，每日练习与作答规则在 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
 | `knowledge-base/atlas/` | Atlas 应用协作目录（内容**不入索引**）：`config/settings.properties` 是其仓库同步层配置（主题/映射等，多设备经 git 一致；本机层与 PIN 仍在 `~/.local/share/atlas/`） | 排查 Atlas 配置/多设备一致性问题时；见 atlas/PRD.md §6.4.24 | 应用自动读写，可手改重启生效；勿放任何凭据 |

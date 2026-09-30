@@ -412,16 +412,16 @@ private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)
 private val markdownTaskPattern = Regex("^\\s*[-*] \\[([ xX])\\] (.+)$")
 
 // 行内代码芯片宽度估算：芯片字取正文 0.92 倍，等宽步进 ≈0.62em（DejaVu 0.602/JBMono 0.60），
-// CJK 回退字形 ≈1.1em，加 12sp 水平内边距 + 2sp 余量——占位符宽度不足会让 Surface 裁字。
+// CJK 回退字形 ≈1.1em，加 12sp 水平内边距、2sp 余量和一个 ASCII 字形宽的安全量，避免长代码末尾被裁切。
 private const val MD_CHIP_ASCII_EM = 0.62f
 private const val MD_CHIP_CJK_EM = 1.1f
 
 /** 光学下沉量：对冲 TextCenter 按字体 metrics 居中在 CJK 混排行里的「骑高」观感（可调） */
 private val MD_CHIP_OPTICAL_DROP = 2.dp
 
-private fun mdChipWidthSp(code: String, chipFontSize: TextUnit): TextUnit =
+internal fun mdChipWidthSp(code: String, chipFontSize: TextUnit): TextUnit =
     (code.sumOf { c -> (if (c.code > 0x2E80) MD_CHIP_CJK_EM else MD_CHIP_ASCII_EM).toDouble() }.toFloat()
-        * chipFontSize.value + 14f).sp
+        * chipFontSize.value + 14f + chipFontSize.value).sp
 
 /** 行内代码芯片的 inlineContent 表：圆角 Surface 药丸，贴身包裹代码文本 */
 @Composable

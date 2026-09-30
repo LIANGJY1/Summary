@@ -55,7 +55,7 @@ data class SourceQuestionGitDiff(
 
 enum class ReadmeSaveResult { SAVED, CONFLICT, UNAVAILABLE, FAILED }
 
-/** git 改动标记的 key：按文档 + 题号配对，内容编辑或块偏移变化不影响配对。 */
+/** 当前题目列表读取 diff 的寻址 key。题号只用于定位当前条目，不用于和 HEAD 配对。 */
 internal fun sourceQuestionGitKey(entry: SourceQuestions.Entry): String =
     "${entry.sourcePath}#${entry.number}"
 
@@ -1012,7 +1012,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     private val gitUnavailableRoots: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /**
-     * 逐题比对当前内容与 git HEAD 里的版本（按题号配对）。除是否变化外，
+     * 逐题比对当前内容与 git HEAD 里的版本（按题面身份配对，不按题号配对）。除是否变化外，
      * 还携带题面变化字符区间与答案变化行号，供 UI 行内着色。
      * 返回 null 表示 git 不可用或当前库不在 git 仓库里，UI 不标色。
      */
@@ -1045,9 +1045,10 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 }
                 continue
             }
-            val oldByNumber = SourceQuestions.parse(path, oldDoc, settings.sourceQuestionPaths).associateBy { it.number }
+            val oldEntries = SourceQuestions.parse(path, oldDoc, settings.sourceQuestionPaths)
+            val oldByCurrentNumber = matchGitHeadQuestions(oldEntries, entries)
             entries.forEach { entry ->
-                val old = oldByNumber[entry.number]
+                val old = oldByCurrentNumber[entry.number]
                 result[sourceQuestionGitKey(entry)] = when {
                     old == null -> SourceQuestionGitDiff(
                         changed = true,
@@ -1064,6 +1065,77 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             }
         }
         return result
+    }
+
+    /**
+     * 按题面文本匹配当前题目与 HEAD 中的题目，避免插入或重排题目后题号整体偏移，
+     * 把未修改的后续题目误标为改动。重复题面优先按答案精确匹配；题面改写时再用答案或剩余顺序辅助配对。
+     */
+    private fun matchGitHeadQuestions(
+        oldEntries: List<SourceQuestions.Entry>,
+        currentEntries: List<SourceQuestions.Entry>,
+    ): Map<Int, SourceQuestions.Entry> {
+        fun identity(question: String): String = question.trim().replace(Regex("\\s+"), " ")
+
+        val matchesByCurrentNumber = HashMap<Int, SourceQuestions.Entry>()
+        val usedOld = BooleanArray(oldEntries.size)
+        val usedCurrent = BooleanArray(currentEntries.size)
+        val oldIndicesByQuestion = oldEntries.indices.groupBy { identity(oldEntries[it].question) }
+        val currentIndicesByQuestion = currentEntries.indices.groupBy { identity(currentEntries[it].question) }
+
+        fun pair(currentIndex: Int, oldIndex: Int) {
+            usedCurrent[currentIndex] = true
+            usedOld[oldIndex] = true
+            matchesByCurrentNumber[currentEntries[currentIndex].number] = oldEntries[oldIndex]
+        }
+
+        // 题面文本是主要身份；重复题面先用答案精确匹配，避免新副本抢走旧题身份。
+        for ((questionIdentity, currentIndices) in currentIndicesByQuestion) {
+            val oldIndices = oldIndicesByQuestion[questionIdentity].orEmpty()
+            if (oldIndices.isEmpty()) continue
+
+            val unmatchedCurrent = ArrayList<Int>()
+            for (currentIndex in currentIndices) {
+                val current = currentEntries[currentIndex]
+                val exactAnswerIndex = oldIndices.firstOrNull { oldIndex ->
+                    !usedOld[oldIndex] && oldEntries[oldIndex].answer == current.answer
+                }
+                if (exactAnswerIndex == null) {
+                    unmatchedCurrent += currentIndex
+                } else {
+                    pair(currentIndex, exactAnswerIndex)
+                }
+            }
+
+            // 题面相同但答案有改动时，只有组内数量相等才按顺序配对；数量不等时保留歧义项，
+            // 避免把新增的重复题面误认成旧题编辑。
+            val remainingOld = oldIndices.filterNot { usedOld[it] }
+            if (unmatchedCurrent.size == remainingOld.size) {
+                unmatchedCurrent.zip(remainingOld).forEach { (currentIndex, oldIndex) ->
+                    pair(currentIndex, oldIndex)
+                }
+            }
+        }
+
+        // 题面改写但答案未变时，用答案作为辅助身份，避免把未改答案整段标黄。
+        for (currentIndex in currentEntries.indices.filterNot { usedCurrent[it] }) {
+            val current = currentEntries[currentIndex]
+            val exactAnswerIndex = oldEntries.indices
+                .filterNot { usedOld[it] }
+                .filter { oldEntries[it].answer == current.answer }
+                .minByOrNull { kotlin.math.abs(oldEntries[it].number - current.number) }
+            if (exactAnswerIndex != null) pair(currentIndex, exactAnswerIndex)
+        }
+
+        // 若题面和答案都改写，但增删数相等，剩余区间按文档顺序配对。
+        val remainingCurrent = currentEntries.indices.filterNot { usedCurrent[it] }
+        val remainingOld = oldEntries.indices.filterNot { usedOld[it] }
+        if (remainingCurrent.size == remainingOld.size) {
+            remainingCurrent.zip(remainingOld).forEach { (currentIndex, oldIndex) ->
+                pair(currentIndex, oldIndex)
+            }
+        }
+        return matchesByCurrentNumber
     }
 
     /** 后台重算 git 改动标记并原子发布；重载后调用，保存与外部修改都会跟着刷新。 */
