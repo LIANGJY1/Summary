@@ -1,6 +1,6 @@
 # Android 学习资料目录
 
-> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。《android-internals-wiki》全书已于 2026-09-25 按 session-to-knowledge 文章模式全量沉淀为本目录下的 Q&A 学习资料：机制类结论按本地 AAOS13 源码（Android 13）核对并标注与材料 Android 17 语境的版本差异，Q 序列即结构、供 atlas 同源直读；`architecture/01–10` 等早期文档为既往沉淀，予以保留。yadi 车机项目《git 提交与缺陷分析》已于 2026-09-26 沉淀为 [11-defects/](11-defects/) 九册。维护者：session-to-knowledge。
+> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。《android-internals-wiki》全书已于 2026-09-25 按 session-to-knowledge 文章模式全量沉淀为本目录下的 Q&A 学习资料：机制类结论按本地 AAOS13 源码（Android 13）核对并标注与材料 Android 17 语境的版本差异，Q 序列即结构、供 atlas 同源直读；`architecture/01–10` 等早期文档为既往沉淀，予以保留。yadi 车机项目《git 提交与缺陷分析》已于 2026-09-26 沉淀为 [11-defects/](11-defects/) 技术分册八册（2026-09-30 项目级画像一册迁出至 [../04-exp/](../04-exp/) 项目经验目录）。维护者：session-to-knowledge。
 
 ## 面试冲刺
 
@@ -10,10 +10,14 @@
 
 - [architecture/](01-architecture/) — 系统架构与系统服务：分层架构、启动链路、Binder、ART、显示/WM、Telephony/Connectivity、AVF、logd/BPF（11–19 为本轮新增）
 - [rendering/](02-rendering/) — 渲染系统：渲染管线与 VSync 调度、GPU 合成与显示管线、多窗口折叠屏与显示服务
-- [input/](03-input/) — 输入系统：分发与安全、触摸延迟、手势导航、IMM、外设输入
+- [input/](03-input/) — 输入专项（详见下方"输入专题（AOSP + AAOS）"）
 - [memory/](05-memory/) — 内存管理：内存全景与 GC、lmkd/Freezer、回收压缩、ZRAM、MTE、跨进程内存
 - [cpu-power/](08-cpu-power/) — CPU 调度与能耗：EAS/DVFS/Thermal、后台任务、ADPF、端侧 AI、传感器批处理与 CPU Cache
 - [storage/](04-storage/) — 存储与 I/O：存储架构、文件系统调度、SharedPreferences/DataStore、vold/FUSE
+
+## 输入专题（AOSP + AAOS）
+
+- [03-input/](03-input/) — 输入专项（2026-09-29 扩写为七册；01 册为源书沉淀，02–07 册为本轮新增并全网扩写：机制按本地 AAOS13 源码核对，多点触控协议与内核驱动为 kernel.org 官方文档口径，触控 IC 实战为厂商/社区二手结论；Rotary 与 FocusArea 按官方文档口径，2026-09 检索）：[01-输入系统](03-input/01-输入系统.md)——分发全链路与分段定位、延迟五时间戳、InputChannel 与反压、iq/oq/wq 与输入 ANR、过期丢弃、旁路拦截与注入安全、手势导航与 Predictive Back、手势识别、IME 显示链路、物理键与鼠标触控板（26 题）；[02-应用层事件分发与多点触控](03-input/02-应用层事件分发与多点触控.md)——Activity→View 方法链与返回值语义（DecorView 回调转发为第一站）、onTouch/onClick/onLongClick 时序与互斥、拦截与 TouchTarget 生命周期、可点击性默认值、action 编码与 pointer id/index、getX/getRawX、窗口与 View 两级触摸拆分、滑动冲突两策略与嵌套滚动（disallow 的 DOWN 重置坑）、scrollTo 滑动模型、CANCEL 清理义务、触摸遮挡过滤、TouchDelegate 热区扩大、ACTION_OUTSIDE 点外关闭、滚轮悬停与旋钮的通用运动事件（isHoverable 前提）、InputConnection 文本路径、BACK 默认行为与 startTracking 协议、点击无效排查（21 题）；[03-按键系统与键值映射](03-input/03-按键系统与键值映射.md)——扫描码/键码/字符三层、`.kl`（五个顶级声明）/`.kcm`/`.idc` 分工语法与查找链、新增硬键端到端定制、WAKE 与唤醒两级裁决（含外接键盘自动补位、唤醒键 UP 吞除、双击唤醒传感器通道）、组合键与 framework 级长按多击模板、ACTION_MULTIPLE 历史形态、方向盘 HID 与 VHAL 两条接入路线、uinput 虚拟设备、媒体键路由、HOME 等系统键拦截、方向键焦点导航、downTime/eventTime 与 repeat、fallback 合成键（策略层 dispatchUnhandledKey）、按键排查路径（17 题）；[04-设备接入与InputReader](03-input/04-设备接入与InputReader.md)——内核 input/evdev 与 input_event 语义、多点触控协议 A/B 与槽位同步、EventHub 三路 epoll 与热插拔、能力位推断设备分类（手柄三路 mapper）、触摸屏-显示绑定三级来源与视口四级查找、仿射校准先于旋转、虚拟按键 sysfs 定义、旋钮编码器 AXIS_SCROLL、内核重复与框架重复、SYN_DROPPED 溢出、鬼触摸/断触成因对策、触控 IC 联调入口与热力图管道、Switch 开关输入双路消费（17 题）；[05-焦点分发与多屏输入](03-input/05-焦点分发与多屏输入.md)——每屏焦点与 FocusResolver 令牌记账、两类焦点请求的持久化差异、窗口命中与遮挡校验、slippery 出界换窗、窗口级触摸拆分、监视窗口三真实用户（手势导航/屏下指纹/全局监听）、窗口级指针捕获、拖放会话、触摸模式、误触抑制与事件分类组件及版本演进、事件流向窗口级排查、副驾屏无反应分发侧归因、焦点请求持久化的反直觉行为（14 题）；[06-AAOS车机输入](03-input/06-AAOS车机输入.md)——VHAL→应用完整上行链路、三个 VHAL 输入属性的 int32Values 语义（对角线 nudge 合成）、InputHalService 加工与防御、CarInputService 五步分发、语音/通话键车载长按、CustomInputEvent 无人捕获即丢弃、capture 排他栈仲裁（含音量旋钮不可捕获）、旋钮 VHAL 与 Linux 设备双链路、RotaryService 无障碍形态与三模式、焦点移动与滚动加速、FocusArea/FocusParkingView 契约、RotaryService 内部机制（触摸退出检测/HUN nudge 劫持/SurfaceView 修正/历史缓存）、cluster 按键两代路由、车机 IME 与旋钮输入法、注入调试命令、旋钮失灵五层排查（17 题）；[07-输入排查工具与实战](03-input/07-输入排查工具与实战.md)——getevent 全参数与 `-r` 上报率、/proc/bus/input/devices 取证、dumpsys input 分段与队列字段语义、input 命令族（swipe 缺省 300 ms 匀速插值）、四种注入对比、uinput 命令造设备、Perfetto 输入轨道、输入 ANR 输入侧证据链、整机无响应五层决策树、鬼触摸取证矩阵、防误触三层、自动化注入稳定性坑、输入 ANR 五类根因识别、IME 丢字与组合输入时序排查、外设接入四步排查、一次到位采集清单（17 题）
 
 ## 性能问题（源书第二部分）
 
@@ -33,7 +37,7 @@
 
 ## 缺陷复盘（yadi 项目）
 
-- [11-defects/](11-defects/) — 某车机项目 85 天 1010 条提交、761 条缺陷修复的复盘沉淀：项目缺陷画像与复盘方法、车控信号语义、主线程与异步时序、蓝牙机制、Kanzi 双端状态同步、UI 还原与主题适配、状态缓存与启动时序、崩溃防护与偶现排查、提交治理与防回归
+- [11-defects/](11-defects/) — 某车机项目 85 天 1010 条提交、761 条缺陷修复复盘的技术根因分册（八册）：车控信号语义、主线程与异步时序、蓝牙机制、Kanzi 双端状态同步、UI 还原与主题适配、状态缓存与启动时序、崩溃防护与偶现排查、提交治理与防回归；项目级缺陷画像与复盘方法已迁 [../04-exp/00-项目缺陷画像与复盘方法.md](../04-exp/00-项目缺陷画像与复盘方法.md)
 
 ## 平台原生层（外部资料，证据等级：二手）
 
@@ -47,7 +51,7 @@
 
 ## UI 专题（AOSP + AAOS）
 
-- [15-ui/](15-ui/) — UI 专题（2026-09-29 新增并深化，8 册 125 题；AOSP 机制按本地 AAOS13 源码核对，Car App Library / CarUxRestrictions / Power Policy 按官方文档口径，2026-09 检索）：[01-窗口系统与WMS](15-ui/01-窗口系统与WMS.md)——窗口三副面孔、addWindow 校验与返回码、relayout 与遍历调度分工、WindowState/Token/DisplayContent、z 序与 surface placement、Insets 体系与 WindowInsetsController、Configuration 两条路径、IME 适配、多窗口与 letterbox、窗口不显示排查；[02-Activity与窗口生命周期](15-ui/02-Activity与窗口生命周期.md)——启动到首帧时序、四个可观测时点、setContentView 与 DecorView、透明主题尺寸陷阱、relaunch vs recreate、状态保存、启动模式与任务栈、切换动画双窗口、首帧度量、onTrimMemory、车机多用户归属、时序踩坑、Fragment 生命周期与视图分离、三种切换语义、commit 三态与状态保存、ViewModel 作用域；[03-View测量布局与绘制](15-ui/03-View测量布局与绘制.md)——三趟管线、MeasureSpec 与尺寸契约、layout vs onLayout、requestLayout vs invalidate、display list 与"不 invalidate 就不重绘"、脏区传播、绘制顺序与裁剪、onDraw 分配、图层类型、SurfaceView vs TextureView、属性动画与布局动画；[04-资源主题与多屏适配](15-ui/04-资源主题与多屏适配.md)——限定符优先级与顺序、默认资源兜底、版本限定符、深色模式三件事、动态取色取舍、主题属性与 RRO 定制契约、dp/sp/fontScale、限定符≠窗口尺寸、车机多屏分歧、RTL、ViewBinding 联合字段缺失、Configuration 变更纪律、生效变体探针；[05-Compose运行期与跨栈互操作](15-ui/05-Compose运行期与跨栈互操作.md)——组合期写状态、remember/rememberSaveable、derivedStateOf、稳定性推断与 strong skipping、延迟读取、列表键、三个 Effect、ComposeView 组合策略、AndroidView 代价、自定义宿主帧时钟、重组归因工具、迁移坑；[06-AAOS车机UI架构与CarService](15-ui/06-AAOS车机UI架构与CarService.md)——UI 四层与定制点、CarService 与 car-lib、车机 Launcher、模板 vs 原生两条路线、CarAppService 注册契约与 Car App API level、车机 SystemUI、应用焦点、occupant zone 座位-显示-用户映射、多用户、CarPowerManager 与 power policy、日夜模式、旋钮与自定义输入、仪表通道、投影共存、调试与特性开关；[07-车机交互安全与驾驶分心](15-ui/07-车机交互安全与驾驶分心.md)——分心约束来源、驾驶状态判定、car_ux_restrictions_map.xml 与自动提升规则、restriction mode、消费姿势、distractionOptimized 声明、全限制兜底、config_ignore_ux_restrictions、乘员屏触控锁定、限制变化处理、内容级限制、语音与物理控件、验证方法、其他安全约束；[08-UI疑难排查与体验踩坑](15-ui/08-UI疑难排查与体验踩坑.md)——五层归因、界面没出来/白屏判定、掉帧阶段归因与 FrameMetrics 字段、抓帧工具集与命令归属、跳过绘制原因字段、重绘过大治理、insets 遮挡解法、输入超时与 UI 阻塞、渲染内存、SurfaceView 黑区、车机多显示与电源策略故障、回归机制
+- [15-ui/](15-ui/) — UI 专题（8 册 127 题，按学习路径编排：Activity 生命周期与首帧 → View 布局绘制 → 资源与多屏适配 → Compose 与 View 互操作 → 窗口系统 → AAOS 架构 → 驾驶安全 → 综合排查；机制版本与证据来源见各册引言）
 
 ## 早期文档
 
@@ -81,7 +85,13 @@
 | [02-rendering/01-渲染管线与VSync调度.md](02-rendering/01-渲染管线与VSync调度.md) | 渲染管线与 VSync 调度 | 30 |  |
 | [02-rendering/02-GPU合成与显示管线.md](02-rendering/02-GPU合成与显示管线.md) | GPU 合成与显示管线 | 30 |  |
 | [02-rendering/03-多窗口折叠屏与显示服务.md](02-rendering/03-多窗口折叠屏与显示服务.md) | 多窗口、折叠屏与显示服务 | 25 |  |
-| [03-input/01-输入系统.md](03-input/01-输入系统.md) | Android 输入系统：分发、延迟与安全边界 | 26 |  |
+| [03-input/01-输入系统.md](03-input/01-输入系统.md) | Android 输入系统：分发、延迟与安全边界 | 26 | 全链路分段定位 / 延迟五时间戳 / InputChannel 反压 / iq·oq·wq 与输入 ANR / 过期丢弃 / 旁路拦截与注入 / 手势导航与 Predictive Back / IME 显示 / 外设 |
+| [03-input/02-应用层事件分发与多点触控.md](03-input/02-应用层事件分发与多点触控.md) | 应用层事件分发与多点触控 | 21 | 方法链与返回值 / onTouch·onClick·onLongClick / 拦截与 TouchTarget / pointer id·index / 两级拆分 / 滑动冲突 / CANCEL 清理 / 遮挡过滤 / TouchDelegate / ACTION_OUTSIDE / InputConnection |
+| [03-input/03-按键系统与键值映射.md](03-input/03-按键系统与键值映射.md) | 按键系统与键值映射 | 17 | 三层映射 / .kl·.kcm·.idc 查找链 / 硬键定制 / WAKE 唤醒 / 组合键与连击 / ACTION_MULTIPLE / 方向盘两路线 / uinput / 媒体键与 HOME / fallback |
+| [03-input/04-设备接入与InputReader.md](03-input/04-设备接入与InputReader.md) | 设备接入与 InputReader | 17 | input_event / MT 协议 A·B / 能力位分类 / mapper 族（手柄三路）/ 显示绑定 / 校准与旋转 / 虚拟键 / 旋钮 / Switch 开关 / SYN_DROPPED / 鬼触摸·断触 |
+| [03-input/05-焦点分发与多屏输入.md](03-input/05-焦点分发与多屏输入.md) | 焦点分发与多屏输入 | 14 | 每屏焦点与请求持久化 / 窗口命中与遮挡 / slippery / 拆分 / 监视窗口 / 指针捕获 / 拖放 / 触摸模式 / 分类组件 |
+| [03-input/06-AAOS车机输入.md](03-input/06-AAOS车机输入.md) | AAOS 车机输入 | 17 | VHAL 三属性 / CarInputService 五步 / capture 栈 / 旋钮双链路 / RotaryService·FocusArea·内部机制 / cluster / 车机 IME / 五层排查 |
+| [03-input/07-输入排查工具与实战.md](03-input/07-输入排查工具与实战.md) | 输入排查工具与实战 | 17 | getevent / dumpsys input 字段 / input 命令族 / 注入对比 / Perfetto 轨道 / ANR 证据链 / 决策树 / 外设接入 / IME 丢字 / 取证矩阵 |
 | [04-storage/01-存储与IO.md](04-storage/01-存储与IO.md) | 存储与 I/O：架构分层、文件系统调度与配置持久化 | 22 |  |
 | [05-memory/01-内存管理与压力治理.md](05-memory/01-内存管理与压力治理.md) | Android 内存管理与压力治理 | 24 |  |
 | [05-memory/02-回收压缩与专项内存.md](05-memory/02-回收压缩与专项内存.md) | 回收压缩与专项内存 | 25 |  |
@@ -122,7 +132,6 @@
 | [10-tools/06-APM-平台与SDK.md](10-tools/06-APM-平台与SDK.md) | APM 平台与 SDK | 30 |  |
 | [10-tools/07-APM-专项原理与架构.md](10-tools/07-APM-专项原理与架构.md) | APM 专项原理与架构 | 32 |  |
 | [10-tools/08-学习方法与检查清单.md](10-tools/08-学习方法与检查清单.md) | 学习方法与检查清单 | 8 |  |
-| [11-defects/00-项目缺陷画像与复盘方法.md](11-defects/00-项目缺陷画像与复盘方法.md) | 项目缺陷画像与复盘方法 | 18 |  |
 | [11-defects/01-车控信号语义.md](11-defects/01-车控信号语义.md) | 车控信号语义 | 24 |  |
 | [11-defects/02-主线程与异步时序.md](11-defects/02-主线程与异步时序.md) | 主线程与异步时序 | 27 |  |
 | [11-defects/03-蓝牙机制.md](11-defects/03-蓝牙机制.md) | 蓝牙机制 | 31 |  |
@@ -148,11 +157,11 @@
 | [14-network/07-车机网络安全.md](14-network/07-车机网络安全.md) | 车机网络安全 | 8 | 攻击面盘点 / 指令防重放 / 传输基线 / 固件校验防降级 / 调试接口治理 / 信任锚管理 / 近场通道加固 / 检测响应 |
 | [14-network/08-应用网络编程与系统约束.md](14-network/08-应用网络编程与系统约束.md) | 应用网络编程与系统约束 | 14 | Doze 网络限制 / WorkManager 约束 / HTTPS 诊断 / 双栈 socket / eSIM / 连接竞速 / 指标监控 / 重试与幂等 / 主线程网络异常 / 权限之辨 / TrafficStats |
 | [14-network/09-传输细节与协议设计.md](14-network/09-传输细节与协议设计.md) | 传输细节与协议设计 | 11 | 粘包与协议定界 / Nagle 延迟 / keepalive 参数 / 证书链事故 / 拥塞控制 / 字节序与版本 / 通道选型 / 网段冲突 / 半开假在线 / DNS 劫持 |
-| [15-ui/01-窗口系统与WMS.md](15-ui/01-窗口系统与WMS.md) | 窗口系统与 WindowManagerService | 16 | 窗口三副面孔 / addWindow 校验与返回码 / relayout 与遍历调度 / WindowState·Token·DisplayContent / z 序与 surface placement / Insets 与 WindowInsetsController / Configuration 两条路径 / IME 适配 / letterbox / 窗口排查 |
-| [15-ui/02-Activity与窗口生命周期.md](15-ui/02-Activity与窗口生命周期.md) | Activity 与窗口生命周期 | 18 | 启动到首帧时序 / 四个可观测时点 / setContentView 与 DecorView / 透明主题尺寸陷阱 / relaunch vs recreate / 状态保存 / 启动模式与任务栈 / 切换动画双窗口 / 首帧度量 / onTrimMemory / 车机多用户归属 |
-| [15-ui/03-View测量布局与绘制.md](15-ui/03-View测量布局与绘制.md) | View 测量、布局与绘制 | 15 | 三趟管线 / MeasureSpec 与尺寸契约 / layout vs onLayout / requestLayout vs invalidate / display list 与失效语义 / 脏区传播 / 绘制顺序与裁剪 / onDraw 分配 / 图层类型 / SurfaceView vs TextureView / 属性动画与布局动画 |
-| [15-ui/04-资源主题与多屏适配.md](15-ui/04-资源主题与多屏适配.md) | 资源、主题与多屏适配 | 15 | 限定符优先级与顺序 / 默认资源兜底 / 版本限定符 / 深色模式三件事 / 动态取色取舍 / 主题属性与 RRO 定制契约 / dp·sp·fontScale / 限定符≠窗口尺寸 / 车机多屏分歧 / RTL / ViewBinding 联合字段缺失 / 生效变体探针 |
-| [15-ui/05-Compose运行期与跨栈互操作.md](15-ui/05-Compose运行期与跨栈互操作.md) | Compose 运行期与跨栈互操作 | 15 | 组合期写状态 / remember 与 rememberSaveable / derivedStateOf / 稳定性推断与 strong skipping / 延迟读取 / 列表键 / 三个 Effect / ComposeView 组合策略 / AndroidView 代价 / 自定义宿主帧时钟 / 重组归因 |
-| [15-ui/06-AAOS车机UI架构与CarService.md](15-ui/06-AAOS车机UI架构与CarService.md) | AAOS 车机 UI 架构与 CarService | 15 | UI 四层与定制点 / CarService 与 car-lib / 模板 vs 原生两条路线 / CarAppService 注册契约与 Car App API level / 车机 SystemUI / 应用焦点 / occupant zone 映射 / 多用户 / CarPowerManager 与 power policy / 日夜模式 / 旋钮与自定义输入 / 仪表通道 / 投影共存 |
-| [15-ui/07-车机交互安全与驾驶分心.md](15-ui/07-车机交互安全与驾驶分心.md) | 车机交互安全与驾驶分心 | 15 | 约束来源与建模 / 驾驶状态判定 / uxr 映射表与自动提升 / restriction mode / 消费姿势 / distractionOptimized 声明 / 全限制兜底 / config_ignore_ux_restrictions / 乘员屏触控锁定 / 内容级限制 / 语音与物理控件 / 验证方法 |
-| [15-ui/08-UI疑难排查与体验踩坑.md](15-ui/08-UI疑难排查与体验踩坑.md) | UI 疑难排查与体验踩坑 | 15 | 五层归因 / 界面没出来与白屏判定 / 掉帧阶段归因与 FrameMetrics / 抓帧工具集与命令归属 / 跳过绘制原因字段 / 重绘过大治理 / insets 遮挡解法 / 输入超时与 UI 阻塞 / SurfaceView 黑区 / 车机多显示与电源策略故障 / 回归机制 |
+| [15-ui/01-activity.md](15-ui/01-activity.md) | Activity 启动与窗口生命周期 | 18 | 启动到首帧 / 窗口焦点与首帧 / 配置变化 / 状态恢复 / 任务栈 / Fragment 视图与状态 |
+| [15-ui/02-view.md](15-ui/02-view.md) | View 测量、布局与绘制 | 17 | MeasureSpec / requestLayout 与 invalidate / display list / 绘制顺序 / 图层 / SurfaceView 与 TextureView |
+| [15-ui/03-resources.md](15-ui/03-resources.md) | 资源、主题与多屏适配 | 15 | 限定符 / 默认资源 / 深色模式 / 主题与 RRO / 字号与 RTL / 多显示 / Configuration |
+| [15-ui/04-compose.md](15-ui/04-compose.md) | Compose 运行期与 View 互操作 | 15 | 重组与状态 / remember / derivedStateOf / 稳定性 / Effect / ComposeView 与 AndroidView / 掉帧 |
+| [15-ui/05-window-system.md](15-ui/05-window-system.md) | 窗口系统与 WindowManagerService | 17 | 窗口层级 / token 与 addWindow / relayout / Insets / Configuration / IME / 多窗口 / 黑屏排查 |
+| [15-ui/06-aaos-ui.md](15-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 15 | UI 定制分层 / CarService / 模板与原生应用 / occupant zone / 多用户 / 电源策略 / 仪表 / 投影 |
+| [15-ui/07-driving-safety.md](15-ui/07-driving-safety.md) | 车机交互安全与驾驶分心 | 15 | UX 限制 / 驾驶状态 / restriction mode / 应用声明 / 乘员屏 / 受限交互 / 验证 |
+| [15-ui/08-ui-debugging.md](15-ui/08-ui-debugging.md) | UI 疑难排查与体验踩坑 | 15 | 白屏与黑屏 / 首帧 / 掉帧归因 / 绘制诊断 / Insets / 输入超时 / 多显示 / 回归检查 |

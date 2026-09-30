@@ -45,7 +45,7 @@ class SourceQuestionsTest {
     fun `只识别目标文件并兼容中文冒号`() {
         val text = "**Q1：中文冒号问题？**\n\n答案。"
 
-        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-语法基础.md"))
+        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/03-language/kotlin/01-语法基础.md"))
         assertTrue(!SourceQuestions.isSupportedPath("language/kotlin/02-对象与类型设计.md"))
         val question = SourceQuestions.parse("language/kotlin/01-语法基础.md", text).single()
         assertEquals("中文冒号问题？", question.question)

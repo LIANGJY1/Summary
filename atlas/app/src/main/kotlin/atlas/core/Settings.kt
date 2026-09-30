@@ -82,12 +82,40 @@ data class AppSettings(
     )
 }
 
-/** 配置持久化（Properties，应用数据目录下 settings.properties） */
+/**
+ * 配置持久化（Properties，双层，PRD §6.4.23）。
+ *  - 本机层 [file]：只存「必然跨设备不同」的键（[localKeys]）——知识库路径（引导键，各机绝对路径不同）、
+ *    本机文件路径（题库选中文档/推送 APK/截图/录制目录）、局域网手机 IP、本机 AVD 名。
+ *  - 仓库同步层 syncedFile（`<库根>/atlas/config/settings.properties`）：其余全部用户配置，随知识库所在
+ *    git 仓库同步（`<库根>/atlas` 本就是索引忽略名单里的应用协作目录），多设备经 git pull 保持一致。
+ *
+ * 兼容与迁移：syncedFile 传 null 时保持旧行为（本机文件全量读写）——既有调用与「仓库层尚未落盘」的
+ * 老配置原地可用，首次非空保存即自动分流成两层。写入用固定键序、无时间戳注释（java.util.Properties
+ * 的 store 会带当天日期，每次保存都会弄脏 git diff）。PIN 是凭据，照旧独立 0600 文件
+ * （FeishuCheckin.pinFile），绝不入仓库（脱敏底线）。
+ */
 class SettingsStore(private val file: File) {
-    fun load(): AppSettings {
-        if (!file.isFile) { Log.d("设置文件不存在，用默认值：${file.absolutePath}"); return AppSettings() }
-        val p = java.util.Properties()
-        file.inputStream().use { p.load(it.reader(Charsets.UTF_8)) }
+
+    /** 只留在本机层的键；其余键全部进仓库同步层 */
+    private val localKeys = setOf(
+        "libraryPath", "selectedSourcePath", "recordingSaveDir",
+        "pushApkPath", "screenshotSaveDir", "feishuIp", "emulatorAvd",
+    )
+
+    fun load(): AppSettings = load(null)
+
+    /** [syncedFileFor] 以本机层解析出的 libraryPath 定位仓库同步层；文件不存在时仅读本机层 */
+    fun load(syncedFileFor: ((libraryPath: String) -> File?)?): AppSettings {
+        val p = readProperties(file)
+        if (syncedFileFor != null) {
+            val libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { DEFAULT_LIBRARY_PATH }
+            val synced = syncedFileFor(libraryPath)
+            if (synced != null && synced.isFile) {
+                val sp = readProperties(synced)
+                sp.stringPropertyNames().filter { it !in localKeys }.forEach { k -> p.setProperty(k, sp.getProperty(k)) }
+                Log.d("设置叠加仓库同步层 ${synced.absolutePath}")
+            }
+        }
         fun list(k: String) = (p.getProperty(k) ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val s = AppSettings(
             // 旧版本可能已经写入空路径；空路径不应让用户每次重新选择知识库。
@@ -117,8 +145,33 @@ class SettingsStore(private val file: File) {
         return s
     }
 
-    fun save(s: AppSettings) {
-        file.parentFile?.mkdirs()
+    fun save(s: AppSettings) = save(s, null)
+
+    /** syncedFile 为 null 时本机文件全量写入（旧行为）；否则本机层与仓库层按键分流 */
+    fun save(s: AppSettings, syncedFile: File?) {
+        val all = toProperties(s)
+        if (syncedFile == null) {
+            writeProperties(file, all, all.stringPropertyNames())
+            Log.i("设置已写入 ${file.absolutePath}")
+        } else {
+            writeProperties(file, all, all.stringPropertyNames().filter { it in localKeys }.toSet())
+            writeProperties(
+                syncedFile,
+                all,
+                all.stringPropertyNames().filter { it !in localKeys }.toSet(),
+                header = "# Atlas 仓库同步层配置：随本知识库仓库 git 同步，多设备保持一致；可手改，重启生效。",
+            )
+            Log.i("设置已分层写入 本机=${file.absolutePath} 仓库同步=${syncedFile.absolutePath}")
+        }
+    }
+
+    private fun readProperties(f: File): java.util.Properties {
+        val p = java.util.Properties()
+        if (f.isFile) f.inputStream().use { p.load(it.reader(Charsets.UTF_8)) }
+        return p
+    }
+
+    private fun toProperties(s: AppSettings): java.util.Properties {
         val p = java.util.Properties()
         p.setProperty("libraryPath", s.libraryPath)
         p.setProperty("sourceQuestionPaths", s.sourceQuestionPaths.joinToString(","))
@@ -140,7 +193,18 @@ class SettingsStore(private val file: File) {
         if (s.pushApkPath.isNotEmpty()) p.setProperty("pushApkPath", s.pushApkPath)
         if (s.screenshotSaveDir.isNotEmpty()) p.setProperty("screenshotSaveDir", s.screenshotSaveDir)
         p.setProperty("emulatorAvd", s.emulatorAvd)
-        file.outputStream().use { p.store(it, "Atlas settings") }
-        Log.i("设置已写入 ${file.absolutePath}")
+        return p
+    }
+
+    /** 手写 Properties 文本：固定键序、无时间戳注释（java.util.Properties 的 store 带当天日期，git diff 每次都脏）；
+     *  键不用转义（全为固定标识符），值转义反斜杠与首空格 */
+    private fun writeProperties(f: File, p: java.util.Properties, keys: Set<String>, header: String? = null) {
+        f.parentFile?.mkdirs()
+        val body = keys.sorted().joinToString("\n") { k ->
+            val v = p.getProperty(k).orEmpty().replace("\\", "\\\\")
+            "$k=" + if (v.startsWith(" ")) "\\$v" else v
+        }
+        val head = header?.let { "$it\n" } ?: ""
+        f.writeText(head + body + "\n")
     }
 }

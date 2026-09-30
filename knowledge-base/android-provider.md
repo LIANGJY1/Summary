@@ -5,7 +5,7 @@
 ## 边界
 
 - **收**：ContentProvider 访问路径与系统 Provider 的架构事实；ContentObserver 等变化通知机制的行为细节与正确用法范式；跨进程数据监听"拿不到值/漏通知/状态不一致"类坑与解法
-- **不收**：编程语言特性（→ [language/](./language/)）；SDK/组件设计模式（→ [sdk-design.md](./sdk-design.md)）；Android UI 域（→ [android-ui.md](./android-ui.md)）；等
+- **不收**：编程语言特性（→ [language/](03-language/)）；SDK/组件设计模式（→ [sdk-design.md](./sdk-design.md)）；Android UI 域（→ [android-ui.md](./android-ui.md)）；等
 - **分工**：本文收"机制层怎么运作、怎么用才对"；权衡与思维方式 → [design-principles.md](./design-principles.md)
 
 ## 规则
@@ -26,7 +26,7 @@
 
 <!-- 条目模板：
 
-踩坑类五段（现象→原因→误区→解决方案→启示）同 android-ui.md；
+踩坑类五段（现象→原因→误区→解决方案→启示）同 01-android-ui.md；
 稳定事实类五段变体（条目首行注明"（稳定事实变体）"）：
 
 ## 条目名（完整命题）

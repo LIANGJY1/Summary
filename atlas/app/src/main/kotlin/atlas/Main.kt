@@ -204,7 +204,8 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
                     }
                     // 题库页搜索栏默认隐藏，Ctrl+Shift+F 召出/收起（§6.4.19）；
                     // 收起时的焦点归位统一由 QuestionSection 的可见性联动负责（覆盖键盘/点击全部路径）
-                    e.type == KeyEventType.KeyDown && e.key == Key.F && e.isCtrlPressed && e.isShiftPressed && tab == "题库" -> {
+                    e.type == KeyEventType.KeyDown && e.key == Key.F && e.isCtrlPressed && e.isShiftPressed &&
+                        tab == "题库" && store.selectedSourcePath !in store.sourceReadmeDocuments -> {
                         store.questionSearchVisible.value = !store.questionSearchVisible.value
                         Log.d("Ctrl+Shift+F 题库搜索栏 → ${store.questionSearchVisible.value}")
                         true

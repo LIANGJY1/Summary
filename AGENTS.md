@@ -15,11 +15,14 @@
 
 | 路径 | 是什么 | agent 何时读 | 怎么写入 |
 |---|---|---|---|
-| `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；session-to-knowledge 调用即出题——复盘题以 `**Qn:**` 同源格式直接写入知识文档，atlas 同源直读；新内容先按 profile 与路由规则处理 |
+| `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `03-language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；session-to-knowledge 调用即出题——复盘题以 `**Qn:**` 同源格式直接写入知识文档，atlas 同源直读；新内容先按 profile 与路由规则处理 |
+| `knowledge-base/04-exp/` | 项目经验（非技术）目录：项目阶段定位、质量投入、度量口径、流程治理、协作联调的跨项目判断规则，Q 序列供 atlas 直读 | 复盘或沉淀非技术项目经验、找"项目怎么跑"的现成判断时 | session-to-knowledge 文章模式写入；技术根因归 `01-android/11-defects/`，项目事实档案归 `career/work-project-analysis/`，单次事件归 `issue/`；项目名脱敏沿用"某车机项目"惯例 |
+| `knowledge-base/02-testing/` | 跨项目测试学习资料：测试基础、策略、用例设计、执行与自动化实践 | 查测试术语、设计方法或验证策略时 | 按目录 README 的边界组织 Q&A；Android 平台机制归 `01-android/`，项目治理经验归 `04-exp/` |
 | `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
 | `knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、`weekly/`、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 总路线在 `plans/roadmaps/`，每日练习与作答规则在 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
+| `knowledge-base/atlas/` | Atlas 应用协作目录（内容**不入索引**）：`config/settings.properties` 是其仓库同步层配置（主题/映射等，多设备经 git 一致；本机层与 PIN 仍在 `~/.local/share/atlas/`） | 排查 Atlas 配置/多设备一致性问题时；见 atlas/PRD.md §6.4.24 | 应用自动读写，可手改重启生效；勿放任何凭据 |
 | `tools/skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后手动同步拷贝到此处（暂无自动同步脚本） |
-| `knowledge-base/android/`、`knowledge-base/密码/`、`knowledge-base/网络/`、`knowledge-base/设计模式/`、`knowledge-base/文件管理系列文章/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可迁移结论按 `ROUTING.md` 沉淀为知识条目 |
+| `knowledge-base/01-android/`、`knowledge-base/密码/`、`knowledge-base/网络/`、`knowledge-base/设计模式/`、`knowledge-base/文件管理系列文章/` | 学习笔记（人读散文，非条目） | 被点名引用或作为分析素材时 | 无强制流；可迁移结论按 `ROUTING.md` 沉淀为知识条目 |
 | `knowledge-base/path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |
 | `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
 | `issue/` | 问题复盘与交接 | 排查同类问题前先查 | 复盘流待建（暂手动，见 Roadmap） |

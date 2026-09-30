@@ -2025,7 +2025,7 @@ mSystemServiceManager.startBootPhase(t, SystemService.PHASE_WAIT_FOR_SENSOR_SERV
 ```java
 // 框架侧只有时序骨架：systemReady 回调里按特性拉起宿主服务
 private static final String CAR_SERVICE_HELPER_SERVICE_CLASS =
-        "com.android.internal.car.CarServiceHelperService";
+        "com.01-android.internal.car.CarServiceHelperService";
 // 车机业务全在可更新 APK 里：onCreate 连 VHAL → init 子服务 → 注册 car_service
 ServiceManagerHelper.addService("car_service", mICarImpl);
 ```

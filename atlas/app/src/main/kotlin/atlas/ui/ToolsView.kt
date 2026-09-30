@@ -80,7 +80,7 @@ enum class ToolsDestination(val title: String, val description: String) {
     LOG_DECRYPT("日志解密", "27HM 日志压缩包 / 目录 → 解压·解密·解压，一键出可读日志"),
     PHONE_AUTO("任务自动化", "adb 控制手机一键执行常用流程，无线优先、USB 兜底"),
     DEVICE_TOOLS("设备工具箱", "推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
-    PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 98 个场景 · 专用日志，一键执行"),
+    PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 99 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
     PROMPTS("提示词库", "常用提示词集中管理，一键复制给任意 AI"),
 }
@@ -97,15 +97,19 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
         )
         Column(
             Modifier.weight(1f).fillMaxHeight()
-                // 提示词库是工作台型工具：占满右侧可用区域，不做限宽与竖向滚动
-                .then(if (destination == ToolsDestination.PROMPTS) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                // 提示词库与萌宠调试是工作台型工具：占满右侧可用区域，不做限宽与竖向滚动
+                // （萌宠调试 99 个场景卡片只有放进自身 LazyColumn 虚拟化才能避免进页卡顿）
+                .then(
+                    if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG) Modifier
+                    else Modifier.verticalScroll(rememberScrollState()),
+                )
                 .padding(ui.spacing.page),
             verticalArrangement = Arrangement.spacedBy(ui.spacing.section),
         ) {
             Column(
                 Modifier
                     .then(
-                        if (destination == ToolsDestination.PROMPTS) Modifier.fillMaxSize()
+                        if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG) Modifier.fillMaxSize()
                         else Modifier.widthIn(max = 980.dp).fillMaxWidth(),
                     )
                     .align(Alignment.CenterHorizontally),
@@ -121,7 +125,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
                     ToolsDestination.LOG_DECRYPT -> HcLogDecryptCard(store)
                     ToolsDestination.PHONE_AUTO -> FeishuCheckinCard(store)
                     ToolsDestination.DEVICE_TOOLS -> DeviceToolboxCard(store)
-                    ToolsDestination.PET_DEBUG -> PetDebugCard(store)
+                    ToolsDestination.PET_DEBUG -> PetDebugCard(store, Modifier.weight(1f))
                     ToolsDestination.WMS_VIEWER -> WmsViewerCard(store)
                     ToolsDestination.PROMPTS -> PromptsCard(store, Modifier.weight(1f))
                 }
@@ -811,9 +815,9 @@ private fun DeviceToolboxCard(store: AppStore) {
     }
 }
 
-/** 萌宠调试：单事件、正式 IPC、环境命令与 98 行场景在同一设备上下文中执行。 */
+/** 萌宠调试：单事件、正式 IPC、环境命令与 99 行场景在同一设备上下文中执行。 */
 @Composable
-private fun PetDebugCard(store: AppStore) {
+private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
     val ui = atlasUiTokens()
     val run = store.petDebugRun.value
     val running = run.running
@@ -822,17 +826,26 @@ private fun PetDebugCard(store: AppStore) {
     var query by remember { mutableStateOf("") }
     var selectedStage by remember { mutableStateOf("全部") }
     var expandedCase by remember { mutableStateOf<Int?>(null) }
+    var technicalCase by remember { mutableStateOf<Int?>(null) }
     var pendingAction by remember { mutableStateOf<PetDebugTools.QuickAction?>(null) }
     var pendingScenario by remember { mutableStateOf<PetDebugTools.Scenario?>(null) }
 
     LaunchedEffect(Unit) { store.refreshToolboxDevices() }
 
-    val stages = remember { listOf("全部") + PetDebugTools.scenarios.map { it.stage }.distinct() }
-    val filtered = PetDebugTools.scenarios.filter { scenario ->
-        (selectedStage == "全部" || scenario.stage == selectedStage) &&
-            (query.isBlank() || query.trim().let { q ->
-                q in scenario.name || q in scenario.expected || q == scenario.number.toString()
-            })
+    val scenarios by produceState<List<PetDebugTools.Scenario>?>(initialValue = null) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PetDebugTools.scenarios }
+    }
+    val loadedScenarios = scenarios.orEmpty()
+    val stages = remember(scenarios) { listOf("全部") + loadedScenarios.map { it.stage }.distinct() }
+    // 过滤结果记忆化：搜索输入时不重复全表过滤
+    val filtered = remember(scenarios, selectedStage, query) {
+        loadedScenarios.filter { scenario ->
+            (selectedStage == "全部" || scenario.stage == selectedStage) &&
+                (query.isBlank() || query.trim().let { q ->
+                    q in scenario.titleZh || q in scenario.name || q in scenario.expected ||
+                        q in scenario.sequence || q in (scenario.limitation ?: "") || q == scenario.number.toString()
+                })
+        }
     }
 
     fun requestAction(action: PetDebugTools.QuickAction) {
@@ -840,19 +853,23 @@ private fun PetDebugCard(store: AppStore) {
     }
 
     Surface(
-        Modifier.fillMaxWidth(),
+        modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = Theme.Panel,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 单一 LazyColumn 承载整页，让顶部操作区和底部日志都可滚动，同时虚拟化场景卡。
+        LazyColumn(
+            Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Surface(shape = RoundedCornerShape(10.dp), color = Theme.Selected) {
                     Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { PetDebugIcon() }
                 }
                 Column(Modifier.weight(1f)) {
                     Text("萌宠调试", style = ui.typography.itemTitle)
-                    Text("Settings 直注 + PetIpcTest 正式链路；命令串行执行并自动处理间隔", style = ui.typography.secondary, color = Theme.Muted)
+                    Text("每条都显示中文说明和原始工作流；直注与 PetIpcTest 正式链路均可运行", style = ui.typography.secondary, color = Theme.Muted)
                 }
                 if (running) {
                     Button(
@@ -860,9 +877,9 @@ private fun PetDebugCard(store: AppStore) {
                         colors = ButtonDefaults.buttonColors(containerColor = Theme.BadRed),
                     ) { Text("停止") }
                 }
-            }
+            } }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("目标", style = ui.typography.secondary, color = Theme.Muted, modifier = Modifier.width(44.dp))
                 Box {
                     OutlinedButton(onClick = { store.refreshToolboxDevices(); deviceMenu = true }, enabled = !running) {
@@ -895,23 +912,23 @@ private fun PetDebugCard(store: AppStore) {
                 Surface(shape = RoundedCornerShape(999.dp), color = Theme.Selected) {
                     Text("要求 DEBUG_INJECTION_ENABLED=true", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 11.sp, color = Theme.Accent)
                 }
-            }
+            } }
 
-            PetSectionTitle("环境与构建", "安装、重启与日志操作会作用于上方选中的设备")
-            PetActionGroups(
+            item { PetSectionTitle("环境与构建", "安装、重启与日志操作会作用于上方选中的设备") }
+            item { PetActionGroups(
                 actions = PetDebugTools.quickActions.filter { it.group in setOf("环境", "构建安装") },
                 enabled = !running,
                 onAction = ::requestAction,
-            )
+            ) }
 
-            PetSectionTitle("单事件控制台", "点击即发；生日和节日使用 PetIpcTest 正式 IPC")
-            PetActionGroups(
+            item { PetSectionTitle("单事件控制台", "点击即发；生日和节日使用 PetIpcTest 正式 IPC") }
+            item { PetActionGroups(
                 actions = PetDebugTools.quickActions.filterNot { it.group in setOf("环境", "构建安装") },
                 enabled = !running,
                 onAction = ::requestAction,
-            )
+            ) }
 
-            if (run.target != null) {
+            if (run.target != null) item {
                 Surface(shape = RoundedCornerShape(10.dp), color = Theme.CodeBlock) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -929,15 +946,16 @@ private fun PetDebugCard(store: AppStore) {
                 }
             }
 
-            PetSectionTitle("场景运行器", "${filtered.size}/98 个 case；每条默认先建立干净 Launcher 进程周期")
-            OutlinedTextField(
+            item { PetSectionTitle("场景库", "显示用户可读名称与验证目标；运行前会说明重启和事件步骤") }
+            item { OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("搜索编号、英文 case 名或预期") },
+                label = { Text("搜索中文名称、编号、事件、英文原名或预期") },
                 singleLine = true,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ) }
+            item { Text(if (scenarios == null) "正在加载场景…" else "${filtered.size} / 99 条场景", fontSize = 11.sp, color = Theme.Muted) }
+            item { FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 stages.forEach { stage ->
                     FilterChip(
                         selected = selectedStage == stage,
@@ -945,9 +963,8 @@ private fun PetDebugCard(store: AppStore) {
                         label = { Text(stage, fontSize = 11.sp) },
                     )
                 }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                filtered.forEach { scenario ->
+            } }
+            itemsIndexed(filtered, key = { _, scenario -> scenario.number }) { _, scenario ->
                     val expanded = expandedCase == scenario.number
                     Surface(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
@@ -960,16 +977,42 @@ private fun PetDebugCard(store: AppStore) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                                 Text("#${scenario.number}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Theme.Accent, fontWeight = FontWeight.Bold)
-                                Text(scenario.name, Modifier.weight(1f), fontSize = 12.sp, maxLines = if (expanded) 3 else 1, overflow = TextOverflow.Ellipsis)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(scenario.titleZh, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = if (expanded) 2 else 1, overflow = TextOverflow.Ellipsis)
+                                    Text(scenario.name, fontSize = 10.sp, color = Theme.Muted, maxLines = if (expanded) 2 else 1, overflow = TextOverflow.Ellipsis)
+                                }
                                 Text(scenario.stage, fontSize = 10.sp, color = Theme.Muted)
                             }
                             if (expanded) {
-                                Text("命令", fontSize = 10.sp, color = Theme.Muted)
-                                Text(scenario.sequence, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 16.sp, color = Theme.MdInlineCode)
-                                Text("预期：${scenario.expected}", fontSize = 12.sp, color = Theme.Muted)
+                                Text("这个场景验证", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+                                Text(scenario.expected, fontSize = 12.sp, lineHeight = 17.sp, color = Theme.Muted)
+                                Text("执行步骤", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Theme.MdH2)
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    PetDebugTools.scenarioDescriptions(scenario).forEachIndexed { index, description ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                                            Text("${index + 1}.", fontSize = 11.sp, color = Theme.Accent)
+                                            Text(description, Modifier.weight(1f), fontSize = 11.sp, lineHeight = 15.sp, color = Theme.Muted)
+                                        }
+                                    }
+                                }
                                 scenario.limitation?.let {
                                     Surface(shape = RoundedCornerShape(6.dp), color = Theme.WarnOrange.copy(alpha = 0.12f)) {
-                                        Text("限制：$it", Modifier.fillMaxWidth().padding(8.dp), fontSize = 11.sp, color = Theme.WarnOrange)
+                                        Text("设备复现说明：$it", Modifier.fillMaxWidth().padding(8.dp), fontSize = 11.sp, color = Theme.WarnOrange)
+                                    }
+                                }
+                                TextButton(onClick = { technicalCase = if (technicalCase == scenario.number) null else scenario.number }) {
+                                    Text(if (technicalCase == scenario.number) "收起技术细节" else "查看底层命令", fontSize = 11.sp)
+                                }
+                                if (technicalCase == scenario.number) {
+                                    Surface(shape = RoundedCornerShape(7.dp), color = Theme.CodeBlock) {
+                                        Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("场景脚本", fontSize = 10.sp, color = Theme.Muted)
+                                            Text(scenario.sequence, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 14.sp, color = Theme.MdInlineCode)
+                                            Text("当前目标设备的实际 adb argv", fontSize = 10.sp, color = Theme.Muted)
+                                            store.petScenarioTechnicalCommands(scenario).forEach { command ->
+                                                Text(command, fontFamily = FontFamily.Monospace, fontSize = 9.sp, lineHeight = 13.sp, color = Theme.Muted)
+                                            }
+                                        }
                                     }
                                 }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -979,9 +1022,8 @@ private fun PetDebugCard(store: AppStore) {
                         }
                     }
                 }
-            }
 
-            if (store.logcatLines.isNotEmpty()) {
+            if (store.logcatLines.isNotEmpty()) item {
                 PetSectionTitle("实时日志", "保留最近 500 行，界面展示尾部 20 行")
                 MonoOutputBlock(store.logcatLines.takeLast(20), color = Theme.Muted)
             }
@@ -993,10 +1035,13 @@ private fun PetDebugCard(store: AppStore) {
     if (confirmAction != null || confirmScenario != null) {
         AlertDialog(
             onDismissRequest = { pendingAction = null; pendingScenario = null },
-            title = { Text(if (confirmScenario != null) "运行场景 #${confirmScenario.number}" else "确认执行") },
+            title = { Text(if (confirmScenario != null) "运行：${confirmScenario.titleZh}" else "确认执行") },
             text = {
                 Text(
-                    confirmScenario?.let { "该场景会强制停止并重新启动 Launcher，然后依次执行 ${it.sequence}." }
+                    confirmScenario?.let {
+                        "将对 ${store.toolboxSerial ?: "当前设备"} 执行此场景：先重启 Launcher 清理进程状态，再依次发送事件。预期结果：${it.expected}" +
+                            (it.limitation?.let { note -> "\n\n设备限制：$note" } ?: "")
+                    }
                         ?: confirmAction?.confirmation.orEmpty(),
                 )
             },

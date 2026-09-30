@@ -181,7 +181,7 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
 ```yaml
 # ❌ BAD: Too abstract, vague, doesn't include when to use
-description: For async testing
+description: For async 02-testing
 
 # ❌ BAD: First person
 description: I can help you with async tests when they're flaky

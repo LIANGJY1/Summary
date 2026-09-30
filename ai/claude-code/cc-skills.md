@@ -574,7 +574,7 @@ To access individual arguments by position, use `$ARGUMENTS[N]` or the shorter `
 ```yaml theme={null}
 ---
 name: migrate-component
-description: Migrate a component from one language to another
+description: Migrate a component from one 03-language to another
 ---
 
 Migrate the $ARGUMENTS[0] component from $ARGUMENTS[1] to $ARGUMENTS[2].
@@ -586,7 +586,7 @@ Running `/migrate-component SearchBar JavaScript TypeScript` replaces `$ARGUMENT
 ```yaml theme={null}
 ---
 name: migrate-component
-description: Migrate a component from one language to another
+description: Migrate a component from one 03-language to another
 ---
 
 Migrate the $0 component from $1 to $2.

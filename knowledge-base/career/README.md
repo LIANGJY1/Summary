@@ -26,7 +26,7 @@
 
 | 本计划主题 | 知识库入口 | 用法 |
 |---|---|---|
-| Java/Kotlin/C++ | [`language/`](../language/) | 查语言机制；面试卡只写自己的回答和源码锚点 |
+| Java/Kotlin/C++ | [`03-language/`](../03-language/) | 查语言机制；面试卡只写自己的回答和源码锚点 |
 | 设计权衡 | [`design-principles.md`](../design-principles.md) | 查可迁移的取舍，不复制到项目文档 |
 | SDK/组件做法 | [`sdk-design.md`](../sdk-design.md) | 查可执行设计模式 |
 | Android UI/Provider/Audio | [`android-ui.md`](../android-ui.md)、[`android-provider.md`](../android-provider.md)、[`android-audio.md`](../android-audio.md) | 查机制坑和边界 |

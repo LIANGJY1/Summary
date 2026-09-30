@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 Atlas 萌宠调试的 98 个 case 易读、可追溯、可可靠中止，同时保持设备端注入协议不变。
+**Goal:** 让 Atlas 萌宠调试的 99 个 case 易读、可追溯、可可靠中止，同时保持设备端注入协议不变。
 
 **Architecture:** 以受控同步脚本从 PetScenarios.kt 与 08 命令清单生成自包含的场景资源，Atlas 维护少量中文展示文案。PetCommandRunner 持有子进程生命周期、超时、取消和有界输出；AppStore 负责编排状态，Compose 页面展示易读场景、步骤和可折叠技术细节。
 
@@ -26,7 +26,7 @@
 | 文件 | 职责 |
 |---|---|
 | `atlas/scripts/sync_pet_scenarios.py` | 从 08 命令表和 PetScenarios 源提取、核对场景，生成/检查 TSV 资源。 |
-| `atlas/app/src/main/resources/pet_scenarios.tsv` | 同步生成、随 Atlas 打包的 98 条场景数据。 |
+| `atlas/app/src/main/resources/pet_scenarios.tsv` | 同步生成、随 Atlas 打包的 99 条场景数据。 |
 | `atlas/app/src/main/resources/pet_scenario_zh.tsv` | Atlas 维护的 case 编号、中文标题和中文验证摘要。 |
 | `atlas/app/src/main/kotlin/atlas/core/PetDebugTools.kt` | 载入并校验场景资源、把 DSL 转成有类型的步骤及可读说明。 |
 | `atlas/app/src/main/kotlin/atlas/core/PetCommandRunner.kt` | 子进程执行、取消、超时、输出尾部限制与清理。 |
@@ -49,13 +49,13 @@
 - Kotlin model: `Scenario(number, stage, sourceName, titleZh, summaryZh, sequence, expected, limitation)`。
 - Kotlin loader: `PetDebugTools.scenarios: List<Scenario>`；资源条数、连续编号和未知 DSL token 不合法时抛出包含 case 编号的明确错误。
 
-- [ ] 解析 `08-调试注入命令清单.md` 的 98 行 case 表：编号、反引号 case 名、命令序列、预期表现和可选设备限制；跳过 Markdown 表头与分隔行。
-- [ ] 解析 `PetScenarios.kt` 中 `PetScenarios.ALL` 的有序 `Case("...")` 名称，校验数量为 98、编号连续且名称逐行相同；错误输出列出首个不匹配编号和两侧名称。
-- [ ] 建立 `pet_scenario_zh.tsv`，为 1..98 每条写中文标题与一句验证摘要；保留英文来源名作为同步键，不把英文名复制成中文翻译的替代品。
+- [ ] 解析 `08-调试注入命令清单.md` 的 99 行 case 表：编号、反引号 case 名、命令序列、预期表现和可选设备限制；跳过 Markdown 表头与分隔行。
+- [ ] 解析 `PetScenarios.kt` 中 `PetScenarios.ALL` 的有序 `Case("...")` 名称，校验数量为 99、编号连续且名称逐行相同；错误输出列出首个不匹配编号和两侧名称。
+- [ ] 建立 `pet_scenario_zh.tsv`，为 1..99 每条写中文标题与一句验证摘要；保留英文来源名作为同步键，不把英文名复制成中文翻译的替代品。
 - [ ] 对场景命令 DSL 做白名单校验：`fresh_on`、`pet <已支持type/value>`、`ipc <整数>`、`media_play`、`media_pause`；未知 token、空命令、无效 festival/send_failed 参数均指出 case 编号并失败。
 - [ ] 以 UTF-8 TSV 生成 `pet_scenarios.tsv`，字段顺序固定为编号、阶段、英文名、原序列、预期、限制；字段中的反斜线、制表符和换行统一转义。
-- [ ] 在 `PetDebugTools` 中从 classpath 读取两份 TSV，校验中文元数据恰好覆盖 1..98，按编号合并；构建运行不读机器上的源 Markdown/Kotlin 文件。
-- [ ] 执行同步命令生成资源，再执行 `--check`；核对差异为空、98 条数量与编号完整、无未识别 DSL token。
+- [ ] 在 `PetDebugTools` 中从 classpath 读取两份 TSV，校验中文元数据恰好覆盖 1..99，按编号合并；构建运行不读机器上的源 Markdown/Kotlin 文件。
+- [ ] 执行同步命令生成资源，再执行 `--check`；核对差异为空、99 条数量与编号完整、无未识别 DSL token。
 
 ### Task 2: 把命令序列转换为可解释的步骤
 
@@ -74,7 +74,7 @@
 - [ ] 将 `fresh_on` 展开为清空残留调试键、停止 Launcher、启动 HOME Launcher、等待启动稳定四个有名步骤。
 - [ ] 从场景序列产生 typed steps 和安全执行 argv；不再用“未知步骤”Note 让非法 token 继续通过。
 - [ ] 对 case 2、33、34、76 等 limitation 建立结构化展示字段，使页面可以单独呈现“设备无法精确复现”的原因。
-- [ ] 运行场景同步 `--check`，确认步骤词典覆盖全部 98 条序列使用的 token。
+- [ ] 运行场景同步 `--check`，确认步骤词典覆盖全部 99 条序列使用的 token。
 
 ### Task 3: 实现可取消、有界输出的 PetCommandRunner
 

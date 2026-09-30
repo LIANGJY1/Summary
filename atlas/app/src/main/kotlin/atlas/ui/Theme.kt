@@ -245,21 +245,21 @@ object AtlasThemes {
         ),
     )
 
-    /** 黑曜的白色姊妹皮肤：亮色板同为 R=G=B 纯中性（纸灰画布 + 纯白内容面），暗色板与黑曜深色共用。 */
+    /** 黑曜的白色姊妹皮肤：共享语义灰阶和状态色，亮色面更明亮；暗色板与黑曜深色共用。 */
     val SNOW = ThemeDefinition(
         name = SNOW_NAME,
         dark = BLACK.dark,
         light = ThemeSpec(
-            accent = color("#4B4E53"), okGreen = color("#2F7453"),
+            accent = color("#4B5058"), okGreen = color("#2F7453"),
             warnOrange = color("#875A28"), badRed = color("#A4474F"),
-            muted = color("#6E6E6E"), codeBg = color("#F0F0F0"),
+            muted = color("#626262"), codeBg = color("#F0F0F0"),
             background = color("#F7F7F7"), surface = color("#FFFFFF"),
             surfaceVariant = color("#ECECEC"), onSurface = color("#242424"),
-            outline = color("#767676"), outlineVariant = color("#DEDEDE"),
-            mdH1 = color("#262626"), mdH2 = color("#595959"),
-            mdH3 = color("#3A3A3A"), mdBold = color("#1A1A1A"),
-            mdLink = color("#3E5B7A"), mdQuote = color("#6B6B6B"),
-            mdInlineCode = color("#474747"), mdInlineCodeBg = color("#E9E9E9"),
+            outline = color("#707070"), outlineVariant = color("#D8D8D8"),
+            mdH1 = color("#202020"), mdH2 = color("#4B5058"),
+            mdH3 = color("#292929"), mdBold = color("#1A1A1A"),
+            mdLink = color("#3E5B7A"), mdQuote = color("#565656"),
+            mdInlineCode = color("#484848"), mdInlineCodeBg = color("#EBEBEB"),
         ),
     )
 

@@ -53,6 +53,8 @@ data class SourceQuestionGitDiff(
     val answerDirtyLines: Set<Int> = emptySet(),
 )
 
+enum class ReadmeSaveResult { SAVED, CONFLICT, UNAVAILABLE, FAILED }
+
 /** git 改动标记的 key：按文档 + 题号配对，内容编辑或块偏移变化不影响配对。 */
 internal fun sourceQuestionGitKey(entry: SourceQuestions.Entry): String =
     "${entry.sourcePath}#${entry.number}"
@@ -89,6 +91,10 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     val sourceSections = mutableStateListOf<SourceQuestions.SectionHeading>()
     /** 题库左侧的知识库 Markdown 文档列表。 */
     val knowledgeDocuments = mutableStateListOf<String>()
+    /** 题目源目录中额外纳入题库树的 README 文档。 */
+    val sourceReadmeDocuments = mutableStateListOf<String>()
+    /** 当前选中的 README 全文；题目文档选中时为空。 */
+    var sourceReadmeContent by mutableStateOf<String?>(null)
 
     private val selectedSourcePathState = mutableStateOf(SourceQuestions.TARGET_PATH)
 
@@ -103,7 +109,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             selectedSourcePathState.value = value
             if (settings.selectedSourcePath != value) {
                 settings = settings.copy(selectedSourcePath = value)
-                runCatching { settingsStore.save(settings) }.onFailure { Log.e("持久化题库选中文档失败", it) }
+                runCatching { settingsStore.save(settings, File(settings.libraryPath, "atlas/config/settings.properties")) }
+                    .onFailure { Log.e("持久化题库选中文档失败", it) }
             }
         }
     val candidates = mutableStateListOf<Inbox.Candidate>()
@@ -509,7 +516,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     }
 
     fun stopLogcat() {
-        logcatProcess?.destroy()
+        logcatProcess?.destroyForcibly()
         logcatProcess = null
         logcatRunning.value = false
     }
@@ -523,15 +530,25 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     val petDebugRun = mutableStateOf(PetDebugTools.RunState())
     private var petDebugJob: Job? = null
+    @Volatile private var petDebugGeneration = 0L
+    @Volatile private var activePetProcess: Process? = null
+    private var activePetGeneration: Long? = null
+    private val petProcessLock = Any()
 
     fun runPetQuickAction(action: PetDebugTools.QuickAction) {
         runPetDebug(action.label) { adb, serial -> PetDebugTools.quickActionSteps(action, adb, serial) }
     }
 
     fun runPetScenario(scenario: PetDebugTools.Scenario) {
-        runPetDebug("#${scenario.number} ${scenario.name}") { adb, serial ->
+        runPetDebug("#${scenario.number} ${scenario.titleZh}") { adb, serial ->
             PetDebugTools.scenarioSteps(scenario, adb, serial)
         }
+    }
+
+    fun petScenarioTechnicalCommands(scenario: PetDebugTools.Scenario): List<String> {
+        val adbPath = FeishuCheckin.findAdb() ?: return listOf("未找到 adb")
+        val serial = toolboxSerial ?: return listOf("尚未选择目标设备")
+        return PetDebugTools.scenarioTechnicalCommands(scenario, adbPath, serial)
     }
 
     private fun runPetDebug(
@@ -551,9 +568,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             return
         }
         val allSteps = steps(adbPath, serial)
-        petDebugJob = scope.launch {
+        val generation = ++petDebugGeneration
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             val lines = mutableListOf<String>()
             fun update(step: Int, message: String? = null, exitCode: Int? = null, running: Boolean = true) {
+                if (generation != petDebugGeneration) return
                 message?.let { lines += it }
                 petDebugRun.value = PetDebugTools.RunState(
                     target = target,
@@ -570,14 +589,14 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 for ((index, step) in allSteps.withIndex()) {
                     when (step) {
                         is PetDebugTools.Step.Wait -> {
-                            update(index + 1, "等待 ${step.millis} ms")
+                            update(index + 1, "${step.explanation}（${step.millis} ms）")
                             delay(step.millis)
                         }
                         is PetDebugTools.Step.Note -> update(index + 1, step.text)
                         is PetDebugTools.Step.Run -> {
                             val command = step.command
-                            update(index + 1, "==> ${command.label}\n${command.args.joinToString(" ")}")
-                            val (code, out) = execPetCommand(command)
+                            update(index + 1, "${command.label}：${command.explanation}")
+                            val (code, out) = execPetCommand(command, generation)
                             out.trim().takeIf { it.isNotEmpty() }?.let { update(index + 1, it) }
                             if (code != 0) {
                                 exit = code
@@ -594,29 +613,82 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     showToast("$target 未成功（exit $exit）")
                 }
             } catch (_: kotlinx.coroutines.CancellationException) {
+                synchronized(petProcessLock) {
+                    if (activePetGeneration == generation) {
+                        activePetProcess?.destroyForcibly()
+                        activePetProcess = null
+                        activePetGeneration = null
+                    }
+                }
                 update(petDebugRun.value.step, "已停止后续步骤", exitCode = -2, running = false)
-                showToast("萌宠命令已停止")
+                if (generation == petDebugGeneration) showToast("萌宠命令已停止")
+            } catch (error: Exception) {
+                update(petDebugRun.value.step, "执行未能启动：${error.message ?: error.javaClass.simpleName}", exitCode = -1, running = false)
+                if (generation == petDebugGeneration) showToast("萌宠调试执行失败，请检查 adb、设备连接和本地构建环境")
             } finally {
-                petDebugJob = null
+                synchronized(petProcessLock) {
+                    if (generation == petDebugGeneration) petDebugJob = null
+                }
             }
+        }
+        synchronized(petProcessLock) {
+            petDebugJob = job
+            job.start()
         }
     }
 
     fun stopPetDebug() {
-        petDebugJob?.cancel()
+        synchronized(petProcessLock) {
+            activePetProcess?.destroyForcibly()
+            activePetProcess = null
+            activePetGeneration = null
+            petDebugJob?.cancel()
+        }
     }
 
-    private fun execPetCommand(command: PetDebugTools.Command): Pair<Int, String> {
+    private fun execPetCommand(command: PetDebugTools.Command, generation: Long): Pair<Int, String> {
         val builder = ProcessBuilder(command.args).redirectErrorStream(true)
         command.workingDirectory?.let { builder.directory(File(it)) }
-        val proc = builder.start()
-        val future = CompletableFuture.supplyAsync { proc.inputStream.bufferedReader().readText() }
-        if (!proc.waitFor(command.timeoutMs, TimeUnit.MILLISECONDS)) {
-            proc.destroyForcibly()
-            future.cancel(true)
-            return -1 to "命令超时(${command.timeoutMs}ms)"
+        val proc = synchronized(petProcessLock) {
+            if (generation != petDebugGeneration || petDebugJob?.isActive == false) {
+                throw kotlinx.coroutines.CancellationException()
+            }
+            builder.start().also {
+                activePetProcess = it
+                activePetGeneration = generation
+            }
         }
-        return proc.exitValue() to runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
+        val future = CompletableFuture.supplyAsync {
+            val tail = ArrayDeque<String>()
+            var size = 0
+            proc.inputStream.bufferedReader().use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    tail.addLast(line)
+                    size += line.length
+                    while (tail.size > 80 || size > 16_384) size -= tail.removeFirst().length
+                }
+            }
+            tail.joinToString("\n")
+        }
+        try {
+            if (!proc.waitFor(command.timeoutMs, TimeUnit.MILLISECONDS)) {
+                proc.destroyForcibly()
+                future.cancel(true)
+                return -1 to "执行超时（${command.timeoutMs / 1_000}s）。检查设备连接或稍后重试。"
+            }
+            if (petDebugJob?.isActive == false) throw kotlinx.coroutines.CancellationException()
+            val output = runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
+            return proc.exitValue() to output
+        } finally {
+            synchronized(petProcessLock) {
+                if (activePetProcess === proc) {
+                    activePetProcess = null
+                    activePetGeneration = null
+                }
+            }
+            if (proc.isAlive) proc.destroyForcibly()
+        }
     }
 
     /** 使用 logcat 的 tag 过滤能力，避免萌宠页面被整机日志淹没。 */
@@ -790,7 +862,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         bootError = null
         Log.i("boot() 开始")
         try {
-            settings = settingsStore.load()
+            // 先读本机层（含 libraryPath 引导键），再以它定位仓库同步层叠加（§6.4.23）
+            settings = settingsStore.load { lib -> File(lib, "atlas/config/settings.properties") }
             Log.i("设置已加载 libraryPath=${settings.libraryPath} 仅本地目录=${settings.localOnlyExtra.size}个")
             if (settings.libraryPath.isNotBlank() && File(settings.libraryPath).isDirectory) {
                 openLibrary(settings.libraryPath, rescanIfNeeded = true)
@@ -805,7 +878,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     fun saveSettings() {
         Log.i("设置保存 libraryPath=${settings.libraryPath} 仅本地=${settings.localOnlyExtra.size}个 忽略额外=${settings.ignoredExtra.size}个")
-        settingsStore.save(settings)
+        settingsStore.save(settings, File(settings.libraryPath, "atlas/config/settings.properties"))
         writeRecordingConfig()
     }
 
@@ -894,6 +967,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val newQuestions = MdStores.loadQuestions(questionsFile())
                 val documents = scanKnowledgeDocuments()
                 val mappedDocuments = SourceQuestions.supportedDocuments(documents, settings.sourceQuestionPaths)
+                val mappedReadmes = SourceQuestions.supportedReadmeDocuments(documents, settings.sourceQuestionPaths)
                 val docContents = mappedDocuments.mapNotNull { path ->
                     val file = sourceDocumentFile(path)
                     if (file.isFile) path to file.readText(Charsets.UTF_8) else null
@@ -902,6 +976,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val source = sourceQuestionFile()
                 val sourceDocument = if (
                     source.isFile &&
+                    selectedSourcePath in mappedDocuments &&
                     SourceQuestions.isSupportedPath(selectedSourcePath, settings.sourceQuestionPaths)
                 ) source.readText(Charsets.UTF_8) else null
                 val newSourceQuestions = sourceDocument
@@ -910,10 +985,15 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val newSourceSections = sourceDocument
                     ?.let { SourceQuestions.parseSections(selectedSourcePath, it, settings.sourceQuestionPaths) }
                     .orEmpty()
+                val newReadmeContent = if (selectedSourcePath in mappedReadmes) {
+                    sourceDocumentFile(selectedSourcePath).takeIf { it.isFile }?.readText(Charsets.UTF_8)
+                } else null
                 androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
                     cards.clear(); cards.addAll(newCards)
                     questions.clear(); questions.addAll(newQuestions)
                     knowledgeDocuments.clear(); knowledgeDocuments.addAll(documents)
+                    sourceReadmeDocuments.clear(); sourceReadmeDocuments.addAll(mappedReadmes)
+                    sourceReadmeContent = newReadmeContent
                     sourceQuestions.clear(); sourceQuestions.addAll(newSourceQuestions)
                     allSourceQuestions.clear(); allSourceQuestions.addAll(newAllSourceQuestions)
                     sourceSections.clear(); sourceSections.addAll(newSourceSections)
@@ -1012,6 +1092,36 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         selectedSourcePath = path
         Log.i("切换题库源文档 → $path")
         reloadKnowledgeFiles()
+    }
+
+    /** 将 README 草稿写回原文件；expectedContent 用于阻止覆盖编辑器外部的并发修改。 */
+    fun saveReadme(path: String, expectedContent: String, updatedContent: String): ReadmeSaveResult {
+        val normalized = path.replace('\\', '/').trim('/')
+        val supportedReadmes = SourceQuestions.supportedReadmeDocuments(
+            knowledgeDocuments.toList(),
+            settings.sourceQuestionPaths,
+        )
+        if (path !in supportedReadmes && normalized !in supportedReadmes.map { it.replace('\\', '/').trim('/') }) {
+            return ReadmeSaveResult.UNAVAILABLE
+        }
+        val result = runCatching {
+            synchronized(reloadLock) {
+                val file = sourceDocumentFile(path)
+                if (!file.isFile) return@synchronized ReadmeSaveResult.UNAVAILABLE
+                val actualContent = file.readText(Charsets.UTF_8)
+                if (actualContent != expectedContent) {
+                    ReadmeSaveResult.CONFLICT
+                } else {
+                    MdStores.atomicWrite(file, updatedContent)
+                    ReadmeSaveResult.SAVED
+                }
+            }
+        }.getOrElse { error ->
+            Log.e("README 自动保存失败 path=$path", error)
+            ReadmeSaveResult.FAILED
+        }
+        if (result != ReadmeSaveResult.UNAVAILABLE) reloadKnowledgeFiles()
+        return result
     }
 
     fun renameKnowledgeNode(path: String, newName: String): Boolean {

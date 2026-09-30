@@ -23,7 +23,7 @@ echo '你的sudo密码' > ~/.atlas-sudo-pass && chmod 600 ~/.atlas-sudo-pass
 ## 功能（对应 PRD）
 
 - **知识库**：目录树 + markdown 只读预览 + 检索工作台（≥3 字 trigram 全文检索，<3 字 LIKE 兜底）+ 来源面板 + 一键**上下文包**（检索结果组装后交给 agent）+ **Ctrl+K 全局搜索浮层**（↑↓ 选择、回车打开、Tab 转入检索工作台）
-- **同源题库（首期）**：题库左侧递归映射 `knowledge-base` 下的 Markdown 文档，可切换源文档；当前只解析 `knowledge-base/language/kotlin/01-语法基础.md`，识别 `**Qn: 问题**`，下一个 Q 或文件结尾前的 Markdown 都是答案；点击题目展开答案，编辑后局部写回原文；文件外部修改后 ≤3s 自动重载
+- **同源题库（首期）**：题库左侧递归映射 `knowledge-base` 下的 Markdown 文档，可切换源文档；当前只解析 `knowledge-base/03-language/kotlin/01-语法基础.md`，识别 `**Qn: 问题**`，下一个 Q 或文件结尾前的 Markdown 都是答案；点击题目展开答案，编辑后局部写回原文；文件外部修改后 ≤3s 自动重载
 - **学习/闪卡**：本轮暂时隐藏学习入口、闪卡转化和 FSRS 复习 UI；旧 `atlas/cards.md` 保留但不再作为当前题库内容源
 - **收件箱**：agent 写入 `atlas/inbox/` 的题目候选（每块仅含 `kind: question`、`q`、`answer`）在工作台逐条确认/编辑/丢弃，支持按文件**整批忽略**；旧闪卡候选兼容转换为题目
 - **Git 源**：本地仓库提交流浏览 + diff + 一键写 outbox 解读任务（学别人的提交）
@@ -35,7 +35,7 @@ echo '你的sudo密码' > ~/.atlas-sudo-pass && chmod 600 ~/.atlas-sudo-pass
 |---|---|---|
 | `atlas/inbox/` | agent → Atlas | 待确认题目（kind: question + q + answer，块间 `---` 分隔） |
 | `atlas/outbox/` | Atlas → agent | 任务文件（type: feynman / interview / interpret / cardgen） |
-| `knowledge-base/language/kotlin/01-语法基础.md` | 人/Atlas ↔ Atlas | 首期唯一题库源文档；题目和答案均在同一 Markdown 文件内 |
+| `knowledge-base/03-language/kotlin/01-语法基础.md` | 人/Atlas ↔ Atlas | 首期唯一题库源文档；题目和答案均在同一 Markdown 文件内 |
 | 库目录本身 | 双向 | 任何工具写入的 md 会被增量索引自动收录 |
 
 ## 与 PRD 的已知偏差（ADR 简记）

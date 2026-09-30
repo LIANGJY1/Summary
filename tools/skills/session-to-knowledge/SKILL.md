@@ -28,7 +28,7 @@ disable-model-invocation: true
 
 | 输入 | 归宿 |
 |---|---|
-| 编程语言语法、类型、标准库、工具链行为 | `language-note`，进入 `language/`（Q&A 即笔记主线） |
+| 编程语言语法、类型、标准库、工具链行为 | `language-note`，进入 `knowledge-base/03-language/`（Q&A 即笔记主线） |
 | 换项目仍成立、通过复习者测试的机制或经验 | `knowledge-entry`，进入根级大类 |
 | 文章/网页/粘贴文本的学习内容 | 并入对应学习资料文档；无处可并时新建（仅一级标题+引言+Q 序列，不建章节/目录），Q 块直接追加 |
 | 可重复流程、提示词、代理协议 | `session-to-skill` |
@@ -84,7 +84,7 @@ disable-model-invocation: true
 
 相邻追问共享同一概念和复习入口时合并；一个问题包含互不依赖的结论时拆分。会话模式中用户随后追问的旁支升级为用户主题；会话中没有用户来源的主题不进入本轮知识正文。
 
-语言笔记必须读取 [语言笔记提炼规则](references/language-note-extraction.md)，再读取 `language/README.md` 和目标文档；其他 profile 读取目标文档局部契约。
+语言笔记必须读取 [语言笔记提炼规则](references/language-note-extraction.md)，再读取 `knowledge-base/03-language/README.md` 和目标文档；其他 profile 读取目标文档局部契约。
 
 **完成判据**：所有输入单元恰好映射到一个主题或有明确的非知识去向；不存在仅由助手主动扩展产生的主题。
 
@@ -109,7 +109,7 @@ disable-model-invocation: true
 
 1. `knowledge-base/CONTEXT.md`；
 2. `knowledge-base/ROUTING.md`；
-3. 目标大类规则，或 `language/README.md` 与目标语言文件，或目标学习资料文档。
+3. 目标大类规则，或 `knowledge-base/03-language/README.md` 与目标语言文件，或目标学习资料文档。
 
 按知识内核、目标边界和复习入口确定唯一落点。同义命题并入既有内容；两个视角确实独立时分别写并建立链接。示例必须最小、完整、可运行，或明确标出省略与未验证部分。
 

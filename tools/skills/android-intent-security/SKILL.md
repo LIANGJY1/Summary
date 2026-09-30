@@ -1,5 +1,5 @@
 ---
-name: android-intent-security
+name: 01-android-intent-security
 description: Best practices for Android Intent security. Use this skill when auditing
   component configurations in AndroidManifest.xml activities, services, receivers)
   or source code handling incoming Intents (getIntent, getParcelableExtra) to prevent

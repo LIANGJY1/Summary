@@ -30,7 +30,7 @@ enum class QuestionStatus(val key: String) {
 }
 
 object SourceQuestions {
-    const val TARGET_PATH = "knowledge-base/language/kotlin/01-语法基础.md"
+    const val TARGET_PATH = "knowledge-base/03-language/kotlin/01-语法基础.md"
     val DEFAULT_SUPPORTED_PATHS = listOf(TARGET_PATH)
 
     data class Entry(
@@ -94,6 +94,27 @@ object SourceQuestions {
     /** 只保留配置的单个 Markdown 文档或目录规则命中的文档。 */
     fun supportedDocuments(documents: Iterable<String>, supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS): List<String> =
         documents.filter { isSupportedPath(it, supportedPaths) }.distinct().sorted()
+
+    /**
+     * 题库树额外展示题目源目录中的 README：目录规则递归覆盖其下文档；精确文件规则只关联同目录 README。
+     */
+    fun supportedReadmeDocuments(
+        documents: Iterable<String>,
+        supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS,
+    ): List<String> {
+        val readmes = documents.filter { it.substringAfterLast('/').equals("README.md", ignoreCase = true) }
+        return readmes.filter { readme ->
+            isSupportedPath(readme, supportedPaths) || supportedPaths.any { configuredPath ->
+                val configured = configuredPath.replace('\\', '/').trim('/')
+                val isDirectoryRule = configuredPath.replace('\\', '/').trim().endsWith('/')
+                if (configured.isBlank() || isDirectoryRule) return@any false
+                val configParent = configured.removePrefix("knowledge-base/").substringBeforeLast('/', "")
+                val readmeParent = readme.replace('\\', '/').trim('/').removePrefix("knowledge-base/")
+                    .substringBeforeLast('/', "")
+                configParent == readmeParent
+            }
+        }.distinct().sorted()
+    }
 
     fun parse(sourcePath: String, document: String, supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS): List<Entry> {
         if (!isSupportedPath(sourcePath, supportedPaths)) return emptyList()

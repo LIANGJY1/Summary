@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -652,6 +654,52 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
             }
         }
     }
+}
+
+/** README 长文按 Markdown 块虚拟化，避免打开时一次组合整篇文档。 */
+@Composable
+fun LazyMarkdownText(md: String, modifier: Modifier = Modifier) {
+    val ui = atlasUiTokens()
+    val blocks = remember(md) { markdownBlocks(md) }
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        itemsIndexed(blocks, key = { index, block -> "$index:${block.hashCode()}" }) { _, block ->
+            Box(Modifier.fillMaxWidth()) {
+                ReaderMarkdownText(
+                    block,
+                    Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+                )
+            }
+        }
+    }
+}
+
+/** 保持围栏代码、表格和无围栏 Mermaid 完整；普通行单独成为可虚拟化的块。 */
+private fun markdownBlocks(md: String): List<String> {
+    val lines = md.lines()
+    val blocks = ArrayList<String>(lines.size)
+    var index = 0
+    while (index < lines.size) {
+        val start = index
+        val table = parseMarkdownTable(lines, index)
+        when {
+            lines[index].trimStart().startsWith("```") -> {
+                index++
+                while (index < lines.size && !lines[index].trimStart().startsWith("```")) index++
+                if (index < lines.size) index++
+            }
+            table != null -> index = table.endExclusive
+            lines[index].trimStart().startsWith("flowchart") || lines[index].trimStart().startsWith("graph ") -> {
+                index++
+                while (index < lines.size && (lines[index].isBlank() || lines[index].startsWith(" ") || lines[index].startsWith("\t"))) index++
+            }
+            else -> index++
+        }
+        blocks += lines.subList(start, index).joinToString("\n")
+    }
+    return blocks
 }
 
 @Composable

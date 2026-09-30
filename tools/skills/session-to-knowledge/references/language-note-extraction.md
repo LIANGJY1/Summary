@@ -1,6 +1,6 @@
 # 语言问答提炼规则
 
-在 `language-note` profile 下完整阅读本文件。它只规定从会话到语言问题的提炼判断；标题、列表、代码和排版细节以知识库 `language/README.md` 为唯一事实源。
+在 `language-note` profile 下完整阅读本文件。它只规定从会话到语言问题的提炼判断；标题、列表、代码和排版细节以知识库 `knowledge-base/03-language/README.md` 为唯一事实源。
 
 ## 优先级
 

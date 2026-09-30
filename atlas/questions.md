@@ -30,11 +30,10 @@
 - ref: 稳：崩溃、页面加载错误、白屏；指标为崩溃率、加载成功率
 快：启动慢、页面加载慢、滑动卡顿；指标为启动耗时、页面耗时、帧耗时、Janky frames
 少：耗电、流量、磁盘和内存占用高；指标为电量消耗、流量、PSS、磁盘占用
-来源锚点: knowledge-base/android/性能优化.md##2.3 用户体验可以归纳为"稳、快、少"
+来源锚点: knowledge-base/01-android/性能优化.md##2.3 用户体验可以归纳为"稳、快、少"
 
 - status: 未测
 - ref: 阿斯蒂芬
 - source: article-quiz: 性能优化方法论
 - id: c5dca9e57b
 - tags: 性能优化
-

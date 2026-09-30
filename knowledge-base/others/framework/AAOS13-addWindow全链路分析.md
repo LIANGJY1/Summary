@@ -958,4 +958,3 @@ graph TD
 5. **【BLAST 1:N 映射关系观察】**：打开任意普通 App，执行 `adb shell dumpsys SurfaceFlinger | grep -A 10 "BufferStateLayer"`。找到名称形如 `SurfaceView[包名]...#0` 的空壳图层，并确认其子节点（`Children`）中包含名称带有 `BLAST` 后缀的真正渲染图层。
 
 <br />
-

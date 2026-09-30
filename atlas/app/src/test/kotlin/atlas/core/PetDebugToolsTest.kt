@@ -30,13 +30,13 @@ class PetDebugToolsTest {
     }
 
     @Test
-    fun `scenario catalog covers all 98 rows in source order`() {
+    fun `scenario catalog covers all 99 rows in source order`() {
         val cases = PetDebugTools.scenarios
-        assertEquals(98, cases.size)
-        assertEquals((1..98).toList(), cases.map { it.number })
-        assertEquals("first boot default on -> show only, wait ivi ready", cases.first().name)
-        assertEquals("long idle ignored when switch off", cases.last().name)
-        assertEquals(98, cases.map { it.name }.distinct().size)
+        assertEquals(99, cases.size)
+        assertEquals((1..99).toList(), cases.map { it.number })
+        assertEquals("first boot default on -> hide until ivi ready", cases.first().name)
+        assertEquals("switch reopened before ivi ready -> remain hidden", cases.last().name)
+        assertEquals(99, cases.map { it.name }.distinct().size)
     }
 
     @Test

@@ -1,6 +1,6 @@
 # 车载总线与诊断协议详解：CAN / CAN-FD / LIN / UDS / DoIP
 
-> 本文是车载总线层的系统讲解（2026-09 检索整理，ISO/SAE 标准与社区实践口径），补齐 [SOME/IP 深入详解](./SOME_IP_深入详解.md) 与 [车联网网络学习指南](./车联网网络学习指南.md) 之间的车内总线层：CAN 基础与仲裁/错误处理、CAN-FD 差异、LIN、与车载以太网/SOME/IP 的关系、UDS 与 DoIP 诊断。Android 座舱视角见文末第 8 节；座舱网络（IP 侧）详见 `android/14-network/`。
+> 本文是车载总线层的系统讲解（2026-09 检索整理，ISO/SAE 标准与社区实践口径），补齐 [SOME/IP 深入详解](./SOME_IP_深入详解.md) 与 [车联网网络学习指南](./车联网网络学习指南.md) 之间的车内总线层：CAN 基础与仲裁/错误处理、CAN-FD 差异、LIN、与车载以太网/SOME/IP 的关系、UDS 与 DoIP 诊断。Android 座舱视角见文末第 8 节；座舱网络（IP 侧）详见 `01-android/14-network/`。
 
 ## 目录
 

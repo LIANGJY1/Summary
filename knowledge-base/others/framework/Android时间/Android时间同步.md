@@ -412,7 +412,7 @@ sequenceDiagram
 boolean setTimeImpl(long millis, int reason, String opPackageName) {
     // 1. 权限与 SELinux 检查：必须持有 SET_TIME 权限
     // 对应 SELinux TE 策略：allow system_server self:capability sys_time;
-    getContext().enforceCallingOrSelfPermission("android.permission.SET_TIME", "setTime");
+    getContext().enforceCallingOrSelfPermission("01-android.permission.SET_TIME", "setTime");
 
     // 2. JNI 调用，深入 Native 层
     SystemClock.setCurrentTimeMillis(millis);

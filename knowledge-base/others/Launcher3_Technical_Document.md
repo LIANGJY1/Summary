@@ -454,7 +454,7 @@ Launcher3 需要通过特权获取的关键权限（定义在 `privapp_whitelist
 ### 6.4 特权白名单配置
 
 ```xml
-<!-- privapp_whitelist_com.android.launcher3.xml -->
+<!-- privapp_whitelist_com.01-android.launcher3.xml -->
 <permissions>
     <privapp-permissions package="com.android.launcher3">
         <permission name="android.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS"/>
@@ -591,8 +591,8 @@ AAOS（Android Automotive OS）使用独立的 **CarLauncher**，而非 Launcher
 HOME Intent 解析结果：
 
 ```bash
-$ pm resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME
-→ com.android.car.carlauncher/.CarLauncher
+$ pm resolve-activity -a 01-android.intent.action.MAIN -c 01-android.intent.category.HOME
+→ com.01-android.car.carlauncher/.CarLauncher
 ```
 
 ### 9.3 为什么 AAOS 不用 Launcher3
@@ -740,16 +740,16 @@ PRODUCT_PACKAGES += MyLauncher
 
 ```bash
 # 查看当前HOME Intent解析结果
-adb shell pm resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME
+adb shell pm resolve-activity -a 01-android.intent.action.MAIN -c 01-android.intent.category.HOME
 
 # 查看已安装的Launcher包名
 adb shell pm list packages | grep -i launcher
 
 # 查看Launcher APK安装路径
-adb shell pm path com.android.launcher3
+adb shell pm path com.01-android.launcher3
 
 # 查看Launcher详细信息
-adb shell dumpsys package com.android.launcher3
+adb shell dumpsys package com.01-android.launcher3
 
 # 查看所有特权应用
 adb shell ls /06-system/priv-app/ /06-system/product/priv-app/ /06-system/system_ext/priv-app/
@@ -758,8 +758,8 @@ adb shell ls /06-system/priv-app/ /06-system/product/priv-app/ /06-system/system
 adb shell dumpsys activity activities | grep -i home
 
 # 强制停止Launcher（系统会自动重启）
-adb shell am force-stop com.android.launcher3
+adb shell am force-stop com.01-android.launcher3
 
 # 设置默认Launcher（需要root）
-adb shell cmd package set-home-activity com.android.launcher3/.uioverrides.QuickstepLauncher
+adb shell cmd package set-home-activity com.01-android.launcher3/.uioverrides.QuickstepLauncher
 ```

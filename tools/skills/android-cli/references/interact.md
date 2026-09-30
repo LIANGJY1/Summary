@@ -59,7 +59,7 @@ Interact with UI elements with their `center` coordinate or their `bounds` coord
 ```json
 {
   "key": -248568265,
-  "class": "android.widget.Button",
+  "class": "01-android.widget.Button",
   "bounds": "[138,9][167,38]",
   "center": "[152,23]"
 }

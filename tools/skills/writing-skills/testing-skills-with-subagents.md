@@ -219,7 +219,7 @@ Write code before test? Delete it. Start over.
 ### 4. Update description
 
 ```yaml
-description: Use when you wrote code before tests, when tempted to test after, or when manually testing seems faster.
+description: Use when you wrote code before tests, when tempted to test after, or when manually 02-testing seems faster.
 ```
 
 Add symptoms of ABOUT to violate.

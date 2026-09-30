@@ -1,6 +1,6 @@
 package atlas.core
 
-/** knowledge-base 文档的目录树模型；只从可产生题目的 Markdown 文件路径构建。 */
+/** knowledge-base 文档的目录树模型；题目源文档与关联 README 均可作为叶节点。 */
 data class KnowledgeTreeNode(
     val name: String,
     val path: String,

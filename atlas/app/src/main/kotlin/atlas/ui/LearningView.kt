@@ -465,10 +465,20 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val mappedDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
         SourceQuestions.supportedDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
     }
-    val knowledgeTree = remember(mappedDocuments) {
-        KnowledgeTree.build(mappedDocuments)
+    val mappedReadmeDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
+        SourceQuestions.supportedReadmeDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
+    }
+    val treeDocuments = remember(mappedDocuments, mappedReadmeDocuments) {
+        (mappedDocuments + mappedReadmeDocuments).distinct().sorted()
+    }
+    val knowledgeTree = remember(treeDocuments) {
+        KnowledgeTree.build(treeDocuments)
     }
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
+    val selectedReadmeDocument = store.selectedSourcePath.takeIf { it in mappedReadmeDocuments }
+    LaunchedEffect(selectedReadmeDocument) {
+        if (selectedReadmeDocument != null) store.questionSearchVisible.value = false
+    }
 
     fun locateSource(path: String) {
         expandedDirs = expandedDirs + setOf("knowledge-base") + KnowledgeTree.ancestorPaths(path)
@@ -542,8 +552,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         ) {
             if (sidebarExpanded) {
                 Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.MdH1)
-                Text("题库映射 · ${mappedDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
-                if (mappedDocuments.isEmpty()) {
+                Text("题目与 README · ${treeDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
+                if (treeDocuments.isEmpty()) {
                     Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
                 }
                 Spacer(Modifier.height(10.dp))
@@ -625,6 +635,16 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 // 卡片边框因此贴合内容，不再出现 1240 宽卡 + 卡内 1040 文字的两侧空带
                 Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
             ) {
+        if (selectedReadmeDocument != null) {
+            key(selectedReadmeDocument) {
+                ReadmeDocumentView(
+                    store = store,
+                    path = selectedReadmeDocument,
+                    content = store.sourceReadmeContent.orEmpty(),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        } else {
         // 搜索栏（输入框 + 范围行）默认隐藏，Ctrl+Shift+F 召出并聚焦；点击其外任意区域自动收起
         if (store.questionSearchVisible.value) {
             Column(
@@ -1051,6 +1071,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
         }
         }
+        }
     }
         }
     renameTarget?.let { node ->
@@ -1095,6 +1116,137 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             targetCandidates = mappedDocuments.filter { it != entry.sourcePath },
             onDismiss = { movingEntry = null },
         )
+    }
+}
+
+@Composable
+private fun ReadmeDocumentView(
+    store: AppStore,
+    path: String,
+    content: String,
+    modifier: Modifier = Modifier,
+) {
+    val ui = atlasUiTokens()
+    var editing by remember(path) { mutableStateOf(false) }
+    var draft by remember(path) { mutableStateOf(content) }
+    var baseContent by remember(path) { mutableStateOf(content) }
+    var externalConflict by remember(path) { mutableStateOf<String?>(null) }
+    var saveFailed by remember(path) { mutableStateOf(false) }
+    val savePendingOnLeave = rememberUpdatedState {
+        if (externalConflict == null && draft != baseContent) {
+            when (store.saveReadme(path, baseContent, draft)) {
+                atlas.ReadmeSaveResult.CONFLICT -> store.showToast("README.md 有外部修改；重新打开后选择保留本地编辑或载入外部版本")
+                atlas.ReadmeSaveResult.FAILED,
+                atlas.ReadmeSaveResult.UNAVAILABLE -> store.showToast("README.md 自动保存失败")
+                atlas.ReadmeSaveResult.SAVED -> Unit
+            }
+        }
+    }
+    DisposableEffect(path) {
+        onDispose { savePendingOnLeave.value() }
+    }
+
+    LaunchedEffect(path, content) {
+        if (draft == baseContent) {
+            draft = content
+            baseContent = content
+            externalConflict = null
+        } else if (content != baseContent && content != draft) {
+            externalConflict = content
+        }
+    }
+
+    LaunchedEffect(path, draft, baseContent, externalConflict) {
+        if (externalConflict != null || draft == baseContent) return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        when (store.saveReadme(path, baseContent, draft)) {
+            atlas.ReadmeSaveResult.SAVED -> {
+                baseContent = draft
+                saveFailed = false
+            }
+            atlas.ReadmeSaveResult.CONFLICT -> {
+                externalConflict = store.sourceReadmeContent ?: content
+            }
+            atlas.ReadmeSaveResult.UNAVAILABLE -> {
+                saveFailed = true
+            }
+            atlas.ReadmeSaveResult.FAILED -> {
+                saveFailed = true
+            }
+        }
+    }
+
+    Column(modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("README.md", style = ui.typography.sectionTitle, color = Theme.MdH1)
+                Text(path, style = ui.typography.caption, color = Theme.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (editing) {
+                Text(
+                    when {
+                        externalConflict != null -> "发现外部修改"
+                        saveFailed -> "自动保存失败"
+                        draft != baseContent -> "正在自动保存…"
+                        else -> "已保存"
+                    },
+                    style = ui.typography.caption,
+                    color = if (externalConflict != null || saveFailed) Theme.WarnOrange else Theme.Muted,
+                )
+            }
+            OutlinedButton(onClick = { editing = !editing }) {
+                Text(if (editing) "预览" else "编辑")
+            }
+        }
+
+        externalConflict?.let { external ->
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                    .background(Theme.WarnOrange.copy(alpha = 0.10f), MaterialTheme.shapes.small)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("README.md 已在其他位置修改。自动写回已暂停。", Modifier.weight(1f), color = Theme.WarnOrange, fontSize = 12.sp)
+                OutlinedButton(onClick = {
+                    baseContent = external
+                    externalConflict = null
+                    saveFailed = false
+                }) { Text("保留本地编辑") }
+                Button(onClick = {
+                    draft = external
+                    baseContent = external
+                    externalConflict = null
+                    saveFailed = false
+                }) { Text("载入外部版本") }
+            }
+        }
+
+        if (editing) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                minLines = 16,
+                maxLines = Int.MAX_VALUE,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                placeholder = { Text("README.md 为空") },
+            )
+        } else {
+            Box(
+                Modifier.fillMaxWidth().weight(1f)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                SelectionContainer {
+                    if (draft.isBlank()) Text("README.md 为空。", color = Theme.Muted)
+                    else LazyMarkdownText(draft, Modifier.fillMaxSize())
+                }
+            }
+        }
     }
 }
 

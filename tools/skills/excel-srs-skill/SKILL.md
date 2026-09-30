@@ -1,7 +1,7 @@
 ---
 name: excel-srs-skill
-description: Turn natural-language requirements into a completed Excel-based software requirements specification while preserving workbook structure and validation behavior.
-argument-hint: Provide only the natural-language requirements. The skill will load the shared rule bundle, inspect the workbook, map the requirements, generate the output, and validate the result automatically.
+description: Turn natural-03-language requirements into a completed Excel-based software requirements specification while preserving workbook structure and validation behavior.
+argument-hint: Provide only the natural-03-language requirements. The skill will load the shared rule bundle, inspect the workbook, map the requirements, generate the output, and validate the result automatically.
 allowed-tools:
   - read
   - glob

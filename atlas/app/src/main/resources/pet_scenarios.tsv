@@ -1,0 +1,100 @@
+# number<TAB>stage<TAB>sourceName<TAB>sequence<TAB>expected<TAB>limitation
+1	阶段 1 · 骨架与开关	first boot default on -> hide until ivi ready	fresh_on	开关默认开启但未收到就绪沿：萌宠保持隐藏；不设超时显示。	
+2	阶段 1 · 骨架与开关	switch off at boot -> hide	fresh_on; pet switch_off	当前包近似链为初始化隐藏后再次确认隐藏；精确 Init(false) 由同名单测覆盖。Setting 接入后关闭 SWITCH_FORCE_ON，再以 ai_pet_switch=0 冷启验证。	精确设备前置受阻断
+3	阶段 1 · 骨架与开关	switch off while running -> hide and clear	fresh_on; pet switch_off	隐藏并清空动作、定时器和挂起状态。	
+4	阶段 1 · 骨架与开关	switch back on -> resident directly, no opening replay	fresh_on; pet switch_off; pet ivi_ready; pet switch_on	收到就绪沿后重新开启：显示并直接常驻，不补出场。	
+5	阶段 1 · 骨架与开关	send failed -> retry up to limit	fresh_on; pet ivi_ready; pet send_failed 1; pet send_failed 1	出场初发后重试 2 次，不隐藏。	
+6	阶段 1 · 骨架与开关	send failed beyond limit -> hide fallback	fresh_on; pet ivi_ready; pet send_failed 1; pet send_failed 1; pet send_failed 1	第 3 次失败耗尽重试，取消定时器并隐藏。	
+7	阶段 2 · 出场与常驻	ivi ready foreground unplugged -> opening	fresh_on; pet ivi_ready	播出场并挂动作看门狗。	
+8	阶段 2 · 出场与常驻	sound plays at dispatch (temporary immediate mode)	fresh_on; pet ivi_ready	当前临时立即模式下，出场下发同时播出场音效。	
+9	阶段 2 · 出场与常驻	opening completed -> stop sound, resident loop starts	fresh_on; pet ivi_ready; pet play_done	停出场音效并进入常驻。	
+10	阶段 2 · 出场与常驻	opening completed -> resident loop starts	fresh_on; pet ivi_ready; pet play_done	取消看门狗并进入常驻循环。	
+11	阶段 2 · 出场与常驻	second ivi ready in same process -> ignored	fresh_on; pet ivi_ready; pet play_done; pet ivi_ready	第二个就绪沿不重播出场。	
+12	阶段 2 · 出场与常驻	ivi ready while background -> opening missed, no replay after render start	fresh_on; pet render_off; pet ivi_ready; pet render_on	后台错过出场，回前台直接常驻。	
+13	阶段 2 · 出场与常驻	ivi ready while plugged -> opening missed, charging directly	fresh_on; pet plug; pet ivi_ready; pet unplug	插枪时直接充电；拔枪回常驻，全程无出场。	
+14	阶段 2 · 出场与常驻	render stop during opening -> terminate, resident on render start	fresh_on; pet ivi_ready; pet play_start; pet render_off; pet render_on	切后台终止出场和音效，回前台常驻。	
+15	阶段 2 · 出场与常驻	duplicate render stop -> ignored	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet render_off	第一次撤计时，重复后台沿无附加终止。	
+16	阶段 2 · 出场与常驻	idle timer fires -> next random action with watchdog	fresh_on; pet ivi_ready; pet play_done; pet timer_idle	常驻间隔到点抽首个固定随机动作并挂看门狗。	
+17	阶段 2 · 出场与常驻	random completed -> back to resident with new timer	fresh_on; pet ivi_ready; pet play_done; pet timer_idle; pet play_done	随机动作完成后回常驻并重新计时。	
+18	阶段 2 · 出场与常驻	render stop during loop -> suspend timers, render start -> resume	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet render_on	后台撤定时器，回前台恢复常驻。	
+19	阶段 2 · 出场与常驻	watchdog timeout without callback -> reset to resident	fresh_on; pet ivi_ready; pet play_done; pet timer_idle; pet timer_watchdog	随机动作无回调，看门狗将其复位为常驻。	
+20	阶段 3 · 点击	click during resident -> click action with sound	fresh_on; pet ivi_ready; pet play_done; pet clicked	下发固定种子对应的点击动作、看门狗和点击音效。	
+21	阶段 3 · 点击	click completed -> back to resident loop	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet play_start; pet play_done	点击完成后停音效并回常驻。	
+22	阶段 3 · 点击	click during opening -> rejected	fresh_on; pet ivi_ready; pet clicked	出场保持；不下发点击动作。	
+23	阶段 3 · 点击	click while battery low -> ignored	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet clicked; pet battery_ok; pet clicked	低电量期间点击被前置拦截；恢复后新点击沿放行。	
+24	阶段 3 · 点击	click while background -> ignored	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet clicked; pet render_on	后台点击不执行，回前台常驻。	
+25	阶段 3 · 点击	click during click action -> ignored	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet clicked	第二次点击不替换、不打断第一次点击。	
+26	阶段 3 · 点击	switch off clears loop, switch on re-enters resident	fresh_on; pet render_off; pet ivi_ready; pet render_on; pet switch_off; pet switch_on	开关关闭隐藏并清状态；重开直接常驻，不补出场。	
+27	阶段 4 · 音乐	music start during resident -> dance, idle suspended	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet timer_idle	进入舞动并撤常驻计时；强发 idle timer 也不应播随机。	
+28	阶段 4 · 音乐	music stop -> back to resident loop	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet music_off	发音乐结束码 91，回常驻。	
+29	阶段 4 · 音乐	music during opening -> deferred until opening completes	fresh_on; pet ivi_ready; pet music_on; pet play_done	音乐在出场中延迟，完成拍后舞动。	
+30	阶段 4 · 音乐	music playing at boot -> opening first, dance after completion	fresh_on; pet music_on; pet ivi_ready; pet play_done	先出场，完成后按已记忆音乐状态舞动。	
+31	阶段 4 · 音乐	music during click -> deferred until click completes	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet music_on; pet play_start; pet play_done	点击受保护；完成后补舞动。	
+32	阶段 4 · 音乐	click during music -> pause semantics, dance resumes after click (2026-09-28)	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet clicked; pet play_start; pet play_done	点击暂停舞动；完成且音乐镜像仍为真时重启舞动。	
+33	阶段 4 · 音乐	click during music with lost resume edge -> fallback query resumes dance	fresh_on; media_play; pet ivi_ready; pet play_done; pet music_on; pet clicked; pet music_off; pet play_start; pet play_done	镜像为停播但平台查询仍在播，完成拍兜底恢复舞动。无活动目标会话时不能精确复现。	先让网易云/蓝牙音乐成为活动会话并保持真实播放，再执行
+34	阶段 4 · 音乐	mirror corrected by fallback, later real pause edge ends dance (兜底后镜像校正锁定)	fresh_on; media_play; pet ivi_ready; pet play_done; pet music_on; pet clicked; pet music_off; pet play_start; pet play_done; media_pause; pet music_off	兜底先恢复并校正镜像；随后真实暂停沿发 91 并回常驻。	先让目标音乐会话真实播放，再执行
+35	阶段 4 · 音乐	click during music with lost resume edge and music really off -> fallback stays resident	fresh_on; media_pause; pet ivi_ready; pet play_done; pet music_on; pet clicked; pet music_off; pet play_start; pet play_done	平台查询为未播放，点击完成后守卫回常驻，不恢复舞动。	
+36	阶段 4 · 音乐	music start while battery low -> rejected	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet music_on; pet music_off	低电量动作保持，音乐联动被前置拒绝。	
+37	阶段 4 · 音乐	music accepted after battery recovers on new playing edge	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet music_on; pet music_off; pet battery_ok; pet music_on	低电量期间拒绝；恢复后的新起播沿放行舞动。	
+38	阶段 4 · 音乐	battery drops during music -> dance continues, low battery waits for stop	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet battery_low; pet music_off	低电量延迟，不打断舞动；停播后低电量落位。	
+39	阶段 4 · 音乐	music start while background -> rebuild on render start	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet music_on; pet render_on	后台只记忆，回前台按实时状态舞动。	
+40	阶段 4 · 音乐	music stop while background -> resident on render start	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet render_off; pet music_off; pet render_on	后台停播仍发 91，回前台常驻。	
+41	阶段 4 · 音乐	music during voice -> deferred until voice session ends	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet music_on; pet voice_off	语音期间音乐延迟，会话结束后舞动。	
+42	阶段 5 · 语音	voice wake during resident -> interact, idle suspended	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet timer_idle	进入语音并撤常驻计时；不播随机。	
+43	阶段 5 · 语音	voice end -> back to resident loop	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet voice_off	发语音结束码 101，回常驻。	
+44	阶段 5 · 语音	voice during music -> pause semantics, dance resumes after session (2026-09-28)	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet voice_on; pet voice_off	语音暂停舞动；会话结束且音乐仍在时恢复舞动。	
+45	阶段 5 · 语音	birthday during music -> pause semantics, dance resumes after birthday	fresh_on; pet ivi_ready; pet play_done; pet music_on; ipc 14; pet play_done	生日暂停舞动；生日完成后恢复舞动。	
+46	阶段 5 · 语音	rain during music -> pause semantics, dance resumes after rain	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet weather_rain; pet play_done	雨动作暂停舞动；完成后恢复舞动。	
+47	阶段 5 · 语音	voice during click -> deferred until click completes	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet voice_on; pet play_start; pet play_done	语音延迟，点击完成后进入语音。	
+48	阶段 5 · 语音	click during voice -> pause semantics, voice loop restarts after click (2026-09-28)	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet clicked; pet play_start; pet play_done	点击暂停语音；完成且会话仍活跃时重启语音循环。	
+49	阶段 5 · 语音	voice end arrives while never started -> ignored	fresh_on; pet ivi_ready; pet voice_on; pet voice_off; pet play_done	语音在出场中尚未执行，结束迟沿取消意图；出场后回常驻。	
+50	阶段 5 · 语音	voice wake while background -> rebuild on render start	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet voice_on; pet render_on	后台只记忆，回前台进入语音。	
+51	阶段 5 · 语音	voice during low battery -> pauses it, low battery not resumed after session	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet voice_on; pet voice_off	语音打断低电量；会话结束回常驻，不恢复低电量。	
+52	阶段 5 · 语音	voice at boot before ivi ready -> opening first, interact after	fresh_on; pet voice_on; pet ivi_ready; pet play_done	先出场，完成后进入已记忆的语音会话。	
+53	阶段 6 · 电量与充电	battery below threshold during resident -> low battery, idle suspended	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet timer_idle	进入低电量并撤常驻计时；不播随机。	
+54	阶段 6 · 电量与充电	battery recovers -> low battery ends, resident loop	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet battery_ok	发低电量结束码 71，回常驻。	
+55	阶段 6 · 电量与充电	low battery during opening -> deferred until opening completes	fresh_on; pet ivi_ready; pet battery_low; pet play_done	低电量在出场中延迟，完成后落位。	
+56	阶段 6 · 电量与充电	low battery during click -> deferred until click completes	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet battery_low; pet play_start; pet play_done	低电量延迟到点击完成。	
+57	阶段 6 · 电量与充电	low battery during voice -> deferred until voice ends	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet battery_low; pet voice_off	低电量延迟到语音会话结束。	
+58	阶段 6 · 电量与充电	low battery while charging -> rejected	fresh_on; pet ivi_ready; pet play_done; pet plug; pet battery_low; pet timer_idle	充电保持，低电量不执行，不播随机。	
+59	阶段 6 · 电量与充电	low battery at boot before ivi ready -> opening first, low battery after	fresh_on; pet battery_low; pet ivi_ready; pet play_done	先出场，完成后进入低电量。	
+60	阶段 6 · 电量与充电	low battery while background -> rebuild on render start	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet battery_low; pet render_on	后台记忆，回前台进入低电量。	
+61	阶段 6 · 电量与充电	plug in during resident -> charging, idle suspended	fresh_on; pet ivi_ready; pet play_done; pet plug; pet timer_idle	进入充电并撤常驻计时；不播随机。	
+62	阶段 6 · 电量与充电	plug out -> back to resident loop	fresh_on; pet ivi_ready; pet play_done; pet plug; pet unplug	发充电结束码 81，回常驻。	
+63	阶段 6 · 电量与充电	plug during opening -> deferred until opening completes	fresh_on; pet ivi_ready; pet plug; pet play_done	出场受保护，完成后进入充电。	
+64	阶段 6 · 电量与充电	plug during click -> preempts immediately	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet plug	充电独占点击并立即接管。	
+65	阶段 6 · 电量与充电	plug during music -> preempts, music not resumed after unplug	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet plug; pet unplug	充电接管；拔枪回常驻，不恢复舞动。	
+66	阶段 6 · 电量与充电	plug during voice -> preempts	fresh_on; pet ivi_ready; pet play_done; pet voice_on; pet plug	充电独占语音并立即接管。	
+67	阶段 6 · 电量与充电	low battery then plug -> charging, low battery suppressed after unplug	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet plug; pet unplug; pet render_off; pet render_on	充电抑制低电量；拔枪及前后台重估均不复活低电量。	
+68	阶段 6 · 电量与充电	suppressed low battery re-arms on fresh battery cycle	fresh_on; pet ivi_ready; pet play_done; pet battery_low; pet plug; pet battery_ok; pet unplug; pet battery_low	回升结束旧周期；再次跌破作为新沿重新进入低电量。	
+69	阶段 6 · 电量与充电	charging while background -> rebuild on render start	fresh_on; pet ivi_ready; pet play_done; pet render_off; pet plug; pet render_on	后台记忆插枪，回前台进入充电。	
+70	阶段 6 · 电量与充电	click during charging -> rejected	fresh_on; pet ivi_ready; pet play_done; pet plug; pet clicked	充电保持，点击拒绝。	
+71	阶段 6 · 电量与充电	music during charging -> deferred until unplug	fresh_on; pet ivi_ready; pet play_done; pet plug; pet music_on; pet unplug	充电期间不舞动；拔枪后按实时音乐状态舞动。	
+72	阶段 6 · 电量与充电	voice during charging -> rejected	fresh_on; pet ivi_ready; pet play_done; pet plug; pet voice_on; pet voice_off	充电保持，语音不执行。	
+73	机制锁定	click during idle window -> random timer suppressed until completion	fresh_on; pet ivi_ready; pet play_done; pet clicked; pet timer_idle; pet play_done	点击窗口内强发 idle timer 也不播随机；完成后回常驻。	
+74	机制锁定	music suppressed by charging stays off after unplug across render cycle	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet plug; pet unplug; pet render_off; pet render_on	被充电独占的舞动在拔枪及回前台后均不复活。	
+75	机制锁定	music dances again on new playing edge after charging	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet plug; pet unplug; pet music_off; pet music_on	旧舞动被抑制；新的停播→起播周期重新获得舞动资格。	
+76	机制锁定	delayed one shot held in pending slot plays after current completes	fresh_on; pet ivi_ready; pet clicked; pet play_done	同名 JVM case 临时把“出场×点击”覆盖成延迟，验证挂起槽补播；正式矩阵该格为 X，所以设备链会拒绝点击。	测试规则覆盖专用，设备正式表不可精确复现。
+77	机制锁定	music then voice then charging -> voice suppressed only, dance resumes after unplug	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet voice_on; pet plug; pet unplug; pet render_off; pet render_on	充电仅抑制语音；拔枪及回前台按未被抑制的音乐状态恢复舞动。	
+78	生日、天气与节日	birthday event after opening plays birthday action	fresh_on; pet ivi_ready; pet play_done; ipc 14	正式 IPC 生日事件下发生日动作。	
+79	生日、天气与节日	duplicate birthday signals each play (2026-09-28口径)	fresh_on; pet ivi_ready; pet play_done; ipc 14; pet play_done; ipc 14	两次生日事件均播放；第一次完成回报成功。	
+80	生日、天气与节日	birthday audio is deferred by requirement decision	fresh_on; pet ivi_ready; pet play_done; ipc 14	播生日动作，但不播生日音效。	
+81	生日、天气与节日	switch off during birthday reports skipped	fresh_on; pet ivi_ready; pet play_done; ipc 14; pet switch_off	生日中关开关，回报 SKIPPED 并隐藏。	
+82	生日、天气与节日	birthday send retries exhausted reports skipped	fresh_on; pet ivi_ready; pet play_done; ipc 14; pet send_failed 14; pet send_failed 14; pet send_failed 14	生日发送失败耗尽后回报 SKIPPED 并隐藏。	
+83	生日、天气与节日	birthday during opening waits until opening completes	fresh_on; pet ivi_ready; ipc 14; pet play_done	生日在出场中延迟，完成后播放。	
+84	生日、天气与节日	birthday during charging returns skipped	fresh_on; pet ivi_ready; pet play_done; pet plug; ipc 14	充电中拒绝生日，并向 PetIpcTest 回报 SKIPPED。	
+85	生日、天气与节日	rain weather event after opening plays rain action	fresh_on; pet ivi_ready; pet play_done; pet weather_rain	播雨动作。	
+86	生日、天气与节日	weather uses first valid rain or snow event once per process	fresh_on; pet ivi_ready; pet play_done; pet weather_none; pet weather_rain; pet play_done; pet weather_snow	无效天气不消费机会；首个有效雨执行；同进程后续雪忽略。	
+87	生日、天气与节日	festival signal applies skin without replacing current action	fresh_on; pet ivi_ready; pet play_done; ipc 1	叠加春节皮肤，不替换当前动作。	
+88	生日、天气与节日	festival applied reports result and plays sound once	fresh_on; pet ivi_ready; pet play_done; ipc 1; ipc 1	Launcher 实际写皮肤后自动回泵应用结果；首次成功播节日音效，两次请求均回报结果。	
+89	生日、天气与节日	no festival removes applied skin	fresh_on; pet ivi_ready; ipc 1; ipc 0	先穿春节皮肤，再写 NONE 撤销。	
+90	生日、天气与节日	switch off during music -> music end code then hide	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet switch_off	先发音乐结束码 91，再隐藏。	
+91	长期未登录	long idle signal before ivi ready plays after opening	fresh_on; pet long_idle; pet ivi_ready; pet play_done	先出场，完成后播长期未登录。	
+92	长期未登录	long idle signal during opening waits until opening completes	fresh_on; pet ivi_ready; pet long_idle; pet play_done	出场中延迟，完成后补播长期未登录。	
+93	长期未登录	long idle signal with resident active pauses resident and plays	fresh_on; pet ivi_ready; pet play_done; pet long_idle	常驻被暂停，播放长期未登录。	
+94	长期未登录	long idle is one shot without sound and returns to resident	fresh_on; pet ivi_ready; pet play_done; pet long_idle; pet play_done	短时无音效，完成后回常驻。	
+95	长期未登录	duplicate long idle signals fire once	fresh_on; pet ivi_ready; pet play_done; pet long_idle; pet long_idle; pet play_done	同进程重复信号只执行一次，完成后回常驻。	
+96	长期未登录	long idle rejected while charging	fresh_on; pet ivi_ready; pet play_done; pet plug; pet long_idle	充电保持，长期未登录拒绝。	
+97	长期未登录	long idle rejected while music dancing	fresh_on; pet ivi_ready; pet play_done; pet music_on; pet long_idle	舞动保持，长期未登录拒绝。	
+98	长期未登录	long idle ignored when switch off	fresh_on; pet switch_off; pet long_idle	开关关闭时忽略长期未登录，不播放动作。	
+99	显示门控补充策略（99）	switch reopened before ivi ready -> remain hidden	fresh_on; pet switch_off; pet switch_on	未收到 IviReady 时关开关再重开，萌宠仍隐藏；不显示、不播放出场或常驻动作。	
