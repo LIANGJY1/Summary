@@ -84,6 +84,7 @@ fun main() {
         Window(
             onCloseRequest = {
                 Log.i("窗口关闭请求，应用退出")
+                store.stopAaosCommand()
                 exitApplication()
             },
             title = "Atlas",
@@ -95,7 +96,10 @@ fun main() {
                 fontScale = store.settings.fontScale,
                 spec = resolveTheme(store.settings),
             ) {
-                AppRoot(store, windowState) { exitApplication() }
+                AppRoot(store, windowState) {
+                    store.stopAaosCommand()
+                    exitApplication()
+                }
             }
         }
     }

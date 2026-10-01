@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：SELinux 拒绝（avc denial）的确认与处置——从"功能静默失效"到四元组定位、audit2allow 与 neverallow 的处理边界。语境：全局 enforcing 自 Android 5.0 起；启动期策略合成与装载见 [02-Android系统启动流程.md](./02-Android系统启动流程.md)；沙箱三层（UID/SELinux/seccomp）见 [04-Sanbox.md](./04-Sanbox.md)。命令与流程已于 2026-09-25 与官方资料（source.android.com《Validate SELinux》）核对；Q3–Q8 的策略书写机制按 system/sepolicy 与 car_product/sepolicy 源码核对。2026-09-25 会话沉淀追加 Q9–Q18：service_manager 用户态检查链源码、avc 日志双路径与字段解剖、厂商域漏配 find 的崩溃循环案例与修复流程，按 AAOS13_study（Android 13）源码逐行核对。同日二轮并入《selinux 配置指南》与用户补充问题（Q19–Q26）：概念总览、原理与代码落点、应用/framework 两级开发者场景、ioctl allowxperm 双层授权、neverallow 两大编译场景与最小权限原则、工作模式与 ALLOW_PERMISSIVE_SELINUX、make selinux_policy 与 audit2allow 快速验证，均经 AAOS13_study 源码核对（材料笔误已修正，如 DALLOW_PERMISSIVE_SELINUX 实为 ALLOW_PERMISSIVE_SELINUX）。Q 序列即结构，供 atlas 同源直读。2026-09-26 修订 Q1：把首段三个术语「强制访问控制（MAC）」「域」「类型」展开到可核对粒度——三者只是主体、客体两个身份加一套判定机制；补 `user:role:type:level` 四元组的字段分工（`role` 在 Android 只有进程 `r`、对象 `object_r` 两值且不参与授权）、域按 uid 加 targetSdkVersion 选定、类型标签由 `file_contexts`/`genfs_contexts`/`property_contexts`/`service_contexts` 逐条正则匹配，以及「类」与「类型」的区别；同日三轮按用户要求将 Q1 收敛为直答——四元组字段分工、contexts 明细、neverallow 与 vendor 组织等细节由对应 Q 承载，不再堆在 Q1；同日四轮重构开篇边界：Q1 定格为"是什么+为什么"（三步机制移出），机制三步与判定走查落 Q2，原"原理与代码实现"顺延为 Q3 并去重（默认拒绝归 Q2，neverallow 断言保留）。全文按 [WRITING-GUIDE.md](../../WRITING-GUIDE.md) 验收：删除跨 Q 引用与无信息量的计数，改为扁平列表（Atlas 渲染器不表达嵌套层级）。2026-09-26 二轮：沙箱与 UID 的源码深讲并入 [04-Sanbox.md](./04-Sanbox.md)（Q5–Q12，补充 UID 沙箱与安全边界内容），本册保持 SELinux 排查与策略专题纯度。
 
-**Q1: [done] Android SELinux 是什么？怎么理解？**
+**Q1: [done] [tags:SELinux,sdfasf] Android SELinux 是什么？怎么理解？**
 
 SELinux（Security-Enhanced Linux，安全增强型 Linux）是 Android 在 Linux 内核 LSM（Linux Security Modules）框架上实现的**强制访问控制**机制：给每个进程（主体）打"域"标签，给进程访问的一切客体——文件与目录、设备节点、socket、系统属性、Binder 服务乃至另一个进程——打"类型"标签，内核在每次访问时按 `allow 域 类型:类 权限` 策略判定，没有匹配规则即拒绝。
 
@@ -14,8 +14,6 @@ SELinux（Security-Enhanced Linux，安全增强型 Linux）是 Android 在 Linu
 SELinux 用与 uid 无关的标签把细粒度判定下沉到内核，正好补上这两层。
 
 版本与价值：Android 4.3 引入，5.0 起全局 enforcing，CTS 强制校验 enforcing 且禁止修改原生策略；效果是越权访问从"运行时漏洞"变成"编译期失败或 avc 日志可见的失败"。
-
-
 
 **Q2: [done] SELinux 的判定机制分哪几步？一次访问是怎么被放行或拒绝的？**
 

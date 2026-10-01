@@ -432,7 +432,10 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     // AppStore 在原地 clear/addAll 题目列表；取不可变快照作为缓存与手势 key，确保换文档后失效。
     val sourceQuestionsSnapshot = store.sourceQuestions.toList()
     val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else sourceQuestionsSnapshot
-    val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
+    val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
+        entry.question.contains(query.trim(), ignoreCase = true) ||
+            entry.tags.any { it.contains(query.trim(), ignoreCase = true) }
+    }
     // layoutInfo 的下标是 documentItems 的下标，其中夹着章节行，与题目下标并不一致；
     // 一律经 key 换算，避免「非排序模式下多出章节行」导致位次整体错位。
     val questionIndexByKey = remember(sourceQuestionsSnapshot) {
@@ -948,23 +951,46 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             }
                             Spacer(Modifier.width(8.dp))
                         }
-                        Column(
-                            Modifier.weight(1f).singleClickWithoutConsumingSelection {
-                                if (reorderMode) return@singleClickWithoutConsumingSelection
-                                locateSource(entry.sourcePath)
-                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                            },
-                        ) {
+                        Column(Modifier.weight(1f)) {
                             Row(
+                                Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
                                     if (gitDirty) "Q${entry.number} ·有改动" else "Q${entry.number}",
+                                    modifier = if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
+                                        locateSource(entry.sourcePath)
+                                        expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                    },
                                     fontSize = 11.sp,
                                     color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
                                 )
                                 QuestionStatusMark(entry.status)
+                                if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
+                                entry.tags.take(3).forEach { tag ->
+                                    SourceQuestionTag(tag, !reorderMode, store.settings.questionTagFontSize) { editingEntry = entry }
+                                }
+                                if (entry.tags.size > 3) {
+                                    Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
+                                }
+                                if (entry.tags.isEmpty() && !reorderMode) {
+                                    SourceQuestionTag(
+                                        "＋ 标签",
+                                        true,
+                                        store.settings.questionTagFontSize,
+                                        isPlaceholder = true,
+                                        visible = cardHovered || isExpanded,
+                                    ) { editingEntry = entry }
+                                }
+                                Spacer(
+                                    Modifier.weight(1f).height(18.dp).then(
+                                        if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
+                                            locateSource(entry.sourcePath)
+                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                        },
+                                    ),
+                                )
                             }
                             Spacer(Modifier.height(4.dp))
                             // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
@@ -983,7 +1009,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 )
                             } else {
                                 key(entryKey, entry.question) {
-                                    SelectionContainer {
+                                    SelectionContainer(
+                                        modifier = Modifier.singleClickWithoutConsumingSelection {
+                                            locateSource(entry.sourcePath)
+                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                        },
+                                    ) {
                                         Text(
                                             remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
                                             style = ui.typography.itemTitle,
@@ -1041,14 +1072,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                         CompositionLocalProvider(
                                             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                         ) {
-                                            // 同题面：内容变化时重建选区容器，避免旧选区越界崩溃
+                                            // 同题面：内容变化时重建 Markdown 根选择容器，避免旧选区残留。
                                             key(entryKey, entry.answer) {
-                                                SelectionContainer {
-                                                    MarkdownText(
-                                                        entry.answer,
-                                                        dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
-                                                    )
-                                                }
+                                                MarkdownText(
+                                                    entry.answer,
+                                                    dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
+                                                )
                                             }
                                         }
                                     }
@@ -1251,10 +1280,8 @@ private fun ReadmeDocumentView(
                 Modifier.fillMaxWidth().weight(1f)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                SelectionContainer {
-                    if (draft.isBlank()) Text("README.md 为空。", color = Theme.Muted)
-                    else LazyMarkdownText(draft, Modifier.fillMaxSize())
-                }
+                if (draft.isBlank()) Text("README.md 为空。", color = Theme.Muted)
+                else LazyMarkdownText(draft, Modifier.fillMaxSize())
             }
         }
     }
@@ -1705,7 +1732,7 @@ private fun EditSourceQuestionDialog(
     onDismiss: () -> Unit,
 ) {
     // 保存会触发 AppStore 重载；编辑会话必须使用稳定快照，不能跟着外层 visible 短暂清空。
-    val stableEntries = remember { entries.toList() }
+    var stableEntries by remember { mutableStateOf(entries.toList()) }
     var currentIndex by remember { mutableStateOf(initialIndex.coerceIn(0, (stableEntries.size - 1).coerceAtLeast(0))) }
     var isSaving by remember { mutableStateOf(false) }
     val safeIndex = safeQuestionIndex(currentIndex, stableEntries.size)
@@ -1717,9 +1744,14 @@ private fun EditSourceQuestionDialog(
     var question by remember(entry.id) { mutableStateOf(entry.question) }
     var answer by remember(entry.id) { mutableStateOf(TextFieldValue(entry.answer)) }
     var status by remember(entry.id) { mutableStateOf(entry.status) }
+    var tagsText by remember(entry.id) { mutableStateOf(entry.tags.joinToString("，")) }
     fun saveAndMove(target: Int): Boolean {
         if (question.isBlank()) return false
-        if (!store.saveSourceQuestion(entry, question, answer.text, status)) return false
+        if (!store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) return false
+        val updatedDocument = store.sourceQuestionFile().readText(Charsets.UTF_8)
+        val updatedByNumber = SourceQuestions.parse(entry.sourcePath, updatedDocument, listOf(entry.sourcePath))
+            .associateBy { it.number }
+        stableEntries = stableEntries.map { updatedByNumber[it.number] ?: it }
         currentIndex = target
         return true
     }
@@ -1757,7 +1789,7 @@ private fun EditSourceQuestionDialog(
                     if (!isSaving && question.isNotBlank()) {
                         isSaving = true
                         try {
-                            if (store.saveSourceQuestion(entry, question, answer.text, status)) onDismiss()
+                            if (store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) onDismiss()
                         } finally {
                             isSaving = false
                         }
@@ -1781,6 +1813,22 @@ private fun EditSourceQuestionDialog(
                     }
                 }
                 OutlinedTextField(
+                    tagsText,
+                    { tagsText = it.replace('\n', ' ').replace('\r', ' ') },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("分类标签") },
+                    placeholder = { Text("例如 init，启动流程") },
+                    supportingText = { Text("用逗号分隔；标签显示在题号旁，随题目保存在 Markdown 中") },
+                    singleLine = true,
+                )
+                val previewTags = SourceQuestions.normalizeTags(listOf(tagsText))
+                if (previewTags.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        previewTags.take(5).forEach { tag -> SourceQuestionTag(tag, false, store.settings.questionTagFontSize) {} }
+                        if (previewTags.size > 5) Text("+${previewTags.size - 5}", fontSize = 11.sp, color = Theme.Muted)
+                    }
+                }
+                OutlinedTextField(
                     answer,
                     { answer = it },
                     Modifier.fillMaxWidth().markdownFormatKeys { prefix, suffix ->
@@ -1798,6 +1846,33 @@ private fun EditSourceQuestionDialog(
                 Text("保存后直接修改 ${entry.sourcePath}", fontSize = 11.sp, color = Theme.Muted)
             }
         },
+    )
+}
+
+@Composable
+private fun SourceQuestionTag(
+    label: String,
+    editable: Boolean,
+    fontSizeSp: Int,
+    isPlaceholder: Boolean = false,
+    visible: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val displayText = if (isPlaceholder) AnnotatedString("+ 标签") else buildAnnotatedString {
+        append("#$label")
+        addStyle(SpanStyle(color = Theme.Muted.copy(alpha = 0.82f)), 0, 1)
+    }
+    Text(
+        text = displayText,
+        modifier = Modifier
+            .widthIn(max = 144.dp)
+            .graphicsLayer { alpha = if (visible) 1f else 0f }
+            .then(if (editable) Modifier.singleClickWithoutConsumingSelection(onClick = onClick) else Modifier)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        fontSize = fontSizeSp.sp,
+        color = if (isPlaceholder) Theme.Muted.copy(alpha = 0.62f) else Theme.Tag,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 

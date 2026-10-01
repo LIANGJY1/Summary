@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import atlas.core.AppSettings
+import atlas.core.AaosCommandRunner
 import atlas.core.DeviceTools
 import atlas.core.DocMarker
 import atlas.core.FeishuCheckin
@@ -332,6 +333,15 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         }
     }
 
+    val aaosRunner = AaosCommandRunner(scope)
+
+    fun runAaosCommand(command: String) {
+        aaosRunner.start(command, toolboxSerial, FeishuCheckin.findAdb())
+            ?.let(::showToast)
+    }
+
+    fun stopAaosCommand() = aaosRunner.stop()
+
     fun runTool(tool: DeviceTools.Tool) {
         if (toolRun.value.running) {
             showToast("已有工具在运行，请稍候")
@@ -560,6 +570,12 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         val adbPath = FeishuCheckin.findAdb() ?: return listOf("未找到 adb")
         val serial = toolboxSerial ?: return listOf("尚未选择目标设备")
         return PetDebugTools.scenarioTechnicalCommands(scenario, adbPath, serial)
+    }
+
+    fun petQuickActionTechnicalCommands(action: PetDebugTools.QuickAction): List<String> {
+        val adbPath = FeishuCheckin.findAdb() ?: return listOf("未找到 adb")
+        val serial = toolboxSerial ?: return listOf("尚未选择目标设备")
+        return PetDebugTools.quickActionTechnicalCommands(action, adbPath, serial)
     }
 
     private fun runPetDebug(
@@ -1357,6 +1373,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         question: String,
         answer: String,
         status: QuestionStatus = QuestionStatus.DEFAULT,
+        tags: List<String> = entry.tags,
     ): Boolean {
         val file = sourceQuestionFile()
         val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
@@ -1366,7 +1383,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             showToast("源文档已被外部修改，已重新加载")
             return false
         }
-        MdStores.atomicWrite(file, SourceQuestions.replace(entry, question, answer, status))
+        MdStores.atomicWrite(file, SourceQuestions.replace(entry, question, answer, status, tags))
         reloadKnowledgeFiles()
         Log.i("同源题目写回成功 path=${entry.sourcePath} Q${entry.number}")
         return true
@@ -1457,7 +1474,10 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             return false
         }
         val targetDocument = if (targetFile.isFile) targetFile.readText(Charsets.UTF_8) else ""
-        val updatedTarget = SourceQuestions.append(targetDocument, listOf(SourceQuestions.Draft(entry.question, entry.answer)))
+        val updatedTarget = SourceQuestions.append(
+            targetDocument,
+            listOf(SourceQuestions.Draft(entry.question, entry.answer, status = entry.status, tags = entry.tags)),
+        )
         return runCatching {
             // 先写目标再写源：中途失败只会造成题目重复，不会丢题
             MdStores.atomicWrite(targetFile, updatedTarget)

@@ -162,13 +162,20 @@ object PetDebugTools {
     fun scenarioTechnicalCommands(scenario: Scenario, adbPath: String, serial: String): List<String> =
         scenarioSteps(scenario, adbPath, serial).mapNotNull { step ->
             when (step) {
-                is Step.Run -> step.command.args.joinToString(" ") { arg ->
-                    if (arg.any(Char::isWhitespace)) "\"${arg.replace("\"", "\\\"")}\"" else arg
-                }
+                is Step.Run -> formatCommand(step.command.args)
                 is Step.Wait -> "sleep ${step.millis}ms"
                 is Step.Note -> null
             }
         }
+
+    fun quickActionTechnicalCommands(action: QuickAction, adbPath: String, serial: String): List<String> =
+        quickActionSteps(action, adbPath, serial).mapNotNull { step ->
+            (step as? Step.Run)?.let { formatCommand(it.command.args) }
+        }
+
+    private fun formatCommand(args: List<String>): String = args.joinToString(" ") { arg ->
+        if (arg.any(Char::isWhitespace)) "\"${arg.replace("\"", "\\\"")}\"" else arg
+    }
 
     private fun parseSequence(sequence: String, adbPath: String, serial: String): List<Step> = buildList {
         sequence.split(';').map { it.trim() }.filter { it.isNotEmpty() }.forEach { token ->

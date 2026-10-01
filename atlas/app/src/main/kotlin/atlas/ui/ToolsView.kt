@@ -9,6 +9,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -72,7 +73,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * 工具页：把日常本地小工具图形化集成，拖入文件即可运行（全部本地执行，零网络）。
+ * 工具页：把日常本地小工具图形化集成；命令均由用户在本机主动发起。
  * 首个工具：27HM 车机日志解密（脚本随 Summary 仓分发）。
  */
 /** 工具页分区（信息架构与设置中心同构：左侧分区导航 + 右侧内容区） */
@@ -80,6 +81,7 @@ enum class ToolsDestination(val title: String, val description: String) {
     LOG_DECRYPT("日志解密", "27HM 日志压缩包 / 目录 → 解压·解密·解压，一键出可读日志"),
     PHONE_AUTO("任务自动化", "adb 控制手机一键执行常用流程，无线优先、USB 兜底"),
     DEVICE_TOOLS("设备工具箱", "推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
+    AAOS_DEBUG("AAOS 调试", "源码构建与检索 · 设备命令 · 自定义 Bash 命令"),
     PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 100 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
     PROMPTS("提示词库", "常用提示词集中管理，一键复制给任意 AI"),
@@ -97,10 +99,10 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
         )
         Column(
             Modifier.weight(1f).fillMaxHeight()
-                // 提示词库与萌宠调试是工作台型工具：占满右侧可用区域，不做限宽与竖向滚动
+                // 提示词库、萌宠调试与 AAOS 调试是工作台型工具：占满右侧可用区域，不做限宽与竖向滚动
                 // （萌宠调试 100 个场景卡片只有放进自身 LazyColumn 虚拟化才能避免进页卡顿）
                 .then(
-                    if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG) Modifier
+                    if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG || destination == ToolsDestination.AAOS_DEBUG) Modifier
                     else Modifier.verticalScroll(rememberScrollState()),
                 )
                 .padding(ui.spacing.page),
@@ -109,7 +111,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
             Column(
                 Modifier
                     .then(
-                        if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG) Modifier.fillMaxSize()
+                        if (destination == ToolsDestination.PROMPTS || destination == ToolsDestination.PET_DEBUG || destination == ToolsDestination.AAOS_DEBUG) Modifier.fillMaxSize()
                         else Modifier.widthIn(max = 980.dp).fillMaxWidth(),
                     )
                     .align(Alignment.CenterHorizontally),
@@ -125,6 +127,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
                     ToolsDestination.LOG_DECRYPT -> HcLogDecryptCard(store)
                     ToolsDestination.PHONE_AUTO -> FeishuCheckinCard(store)
                     ToolsDestination.DEVICE_TOOLS -> DeviceToolboxCard(store)
+                    ToolsDestination.AAOS_DEBUG -> AaosDebugView(store, Modifier.weight(1f))
                     ToolsDestination.PET_DEBUG -> PetDebugCard(store, Modifier.weight(1f))
                     ToolsDestination.WMS_VIEWER -> WmsViewerCard(store)
                     ToolsDestination.PROMPTS -> PromptsCard(store, Modifier.weight(1f))
@@ -158,7 +161,7 @@ private fun ToolsSidebar(selected: ToolsDestination, onSelect: (ToolsDestination
             }
         }
         Spacer(Modifier.weight(1f))
-        Text("全部本地执行 · 零网络", fontSize = 11.sp, color = Theme.Muted)
+        Text("本机执行 · 命令由你发起", fontSize = 11.sp, color = Theme.Muted)
     }
 }
 
@@ -829,6 +832,7 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
     var technicalCase by remember { mutableStateOf<Int?>(null) }
     var pendingAction by remember { mutableStateOf<PetDebugTools.QuickAction?>(null) }
     var pendingScenario by remember { mutableStateOf<PetDebugTools.Scenario?>(null) }
+    var commandPreview by remember { mutableStateOf<Pair<PetDebugTools.QuickAction, List<String>>?>(null) }
 
     LaunchedEffect(Unit) { store.refreshToolboxDevices() }
 
@@ -919,6 +923,9 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
                 actions = PetDebugTools.quickActions.filter { it.group in setOf("环境", "构建安装") },
                 enabled = !running,
                 onAction = ::requestAction,
+                onShowCommand = { action ->
+                    commandPreview = action to store.petQuickActionTechnicalCommands(action)
+                },
             ) }
 
             item { PetSectionTitle("单事件控制台", "点击即发；生日和节日使用 PetIpcTest 正式 IPC") }
@@ -926,6 +933,9 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
                 actions = PetDebugTools.quickActions.filterNot { it.group in setOf("环境", "构建安装") },
                 enabled = !running,
                 onAction = ::requestAction,
+                onShowCommand = { action ->
+                    commandPreview = action to store.petQuickActionTechnicalCommands(action)
+                },
             ) }
 
             if (run.target != null) item {
@@ -1056,6 +1066,58 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
             dismissButton = { TextButton(onClick = { pendingAction = null; pendingScenario = null }) { Text("取消") } },
         )
     }
+
+    commandPreview?.let { (action, commands) ->
+        val canCopy = commands.isNotEmpty() && commands.none {
+            it == "未找到 adb" || it == "尚未选择目标设备"
+        }
+        AlertDialog(
+            onDismissRequest = { commandPreview = null },
+            title = { Text("命令：${action.label}") },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("目标设备：${store.toolboxSerial ?: "未选择"}", fontSize = 11.sp, color = Theme.Muted)
+                    if (commands.isEmpty()) {
+                        Text("此操作没有可显示的命令。", fontSize = 12.sp, color = Theme.Muted)
+                    } else {
+                        SelectionContainer {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                commands.forEachIndexed { index, command ->
+                                    Surface(shape = RoundedCornerShape(7.dp), color = Theme.CodeBlock) {
+                                        Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            if (commands.size > 1) {
+                                                Text("命令 ${index + 1}", fontSize = 10.sp, color = Theme.Muted)
+                                            }
+                                            Text(command, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp, color = Theme.MdInlineCode)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = canCopy,
+                    onClick = {
+                        java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                            java.awt.datatransfer.StringSelection(commands.joinToString("\n")),
+                            null,
+                        )
+                        store.showToast("命令已复制")
+                        commandPreview = null
+                    },
+                ) { Text("复制命令") }
+            },
+            dismissButton = {
+                TextButton(onClick = { commandPreview = null }) { Text("关闭") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -1071,6 +1133,7 @@ private fun PetActionGroups(
     actions: List<PetDebugTools.QuickAction>,
     enabled: Boolean,
     onAction: (PetDebugTools.QuickAction) -> Unit,
+    onShowCommand: (PetDebugTools.QuickAction) -> Unit,
 ) {
     actions.groupBy { it.group }.forEach { (group, groupActions) ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1081,11 +1144,17 @@ private fun PetActionGroups(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 groupActions.forEach { action ->
-                    OutlinedButton(
-                        onClick = { onAction(action) },
-                        enabled = enabled,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    ) { Text(action.label, fontSize = 11.sp) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(
+                            onClick = { onAction(action) },
+                            enabled = enabled,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        ) { Text(action.label, fontSize = 11.sp) }
+                        TextButton(
+                            onClick = { onShowCommand(action) },
+                            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 4.dp),
+                        ) { Text("命令", fontSize = 10.sp, color = Theme.Accent) }
+                    }
                 }
             }
         }

@@ -6,16 +6,14 @@ import kotlin.test.assertTrue
 
 class MdCodeInlineWidthTest {
     @Test
-    fun `long inline code chip reserves room for its final glyph`() {
+    fun `inline code chip avoids reserving a full extra glyph`() {
         val code = "ActivityThread.performLaunchActivity()"
         val fontSize = 14.sp
         val textWidthEstimate = code.length * 0.62f * fontSize.value
-        val horizontalPaddingAndCurrentSlack = 14f
+        val horizontalPaddingAndSmallSafetyMargin = 14f
+        val width = mdChipWidthSp(code, fontSize).value
 
-        assertTrue(
-            mdChipWidthSp(code, fontSize).value >=
-                textWidthEstimate + horizontalPaddingAndCurrentSlack + fontSize.value,
-            "Long code chips need at least one glyph of width beyond the current estimate",
-        )
+        assertTrue(width >= textWidthEstimate + horizontalPaddingAndSmallSafetyMargin)
+        assertTrue(width < textWidthEstimate + horizontalPaddingAndSmallSafetyMargin + fontSize.value)
     }
 }

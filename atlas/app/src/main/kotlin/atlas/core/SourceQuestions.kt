@@ -43,8 +43,9 @@ object SourceQuestions {
         val answerStartOffset: Int,
         val document: String,
         val status: QuestionStatus = QuestionStatus.DEFAULT,
+        val tags: List<String> = emptyList(),
     ) {
-        /** id 只由题号与题面决定：状态是展示元数据，改状态不该让题目换身份。 */
+        /** id 只由题号与题面决定：状态和标签是展示元数据，不改变题目身份。 */
         val id: String get() = "$sourcePath#Q$number:${Md.md5(question)}"
     }
 
@@ -55,12 +56,19 @@ object SourceQuestions {
         val endOffset: Int,
     )
 
-    data class Draft(val question: String, val answer: String, val number: Int? = null)
+    data class Draft(
+        val question: String,
+        val answer: String,
+        val number: Int? = null,
+        val status: QuestionStatus = QuestionStatus.DEFAULT,
+        val tags: List<String> = emptyList(),
+    )
 
     private data class Marker(
         val number: Int,
         val question: String,
         val status: QuestionStatus,
+        val tags: List<String>,
         val start: Int,
         val lineEnd: Int,
     )
@@ -74,6 +82,13 @@ object SourceQuestions {
     // （答案结束边界 = 下一个题目标记或下一个章标题，2026-09-28 用户截图复现）
     private val sectionPattern = Regex("^\\s*(?:#{1,6}\\s+)?第\\s*[0-9一二三四五六七八九十百]+\\s*[章节]\\s+(.+?)\\s*$")
     private val statusPrefixPattern = Regex("^\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*")
+    private val tagsPrefixPattern = Regex("^\\[tags:([^\\]\\r\\n]*)\\]\\s*", RegexOption.IGNORE_CASE)
+
+    /** 标签只存 Q 行元信息，过滤会破坏方括号标记的字符。 */
+    fun normalizeTags(tags: List<String>): List<String> = QuestionTags.normalize(tags)
+        .map { it.replace(Regex("[\\[\\]\\r\\n]"), "").trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
 
     fun isSupportedPath(path: String, supportedPaths: List<String> = DEFAULT_SUPPORTED_PATHS): Boolean {
         val normalized = path.replace('\\', '/').trimStart('/')
@@ -146,6 +161,7 @@ object SourceQuestions {
                 answerStartOffset = marker.lineEnd,
                 document = document,
                 status = marker.status,
+                tags = marker.tags,
             )
         }
     }
@@ -197,7 +213,9 @@ object SourceQuestions {
                 nextNumber - 1
             }
             usedNumbers += number
-            val block = "**Q$number: ${draft.question.trim()}**\n\n${draft.answer.trim()}"
+            val tagList = normalizeTags(draft.tags)
+            val tagPrefix = if (tagList.isEmpty()) "" else "[tags:${tagList.joinToString(",")}] "
+            val block = "**Q$number: ${draft.status.markerPrefix()}$tagPrefix${draft.question.trim()}**\n\n${draft.answer.trim()}"
             block
         }
         val prefix = if (document.isBlank()) "" else "\n\n"
@@ -321,22 +339,49 @@ object SourceQuestions {
             .firstNotNullOfOrNull { it.matchEntire(line) }
             ?: return null
         val number = match.groupValues[1].toIntOrNull() ?: return null
-        val raw = match.groupValues[2]
-        val prefix = statusPrefixPattern.find(raw)
-        val status = prefix?.let { QuestionStatus.fromKey(it.groupValues[1]) }
+        var question = match.groupValues[2]
+        var status = QuestionStatus.DEFAULT
+        var hasStatus = false
+        var tags = emptyList<String>()
+        var hasTags = false
+        repeat(2) {
+            val statusPrefix = if (!hasStatus) statusPrefixPattern.find(question) else null
+            val parsedStatus = statusPrefix?.let { QuestionStatus.fromKey(it.groupValues[1]) }
+            if (parsedStatus != null) {
+                status = parsedStatus
+                hasStatus = true
+                question = question.removeRange(statusPrefix.range)
+            } else {
+                val tagsPrefix = if (!hasTags) tagsPrefixPattern.find(question) else null
+                if (tagsPrefix != null) {
+                    tags = normalizeTags(listOf(tagsPrefix.groupValues[1]))
+                    hasTags = true
+                    question = question.removeRange(tagsPrefix.range)
+                }
+            }
+        }
         return Marker(
             number = number,
-            question = if (status != null) raw.removeRange(prefix!!.range) else raw,
-            status = status ?: QuestionStatus.DEFAULT,
+            question = question,
+            status = status,
+            tags = tags,
             start = offset,
             lineEnd = offset + line.length,
         )
     }
 
     /** 只替换当前 Q 块，文档其余内容保持原样。 */
-    fun replace(entry: Entry, question: String, answer: String, status: QuestionStatus = QuestionStatus.DEFAULT): String {
+    fun replace(
+        entry: Entry,
+        question: String,
+        answer: String,
+        status: QuestionStatus = entry.status,
+        tags: List<String> = entry.tags,
+    ): String {
         require(question.isNotBlank()) { "题目不能为空" }
-        val rendered = "**Q${entry.number}: ${status.markerPrefix()}${question.trim()}**\n\n${answer.trim()}"
+        val tagList = normalizeTags(tags)
+        val tagPrefix = if (tagList.isEmpty()) "" else "[tags:${tagList.joinToString(",")}] "
+        val rendered = "**Q${entry.number}: ${status.markerPrefix()}$tagPrefix${question.trim()}**\n\n${answer.trim()}"
         val suffix = if (entry.endOffset < entry.document.length) "\n\n" else ""
         return entry.document.substring(0, entry.startOffset) + rendered + suffix +
             entry.document.substring(entry.endOffset)

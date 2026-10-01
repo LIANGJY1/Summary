@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -205,6 +206,8 @@ object Theme {
     val MdH3: Color get() = palette.value.md.h3
     val MdBold: Color get() = palette.value.md.bold
     val MdLink: Color get() = palette.value.md.link
+    /** 题库标签：从当前主题的次要文字向链接色轻微偏移，保留分类感而不抢题面。 */
+    val Tag: Color get() = lerp(Muted, MdLink, 0.58f)
     val MdQuote: Color get() = palette.value.md.quote
     val MdInlineCode: Color get() = palette.value.md.inlineCode
     val MdInlineCodeBg: Color get() = palette.value.md.inlineCodeBg
@@ -412,7 +415,7 @@ private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)
 private val markdownTaskPattern = Regex("^\\s*[-*] \\[([ xX])\\] (.+)$")
 
 // 行内代码芯片宽度估算：芯片字取正文 0.92 倍，等宽步进 ≈0.62em（DejaVu 0.602/JBMono 0.60），
-// CJK 回退字形 ≈1.1em，加 12sp 水平内边距、2sp 余量和一个 ASCII 字形宽的安全量，避免长代码末尾被裁切。
+// CJK 回退字形 ≈1.1em，加 12sp 水平内边距和 2sp 余量；不再额外预留一个字符，避免短代码两侧留白过宽。
 private const val MD_CHIP_ASCII_EM = 0.62f
 private const val MD_CHIP_CJK_EM = 1.1f
 
@@ -421,7 +424,7 @@ private val MD_CHIP_OPTICAL_DROP = 2.dp
 
 internal fun mdChipWidthSp(code: String, chipFontSize: TextUnit): TextUnit =
     (code.sumOf { c -> (if (c.code > 0x2E80) MD_CHIP_CJK_EM else MD_CHIP_ASCII_EM).toDouble() }.toFloat()
-        * chipFontSize.value + 14f + chipFontSize.value).sp
+        * chipFontSize.value + 14f).sp
 
 /** 行内代码芯片的 inlineContent 表：圆角 Surface 药丸，贴身包裹代码文本 */
 @Composable
@@ -499,7 +502,9 @@ private fun colorIfDirty(annotated: AnnotatedString, lineIndex: Int, dirtyLines:
  */
 @Composable
 fun MarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) =
-    ReaderMarkdownText(md, modifier, dirtyLines)
+    SelectionContainer {
+        ReaderMarkdownText(md, modifier, dirtyLines)
+    }
 
 @Composable
 private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) {
@@ -537,21 +542,19 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         ) {
                             Column(Modifier.fillMaxWidth()) {
                                 if (lang.isNotBlank()) CodeLanguageLabel(lang)
-                                SelectionContainer {
-                                    Column(
-                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                            .padding(horizontal = 16.dp, vertical = 15.dp),
-                                    ) {
-                                        buf.forEach { code ->
-                                            Text(
-                                                code,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontSize = 13.sp,
-                                                lineHeight = 20.sp,
-                                                softWrap = false,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                        }
+                                Column(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                                ) {
+                                    buf.forEach { code ->
+                                        Text(
+                                            code,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp,
+                                            lineHeight = 20.sp,
+                                            softWrap = false,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
                                     }
                                 }
                             }
@@ -661,16 +664,18 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
 fun LazyMarkdownText(md: String, modifier: Modifier = Modifier) {
     val ui = atlasUiTokens()
     val blocks = remember(md) { markdownBlocks(md) }
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        itemsIndexed(blocks, key = { index, block -> "$index:${block.hashCode()}" }) { _, block ->
-            Box(Modifier.fillMaxWidth()) {
-                ReaderMarkdownText(
-                    block,
-                    Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
-                )
+    SelectionContainer {
+        LazyColumn(
+            modifier = modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            itemsIndexed(blocks, key = { index, block -> "$index:${block.hashCode()}" }) { _, block ->
+                Box(Modifier.fillMaxWidth()) {
+                    ReaderMarkdownText(
+                        block,
+                        Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+                    )
+                }
             }
         }
     }

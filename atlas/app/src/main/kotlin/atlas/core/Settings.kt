@@ -56,6 +56,8 @@ data class AppSettings(
     /** 用户自建主题，逐条 `v2|名称|浅色20项|深色20项`，多条之间用 `;` 分隔。 */
     val customThemes: List<String> = emptyList(),
     val fontScale: Float = 1f,
+    /** 同源题库卡片上 #标签名 与添加入口的字号（sp）。 */
+    val questionTagFontSize: Int = 11,
     /** 题库答案区域单击时是否打开编辑弹窗；关闭后仍可划词，编辑按钮不受影响。 */
     val clickAnswerToEdit: Boolean = true,
     /** 屏幕录制（tools/screen_recorder）参数：保存目录（空=默认 ~/Videos/Screencasts）、帧率、码率 kbps。 */
@@ -129,6 +131,7 @@ class SettingsStore(private val file: File) {
             customThemes = (p.getProperty("customThemes") ?: "").split(";")
                 .map { it.trim() }.filter { it.isNotEmpty() },
             fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
+            questionTagFontSize = p.getProperty("questionTagFontSize")?.toIntOrNull()?.coerceIn(10, 18) ?: 11,
             clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
             recordingSaveDir = p.getProperty("recordingSaveDir") ?: "",
             recordingFps = p.getProperty("recordingFps")?.toIntOrNull()?.coerceIn(5, 60) ?: 15,
@@ -182,6 +185,7 @@ class SettingsStore(private val file: File) {
         p.setProperty("themeName", s.themeName)
         p.setProperty("customThemes", s.customThemes.joinToString(";"))
         p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
+        p.setProperty("questionTagFontSize", s.questionTagFontSize.coerceIn(10, 18).toString())
         p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
         p.setProperty("recordingSaveDir", s.recordingSaveDir)
         p.setProperty("recordingFps", s.recordingFps.toString())

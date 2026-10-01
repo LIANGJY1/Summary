@@ -31,6 +31,10 @@
 
 - [system/](06-system/) — AOSP 性能优化（构建/AutoFDO/Profile 编译/启动耗时/Rust）、OEM 与设备差异（SoC、游戏模式、Power HAL、AAOS）、CarService 服务速览（媒体源/蓝牙/遥测/诊断/投影）
 
+## 构建与集成
+
+- [18-complie/](18-complie/) — Android/AAOS 产品配置与应用裁剪、Soong C/C++/Java 模块、AAOS 13 模拟器内核编译，以及 Linux 字符设备驱动与验证
+
 ## 应用实践（源书第五部分）
 
 - [app-practice/](09-app-practice/) — 稳定性治理（度量崩溃/资源泄漏/线程 IPC/Native 与 SDK）、启动优化、渲染实战（View 与 Compose/图像显示/媒体混合栈）、内存实践、I/O 与存储、网络与连接、功耗优化、CPU 与体积、可观测性（体系治理/线上诊断）

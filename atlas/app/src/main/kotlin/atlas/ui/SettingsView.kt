@@ -166,6 +166,24 @@ private fun SettingsAppearance(store: AppStore, onOpenColors: () -> Unit, fontSc
                 Text("${(fontScale * 100).roundToInt()}%", Modifier.width(48.dp), color = Theme.Accent, fontWeight = FontWeight.SemiBold)
             }
         }
+        SettingsGroup("题目标签字号", "只调整题库卡片的标签，10–18 sp") {
+            val tagSize = store.settings.questionTagFontSize
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Slider(
+                    value = tagSize.toFloat(),
+                    onValueChange = { store.settings = store.settings.copy(questionTagFontSize = it.roundToInt().coerceIn(10, 18)) },
+                    onValueChangeFinished = { store.saveSettings() },
+                    valueRange = 10f..18f,
+                    steps = 7,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("$tagSize sp", Modifier.width(54.dp), color = Theme.Accent, fontWeight = FontWeight.SemiBold)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("预览", fontSize = 11.sp, color = Theme.Muted)
+                Text("#init  #SELinux", fontSize = tagSize.sp, color = Theme.Tag)
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = clickAnswerToEdit, onCheckedChange = { setClickAnswerToEdit(it); store.settings = store.settings.copy(clickAnswerToEdit = it); store.saveSettings() })
             Text("点击答案内容打开编辑弹窗")
