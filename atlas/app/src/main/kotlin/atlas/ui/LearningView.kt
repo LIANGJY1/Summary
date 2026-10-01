@@ -429,14 +429,16 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val listState = rememberLazyListState()
     val rowSpacingPx = with(LocalDensity.current) { 6.dp.toPx() }
     var listViewportHeight by remember { mutableStateOf(0f) }
-    val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else store.sourceQuestions
-    val visible = if (query.isBlank()) store.sourceQuestions else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
+    // AppStore 在原地 clear/addAll 题目列表；取不可变快照作为缓存与手势 key，确保换文档后失效。
+    val sourceQuestionsSnapshot = store.sourceQuestions.toList()
+    val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else sourceQuestionsSnapshot
+    val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { it.question.contains(query.trim(), ignoreCase = true) }
     // layoutInfo 的下标是 documentItems 的下标，其中夹着章节行，与题目下标并不一致；
     // 一律经 key 换算，避免「非排序模式下多出章节行」导致位次整体错位。
-    val questionIndexByKey = remember(store.sourceQuestions) {
-        store.sourceQuestions.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
+    val questionIndexByKey = remember(sourceQuestionsSnapshot) {
+        sourceQuestionsSnapshot.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
     }
-    val canReorderList = reorderMode && query.isBlank() && visible.size == store.sourceQuestions.size
+    val canReorderList = reorderMode && query.isBlank() && visible.size == sourceQuestionsSnapshot.size
     val dragging = reorderMode && draggingKey != null && query.isBlank()
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
@@ -487,7 +489,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
 
     fun resolveDragTarget() {
         val key = draggingKey ?: return
-        val base = store.sourceQuestions
+        val base = sourceQuestionsSnapshot
         val from = questionIndexByKey[key] ?: return
         val current = dragTargetIndex ?: from
         val target = QuestionReorder.resolveTargetIndex(
@@ -764,7 +766,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         LazyColumn(
             Modifier.fillMaxSize()
                 .onGloballyPositioned { listViewportHeight = it.size.height.toFloat() }
-                .pointerInput(reorderMode, query, store.sourceQuestions) {
+                .pointerInput(reorderMode, query, sourceQuestionsSnapshot) {
                     if (!canReorderList) return@pointerInput
                     detectDragGestures(
                         onDragStart = { pos ->
@@ -786,7 +788,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             if (key != null && target != null) {
                                 val from = questionIndexByKey[key]
                                 if (from != null && target != from) {
-                                    store.reorderSourceQuestions(store.sourceQuestions.toList(), from, target)
+                                    store.reorderSourceQuestions(sourceQuestionsSnapshot, from, target)
                                 }
                             }
                             draggingKey = null
@@ -844,6 +846,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isExpanded = entryKey in expanded
                 val isDragging = draggingKey == entryKey
+                val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
                 // 内容相对 git HEAD 有未提交改动：橙色边框 + Q 标签 + 行内着色（比对异步完成，加载中不标色）
                 val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
                 val gitDirty = gitDiff?.changed == true
@@ -913,6 +916,13 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
                             MaterialTheme.shapes.small,
                         )
+                        // 内容列从 12dp 顶部内边距之后才开始；让这段卡片留白也能展开题目。
+                        .singleClickWithoutConsumingSelection(
+                            accept = { !reorderMode && it.y < cardTopTapHeightPx },
+                        ) {
+                            locateSource(entry.sourcePath)
+                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                        }
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     // 整卡内容列（题干+答案+操作行）共用 1040 阅读度量并在卡面内居中：
@@ -1263,11 +1273,15 @@ private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): A
 }
 
 /** 单击打开编辑，拖动时把鼠标事件留给 SelectionContainer 做划词。 */
-private fun Modifier.singleClickWithoutConsumingSelection(onClick: () -> Unit): Modifier =
+private fun Modifier.singleClickWithoutConsumingSelection(
+    accept: (Offset) -> Boolean = { true },
+    onClick: () -> Unit,
+): Modifier =
     pointerInput(onClick) {
         awaitPointerEventScope {
             var pressed = false
             var moved = false
+            var acceptedPress = false
             var downX = 0f
             var downY = 0f
             while (true) {
@@ -1277,12 +1291,13 @@ private fun Modifier.singleClickWithoutConsumingSelection(onClick: () -> Unit): 
                     PointerEventType.Press -> {
                         pressed = true
                         moved = false
+                        acceptedPress = accept(change.position)
                         downX = change.position.x
                         downY = change.position.y
                     }
                     PointerEventType.Move -> if (pressed && ((change.position.x - downX) * (change.position.x - downX) + (change.position.y - downY) * (change.position.y - downY) > 36f)) moved = true
                     PointerEventType.Release -> {
-                        if (pressed && !moved) onClick()
+                        if (pressed && acceptedPress && !moved) onClick()
                         pressed = false
                     }
                 }
@@ -1600,6 +1615,8 @@ private fun MoveSourceQuestionDialog(
     onDismiss: () -> Unit,
 ) {
     var selected by remember { mutableStateOf("") }
+    var targetQuery by remember(entry.id) { mutableStateOf("") }
+    val filteredTargetCandidates = targetCandidates.filter { it.contains(targetQuery.trim(), ignoreCase = true) }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.width(680.dp),
@@ -1624,11 +1641,26 @@ private fun MoveSourceQuestionDialog(
                 Text(entry.question, fontSize = 13.sp)
                 Text("当前文档", fontWeight = FontWeight.SemiBold)
                 Text(entry.sourcePath, fontSize = 12.sp, color = Theme.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("目标文档", fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("目标文档", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = targetQuery,
+                        onValueChange = { targetQuery = it },
+                        modifier = Modifier.width(280.dp),
+                        placeholder = { Text("搜索目标文档…") },
+                        singleLine = true,
+                    )
+                }
+                if (selected.isNotBlank() && selected !in filteredTargetCandidates) {
+                    Text("已选目标：$selected", fontSize = 11.sp, color = Theme.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 if (targetCandidates.isEmpty()) {
                     Text("没有其他纳入题库映射的文档可作目标。", fontSize = 12.sp, color = Theme.WarnOrange)
+                } else if (filteredTargetCandidates.isEmpty()) {
+                    Text("没有匹配的目标文档。", fontSize = 12.sp, color = Theme.Muted)
                 }
-                targetCandidates.forEach { path ->
+                filteredTargetCandidates.forEach { path ->
                     Row(
                         Modifier.fillMaxWidth()
                             .clickable { selected = path }

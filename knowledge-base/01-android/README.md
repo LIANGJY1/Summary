@@ -176,3 +176,7 @@
 ## 项目架构设计
 
 - [16-project-architecture/](16-project-architecture/) — 特定项目、特定场景的架构方案与问题分析；结论以案例源码为边界，不概括为通用 Android 规则：[Launcher 项目架构案例：全局车辆服务与首页 Activity 的协作](16-project-architecture/01-应用进程启动与全局服务生命周期.md)（以一个问题完整串联 VehicleService 启动链、Activity 时序、车辆 ready 边界与 MainService 生命周期宿主的项目取舍）
+
+## 车载应用专题
+
+- [17-car-app/](17-car-app/) — AAOS 车载应用专题；[Launcher 启动流程](17-car-app/01-Launcher.md)覆盖 CarLauncher 与手机 Launcher3 的职责差异、车载应用发现、媒体源入口、Activity 启动链及任务/进程复用。

@@ -12,23 +12,47 @@
 
 排查边界：公共内核源码标签（如 ACK `android17-6.18-2026-06_r6`）只能核对平台通用机制；具体设备的驱动、配置与调度策略要看设备自己的内核提交版本与 fragment，不能拿公共内核源码当设备内核源码用。
 
-**Q2: 怎么确认一台设备的内核版本、KMI 和功能开关？**
+
+
+**Q2: 内核有“进程”这个概念吗？内核为什么能运行？**
+
+进程是内核管理的对象，不是内核存在的前提。 在 Linux 里，所谓进程，本质是内核里的一块数据结构（task_struct：记录 PID、地址空间、打开的文件、调度信息……）加上一份地址空间。内核创建进程，就是在内存里建这样一个结构；销毁进程，就是释放它。
+
+那内核自己是什么？它不是任何进程，它就是被 bootloader 装进内存的一段特权代码 + 它管理的数据结构的总和。 CPU 在特权模式（ARM 上的 EL1/EL2）下直接执行它的指令——不需要“进程”这个载体。开机时连调度器都没有，谈不上“谁在运行内核”：就是 CPU 一条条顺序执行内核指令。
+
+初始化顺序：
+
+1. Bootloader 把内核镜像载入内存，把 CPU 的程序计数器（PC）设到内核入口，跳过去；
+2. 内核入口是一小段汇编：建立临时页表、打开 MMU（虚拟内存）、清空 BSS 段、设好栈——把自己变成"可以跑 C 代码"的环境；
+3. 进入 C 函数 `start_kernel()`：初始化内存管理、调度器、中断、驱动模型……每初始化完一个子系统，就多一块可用能力；
+4. 初始化尾声创建最早的两个特殊内核线程：kthreadd（PID 2，之后所有内核线程的祖先）和 kernel_init（PID 1）；
+5. 调度器接管，这些线程才开始被调度运行。
+
+内核线程与用户进程的边界：内核线程只有内核态身份（task_struct 里的地址空间指针为空），永不回落用户态，只执行内核代码（ksoftirqd 软中断处理、kworker 工作队列）——"任务"这个概念在内核里先于"用户进程"存在。
+
+
+**Q3: 怎么确认一台设备的内核版本、KMI 和功能开关？**
 
 1. **版本与 KMI**：`uname -r` 与 `cat /proc/version`——GKI 设备的 KMI 直接体现在版本串里（形如 `5.15.78-android13-8-g…`，即"内核版本-android 平台发布"）；
 2. **功能开关**：启用 CONFIG_IKCONFIG_PROC 的内核把完整 config 挂在 `/proc/config.gz`——`su 0 zcat /proc/config.gz | grep CONFIG_PSI=` 即可验证某功能是否编入；无该节点时到对应 GKI release 页下载 config 比对；
 3. **排查顺序**：确认"某机制是否存在"先看 config、再看运行时节点（如 `/dev/binderfs`、`/proc/pressure`）、最后看厂商修改（见 Q3）。
 
-**Q3: 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
+
+
+**Q4: 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
 
 vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用 ftrace 的可用事件列表验证：`su 0 cat /sys/kernel/tracing/available_events | grep android_vh`，再向 `events/vendor_hooks/<名>/enable` 写 1 即可观测。
 
 1. **版本纪律**：钩子集合随 KMI 版本变化（不同内核分支的 include/trace/hooks/ 内容不同，如 binder 相关钩子只在部分分支存在）——查钩子必须按设备 KMI 对应的内核分支，不能用主线树想当然；
 2. **用途**：OEM 的调度/电源策略经这些钩子挂回调；应用与框架工程师可用它们在 ftrace/perfetto 里观测内核侧事件（厂商调优的可见部分，呼应 Q1 的"厂商改什么"）。
 
-**Q4: PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
+
+
+**Q5: PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
 
 每个 `/proc/pressure/{cpu,memory,io}` 文件两行：`some` 与 `full`，各带 avg10/avg60/avg300（窗口内停顿时间占比）与 total（累计微秒）。`some` = 至少部分任务处于停顿的时间占比；`full` = 所有非空闲任务同时停顿的占比（CPU 的 full 在系统级无意义）。
 
 1. **判读**：memory 的 full avg60 持续大于 0 = 全系统级内存停顿明显（内存压力实锤）；some 高而 full 为 0 是局部任务受阻；
 2. **dmesg 过滤**：`su 0 dmesg -w | grep -iE 'binder|oom|lowmemorykiller|psi'`；user 版默认限制读 dmesg（dmesg_restrict），要用 userdebug/root；`logcat -b kernel` 依赖 logd 配置、并非所有设备可用；
 3. **衔接**：lmkd 消费 PSI 的机制见 [../05-memory/01-内存管理与压力治理.md](../05-memory/01-内存管理与压力治理.md)；调度压力与温控见 [../08-cpu-power/01-调度与功耗框架.md](../08-cpu-power/01-调度与功耗框架.md)。
+
