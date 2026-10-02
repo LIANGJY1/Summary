@@ -2,7 +2,7 @@
 
 > Android 13/AAOS 中新增 C/C++ 与 Java 可执行模块和库的学习资料，覆盖源码构建、预编译导入、依赖、分区安装及设备侧验证。代码片段说明模块类型与关键属性；模块名、路径和目标分区应按实际产品调整。维护者：session-to-knowledge。
 
-**Q1: AAOS 构建中的 Soong 和 Soong 模块分别是什么？**
+**Q1: [tags:Soong] AAOS 构建中的 Soong 和 Soong 模块分别是什么？**
 
 **Soong 是 Android 的构建系统之一；Soong 模块是它构建图中的基本单元。** `Android.bp` 声明模块，Soong 读取声明并解析依赖与构建变体，生成 Ninja 构建规则；Ninja 再执行具体的编译、链接等命令。
 
@@ -14,7 +14,28 @@
 
 模块不一定对应一个最终文件：`cc_defaults` 用于复用构建属性，`filegroup` 用于组织文件；而能产出文件的模块也不一定自动进入产品镜像，是否打包由产品配置决定。
 
-**Q2: AAOS 项目什么时候需要新增或修改 Android.bp，模块声明与产品打包如何区分？**
+**Q2: AAOS 中预编译模块与可执行模块分别有哪些应用场景？**
+
+“预编译”描述产物来源：Soong 接收已有文件，不编译其源码；“可执行”描述产物用途：系统能把它作为程序启动。两者可以同时成立：`cc_binary` 从源码构建可执行文件，`cc_prebuilt_binary` 导入已有可执行文件；预编译的 `.so` 则是库，不能直接启动。
+
+预编译导入常见于以下场景：
+
+1. **本机二进制**：导入供应商或第三方 ELF 程序、共享库 `.so`、静态库 `.a`，对应 `cc_prebuilt_binary`、`cc_prebuilt_library_shared`、`cc_prebuilt_library_static`。ELF 必须匹配设备 ABI、Android 运行时和依赖库。
+2. **Java 与配置文件**：已有 JAR 库用 `java_import`；配置文件可用 `prebuilt_etc` 安装。它们是预编译/预置输入，但不一定是程序。
+
+可执行程序常见于以下场景：
+
+1. **设备侧程序**：命令行工具、诊断程序和 `init` 拉起的系统服务，使用 `cc_binary` 或 `cc_prebuilt_binary`；是否进入镜像仍由产品配置决定。
+2. **主机工具与测试**：代码生成、校验工具运行在构建主机；`cc_test`、`cc_benchmark` 供测试或基准测试运行，不是普通产品功能程序。
+3. **Java 程序与应用**：Java 主类可打入可安装 JAR，再由 `app_process` 启动；`android_app` 生成的 APK 由 Android 应用框架启动，不是本机 ELF 可执行文件。
+
+Soong 对预编译模块仍处理依赖、目标变体和安装；只是不从该模块的源码重新编译二进制内容。
+
+
+
+
+
+**Q3: AAOS 项目什么时候需要新增或修改 Android.bp，模块声明与产品打包如何区分？**
 
 当需要把源码或预编译文件纳入构建，或改变已有模块的输入、依赖、编译属性、变体和安装位置时，才新增或修改 `Android.bp`。若模块已经定义，只是要让产品包含它，应修改产品配置中的模块清单，而不是重复定义模块。
 
@@ -44,7 +65,337 @@ cc_binary {
 
 `shared_libs` 中写的是 Soong 模块名，不是库文件路径；它既声明链接依赖，也让 Soong 将库纳入构建图。Java 模块使用 `java_library`、`android_app` 等类型，具体可用属性取决于模块类型和 Android 分支。写完后可用 `m vehicle_diag` 单独构建目标；需要把它安装进设备镜像时，还要确认产品配置包含该模块，并核对安装分区属性。
 
-**Q3: [learning] [tags:Android.bp] system/core/init/Android.bp 中的 defaults、soong_config_module_type 和构建变量如何改变模块配置？**
+
+
+
+
+**Q4: 以 NsrVehicleService/Android.bp 为例，如何逐项解读 Soong 属性、依赖与 APK 安装形态？**
+
+这个文件声明一个系统应用和它的支撑模块：1 个 `android_app` 主体、4 个 `android_library` 源码库、3 个预编译导入和 1 个权限白名单。解读主线：第 1～4 项逐组解析应用块的属性，看它如何变成可安装、可启动的 APK；第 5～7 项解析支撑模块如何接入构建图；第 8 项是声明之外必查的事；第 9 项回答什么时候选 `android_app`。每个属性按“提供什么输入、当前值什么效果、省略后回退到什么默认”三问解读；仅凭模块声明不能断言 APK 已被产品打包。
+
+1. **完整声明与源码输入：**`NsrVehicleService` 用 `android_app` 声明应用模块，完整块如下（属性名称与顺序与源文件一致）；本项解析模块类型与源码输入属性，其余属性在第 2～4 项分组解析：
+
+    ```bp
+    android_app {
+        name: "NsrVehicleService",
+        srcs: [
+            "app/src/main/java/**/*.java",
+            "vehiclebase/src/main/java/**/*.java",
+            "vehiclebase/src/main/aidl/**/*.aidl",
+        ],
+        aidl: {
+            local_include_dirs: [
+                "vehiclebase/src/main/aidl",
+            ],
+            include_dirs: [
+                "frameworks/base/media/java",
+            ],
+        },
+        resource_dirs: ["app/src/main/res"],
+        manifest: "app/src/main/AndroidManifest.xml",
+        package_name: "com.yadea.apf.vehicleservice",
+        platform_apis: true,
+        certificate: "platform",
+        privileged: true,
+        system_ext_specific: true,
+        optimize: {
+            enabled: false,
+        },
+        dex_preopt: {
+            enabled: false,
+        },
+        product_variables: {
+            pdk: {
+                enabled: false,
+            },
+        },
+        libs : ["android.car"],
+        static_libs: [
+            "yadea_anwsdkservice",
+            "IviCommSdk",
+            "TboxSDK",
+            "androidx.annotation_annotation",
+            "androidx.core_core",
+        ],
+        jni_libs: [
+            "libYDBleHandshake",
+        ],
+        use_embedded_native_libs: true,
+        required: [
+            "privapp_whitelist_com.yadea.apf.vehicleservice",
+        ],
+    }
+    ```
+
+    1. `android_app` 是应用模块类型，产物是可安装的 APK：`srcs` 编译为 DEX，`resource_dirs` 的资源经 AAPT2 打包，与 `manifest` 合并出应用身份与组件声明，按 `certificate` 签名，按分区属性安装。块内其余属性都是这条链路的输入；同样源码改用 `android_library` 只产出供依赖编译的库，不走 APK 链路。
+    2. `name: "NsrVehicleService"`：Soong 模块名，依赖引用与产品配置都用它。必需属性，省略则目标无法注册；它决定默认产物文件名，但不等于 APK 的应用包名。
+    3. `srcs`：参与编译的源码，相对 `Android.bp` 所在目录解析：
+       1. `app/src/main/java/**/*.java` 纳入应用自身的 Java 源码。
+       2. `vehiclebase/src/main/java/**/*.java` 把 `vehiclebase` 的 Java 源码也直接编入本 APK。
+       3. `vehiclebase/src/main/aidl/**/*.aidl` 把该目录 AIDL 纳入输入，由 Soong 生成接口代码。
+       4. `**` 表示递归匹配子目录。省略某一项后，对应文件不会因 `aidl` 目录配置而自动编译，缺类型时编译报错。
+    4. `aidl.local_include_dirs: ["vehiclebase/src/main/aidl"]`：AIDL `import` 的解析路径，只管“到哪里找”，纳入编译仍由 `srcs` 决定。省略后被导入文件不在其他可见路径时，AIDL 生成阶段报找不到导入。
+    5. `aidl.include_dirs: ["frameworks/base/media/java"]`：平台媒体 AIDL 的搜索根，是源码树路径，不等于建立模块依赖。省略且这些接口无其他可见途径时导入失败。
+    6. `resource_dirs: ["app/src/main/res"]`：应用资源目录。默认是模块目录下的 `res`，此处为非默认路径所以显式给出；省略则回退默认目录，缺资源时引用资源失败。
+    7. `manifest: "app/src/main/AndroidManifest.xml"`：应用 Manifest，默认位置是模块目录，显式给出是为了选择这里的非默认文件。缺失或选错导致构建失败或应用声明错误。
+
+    `aidl` 两个目录只解决“到哪里找被导入的 AIDL”，哪些 AIDL 参与编译由 `srcs` 决定。
+
+2. **编译依赖与 native 库：**完整声明末段的 `libs`、`static_libs`、`jni_libs` 与 `use_embedded_native_libs` 把依赖库接进 APK：
+
+    1. `libs: ["android.car"]`：把 Car API 加入编译 classpath，供编译器检查引用；平台库不复制进 APK，运行时实现由系统提供。省略且无其他依赖导出这些符号时编译失败。
+    2. `static_libs`：静态并入 APK 的库依赖。源码 `import` 不会自动建立依赖，省略后缺类型或资源时编译失败，库的资源与 Manifest 合并也不会发生：
+       1. `yadea_anwsdkservice`：项目服务库源码模块。
+       2. `IviCommSdk`：下文声明的 AAR 导入模块。
+       3. `TboxSDK`：下文声明的 JAR 导入模块。
+       4. `androidx.annotation_annotation`：AndroidX 注解库。
+       5. `androidx.core_core`：AndroidX Core 库。
+    3. `jni_libs: ["libYDBleHandshake"]`：APK 依赖的 JNI 库，对应下文的预编译 `.so` 模块。省略后不会因 `System.loadLibrary` 自动打包，运行到加载处抛 `UnsatisfiedLinkError`。
+    4. `use_embedded_native_libs: true`：native 库以未压缩形式嵌入 APK，并设 Manifest 的 `android:extractNativeLibs="false"`，运行时直接从 APK 加载。AAOS 13 普通应用默认 `false`（库提取到 APK 外），显式 `true` 同时改变打包布局与加载路径。
+
+3. **包名、API、签名与分区：**声明中部的五个属性决定 APK 身份与安装形态：
+
+    1. `package_name: "com.yadea.apf.vehicleservice"`：固定 APK 包名，须与权限白名单等按包名匹配的配置一致。省略沿用 Manifest 包名，两者不一致时白名单匹配不到应用。
+    2. `platform_apis: true`：允许针对平台内部 API 编译。本块未设 `sdk_version`，此分支下必须显式 `true` 消除 API 模式歧义，否则配置报错；改走 SDK API 时应设相符的 `sdk_version`。
+    3. `certificate: "platform"`：平台证书签名，是签名级权限与系统组件信任的基础。省略时用产品默认证书，可能安装成功但平台权限校验失败，且须在产品签名策略允许范围内。
+    4. `privileged: true`：归入特权应用目录，有资格获得特权权限；它不绕过白名单，省略即无特权身份。
+    5. `system_ext_specific: true`：安装到 `system_ext` 分区。省略走默认分区，与白名单分区不一致时权限配置不生效。
+
+    四者各管一事：`privileged` 管权限资格，平台证书管签名身份，白名单 XML 管授权配置，`system_ext_specific` 管分区位置。
+
+4. **构建开关与安装关联：**其余四个属性调整构建行为或挂载关联模块：
+
+    1. `optimize.enabled: false`：关闭 R8 优化、压缩与混淆（具体流程随分支配置）。普通应用默认启用优化，显式关闭保留未优化构建；动机须查项目提交说明，不能凭值反推。
+    2. `dex_preopt.enabled: false`：关闭镜像构建阶段的 DEX 预优化（默认启用），镜像不含预优化产物，运行时转解释或 JIT。它与 R8 优化是两个独立开关。
+    3. `product_variables.pdk.enabled: false`：产品变量 `pdk` 为真时把模块 `enabled` 覆盖为 `false`，即从 PDK 构建排除；省略则模块照常参与。
+    4. `required: ["privapp_whitelist_com.yadea.apf.vehicleservice"]`：把白名单 XML 模块挂进本应用的构建/安装闭包，名字须与下文 `prebuilt_etc` 的 `name` 完全一致。`required` 不等于产品已选择本应用。
+
+5. **支撑库模块：**`android_library` 块按子模块拆分可复用实现。声明库只建立构建目标：是否被 APK 依赖取决于消费方的 `static_libs`，是否进入镜像取决于产品选择。
+
+    ```bp
+    android_library {
+        name: "yadea_vehiclesdk",
+        manifest: "vehiclesdk/src/main/AndroidManifest.xml",
+        srcs: ["vehiclesdk/src/main/java/**/*.java"],
+        static_libs: ["yadea_vehiclebase"],
+        optimize: {
+            enabled: false,
+        },
+    }
+
+    android_library {
+        name: "yadea_vehiclebase",
+        manifest: "vehiclebase/src/main/AndroidManifest.xml",
+        srcs: [
+            "vehiclebase/src/main/aidl/**/*.aidl",
+            "vehiclebase/src/main/java/**/*.java",
+        ],
+        aidl: {
+            local_include_dirs: ["vehiclebase/src/main/aidl"],
+        },
+        platform_apis: true,
+        libs: ["android.car"],
+        optimize: {
+            enabled: false,
+        },
+    }
+
+    android_library {
+        name: "yadea_nsrspeechsdk",
+        manifest: "nsrspeechsdk/src/main/AndroidManifest.xml",
+        srcs: ["nsrspeechsdk/src/main/java/**/*.java"],
+        static_libs: [
+            "yadea_vehiclesdk",
+            "yadea_anwsdkservice",
+            "IviCommSdk",
+        ],
+        libs: ["android.car"],
+        platform_apis: true,
+        optimize: {
+            enabled: false,
+        },
+    }
+
+    android_library {
+        name: "yadea_anwsdkservice",
+        manifest: "anwsdkservice/src/main/AndroidManifest.xml",
+        srcs: [
+            "anwsdkservice/src/main/java/**/*.java",
+            "anwsdkservice/src/main/aidl/**/*.aidl",
+        ],
+        aidl: {
+            local_include_dirs: ["anwsdkservice/src/main/aidl"],
+        },
+        platform_apis: true,
+        optimize: {
+            enabled: false,
+        },
+    }
+    ```
+
+    1. 每个库携带本子模块的 `manifest` 与 `srcs`，路径都在非默认的 `*/src/main/` 下所以显式给出；`srcs` 只纳入本库源码，glob 语义与应用块相同。
+    2. 依赖链：`yadea_nsrspeechsdk` 静态依赖 `yadea_vehiclesdk`、`yadea_anwsdkservice` 与 `IviCommSdk`，`yadea_vehiclesdk` 再依赖 `yadea_vehiclebase`。省略即断开对应传递关系。
+    3. `yadea_vehiclebase` 与 `yadea_anwsdkservice` 的 `aidl.local_include_dirs` 指向各自 AIDL 根，作用同应用块。
+    4. `platform_apis: true` 与 `libs: ["android.car"]` 的含义同应用块：按平台 API 编译、Car API 进 classpath。
+    5. 四处 `optimize.enabled: false` 均关闭默认启用的 R8 优化。
+
+6. **预编译导入：**`android_library_import`、`java_import` 与 `cc_prebuilt_library_shared` 把现成 AAR、JAR 和 `.so` 接入构建图，不从源码重编：
+
+    ```bp
+    android_library_import {
+        name: "IviCommSdk",
+        aars: ["app/libs/IviCommSdk.aar"],
+    }
+
+    java_import {
+        name: "TboxSDK",
+        jars: ["app/libs/TboxSDK.jar"],
+    }
+
+    cc_prebuilt_library_shared {
+        name: "libYDBleHandshake",
+        target: {
+            android_arm64: {
+                srcs: ["app/src/main/jniLibs/arm64-v8a/libYDBleHandshake.so"],
+            },
+        },
+        system_ext_specific: true,
+        check_elf_files: false,
+    }
+    ```
+
+    1. `IviCommSdk` 的 `aars` 与 `TboxSDK` 的 `jars` 指向库文件，依赖方经 `static_libs` 引用模块名即可拿到其中的类。省略文件列表后依赖方编译失败，AAR 的资源与 Manifest 也不再参与合并。
+    2. `libYDBleHandshake` 的 `target.android_arm64` 把 `srcs` 的 `.so` 限定到 ARM64 目标。未提供其他架构变体，就不能认为其他架构可构建。
+    3. `system_ext_specific: true`：把 `.so` 安排到 `system_ext` 分区，与应用分区对应，保证动态链接器可见。
+    4. `check_elf_files: false`：关闭预编译 ELF 校验，通常用于缺构建依赖信息的库；代价是放弃 ABI、依赖与符号版本一致性检查。
+
+7. **特权权限白名单：**应用 `required` 引用的 XML 安装模块：
+
+    ```bp
+    required: ["privapp_whitelist_com.yadea.apf.vehicleservice"],
+
+    prebuilt_etc {
+        name: "privapp_whitelist_com.yadea.apf.vehicleservice",
+        system_ext_specific: true,
+        src: "app/privapp-permissions-com.yadea.apf.vehicleservice.xml",
+        sub_dir: "permissions",
+        filename_from_src: true,
+    }
+    ```
+
+    1. `prebuilt_etc` 把现成 XML 作为分区 `etc` 下的文件安装，不编译内容。
+    2. `name`：模块标识，必须与应用 `required` 完全一致，否则依赖无法连接。
+    3. `system_ext_specific: true`：与应用同分区，系统读取特权权限配置时才能按包名匹配。
+    4. `src`：指向现成 XML，是必需输入，省略报缺源文件。内容须与包名和权限匹配，声明本身不生成授权规则。
+    5. `sub_dir: "permissions"`：使文件落到 `system_ext/etc/permissions/`。省略则落 `etc` 根目录，系统可能不读。
+    6. `filename_from_src: true`：用源文件名作安装名。省略则默认用模块名，不带 `.xml`，可能不符合系统扫描规则。
+
+8. **声明之外必查的三件事：**属性解读完，还有三件声明本身回答不了的事：
+
+    1. **依赖闭包**：应用源码 `import com.yadea.apf.vehiclesdk`，但 `static_libs` 未列 `yadea_vehiclesdk`。Java `import` 不建立 Soong 依赖，须确认有其他已声明依赖导出该库，或产品规则建立了可见依赖。
+    2. **重复源码**：APK 的 `srcs` 与 `yadea_vehiclebase` 声明了同一批 `vehiclebase` 源码。若该库又经依赖链进入 APK，可能产生重复类，需查完整构建图确认。
+    3. **产品打包**：`Android.bp` 只回答“如何构建”，是否进入镜像取决于 `PRODUCT_PACKAGES` 等产品选择。应核对产品配置、Soong 安装清单与分区文件，`required` 不能替代产品选择。
+
+9. **何时选择 `android_app`：**选择依据是产物形态与安装方式，而不是代码语言：
+
+    1. **需要 APK 形态**：要声明 Manifest 组件、携带资源、申请权限或按分区安装为应用——选 `android_app`。本例需要平台签名、特权白名单和 `system_ext` 安装，属于这种情况。
+    2. **只复用代码或资源**：供其他模块依赖编译、自身不安装——选 `android_library`，本例 `yadea_*` 系列即这一角色。
+    3. **设备侧 Java 程序但不需要 APK**：无界面、不合并资源的后台服务或命令行程序——选 `java_library` 加 `installable: true`，由 `app_process` 启动，没有 Manifest 组件与权限体系可用。
+    4. **已有现成 APK**：无源码、只调签名或安装位置——用 `android_app_import` 导入。源码在仓内时优先 `android_app` 重编，避免产物与源码脱节。
+
+    判断入口一句话：产物要成为安装单元选 `android_app`（无源码用 `android_app_import`），只参与编译选 `android_library`，只要可执行形态选可安装 JAR。
+
+**参考：**
+
+1. [Android.bp 文件格式（AOSP）](https://source.android.com/docs/setup/reference/androidbp)：模块属性的类型、`srcs` 和 glob 语义。
+2. 具体属性的默认值与省略行为：以目标 Android 分支运行 `m soong_docs` 生成的 Soong Modules Reference 和对应分支 `build/soong` 实现为准。
+
+**Q5: 读 build/make/core/version_defaults.mk 判断项目基于哪个 Android 版本时，TP1A、REL 和末尾 include 的 version_util.mk 分别起什么作用？**
+
+两棵源码树都由 `build/make/core/version_defaults.mk` 声明版本默认值，并在该文件末尾 include `version_util.mk` 完成目标版本校验与平台版本推导。`TP1A` 是 Android 13 的平台版本键，`REL` 是表示正式发布的代号值；按两棵树的默认配置，推导结果均为 Android 13 / API Level 33。源码只提供默认值，最终以设备上的 `ro.build.version.*` 属性为准；以下只摘录相关源码行。
+
+1. **TP1A 与 REL 各是什么：**两个值共同回答"这是哪个平台版本、处于什么发布状态"：
+
+    1. `TP1A` 是平台版本键：`version_defaults.mk` 以 `DEFAULT_PLATFORM_VERSION := TP1A` 声明默认目标版本，`MIN_PLATFORM_VERSION` 和 `MAX_PLATFORM_VERSION` 也同为 `TP1A`，所以本树合法的目标版本只有 `TP1A`。键的意义是把"哪个平台版本"编码进变量名，使一个分支能按键维护多套版本信息。
+    2. `REL` 是代号变量 `PLATFORM_VERSION_CODENAME` 的哨兵值，表示正式发布构建；源码注释写明"最终发布构建的代号就是 REL"。开发态则用甜点代号，例如已知代号列表中的 `Tiramisu`。
+    3. `PLATFORM_VERSION_CODENAME.TP1A := REL` 是一条按键组织的映射：变量名内嵌目标版本键，读作"目标版本键 `TP1A` 的代号是 `REL`"。`version_util.mk` 稍后以 `$(PLATFORM_VERSION_CODENAME.$(TARGET_PLATFORM_VERSION))` 查这张映射表。
+    4. `TP1A` 也是 Android 13 发布构建 ID 的前缀，如 Yadi 树 `build_id.mk` 提供的 `TP1A.220624.014`；但构建 ID 由 `build_id.mk` 单独声明（本学习树为 `TQ2A.230305.008.C1`），与平台版本键不是同一变量。
+
+2. **为什么在末尾 include version_util.mk：**Make 的 include 会读入目标文件并在当前位置就地处理，处理顺序与书写顺序一致，因此必须先定义默认值、再做校验推导：
+
+    1. `version_util.mk` 的顶层逻辑直接读取 `MIN_PLATFORM_VERSION`、`MAX_PLATFORM_VERSION`、`DEFAULT_PLATFORM_VERSION` 和映射变量：缺省时把 `TARGET_PLATFORM_VERSION` 定为 `TP1A`，校验其合法，再查表解析代号。若它被放在默认值之前，这些输入还是空值，目标版本校验会直接报错，后续推导全部失去依据。
+    2. 两份文件按"默认输入"与"校验推导"分工：`version_defaults.mk` 只给默认值，`PLATFORM_SDK_VERSION`、`PLATFORM_SECURITY_PATCH` 等包在 `ifndef` 内，此前配置的预设得以保留；`version_util.mk` 负责校验与推导，并用 `.KATI_READONLY` 锁定结果，防止下游配置再改变版本身份。
+    3. 把 include 放在 `version_defaults.mk` 末尾，消费者 `build/make/core/envsetup.mk` 只需 include 一次就得到完整链路；若让消费者自己按顺序 include 两份文件，每个使用者都要自行保证顺序不出错。
+
+3. **版本与 API Level 如何推导：**`version_defaults.mk` 提供以下三个默认值：
+
+    ```make
+    PLATFORM_VERSION_LAST_STABLE := 13
+    PLATFORM_VERSION_CODENAME.TP1A := REL
+
+    ifndef PLATFORM_SDK_VERSION
+      PLATFORM_SDK_VERSION := 33
+    endif
+    ```
+
+    三个赋值的取值来源与省略后果不同：
+
+    1. `PLATFORM_VERSION_LAST_STABLE := 13`：最近一个正式发布的 Android 版本号，供正式发布构建取平台版本。省略后 `REL` 构建推导出的 `PLATFORM_VERSION` 为空。
+    2. `PLATFORM_VERSION_CODENAME.TP1A := REL`：把本树唯一的目标版本键映射到正式发布代号。省略后查表为空，代号回退为目标版本键 `TP1A`，而 `TP1A` 不在已知甜点代号列表中，构建会在代号校验处报错。
+    3. `PLATFORM_SDK_VERSION := 33`：平台 API Level。包在 `ifndef` 内，此前已有定义时保留原值；省略且无其他定义时 API Level 为空，`ro.build.version.sdk` 等产物属性失去取值来源。
+
+    `version_util.mk` 随后校验并推导（省略了查表为空时回退到键名的兜底赋值和 `.KATI_READONLY` 只读行）：
+
+    ```make
+    ifndef TARGET_PLATFORM_VERSION
+      TARGET_PLATFORM_VERSION := $(DEFAULT_PLATFORM_VERSION)
+    endif
+
+    ifndef PLATFORM_VERSION_CODENAME
+      PLATFORM_VERSION_CODENAME := $(PLATFORM_VERSION_CODENAME.$(TARGET_PLATFORM_VERSION))
+    endif
+
+    ifndef PLATFORM_VERSION
+      ifeq (REL,$(PLATFORM_VERSION_CODENAME))
+        PLATFORM_VERSION := $(PLATFORM_VERSION_LAST_STABLE)
+      else
+        PLATFORM_VERSION := $(PLATFORM_VERSION_CODENAME)
+      endif
+    endif
+    ```
+
+    1. 目标版本缺省取 `DEFAULT_PLATFORM_VERSION`，即 `TP1A`；取其他值会因不在此树允许范围内而以 error 终止构建，所以默认且唯一合法的目标版本是 `TP1A`。
+    2. 代号按映射表解析为 `REL`。
+    3. 代号为 `REL` 时，平台版本取 `PLATFORM_VERSION_LAST_STABLE`，得到 `13`，默认应用 targetSdk 取 API Level 33，preview SDK 记为 0；代号不是 `REL` 时，代号本身充当平台版本，targetSdk 也用代号，preview SDK 记为 1。`Tiramisu` 是 Android 13 的甜点代号，不是本树解析出的代号。
+
+4. **安全补丁默认值：**两棵树都把默认补丁级别包在 `ifndef PLATFORM_SECURITY_PATCH` 内，变量未定义或为空时才生效。AAOS13 学习树的赋值是：
+
+    ```make
+    PLATFORM_SECURITY_PATCH := 2023-03-05
+    ```
+
+    Yadi 源码树的对应行是：
+
+    ```make
+    PLATFORM_SECURITY_PATCH := 2025-12-05
+    ```
+
+    日期只是源码声明的默认补丁级别，不能证明对应补丁已实际合入；`version_util.mk` 会把该变量设为只读，防止后续配置改动。
+
+5. **在设备或产物上核对：**源码默认值仍可能被产品配置覆盖，最终以设备属性为准。核对时各属性的对应关系如下：
+
+    1. `ro.build.version.release`：平台版本，默认配置下为 `13`。
+    2. `ro.build.version.sdk`：API Level，默认配置下为 `33`。
+    3. `ro.build.version.security_patch`：实际生效的安全补丁级别，可与源码默认值对照，确认产品是否做过覆盖。
+    4. `ro.build.fingerprint`：其中的构建 ID（如 `TP1A.220624.014`）可与 `build_id.mk` 对照，确认分支身份。
+
+    源码结论与设备属性不一致时，以设备属性和实际镜像为准。
+
+
+
+
+
+**Q6: [learning] [tags:Android.bp] system/core/init/Android.bp 中的 defaults、soong_config_module_type 和构建变量如何改变模块配置？**
 
 defaults 模块集中保存多个模块共用的编译属性与依赖；`soong_config_module_type` 则把指定类型的属性开放给 Soong 配置变量。`init_defaults` 让 init 相关模块共享安全编译选项、库依赖和按构建变体调整的宏定义。
 
@@ -125,7 +476,13 @@ init_first_stage_cc_defaults {
 
 
 
-**Q4: init_first_stage 与 init_second_stage 在 system/core/init/Android.bp 中如何区分源码、链接方式和安装目标？**
+
+
+
+
+
+
+**Q7: init_first_stage 与 init_second_stage 在 system/core/init/Android.bp 中如何区分源码、链接方式和安装目标？**
 
 两个模块都生成名为 `init` 的不同构建变体产物，但承担不同启动阶段：`init_first_stage` 是放入 ramdisk 根目录的静态可执行文件，`init_second_stage` 则以 `main.cpp` 和 `libinit` 组成，并按 platform 或 recovery 目标选择附属文件与依赖。
 
@@ -187,7 +544,13 @@ cc_binary {
 
 
 
-**Q5: system/core/init/Android.bp 如何构建 init 测试、主机校验工具和生成文件？**
+
+
+
+
+
+
+**Q8: system/core/init/Android.bp 如何构建 init 测试、主机校验工具和生成文件？**
 
 该文件把设备测试、基准测试、测试辅助库、主机校验程序与生成规则声明为不同模块。它们复用部分 init 源码或 defaults，但目标平台、依赖和用途不同，不能把它们都当作设备启动程序。
 
@@ -254,7 +617,13 @@ cc_binary {
 
 
 
-**Q6: 阅读 system/core/init/Android.bp 时，源码变量、libinit、phony 模块和 init_second_stage 如何组成模块依赖图？**
+
+
+
+
+
+
+**Q9: 阅读 system/core/init/Android.bp 时，源码变量、libinit、phony 模块和 init_second_stage 如何组成模块依赖图？**
 
 这个文件先定义可复用的源码集合和许可，再由具体 Soong 模块组合成库、可执行文件与别名目标。变量本身不是模块；只有被模块的 `srcs`、`defaults` 等属性引用后，才参与相应模块的构建图。
 
@@ -332,7 +701,13 @@ cc_binary {
 
 
 
-**Q7: 我现在会写Android.bp，说说写完之后有什么用是怎么生效的？**
+
+
+
+
+
+
+**Q10: 我现在会写Android.bp，说说写完之后有什么用是怎么生效的？**
 
 
 
@@ -348,7 +723,13 @@ cc_binary {
 
 
 
-**Q8: 在 AAOS 构建中，Soong、Make/Kati、Ninja、Android.bp/Android.mk 和 m 各自承担什么角色，模块声明又怎样流转为构建动作？**
+
+
+
+
+
+
+**Q11: 在 AAOS 构建中，Soong、Make/Kati、Ninja、Android.bp/Android.mk 和 m 各自承担什么角色，模块声明又怎样流转为构建动作？**
 
 各角色的职责列表如下：
 
@@ -381,7 +762,13 @@ Android 13 处于渐进迁移阶段，同一构建树中可以同时有 Android.
 
 
 
-**Q9: 在 AAOS 产品中新增 C/C++ 命令行程序时，`cc_binary`、`PRODUCT_PACKAGES` 和 `m <模块名>` 分别做什么？**
+
+
+
+
+
+
+**Q12: 在 AAOS 产品中新增 C/C++ 命令行程序时，`cc_binary`、`PRODUCT_PACKAGES` 和 `m <模块名>` 分别做什么？**
 
 `cc_binary` 声明一个由 Soong 编译的本机可执行模块，`PRODUCT_PACKAGES` 请求产品安装它，`m <模块名>` 则构建该模块及其依赖。构建一个模块与把它打进最终镜像是不同动作。
 
@@ -410,7 +797,13 @@ cc_binary {
 
 
 
-**Q10: 什么时候使用 `cc_prebuilt_binary` 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
+
+
+
+
+
+
+**Q13: 什么时候使用 `cc_prebuilt_binary` 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
 
 只有已经针对 Android 目标 ABI 与运行时构建的 ELF 才适合作为 AAOS 预编译可执行文件导入。宿主机 Linux 程序通常依赖 GNU libc，而 Android 使用 Bionic；即使架构相同，也不能据此认为二进制可运行。
 
@@ -430,7 +823,13 @@ Soong 的预编译模块会检查模块类型和目标架构，运行时还要�
 
 
 
-**Q11: C/C++ 动态库、静态库和使用者模块之间如何声明依赖与安装？**
+
+
+
+
+
+
+**Q14: C/C++ 动态库、静态库和使用者模块之间如何声明依赖与安装？**
 
 `cc_library_shared` 构建 `.so`，`cc_library_static` 构建静态库，消费模块通过 `shared_libs` 或 `static_libs` 声明依赖。显式依赖让构建图先构建依赖；若可执行程序进入产品包集合，所需共享库通常由依赖关系纳入安装闭包。
 
@@ -466,7 +865,13 @@ cc_binary {
 
 
 
-**Q12: 使用 `cc_prebuilt_library_shared` 时，如何保证 `.so` 的架构、文件名和头文件导出相互匹配？**
+
+
+
+
+
+
+**Q15: 使用 `cc_prebuilt_library_shared` 时，如何保证 `.so` 的架构、文件名和头文件导出相互匹配？**
 
 预编译共享库要按目标 ABI 提供正确二进制，并在 Soong 声明实际源文件、安装名与公开头文件目录。`arch` 分支应对应源码树中真实存在的 ABI 目录和文件，不能让模块名、`stem` 与文件路径互相矛盾。
 
@@ -503,7 +908,13 @@ cc_prebuilt_library_shared {
 
 
 
-**Q13: Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 `app_process`？**
+
+
+
+
+
+
+**Q16: Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 `app_process`？**
 
 Soong 的 `java_library` 编译 Java 源码；设置 `installable: true` 可生成可安装的设备侧 JAR，产品包配置负责将其放入镜像。Android 设备并不把普通 JAR 名称当作 shell 命令直接执行，示例通过 `app_process` 启动运行时并指定主类。
 
@@ -533,7 +944,13 @@ java_library {
 
 
 
-**Q14: `java_library` 与 `java_import` 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
+
+
+
+
+
+
+**Q17: `java_library` 与 `java_import` 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
 
 `java_library` 从源码构建 Java 模块，`java_import` 将已有 JAR 声明为 Soong 模块；消费者通过模块名建立依赖。一个 JAR 依赖是静态编入还是作为运行时依赖，必须结合 Soong 属性和产物检查，不能只看 `.jar` 后缀判断。
 
@@ -555,7 +972,13 @@ java_library {
 
 
 
-**Q15: Java 的 `installable`、`product_specific` 和 `PRODUCT_PACKAGES` 分别控制什么？**
+
+
+
+
+
+
+**Q18: Java 的 `installable`、`product_specific` 和 `PRODUCT_PACKAGES` 分别控制什么？**
 
 `installable` 控制模块是否作为可安装产物生成，`product_specific` 指定模块的产品分区归属，`PRODUCT_PACKAGES` 将模块请求纳入某个产品。三者回答不同问题，不能互相替代。
 
@@ -579,7 +1002,13 @@ java_library {
 
 
 
-**Q16: 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 `PRODUCT_PACKAGES`？**
+
+
+
+
+
+
+**Q19: 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 `PRODUCT_PACKAGES`？**
 
 一般通过 Soong 的模块依赖关系，构建系统能构建并安装可执行模块所需的共享库依赖；产品包集合通常只需选择产品入口模块。但这依赖依赖声明正确且安装分区兼容。
 
@@ -599,7 +1028,13 @@ java_library {
 
 
 
-**Q17: 如何验证新增加的 Soong 模块从源码定义到设备运行的完整链路？**
+
+
+
+
+
+
+**Q20: 如何验证新增加的 Soong 模块从源码定义到设备运行的完整链路？**
 
 验证应分别确认模块被发现、可编译、被产品选择、安装到预期分区，并能在设备上加载运行。
 
@@ -615,3 +1050,118 @@ java_library {
 
 
 
+
+
+
+
+
+
+**Q21: Android 的 `user`、`userdebug` 和 `eng` 构建变体有什么区别，车机调试和验收该怎么选？**
+
+一句话理解：`user` 面向量产，默认收紧调试能力并贴近消费者设备；`userdebug` 保留接近 `user` 的运行特征，同时开放更多调试手段；`eng` 面向开发，构建更快，性能和功耗不作为首要目标。AOSP `lunch` 目标的最后一段指定构建变体；新版目标还可能在产品名与变体之间带 release config。[AOSP 构建说明](https://source.android.com/docs/setup/build/building)
+
+| 属性或行为 | `user` | `userdebug` | `eng` |
+|---|---|---|---|
+| 用途 | 量产与正式验收 | 开发调试、性能和功耗验证 | 日常系统开发 |
+| `ro.build.type` | `user` | `userdebug` | `eng` |
+| `ro.debuggable` | `0` | `1` | `1` |
+| `ro.secure`（AOSP 默认） | `1` | `1` | `0` |
+| ADB 提权 | 通常不支持 `adb root` | 通常支持 `adb root` | 通常默认以 root adbd 运行 |
+| SELinux | 量产设备应为 enforcing；普通 ADB 调试不能切为 permissive | 可 root 后执行 `setenforce 0` | 可 root 后执行 `setenforce 0` |
+| 调试模块 | 按产品配置安装，通常不选 debug/eng 工具 | 在 user 模块外增加 debug 工具 | 增加 debug/eng 工具 |
+
+构建变体只决定一组默认构建属性和调试策略，产品配置、设备配置和发布签名流程仍可能覆盖部分行为。[AOSP `main.mk`](https://android.googlesource.com/platform/build/%2B/HEAD/core/main.mk) 明确区分 `ro.debuggable`、`ro.secure` 和各变体安装的模块标签；Android 官方说明 `user` 用于 production，`userdebug` 保留调试能力，SELinux 可在 `userdebug`/`eng` 上通过 ADB root 切换 permissive。[SELinux 验证说明](https://source.android.com/docs/security/features/selinux/validate)
+
+1. **调试权限：**`user` 默认 `ro.debuggable=0`，`adbd` 不提供 root 提权；`userdebug` 可用 `adb root`，`eng` 通常默认使用 root adbd。`adb remount`、写系统分区和访问其他应用私有数据还分别受分区只读、Verified Boot、Linux UID 和 SELinux 限制，不能简单等同于“有 root 就都能操作”。
+2. **SELinux：**生产设备必须保持 enforcing；AOSP 支持在 `userdebug` 或 `eng` 上通过 `adb root` 后执行 `setenforce 0`。因此排查 SELinux denial 时，可先在调试版本定位策略问题，再在 `user` 版本验证 enforcing 下的真实行为；量产设备不应依赖 permissive。[AOSP SELinux 文档](https://source.android.com/docs/security/features/selinux/validate)
+3. **模块与日志：**旧式 `Android.mk` 的 `LOCAL_MODULE_TAGS` 可将模块标记为 `user`、`debug` 或 `eng`；`userdebug` 会在 `user` 模块外增加 debug 工具，`eng` 会安装 debug/eng 工具。但 APK 安装和现代产品打包还受产品配置控制，不能据 `LOCAL_MODULE_TAGS := eng` 推断所有工具或测试 APK 都必然被排除。`ALOGD`、`ALOGV` 是否输出也取决于各模块的编译宏、日志配置和运行时过滤，不是所有 user 构建统一关闭。
+4. **签名与属性：**`TARGET_BUILD_VARIANT` 是构建时变体；设备上的 `ro.build.type` 表示 `user`、`userdebug` 或 `eng`，`ro.debuggable` 和 `ro.secure` 反映调试/安全默认值；`ro.build.tags` 表示签名标签，如 `test-keys`、`dev-keys` 或 `release-keys`，不等同于构建变体。AOSP 默认构建会使用公开的 test keys，正式发布必须由厂商发布流程换成私有 release keys；所以 `user` 不会自动等于 `release-keys`，平台签名 APK 也必须使用匹配的厂商平台密钥。[AOSP 发布签名说明](https://source.android.com/docs/core/ota/sign_builds)
+5. **车机版本选择：**日常开发和需要 `adb root`、完整调试工具的排障使用 `userdebug`；量产前复现、权限验证和验收应使用与交付配置一致的 `user` 版本。`user` 上日志较少时，可结合 bugreport、系统事件日志、持久化日志和崩溃现场分析；不要把 `userdebug` 上可关闭 SELinux 或可提权的结果直接当作量产行为。
+
+
+
+
+
+
+
+
+
+
+
+
+**Q22: Make 与 Android.bp 的变量赋值、引用和条件语法有何区别？**
+
+读 `.mk` 和 `Android.bp` 时，先分清变量赋值与模块属性。以下示例只演示语法。
+
+1. **Make 赋值与引用：**下面的变量先取 `13`，随后改为 `14`：
+
+    ```make
+    NEXT := 13
+    DEFERRED = $(NEXT)
+    IMMEDIATE := $(NEXT)
+    NEXT := 14
+    ```
+
+    读取变量时，各符号的作用如下：
+
+    1. `=`：在使用时展开右侧，因此 `DEFERRED` 得到更新后的 `14`。
+    2. `:=`：在赋值时展开右侧，因此 `IMMEDIATE` 保留 `13`。
+    3. `$(NAME)`：引用变量。示例中的 `$(NEXT)` 读取 `NEXT` 的值。
+    4. `+=`：在已有变量后追加值。
+
+2. **Make 条件：**AAOS13 的 `version_defaults.mk` 有如下源码：
+
+    ```make
+    ifndef PLATFORM_SDK_VERSION
+      PLATFORM_SDK_VERSION := 33
+    endif
+    ```
+
+    `ifndef` 在变量未定义或值为空时进入分支，将 API Level 设为 `33`。已有非空值时保留原值。
+
+3. **Android.bp 变量与模块：**下例展示变量、列表和模块属性：
+
+    ```bp
+    src_files = ["main.cpp"]
+    src_files += ["util.cpp"]
+    cc_binary {
+        name: "demo",
+        srcs: src_files,
+    }
+    ```
+
+    这些语法各承担一项职责：
+
+    1. `src_files = ["main.cpp"]`：用 `=` 定义列表变量，`[]` 包住列表，双引号包住文件名。
+    2. `src_files += ["util.cpp"]`：在首次引用前追加第二个文件，此后列表包含两个源码路径。
+    3. `cc_binary { ... }`：声明可执行模块。属性采用 `键: 值,` 的格式。
+    4. `name: "demo"`：为模块命名。省略会使模块缺少必需名称。
+    5. `srcs: src_files`：直接引用变量并编译两个文件。省略后，这两个文件不会因此进入编译。
+
+    Android.bp 的 `=` 不延迟展开，也不使用 Make 的 `:=` 或 `$(NAME)`。
+
+4. **Android.bp 条件：**Android.bp 不支持 Make 式 `if/ifndef`。配置差异写入 Soong 支持的模块属性（如 `soong_config_variables`），复杂逻辑由 Go 构建代码处理。
+
+
+
+
+
+**Q23: 如何结合 Android 13 源码判断项目的 `adb root` 权限和实际能力？**
+
+判断 `adb root` 要沿着“构建属性 → root 请求 → `adbd` 降权 → 产品覆盖”检查。两个项目的 ADB 核心实现相同，但具体产品选用的构建变体和属性覆盖决定最终结果；源码树本身不能证明某个已编译镜像当前正在运行哪种变体。
+
+1. **检查变体默认值：**两棵树的 `build/make/core/main.mk` 都根据 `TARGET_BUILD_VARIANT` 设置属性。`user` 默认 `ro.secure=1`、`ro.debuggable=0`；`userdebug` 默认 `ro.secure=1`、`ro.debuggable=1`；`eng` 默认 `ro.secure=0`、`ro.debuggable=1`。`ro.debuggable` 控制是否允许调试提权，`ro.secure` 控制 `adbd` 是否默认降权；实际值仍可能被产品配置覆盖。
+
+2. **检查 root 请求门槛：**两棵树的 `packages/modules/adb/daemon/restart_service.cpp` 相同。`restart_root_service()` 在 `__android_log_is_debuggable()` 为 false 时拒绝请求；该检查对应 `ro.debuggable`。通过后，代码设置 `service.adb.root=1` 并重启 `adbd`，让新进程重新判断是否保留 root。
+
+3. **检查 `adbd` 身份：**两棵树的 `packages/modules/adb/daemon/main.cpp` 中，`should_drop_privileges()` 先以 `ro.secure` 初始化降权状态；只有 `ro.debuggable=1` 且 `service.adb.root=1` 时，才取消降权；`service.adb.root=0` 则要求降权。降权路径通过 minijail 将 `adbd` 的 UID/GID 改为 `shell`。两棵树的 `packages/modules/adb/Android.bp` 都未设置 `ALLOW_ADBD_ROOT`，因此应以实际的请求处理和降权代码为准，不能套用其他分支的宏判断。
+
+4. **区分 ADB 鉴权：**`ro.adb.secure` 控制连接主机是否需要 ADB 授权，不是 `adbd` 是否以 root 运行的开关。两棵树的 `main.cpp` 将它用于主机认证判断；因此“需要电脑端 RSA 授权”和“shell 是否拿到 root”是两个独立问题。
+
+5. **得出默认结果：**按两棵树的 `main.mk` 默认值，`user` 上 `adb root` 会被拒绝，`adbd` 以 `shell` 身份运行；`userdebug` 初始以 `shell` 运行，`adb root` 成功后重启为 root；`eng` 通常默认以 root 运行，`adb unroot` 后降为 `shell`。这只是变体默认行为，必须再检查产品配置。
+
+6. **检查项目覆盖：**Yadi 的 `vendor/yadea` 和相关 `device/sprd` 配置中没有检出 `service.adb.root` 覆盖。`AAOS13` 中 Google GS101/GS201 的 `factory_common.mk` 设置 `service.adb.root=1`，GS101 还设置 `ro.adb.secure=0`；只有继承该配置的具体产品才受影响，而且 root 结果仍需结合 `ro.debuggable` 判断。两棵树都包含 debug ramdisk 的强制调试路径，但它要求特定 debug boot image 和设备已解锁，不能据此推断普通锁定的量产镜像允许 root。
+
+7. **界定 root 的能力：**`adb root` 让 ADB shell 链路中的命令以 root 身份运行，不会自动关闭 SELinux，也不保证系统分区可写。`adb remount` 是否成功还受 Verified Boot、动态分区和 remount 配置影响；分析实际权限时，应分别确认进程 UID、SELinux enforcing 状态和分区挂载状态。
+
+8. **核对最终设备：**有设备或构建产物时，先查看 `ro.build.type`、`ro.debuggable`、`ro.secure`、`ro.adb.secure` 和 `service.adb.root`，再运行 `adb shell id` 确认实际 UID；`getenforce` 用于确认 SELinux 模式，`adb remount` 的结果用于确认分区写入能力。源码结论与设备属性不一致时，以实际产品配置和最终镜像为准。

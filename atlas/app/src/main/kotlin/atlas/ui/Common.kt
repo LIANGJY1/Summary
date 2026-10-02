@@ -13,18 +13,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -38,17 +34,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -351,11 +351,9 @@ fun NavBadge(text: String, color: Color = Theme.Accent) {
 /**
  * 行内标记：**粗体**、`代码`、[文本](url) 渲染为带样式文本（链接仅展示）。
  *
- * [codeSink] 非 null 时，`代码` 段以 `mdcN` 占位符发出、原始文本收进 sink，
- * 由 [mdCodeInlineContents] 提供圆角芯片内容（SpanStyle 背景贴字矩形做不出药丸，
- * 2026-09-29 用户裁决）；为 null 时退化为等宽着色文本（无芯片）。
+ * 代码保留为普通文字，以便排版器正常换行；圆角底色在排版完成后逐行绘制。
  */
-fun renderInline(text: String, codeSink: MutableList<String>? = null): AnnotatedString = buildAnnotatedString {
+fun renderInline(text: String, codeFontSize: TextUnit = TextUnit.Unspecified): AnnotatedString = buildAnnotatedString {
     var i = 0
     val s = text
     while (i < s.length) {
@@ -380,16 +378,17 @@ fun renderInline(text: String, codeSink: MutableList<String>? = null): Annotated
                 val end = s.indexOf('`', i + 1)
                 if (end > 0) {
                     val code = s.substring(i + 1, end)
-                    if (codeSink != null) {
-                        appendInlineContent("mdc${codeSink.size}", code)
-                        codeSink.add(code)
-                    } else {
+                    if (code.isNotEmpty()) {
+                        append(MD_INLINE_CODE_GAP)
+                        val start = length
                         append(code)
                         addStyle(
-                            SpanStyle(fontFamily = FontFamily.Monospace, color = Theme.MdInlineCode),
-                            length - code.length,
+                            SpanStyle(fontFamily = FontFamily.Monospace, fontSize = codeFontSize, color = Theme.MdInlineCode),
+                            start,
                             length,
                         )
+                        addStringAnnotation(MD_INLINE_CODE_TAG, code, start, length)
+                        append(MD_INLINE_CODE_GAP)
                     }
                     i = end + 1
                 } else { append(s[i]); i++ }
@@ -410,62 +409,53 @@ fun renderInline(text: String, codeSink: MutableList<String>? = null): Annotated
     }
 }
 
+private const val MD_INLINE_CODE_TAG = "md-inline-code"
+private const val MD_INLINE_CODE_GAP = "\u202F\u202F\u202F"
+
 private val markdownBulletPattern = Regex("^\\s*[-*] ")
 private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)(.+)$")
 private val markdownTaskPattern = Regex("^\\s*[-*] \\[([ xX])\\] (.+)$")
 
-// 行内代码芯片宽度估算：芯片字取正文 0.92 倍，等宽步进 ≈0.62em（DejaVu 0.602/JBMono 0.60），
-// CJK 回退字形 ≈1.1em，加 12sp 水平内边距和 2sp 余量；不再额外预留一个字符，避免短代码两侧留白过宽。
+/** 列表层级栈条目：indent 为源码缩进列；counter 给子级有序列表提供 a/b/c 计数。 */
+private class MdListLevel(val indent: Int, var counter: Int)
+
+/** 嵌套有序列表的字母标记：1→a.、2→b.，26 之后进位为 aa.、ab.。 */
+private fun mdOrderedLetterMarker(n: Int): String {
+    var x = n.coerceAtLeast(1)
+    var letters = ""
+    while (x > 0) {
+        x -= 1
+        letters = ('a' + (x % 26)) + letters
+        x /= 26
+    }
+    return "$letters."
+}
+
+/** 三级及更深有序列表的小写罗马数字标记：1→i.、2→ii.、9→ix.、10→x.。 */
+private fun mdOrderedRomanMarker(n: Int): String {
+    var x = n.coerceAtLeast(1)
+    val sb = StringBuilder()
+    for ((value, symbol) in listOf(
+        1000 to "m", 900 to "cm", 500 to "d", 400 to "cd", 100 to "c", 90 to "xc",
+        50 to "l", 40 to "xl", 10 to "x", 9 to "ix", 5 to "v", 4 to "iv", 1 to "i",
+    )) {
+        while (x >= value) {
+            sb.append(symbol)
+            x -= value
+        }
+    }
+    return "$sb."
+}
+
+// 保留旧宽度估算器供历史宽度约束检查；实际渲染不再使用原子占位符。
 private const val MD_CHIP_ASCII_EM = 0.62f
 private const val MD_CHIP_CJK_EM = 1.1f
-
-/** 光学下沉量：对冲 TextCenter 按字体 metrics 居中在 CJK 混排行里的「骑高」观感（可调） */
-private val MD_CHIP_OPTICAL_DROP = 2.dp
 
 internal fun mdChipWidthSp(code: String, chipFontSize: TextUnit): TextUnit =
     (code.sumOf { c -> (if (c.code > 0x2E80) MD_CHIP_CJK_EM else MD_CHIP_ASCII_EM).toDouble() }.toFloat()
         * chipFontSize.value + 14f).sp
 
-/** 行内代码芯片的 inlineContent 表：圆角 Surface 药丸，贴身包裹代码文本 */
-@Composable
-private fun mdCodeInlineContents(codes: List<String>, fontSize: TextUnit): Map<String, InlineTextContent> =
-    if (codes.isEmpty()) {
-        emptyMap()
-    } else {
-        // 图二基准：芯片字比正文略小（0.92×）、药丸同高且垂直严格居中——
-        // 占位符高度只取 1.5em 且所有芯片共用同一 spec，同一行内的药丸才会齐平不忽高忽低。
-        // TextCenter 按字体 metrics 居中，中英混排（CJK 回退 ascent 大）的视觉中心比 metrics
-        // 中心低，药丸会整体骑高——绘制层统一下沉补偿（offset 不影响布局，全部药丸同量保持齐平）。
-        val chipFont = fontSize * 0.92f
-        codes.mapIndexed { idx, code ->
-            "mdc$idx" to InlineTextContent(
-                Placeholder(
-                    width = mdChipWidthSp(code, chipFont),
-                    height = fontSize * 1.5f,
-                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                ),
-            ) {
-                Surface(
-                    Modifier.offset(y = MD_CHIP_OPTICAL_DROP).wrapContentSize(Alignment.Center),
-                    shape = RoundedCornerShape(4.dp),
-                    color = Theme.MdInlineCodeBg,
-                ) {
-                    Text(
-                        code,
-                        Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = chipFont,
-                        lineHeight = chipFont * 1.2f,
-                        color = Theme.MdInlineCode,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                }
-            }
-        }.toMap()
-    }
-
-/** renderInline + 芯片 map 的组合入口：所有行内文本 Text 调用统一走这里 */
+/** 所有行内文字共用的渲染入口；代码以文字参与换行，圆角底色按实际行片段绘制。 */
 @Composable
 private fun MdInlineText(
     raw: String,
@@ -475,14 +465,52 @@ private fun MdInlineText(
     style: TextStyle = TextStyle.Default,
     color: Color = Color.Unspecified,
 ) {
-    val codes = remember(raw) { mutableListOf<String>() }
-    val annotated = remember(raw) { renderInline(raw, codes) }
+    val fontSize = style.fontSize.takeIf { it != TextUnit.Unspecified } ?: 14.sp
+    val chipFont = fontSize * 0.92f
+    val annotated = remember(raw, chipFont, Theme.MdBold, Theme.MdLink, Theme.MdInlineCode) {
+        renderInline(raw, chipFont)
+    }
+    val displayed = colorIfDirty(annotated, lineIndex, dirtyLines)
+    val codeRanges = displayed.getStringAnnotations(MD_INLINE_CODE_TAG, 0, displayed.length)
+    if (codeRanges.isEmpty()) {
+        Text(displayed, modifier = modifier, style = style, color = color)
+        return
+    }
+    val density = LocalDensity.current
+    val layoutState = remember(displayed) { mutableStateOf<TextLayoutResult?>(null) }
+    val codeBackground = Theme.MdInlineCodeBg
     Text(
-        colorIfDirty(annotated, lineIndex, dirtyLines),
-        modifier = modifier,
+        displayed,
+        modifier = modifier.drawBehind {
+            val layout = layoutState.value ?: return@drawBehind
+            val horizontalInset = with(density) { 6.dp.toPx() }
+            val verticalInset = with(density) { 2.dp.toPx() }
+            val radius = with(density) { 4.dp.toPx() }
+            codeRanges.forEach { range ->
+                val firstLine = layout.getLineForOffset(range.start)
+                val lastLine = layout.getLineForOffset(range.end - 1)
+                for (line in firstLine..lastLine) {
+                    val start = maxOf(range.start, layout.getLineStart(line))
+                    val end = minOf(range.end, layout.getLineEnd(line, visibleEnd = true))
+                    if (start >= end) continue
+                    val left = layout.getBoundingBox(start).left - horizontalInset
+                    val right = layout.getBoundingBox(end - 1).right + horizontalInset
+                    val top = layout.getLineTop(line) + verticalInset
+                    val bottom = layout.getLineBottom(line) - verticalInset
+                    if (right > left && bottom > top) {
+                        drawRoundRect(
+                            color = codeBackground,
+                            topLeft = Offset(left, top),
+                            size = Size(right - left, bottom - top),
+                            cornerRadius = CornerRadius(radius, radius),
+                        )
+                    }
+                }
+            }
+        },
         style = style,
         color = color,
-        inlineContent = mdCodeInlineContents(codes, style.fontSize.takeIf { it != TextUnit.Unspecified } ?: 14.sp),
+        onTextLayout = { layoutState.value = it },
     )
 }
 
@@ -516,8 +544,35 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             var i = 0
+            val listStack = mutableListOf<MdListLevel>()
             while (i < lines.size) {
                 val line = lines[i]
+                val sourceIndent = line.takeWhile { it == ' ' }.length
+                val numbered = markdownNumberedPattern.find(line)
+                val task = markdownTaskPattern.find(line)
+                val bullet = markdownBulletPattern.containsMatchIn(line)
+                val isListItem = numbered != null || task != null || bullet
+                if (isListItem) {
+                    while (listStack.isNotEmpty() && listStack.last().indent > sourceIndent) listStack.removeAt(listStack.lastIndex)
+                    val top = listStack.lastOrNull()
+                    if (top != null && top.indent == sourceIndent) {
+                        if (numbered != null) top.counter++
+                    } else {
+                        listStack += MdListLevel(sourceIndent, if (numbered != null) 1 else 0)
+                    }
+                } else if (line.isNotBlank()) {
+                    while (listStack.isNotEmpty() && listStack.last().indent >= sourceIndent) listStack.removeAt(listStack.lastIndex)
+                }
+                val continuation = !isListItem && listStack.isNotEmpty() && sourceIndent > listStack.last().indent
+                val visualDepth = when {
+                    isListItem -> listStack.size - 1
+                    continuation -> listStack.size
+                    else -> 0
+                }
+                val renderedLine = if (continuation) line.drop(minOf(sourceIndent, listStack.last().indent + 4)) else line
+                // 每级缩进 20dp = 标记列 14dp + 标记与正文间距 6dp：续行/代码块用 (depth+1)*20，
+                // 恰与列表项正文起点对齐；标记在列内右对齐，视觉间隙恒为 6dp。
+                Box(Modifier.fillMaxWidth().padding(start = (visualDepth * 20).dp)) {
                 when {
                 parseMarkdownTable(lines, i)?.let { table ->
                     ReaderMarkdownTableView(table)
@@ -528,8 +583,11 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     val lang = line.trimStart().removePrefix("```").trim()
                     val buf = ArrayList<String>()
                     i++
-                    while (i < lines.size && !lines[i].trimStart().startsWith("```")) { buf.add(lines[i]); i++ }
-                    i++
+                    while (i < lines.size && !lines[i].trimStart().startsWith("```")) {
+                        val codeLine = lines[i]
+                        buf.add(codeLine.drop(minOf(sourceIndent, codeLine.takeWhile { it == ' ' }.length)))
+                        i++
+                    }
                     if (lang.equals("mermaid", true) || (lang.isBlank() && buf.firstOrNull()?.trimStart()?.startsWith("flowchart") == true)) {
                         MermaidFlowchartView(buf)
                     } else {
@@ -561,39 +619,38 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         }
                     }
                 }
-                line.startsWith("### ") -> MdInlineText(
-                    line.removePrefix("### "), i, dirtyLines,
+                renderedLine.startsWith("### ") -> MdInlineText(
+                    renderedLine.removePrefix("### "), i, dirtyLines,
                     modifier = Modifier.padding(top = 7.dp),
                     style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 24.sp), color = Theme.MdH3,
                 )
-                line.startsWith("## ") -> MdInlineText(
-                    line.removePrefix("## "), i, dirtyLines,
+                renderedLine.startsWith("## ") -> MdInlineText(
+                    renderedLine.removePrefix("## "), i, dirtyLines,
                     modifier = Modifier.padding(top = 10.dp),
                     style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 28.sp), color = Theme.MdH2,
                 )
-                line.startsWith("# ") -> MdInlineText(
-                    line.removePrefix("# "), i, dirtyLines,
+                renderedLine.startsWith("# ") -> MdInlineText(
+                    renderedLine.removePrefix("# "), i, dirtyLines,
                     modifier = Modifier.padding(top = 12.dp),
                     style = ui.typography.pageTitle.copy(fontSize = 25.sp, lineHeight = 34.sp), color = Theme.MdH1,
                 )
-                line.startsWith("> ") -> Row(
+                renderedLine.startsWith("> ") -> Row(
                     Modifier.fillMaxWidth()
                         .background(Theme.MdQuote.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 11.dp),
                 ) {
                     Box(Modifier.width(2.dp).height(24.dp).background(Theme.MdQuote.copy(alpha = 0.75f), RoundedCornerShape(2.dp)))
                     MdInlineText(
-                        line.removePrefix("> "), i, dirtyLines,
+                        renderedLine.removePrefix("> "), i, dirtyLines,
                         modifier = Modifier.padding(start = 12.dp).fillMaxWidth(),
                         style = TextStyle(fontSize = 15.sp, lineHeight = 25.sp),
                         color = Theme.MdQuote,
                     )
                 }
-                line.trim() == "---" -> VDivider()
-                markdownTaskPattern.find(line) != null -> {
-                    val task = markdownTaskPattern.find(line)!!
+                renderedLine.trim() == "---" -> VDivider()
+                task != null -> {
                     val checked = task.groupValues[1].equals("x", ignoreCase = true)
-                    Row(Modifier.fillMaxWidth().padding(start = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.Top) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
                         Surface(
                             Modifier.padding(top = 2.dp).size(17.dp),
                             shape = RoundedCornerShape(4.dp),
@@ -606,37 +663,50 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         }
                         MdInlineText(
                             task.groupValues[2], i, dirtyLines,
-                            modifier = Modifier.padding(start = 10.dp).fillMaxWidth(),
+                            modifier = Modifier.padding(start = 3.dp).fillMaxWidth(),
                             style = ui.typography.body.copy(color = if (checked) Theme.Muted else MaterialTheme.colorScheme.onSurface),
                         )
                     }
                 }
-                Regex("^\\s*[-*] ").containsMatchIn(line) -> Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
+                bullet -> Row(Modifier.fillMaxWidth()) {
                     // 序号/圆点是结构标记：常态弱化为次要色、不加字重，把强调层级留给内容自身的 **粗体**
-                    Text("•", color = Theme.Muted, fontSize = 15.sp)
+                    Text(
+                        if (visualDepth > 0) "◆" else "•",
+                        modifier = Modifier.widthIn(min = 14.dp).alignByBaseline(),
+                        textAlign = TextAlign.End,
+                        color = Theme.Muted,
+                        fontSize = if (visualDepth > 0) 10.sp else 15.sp,
+                    )
                     MdInlineText(
-                        line.trimStart().removePrefix("- ").removePrefix("* "), i, dirtyLines,
-                        modifier = Modifier.padding(start = 10.dp),
+                        renderedLine.trimStart().removePrefix("- ").removePrefix("* "), i, dirtyLines,
+                        modifier = Modifier.padding(start = 6.dp).alignByBaseline(),
                         style = ui.typography.body,
                     )
                 }
-                markdownNumberedPattern.find(line) != null -> {
-                    val numbered = markdownNumberedPattern.find(line)!!
-                    Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
+                numbered != null -> {
+                    // 标记随层级区分：一级沿用源文件编号，二级 a. b. c.，三级及更深 i. ii. iii.；无序侧一级 •、更深一律 ◆
+                    val counter = listStack.lastOrNull()?.counter ?: 1
+                    val marker = when {
+                        visualDepth <= 0 -> "${numbered.groupValues[1]}."
+                        visualDepth == 1 -> mdOrderedLetterMarker(counter)
+                        else -> mdOrderedRomanMarker(counter)
+                    }
+                    Row(Modifier.fillMaxWidth()) {
                         Text(
-                            "${numbered.groupValues[1]}.",
-                            Modifier.width(26.dp),
+                            marker,
+                            Modifier.widthIn(min = 14.dp).alignByBaseline(),
+                            textAlign = TextAlign.End,
                             color = Theme.Muted,
                             style = ui.typography.body,
                         )
                         MdInlineText(
                             numbered.groupValues[2], i, dirtyLines,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.padding(start = 6.dp).fillMaxWidth().alignByBaseline(),
                             style = ui.typography.body,
                         )
                     }
                 }
-                line.trimStart().startsWith("flowchart") || line.trimStart().startsWith("graph ") -> {
+                renderedLine.trimStart().startsWith("flowchart") || renderedLine.trimStart().startsWith("graph ") -> {
                     // 无围栏的 Mermaid 段：声明行 + 后续缩进/空行，直到首个顶格非空行
                     val block = ArrayList<String>()
                     var j = i
@@ -647,12 +717,13 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     MermaidFlowchartView(block)
                     i = j - 1
                 }
-                line.isBlank() -> Spacer(Modifier.height(3.dp))
+                renderedLine.isBlank() -> Spacer(Modifier.height(3.dp))
                 else -> MdInlineText(
-                    line, i, dirtyLines,
+                    renderedLine, i, dirtyLines,
                     style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface),
                 )
             }
+                }
                 i++
             }
         }
@@ -690,6 +761,25 @@ private fun markdownBlocks(md: String): List<String> {
         val start = index
         val table = parseMarkdownTable(lines, index)
         when {
+            markdownNumberedPattern.containsMatchIn(lines[index]) ||
+                markdownTaskPattern.containsMatchIn(lines[index]) ||
+                markdownBulletPattern.containsMatchIn(lines[index]) -> {
+                val listIndent = lines[index].takeWhile { it == ' ' }.length
+                index++
+                while (index < lines.size) {
+                    val next = lines[index]
+                    if (next.isBlank()) { index++; continue }
+                    val nextIndent = next.takeWhile { it == ' ' }.length
+                    if (nextIndent <= listIndent) break
+                    if (next.trimStart().startsWith("```")) {
+                        index++
+                        while (index < lines.size && !lines[index].trimStart().startsWith("```")) index++
+                        if (index < lines.size) index++
+                    } else {
+                        index++
+                    }
+                }
+            }
             lines[index].trimStart().startsWith("```") -> {
                 index++
                 while (index < lines.size && !lines[index].trimStart().startsWith("```")) index++
