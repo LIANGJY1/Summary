@@ -1,6 +1,7 @@
 package atlas.core
 
 import java.io.File
+import kotlin.math.roundToInt
 
 /** 首次启动且尚未保存过路径时使用的默认知识库。 */
 const val DEFAULT_LIBRARY_PATH = "/home/liang/Project/MyProject/Summary/knowledge-base"
@@ -55,7 +56,14 @@ data class AppSettings(
     val themeName: String = "",
     /** 用户自建主题，逐条 `v2|名称|浅色20项|深色20项`，多条之间用 `;` 分隔。 */
     val customThemes: List<String> = emptyList(),
-    val fontScale: Float = 1f,
+    /** 全局文字大小基准（sp，11–20）：界面按 14sp=100% 换算成 Density.fontScale 应用，替代旧的百分比 fontScale。 */
+    val globalFontSize: Int = 14,
+    /** 题库题面字号（sp，10–18）：工作台题面为基准值，同源题库标题按 15/13 比例跟随。 */
+    val questionFontSize: Int = 13,
+    /** 题库内容字号（sp，10–24）：答案/闪卡/预览 markdown 正文的基准，标题与代码按比例跟随。 */
+    val contentFontSize: Int = 14,
+    /** 内容行间距（%，100–220）：140% 为内置默认行距，作用于答案正文、列表与代码块。 */
+    val contentLineHeight: Int = 140,
     /** 同源题库卡片上 #标签名 与添加入口的字号（sp）。 */
     val questionTagFontSize: Int = 11,
     /** 题库答案区域单击时是否打开编辑弹窗；关闭后仍可划词，编辑按钮不受影响。 */
@@ -130,7 +138,13 @@ class SettingsStore(private val file: File) {
             themeName = p.getProperty("themeName") ?: "",
             customThemes = (p.getProperty("customThemes") ?: "").split(";")
                 .map { it.trim() }.filter { it.isNotEmpty() },
-            fontScale = p.getProperty("fontScale")?.toFloatOrNull()?.coerceIn(0.8f, 1.4f) ?: 1f,
+            // 旧键 fontScale（0.8–1.4 百分比）按 14sp 基准换算成 sp；新键 globalFontSize 优先
+            globalFontSize = p.getProperty("globalFontSize")?.toIntOrNull()?.coerceIn(11, 20)
+                ?: p.getProperty("fontScale")?.toFloatOrNull()?.let { (it * 14).roundToInt().coerceIn(11, 20) }
+                ?: 14,
+            questionFontSize = p.getProperty("questionFontSize")?.toIntOrNull()?.coerceIn(10, 18) ?: 13,
+            contentFontSize = p.getProperty("contentFontSize")?.toIntOrNull()?.coerceIn(10, 24) ?: 14,
+            contentLineHeight = p.getProperty("contentLineHeight")?.toIntOrNull()?.coerceIn(100, 220) ?: 140,
             questionTagFontSize = p.getProperty("questionTagFontSize")?.toIntOrNull()?.coerceIn(10, 18) ?: 11,
             clickAnswerToEdit = p.getProperty("clickAnswerToEdit")?.toBooleanStrictOrNull() ?: true,
             recordingSaveDir = p.getProperty("recordingSaveDir") ?: "",
@@ -184,7 +198,10 @@ class SettingsStore(private val file: File) {
         p.setProperty("theme", s.theme)
         p.setProperty("themeName", s.themeName)
         p.setProperty("customThemes", s.customThemes.joinToString(";"))
-        p.setProperty("fontScale", s.fontScale.coerceIn(0.8f, 1.4f).toString())
+        p.setProperty("globalFontSize", s.globalFontSize.coerceIn(11, 20).toString())
+        p.setProperty("questionFontSize", s.questionFontSize.coerceIn(10, 18).toString())
+        p.setProperty("contentFontSize", s.contentFontSize.coerceIn(10, 24).toString())
+        p.setProperty("contentLineHeight", s.contentLineHeight.coerceIn(100, 220).toString())
         p.setProperty("questionTagFontSize", s.questionTagFontSize.coerceIn(10, 18).toString())
         p.setProperty("clickAnswerToEdit", s.clickAnswerToEdit.toString())
         p.setProperty("recordingSaveDir", s.recordingSaveDir)

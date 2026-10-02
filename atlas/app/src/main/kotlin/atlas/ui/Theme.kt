@@ -200,7 +200,7 @@ object AtlasThemes {
             mdH1 = color("#E9EDF2"), mdH2 = color("#B7C8E0"),
             mdH3 = color("#DDE2E8"), mdBold = color("#F4F6F8"),
             mdLink = color("#A9C4E8"), mdQuote = color("#AEB9C7"),
-            mdInlineCode = color("#B7C1CE"), mdInlineCodeBg = color("#2D343C"),
+            mdInlineCode = color("#B7C1CE"), mdInlineCodeBg = color("#292F37"),
         ),
         light = ThemeSpec(
             accent = color("#365F91"), okGreen = color("#2F7453"),
@@ -229,7 +229,7 @@ object AtlasThemes {
             mdH1 = color("#DBDBDB"), mdH2 = color("#C1C1C1"),
             mdH3 = color("#D0D0D0"), mdBold = color("#E0E0E0"),
             mdLink = color("#9BB1CE"), mdQuote = color("#A6A6A6"),
-            mdInlineCode = color("#B2B2B2"), mdInlineCodeBg = color("#262626"),
+            mdInlineCode = color("#B2B2B2"), mdInlineCodeBg = color("#202020"),
         ),
         light = ThemeSpec(
             accent = color("#4B5058"), okGreen = color("#2F7453"),

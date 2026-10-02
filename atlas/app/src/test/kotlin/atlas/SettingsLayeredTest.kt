@@ -33,18 +33,18 @@ class SettingsLayeredTest {
         val local = File(tmp, "local/settings.properties")
         val kb = File(tmp, "kb").apply { mkdirs() }
         val store = SettingsStore(local)
-        store.save(AppSettings(theme = "dark", fontScale = 1.1f, libraryPath = kb.absolutePath, selectedSourcePath = "/device/only.md"))
-        // 另一台设备的仓库层（模拟 git pull 下来）：主题与缩放与本机不同；libraryPath 是本机键不应被仓库层携带
+        store.save(AppSettings(theme = "dark", globalFontSize = 15, libraryPath = kb.absolutePath, selectedSourcePath = "/device/only.md"))
+        // 另一台设备的仓库层（模拟 git pull 下来）：主题与字号与本机不同；libraryPath 是本机键不应被仓库层携带
         val synced = syncedFile(kb.absolutePath)
         val other = SettingsStore(File(tmp, "other/settings.properties"))
-        other.save(AppSettings(theme = "light", fontScale = 0.9f, libraryPath = "/other/device/kb"))
+        other.save(AppSettings(theme = "light", globalFontSize = 13, libraryPath = "/other/device/kb"))
         // other 的本机文件是全量（未分流），直接把它当作仓库层文件会夹带 libraryPath ——
         // 用真实分流流程重新生成：让 other 以本机自己的 kb 路径分流保存
-        other.save(AppSettings(theme = "light", fontScale = 0.9f, libraryPath = kb.absolutePath), synced)
+        other.save(AppSettings(theme = "light", globalFontSize = 13, libraryPath = kb.absolutePath), synced)
 
         val loaded = store.load { syncedFile(it) }
         assertEquals("light", loaded.theme) // 同步键：仓库层胜
-        assertEquals(0.9f, loaded.fontScale)
+        assertEquals(13, loaded.globalFontSize)
         assertEquals(kb.absolutePath, loaded.libraryPath) // 本机键：不被覆盖
         assertEquals("/device/only.md", loaded.selectedSourcePath)
     }
@@ -71,5 +71,17 @@ class SettingsLayeredTest {
         assertEquals("dark", loaded.theme)
         assertEquals(kb.absolutePath, loaded.libraryPath)
         assertEquals("10.0.0.2", loaded.feishuIp)
+    }
+
+    @Test
+    fun `旧 fontScale 百分比键迁移为具体全局字号`() {
+        val local = File(tmp, "local/settings.properties")
+        local.parentFile.mkdirs()
+        // 110% 按 14sp 基准换算 = 15sp；新键存在时优先生效
+        local.writeText("fontScale=1.1\nglobalFontSize=16\n")
+        assertEquals(16, SettingsStore(local).load().globalFontSize)
+        local.writeText("fontScale=0.9\n")
+        assertEquals(13, SettingsStore(local).load().globalFontSize)
+        assertEquals(14, SettingsStore(File(tmp, "empty/settings.properties")).load().globalFontSize)
     }
 }

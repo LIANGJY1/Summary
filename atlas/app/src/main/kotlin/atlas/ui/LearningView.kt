@@ -200,6 +200,9 @@ private fun GenerateQuestionSetDialog(
 
 // ---------------- 题库（中心信息源：题目+答案，派生面试/闪卡/复习） ----------------
 
+/** 题库卡内容列统一宽度：题面、答案、代码块共享同一内容边缘（§6.4.9/6.4.10），卡面内居中使左右留白对称。 */
+private val QuizContentWidth = 880.dp
+
 @Composable
 private fun LegacyQuestionSection(store: AppStore) {
     var showImport by remember { mutableStateOf(false) }
@@ -272,6 +275,8 @@ private fun LegacyQuestionSection(store: AppStore) {
                 val order = visibleOrder[q.id] ?: 0
                 Column(
                     Modifier.fillMaxWidth()
+                        .wrapContentWidth(Alignment.CenterHorizontally)
+                        .widthIn(max = QuizContentWidth)
                         .background(
                             // 展开只增加内容，不切换整块色板，避免列表出现刺眼的大色块。
                             Theme.Panel,
@@ -295,7 +300,7 @@ private fun LegacyQuestionSection(store: AppStore) {
                         Column(Modifier.weight(1f)) {
                             Text(
                                 q.q,
-                                fontSize = 13.sp,
+                                fontSize = store.settings.questionFontSize.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = if (expanded) Theme.MdH2 else MaterialTheme.colorScheme.onSurface,
                             )
@@ -318,7 +323,8 @@ private fun LegacyQuestionSection(store: AppStore) {
                                 CompositionLocalProvider(
                                     LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                                 ) {
-                                    MarkdownText(q.answer)
+                                    // 题库答案行宽随卡面内容列（QuizContentWidth）收窄：长行是阅读疲劳主因
+                                    MarkdownText(q.answer, maxWidth = QuizContentWidth)
                                 }
                             }
                         } else {
@@ -928,12 +934,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         }
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    // 整卡内容列（题干+答案+操作行）共用 1040 阅读度量并在卡面内居中：
+                    // 整卡内容列（题干+答案+操作行）共用 QuizContentWidth 内容度量并在卡面内居中：
                     // 落实 §6.4.9/§6.4.10「题目与答案共享同一内容边缘」，超宽屏下留白对称分布，
-                    // 不再出现答案列被单独钉在 1040 左对齐造成的右侧空白带。
+                    // 不再出现答案列被单独钉在内容列左对齐造成的右侧空白带。
                     // 顺序不能错：widthIn 必须在 fillMaxWidth 之前经 wrapContentWidth 生效（§6.4.8 教训）。
                     Row(
-                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = ui.readingMaxWidth),
+                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = QuizContentWidth),
                         verticalAlignment = Alignment.Top,
                     ) {
                         if (reorderMode) {
@@ -1017,7 +1023,11 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     ) {
                                         Text(
                                             remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                            style = ui.typography.itemTitle,
+                                            // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
+                                            style = ui.typography.itemTitle.copy(
+                                                fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
+                                                lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
+                                            ),
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
                                         )
                                     }
@@ -1077,6 +1087,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                 MarkdownText(
                                                     entry.answer,
                                                     dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
+                                                    maxWidth = QuizContentWidth,
                                                 )
                                             }
                                         }

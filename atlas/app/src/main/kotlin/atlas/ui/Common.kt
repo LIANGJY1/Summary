@@ -28,10 +28,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
@@ -48,7 +51,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -124,6 +127,11 @@ data class AtlasUiTokens(
 }
 
 val LocalAtlasUiTokens = staticCompositionLocalOf { AtlasUiTokens.forTheme(dark = true) }
+
+/** Markdown 内容排版风格：题库答案/闪卡/预览正文的基准字号与行距（设置中心「外观与阅读」可调）。 */
+data class MarkdownContentStyle(val fontSizeSp: Int = 14, val lineHeightPercent: Int = 140)
+
+val LocalMarkdownContentStyle = staticCompositionLocalOf { MarkdownContentStyle() }
 
 @Composable
 fun atlasUiTokens(): AtlasUiTokens = LocalAtlasUiTokens.current
@@ -260,7 +268,8 @@ fun AtlasTheme(
     content: @Composable () -> Unit,
 ) {
     val baseDensity = LocalDensity.current
-    val safeFontScale = fontScale.coerceIn(0.8f, 1.4f)
+    // 11–20sp 全局字号换算的 fontScale（11/14≈0.79）；夹宽放宽到 0.75–1.5 避免低端被夹掉
+    val safeFontScale = fontScale.coerceIn(0.75f, 1.5f)
     SideEffect { Theme.apply(dark, spec) }
     CompositionLocalProvider(
         LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density, safeFontScale),
@@ -465,7 +474,7 @@ private fun MdInlineText(
     style: TextStyle = TextStyle.Default,
     color: Color = Color.Unspecified,
 ) {
-    val fontSize = style.fontSize.takeIf { it != TextUnit.Unspecified } ?: 14.sp
+    val fontSize = style.fontSize.takeIf { it != TextUnit.Unspecified } ?: LocalMarkdownContentStyle.current.fontSizeSp.sp
     val chipFont = fontSize * 0.92f
     val annotated = remember(raw, chipFont, Theme.MdBold, Theme.MdLink, Theme.MdInlineCode) {
         renderInline(raw, chipFont)
@@ -527,20 +536,106 @@ private fun colorIfDirty(annotated: AnnotatedString, lineIndex: Int, dirtyLines:
  * 轻量 markdown 渲染（v1 内置实现，ADR：替代 mikepenz 库以零依赖——支持标题/列表/引用/
  * 代码块/分隔线/行内标记；复杂 GFM 交给「用系统编辑器打开」）。
  * [dirtyLines]：需要高亮的行下标（md.lines() 坐标），题库 git 改动行内着色用。
+ * 超过 [MD_STREAM_LINE_THRESHOLD] 行的长文走分块渐进渲染：首帧只组合开头几块，其余逐帧续挂。
+ * 题库答案内联在 LazyColumn item 里（高度无界）无法做 Lazy 虚拟化，一次性整篇合成会阻塞 UI 数秒。
  */
 @Composable
-fun MarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) =
+fun MarkdownText(
+    md: String,
+    modifier: Modifier = Modifier,
+    dirtyLines: Set<Int> = emptySet(),
+    maxWidth: Dp = Dp.Unspecified,
+) =
     SelectionContainer {
-        ReaderMarkdownText(md, modifier, dirtyLines)
+        if (remember(md) { md.count { it == '\n' } + 1 } > MD_STREAM_LINE_THRESHOLD) {
+            StreamedMarkdownText(remember(md) { markdownBlocks(md) }, modifier, dirtyLines, maxWidth)
+        } else {
+            ReaderMarkdownText(md, modifier, dirtyLines, maxWidth = maxWidth)
+        }
     }
 
+/** 长文渐进渲染阈值：超过该行数的 markdown 分块续挂 */
+private const val MD_STREAM_LINE_THRESHOLD = 60
+
+/** 首帧至少立即呈现的行数，其余每帧续挂一块 */
+private const val MD_STREAM_FIRST_LINES = 20
+
+/** markdown 分块：块文本 + 块首行在原文中的行号（脏行高亮的坐标换算用） */
+private class MdBlock(val text: String, val startLine: Int)
+
+/** 首帧立即组合的块数：按块累加行数，凑满 [MD_STREAM_FIRST_LINES] 行即止（至少一块） */
+private fun mdStreamFirstBlocks(blocks: List<MdBlock>): Int {
+    var lines = 0
+    for ((count, block) in blocks.withIndex()) {
+        lines += block.text.count { it == '\n' } + 1
+        if (lines >= MD_STREAM_FIRST_LINES) return count + 1
+    }
+    return blocks.size
+}
+
+/** 长答案渐进渲染：点击展开瞬间只合成开头几块，后续块逐帧续挂，组合成本摊开、UI 保持可交互。 */
 @Composable
-private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyLines: Set<Int> = emptySet()) {
+private fun StreamedMarkdownText(
+    blocks: List<MdBlock>,
+    modifier: Modifier = Modifier,
+    dirtyLines: Set<Int> = emptySet(),
+    maxWidth: Dp = Dp.Unspecified,
+) {
     val ui = atlasUiTokens()
+    val visibleBlocks = remember(blocks) { mutableIntStateOf(mdStreamFirstBlocks(blocks)) }
+    LaunchedEffect(blocks) {
+        while (visibleBlocks.intValue < blocks.size) {
+            withFrameNanos { }
+            visibleBlocks.intValue++
+        }
+    }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        for (block in blocks.subList(0, visibleBlocks.intValue)) {
+            Box(Modifier.fillMaxWidth()) {
+                ReaderMarkdownText(
+                    block.text,
+                    Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+                    dirtyLines,
+                    maxWidth,
+                    lineOffset = block.startLine,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderMarkdownText(
+    md: String,
+    modifier: Modifier = Modifier,
+    dirtyLines: Set<Int> = emptySet(),
+    maxWidth: Dp = Dp.Unspecified,
+    lineOffset: Int = 0,
+) {
+    val ui = atlasUiTokens()
+    // 渐进渲染按块调用时传 [lineOffset]：把原文坐标的脏行集合平移成块内局部坐标
+    val answerDirty = remember(dirtyLines, lineOffset) {
+        if (lineOffset == 0) dirtyLines else dirtyLines.mapTo(mutableSetOf()) { it - lineOffset }
+    }
+    // 题库答案可传更窄的行宽（长行是阅读疲劳的主因之一）；不指定时沿用阅读宽
+    val effectiveMax = if (maxWidth != Dp.Unspecified && maxWidth < ui.readingMaxWidth) maxWidth else ui.readingMaxWidth
+    // 嵌套参考线与一级标记的强调色
+    val guideColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val strongMarker = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+    // 内容字号与行距（设置中心可调）：标题/正文/代码的 sp 值按基准等比缩放，140% 行距 = 内置默认
+    val mdStyle = LocalMarkdownContentStyle.current
+    val fontK = mdStyle.fontSizeSp / 14f
+    val lineK = fontK * mdStyle.lineHeightPercent / 140f
+    fun mdSp(v: Int) = (v * fontK).sp
+    fun mdLh(v: Int) = (v * lineK).sp
+    // 正文与代码块比全局 onSurface 低半档亮度：暗底长文降眩光更耐读；粗体/标题/链接保持原亮度，强调层级更分明
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.93f)
+    val codeTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
+    val bodyStyle = ui.typography.body.copy(fontSize = mdSp(14), lineHeight = mdLh(23), color = contentColor)
     val lines = md.lines()
     Box(modifier.fillMaxWidth()) {
         Column(
-            Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+            Modifier.widthIn(max = effectiveMax).fillMaxWidth().align(Alignment.CenterStart),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             var i = 0
@@ -571,7 +666,31 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 }
                 val renderedLine = if (continuation) line.drop(minOf(sourceIndent, listStack.last().indent + 4)) else line
                 // 每级缩进 20dp = 标记列 14dp + 标记与正文间距 6dp：续行/代码块用 (depth+1)*20，
-                // 恰与列表项正文起点对齐；标记在列内右对齐，视觉间隙恒为 6dp。
+                // 恰与列表项正文起点对齐；标记在列内左对齐——序号字母列笔直（右对齐会让字母随
+                // 字形宽度左右浮动），与正文间距 = 20dp − 字形宽，随标记类型略有差异。
+                // 嵌套层级画缩进参考线：落在该级标记列左侧 4dp（级数×20−4dp，避开左对齐字形，
+                // 也避开上一级最宽标记），向下延伸 7dp 桥接块间距实现跨行连续；段落打断处自然断开。
+                // 顶层列表项上方多留 6dp，长答案的顶层分组之间有呼吸感。
+                val guideLevels = when {
+                    isListItem -> visualDepth
+                    continuation -> visualDepth - 1
+                    else -> 0
+                }
+                Box(
+                    Modifier.fillMaxWidth()
+                        .then(if (isListItem && visualDepth == 0) Modifier.padding(top = 6.dp, bottom = 2.dp) else Modifier)
+                        .drawBehind {
+                            for (level in 1..guideLevels) {
+                                val x = (level * 20 - 4).dp.toPx()
+                                drawLine(
+                                    color = guideColor,
+                                    start = Offset(x, 0f),
+                                    end = Offset(x, size.height + 7.dp.toPx()),
+                                    strokeWidth = 1.dp.toPx(),
+                                )
+                            }
+                        },
+                ) {
                 Box(Modifier.fillMaxWidth().padding(start = (visualDepth * 20).dp)) {
                 when {
                 parseMarkdownTable(lines, i)?.let { table ->
@@ -608,10 +727,10 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                                         Text(
                                             code,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 13.sp,
-                                            lineHeight = 20.sp,
+                                            fontSize = mdSp(13),
+                                            lineHeight = mdLh(20),
                                             softWrap = false,
-                                            color = MaterialTheme.colorScheme.onSurface,
+                                            color = codeTextColor,
                                         )
                                     }
                                 }
@@ -620,19 +739,19 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                     }
                 }
                 renderedLine.startsWith("### ") -> MdInlineText(
-                    renderedLine.removePrefix("### "), i, dirtyLines,
+                    renderedLine.removePrefix("### "), i, answerDirty,
                     modifier = Modifier.padding(top = 7.dp),
-                    style = ui.typography.itemTitle.copy(fontSize = 16.sp, lineHeight = 24.sp), color = Theme.MdH3,
+                    style = ui.typography.itemTitle.copy(fontSize = mdSp(16), lineHeight = mdLh(24)), color = Theme.MdH3,
                 )
                 renderedLine.startsWith("## ") -> MdInlineText(
-                    renderedLine.removePrefix("## "), i, dirtyLines,
+                    renderedLine.removePrefix("## "), i, answerDirty,
                     modifier = Modifier.padding(top = 10.dp),
-                    style = ui.typography.sectionTitle.copy(fontSize = 19.sp, lineHeight = 28.sp), color = Theme.MdH2,
+                    style = ui.typography.sectionTitle.copy(fontSize = mdSp(19), lineHeight = mdLh(28)), color = Theme.MdH2,
                 )
                 renderedLine.startsWith("# ") -> MdInlineText(
-                    renderedLine.removePrefix("# "), i, dirtyLines,
+                    renderedLine.removePrefix("# "), i, answerDirty,
                     modifier = Modifier.padding(top = 12.dp),
-                    style = ui.typography.pageTitle.copy(fontSize = 25.sp, lineHeight = 34.sp), color = Theme.MdH1,
+                    style = ui.typography.pageTitle.copy(fontSize = mdSp(25), lineHeight = mdLh(34)), color = Theme.MdH1,
                 )
                 renderedLine.startsWith("> ") -> Row(
                     Modifier.fillMaxWidth()
@@ -641,9 +760,9 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 ) {
                     Box(Modifier.width(2.dp).height(24.dp).background(Theme.MdQuote.copy(alpha = 0.75f), RoundedCornerShape(2.dp)))
                     MdInlineText(
-                        renderedLine.removePrefix("> "), i, dirtyLines,
+                        renderedLine.removePrefix("> "), i, answerDirty,
                         modifier = Modifier.padding(start = 12.dp).fillMaxWidth(),
-                        style = TextStyle(fontSize = 15.sp, lineHeight = 25.sp),
+                        style = TextStyle(fontSize = mdSp(15), lineHeight = mdLh(25)),
                         color = Theme.MdQuote,
                     )
                 }
@@ -662,25 +781,25 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                             }
                         }
                         MdInlineText(
-                            task.groupValues[2], i, dirtyLines,
+                            task.groupValues[2], i, answerDirty,
                             modifier = Modifier.padding(start = 3.dp).fillMaxWidth(),
-                            style = ui.typography.body.copy(color = if (checked) Theme.Muted else MaterialTheme.colorScheme.onSurface),
+                            style = bodyStyle.copy(color = if (checked) Theme.Muted else contentColor),
                         )
                     }
                 }
                 bullet -> Row(Modifier.fillMaxWidth()) {
-                    // 序号/圆点是结构标记：常态弱化为次要色、不加字重，把强调层级留给内容自身的 **粗体**
+                    // 序号/圆点是结构标记：嵌套弱化为次要色，一级稍加重当扫读锚点；内容强调仍留给 **粗体**
                     Text(
                         if (visualDepth > 0) "◆" else "•",
                         modifier = Modifier.widthIn(min = 14.dp).alignByBaseline(),
-                        textAlign = TextAlign.End,
-                        color = Theme.Muted,
+                        color = if (visualDepth > 0) Theme.Muted else strongMarker,
                         fontSize = if (visualDepth > 0) 10.sp else 15.sp,
                     )
                     MdInlineText(
-                        renderedLine.trimStart().removePrefix("- ").removePrefix("* "), i, dirtyLines,
+                        renderedLine.trimStart().removePrefix("- ").removePrefix("* "), i, answerDirty,
                         modifier = Modifier.padding(start = 6.dp).alignByBaseline(),
-                        style = ui.typography.body,
+                        style = bodyStyle,
+                        color = contentColor,
                     )
                 }
                 numbered != null -> {
@@ -695,14 +814,16 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                         Text(
                             marker,
                             Modifier.widthIn(min = 14.dp).alignByBaseline(),
-                            textAlign = TextAlign.End,
-                            color = Theme.Muted,
-                            style = ui.typography.body,
+                            // 一级编号是答案的骨架：加重字重与颜色作扫读锚点；子级编号保持次要
+                            color = if (visualDepth > 0) Theme.Muted else strongMarker,
+                            fontWeight = if (visualDepth == 0) FontWeight.SemiBold else FontWeight.Normal,
+                            style = bodyStyle,
                         )
                         MdInlineText(
-                            numbered.groupValues[2], i, dirtyLines,
+                            numbered.groupValues[2], i, answerDirty,
                             modifier = Modifier.padding(start = 6.dp).fillMaxWidth().alignByBaseline(),
-                            style = ui.typography.body,
+                            style = bodyStyle,
+                            color = contentColor,
                         )
                     }
                 }
@@ -719,10 +840,11 @@ private fun ReaderMarkdownText(md: String, modifier: Modifier = Modifier, dirtyL
                 }
                 renderedLine.isBlank() -> Spacer(Modifier.height(3.dp))
                 else -> MdInlineText(
-                    renderedLine, i, dirtyLines,
-                    style = ui.typography.body.copy(color = MaterialTheme.colorScheme.onSurface),
+                    renderedLine, i, answerDirty,
+                    style = bodyStyle,
                 )
             }
+                }
                 }
                 i++
             }
@@ -740,10 +862,10 @@ fun LazyMarkdownText(md: String, modifier: Modifier = Modifier) {
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            itemsIndexed(blocks, key = { index, block -> "$index:${block.hashCode()}" }) { _, block ->
+            itemsIndexed(blocks, key = { index, block -> "$index:${block.text.hashCode()}" }) { _, block ->
                 Box(Modifier.fillMaxWidth()) {
                     ReaderMarkdownText(
-                        block,
+                        block.text,
                         Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
                     )
                 }
@@ -753,9 +875,9 @@ fun LazyMarkdownText(md: String, modifier: Modifier = Modifier) {
 }
 
 /** 保持围栏代码、表格和无围栏 Mermaid 完整；普通行单独成为可虚拟化的块。 */
-private fun markdownBlocks(md: String): List<String> {
+private fun markdownBlocks(md: String): List<MdBlock> {
     val lines = md.lines()
-    val blocks = ArrayList<String>(lines.size)
+    val blocks = ArrayList<MdBlock>(lines.size)
     var index = 0
     while (index < lines.size) {
         val start = index
@@ -792,7 +914,7 @@ private fun markdownBlocks(md: String): List<String> {
             }
             else -> index++
         }
-        blocks += lines.subList(start, index).joinToString("\n")
+        blocks += MdBlock(lines.subList(start, index).joinToString("\n"), start)
     }
     return blocks
 }

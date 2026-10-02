@@ -28,6 +28,8 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +45,8 @@ import atlas.ui.AtlasTheme
 import atlas.ui.AtlasThemes
 import atlas.ui.ColorSettingsPage
 import atlas.ui.CustomTheme
+import atlas.ui.LocalMarkdownContentStyle
+import atlas.ui.MarkdownContentStyle
 import atlas.ui.ThemeSpec
 import atlas.ui.IndexerHit
 import atlas.ui.LearningView
@@ -50,6 +54,7 @@ import atlas.ui.NavBadge
 import atlas.ui.PreviewDialog
 import atlas.ui.QuestionSection
 import atlas.ui.SettingsView
+import atlas.ui.TypographySettingsPage
 import atlas.ui.Theme
 import atlas.ui.TodayView
 import atlas.ui.ToolsDestination
@@ -91,14 +96,20 @@ fun main() {
             state = windowState,
             undecorated = true,
         ) {
-            AtlasTheme(
-                dark = store.settings.darkTheme,
-                fontScale = store.settings.fontScale,
-                spec = resolveTheme(store.settings),
+            // 全局字号以具体 sp 配置（默认 14sp），按 14sp=100% 换算成字体缩放；内容字号/行距经
+            // CompositionLocal 进 markdown 渲染器（题库答案/闪卡/预览共用），设置页拖动即时生效。
+            CompositionLocalProvider(
+                LocalMarkdownContentStyle provides MarkdownContentStyle(store.settings.contentFontSize, store.settings.contentLineHeight),
             ) {
-                AppRoot(store, windowState) {
-                    store.stopAaosCommand()
-                    exitApplication()
+                AtlasTheme(
+                    dark = store.settings.darkTheme,
+                    fontScale = store.settings.globalFontSize / 14f,
+                    spec = resolveTheme(store.settings),
+                ) {
+                    AppRoot(store, windowState) {
+                        store.stopAaosCommand()
+                        exitApplication()
+                    }
                 }
             }
         }
@@ -166,6 +177,31 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     var settingsSection by remember { mutableStateOf("root") }
     var toolsDestination by remember { mutableStateOf(ToolsDestination.LOG_DECRYPT) }
     var showPalette by remember { mutableStateOf(false) }
+    // 鼠标侧键的页面导航历史（浏览器语义，§6.4.36）：记录 (页签, 设置二级页) 组合，后退/前进沿栈回溯。
+    // 恢复经 navRestoreTarget 标记过滤——同帧写两个 state 只重启一次 effect，命中标记即视为恢复而非新导航。
+    data class NavEntry(val tab: String, val settingsSection: String)
+    val navHistory = remember { mutableStateListOf(NavEntry(tab, settingsSection)) }
+    var navIndex by remember { mutableStateOf(0) }
+    var navRestoreTarget by remember { mutableStateOf<NavEntry?>(null) }
+    LaunchedEffect(tab, settingsSection) {
+        val entry = NavEntry(tab, settingsSection)
+        if (entry == navRestoreTarget) { navRestoreTarget = null; return@LaunchedEffect }
+        navRestoreTarget = null
+        if (navHistory.lastOrNull() == entry) { navIndex = navHistory.size - 1; return@LaunchedEffect }
+        while (navHistory.size > navIndex + 1) navHistory.removeAt(navHistory.lastIndex)
+        navHistory += entry
+        navIndex = navHistory.lastIndex
+    }
+    fun navGo(delta: Int) {
+        val target = navIndex + delta
+        if (target !in navHistory.indices) return
+        val entry = navHistory[target]
+        navIndex = target
+        navRestoreTarget = entry
+        tab = entry.tab
+        settingsSection = entry.settingsSection
+        Log.d("鼠标${if (delta < 0) "后退" else "前进"} → ${entry.tab}/${entry.settingsSection} (${target + 1}/${navHistory.size})")
+    }
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(store.libraryReady) {
         if (store.libraryReady) {
@@ -201,6 +237,20 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         Modifier.fillMaxSize()
             .focusRequester(rootFocus)
             .focusable()
+            // 鼠标前进/后退侧键 = 页面导航回溯；不消费主键事件，普通点击不受影响
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Press) {
+                            when {
+                                event.buttons.isBackPressed -> { navGo(-1); event.changes.forEach { it.consume() } }
+                                event.buttons.isForwardPressed -> { navGo(+1); event.changes.forEach { it.consume() } }
+                            }
+                        }
+                    }
+                }
+            }
             .onPreviewKeyEvent { e ->
                 when {
                     e.type == KeyEventType.KeyDown && e.key == Key.K && e.isCtrlPressed -> {
@@ -256,10 +306,10 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
                 "学习" -> LearningView(store, learnSection) { learnSection = it }
                 "题库" -> QuestionSection(store, rootFocus)
                 "工具" -> ToolsView(store, toolsDestination) { toolsDestination = it }
-                "设置" -> if (settingsSection == "配色") {
-                    ColorSettingsPage(store) { settingsSection = "root" }
-                } else {
-                    SettingsView(store) { settingsSection = "配色" }
+                "设置" -> when (settingsSection) {
+                    "配色" -> ColorSettingsPage(store) { settingsSection = "root" }
+                    "字号与行距" -> TypographySettingsPage(store) { settingsSection = "root" }
+                    else -> SettingsView(store, onOpenColors = { settingsSection = "配色" }, onOpenTypography = { settingsSection = "字号与行距" })
                 }
                 else -> TodayView(store) { destination ->
                     when (destination) {
