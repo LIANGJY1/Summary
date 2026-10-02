@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -200,8 +201,10 @@ private fun GenerateQuestionSetDialog(
 
 // ---------------- 题库（中心信息源：题目+答案，派生面试/闪卡/复习） ----------------
 
-/** 题库卡内容列统一宽度：题面、答案、代码块共享同一内容边缘（§6.4.9/6.4.10），卡面内居中使左右留白对称。 */
+/** 遗留题库卡的阅读宽度。 */
 private val QuizContentWidth = 880.dp
+/** 同源题库卡在 1040dp 页面列内保留每侧 24dp 留白。 */
+private val SourceQuestionContentWidth = 992.dp
 
 @Composable
 private fun LegacyQuestionSection(store: AppStore) {
@@ -932,14 +935,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             locateSource(entry.sourcePath)
                             expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                         }
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
-                    // 整卡内容列（题干+答案+操作行）共用 QuizContentWidth 内容度量并在卡面内居中：
-                    // 落实 §6.4.9/§6.4.10「题目与答案共享同一内容边缘」，超宽屏下留白对称分布，
-                    // 不再出现答案列被单独钉在内容列左对齐造成的右侧空白带。
-                    // 顺序不能错：widthIn 必须在 fillMaxWidth 之前经 wrapContentWidth 生效（§6.4.8 教训）。
+                    // 卡片内侧宽度最多 992dp；题面与下方答案都从同一内边距起排。
+                    // 不能仅将题面收至 880dp，否则展开答案会比题面左移。
                     Row(
-                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = QuizContentWidth),
+                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = SourceQuestionContentWidth),
                         verticalAlignment = Alignment.Top,
                     ) {
                         if (reorderMode) {
@@ -1005,13 +1006,13 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
                             // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
                             // 排序时文字选择无意义，整卡都是拖拽热区。
-                            // 题面降档：onSurface 全亮度（黑曜 #DDE2E8）+ SemiBold 在深色下刺眼
-                            // （2026-09-29 用户反馈），0.86 透明度回到柔白档，对比度仍远超 AA。
+                            // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
+                            // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
                             if (reorderMode) {
                                 Text(
                                     remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                    style = ui.typography.itemTitle,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
+                                    style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                    color = Theme.MdH1,
                                 )
                             } else {
                                 key(entryKey, entry.question) {
@@ -1027,8 +1028,9 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                             style = ui.typography.itemTitle.copy(
                                                 fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
                                                 lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
+                                                fontWeight = FontWeight.Medium,
                                             ),
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
+                                            color = Theme.MdH1,
                                         )
                                     }
                                 }
@@ -1081,13 +1083,24 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                         Spacer(Modifier.height(8.dp))
                                         CompositionLocalProvider(
                                             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+                                            LocalMarkdownReadingColors provides MarkdownReadingColors(
+                                                body = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f),
+                                                bold = Theme.MdBold,
+                                                boldWeight = FontWeight.SemiBold,
+                                                inlineCode = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.98f),
+                                                inlineCodeBackground = lerp(
+                                                    Theme.Elevated,
+                                                    MaterialTheme.colorScheme.onSurface,
+                                                    0.14f,
+                                                ),
+                                            ),
                                         ) {
                                             // 同题面：内容变化时重建 Markdown 根选择容器，避免旧选区残留。
                                             key(entryKey, entry.answer) {
                                                 MarkdownText(
                                                     entry.answer,
                                                     dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
-                                                    maxWidth = QuizContentWidth,
+                                                    maxWidth = SourceQuestionContentWidth,
                                                 )
                                             }
                                         }
@@ -1311,11 +1324,16 @@ private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): A
 }
 
 /** 单击打开编辑，拖动时把鼠标事件留给 SelectionContainer 做划词。 */
+@Composable
 private fun Modifier.singleClickWithoutConsumingSelection(
     accept: (Offset) -> Boolean = { true },
     onClick: () -> Unit,
-): Modifier =
-    pointerInput(onClick) {
+): Modifier {
+    // 文档切换后的题目/Git 标记/悬停重组会换入新的 lambda。以 onClick 为 pointerInput key
+    // 会在 Press 与 Release 之间取消手势协程，导致新文档第一次点击题目没有反应。
+    val currentAccept by rememberUpdatedState(accept)
+    val currentOnClick by rememberUpdatedState(onClick)
+    return pointerInput(Unit) {
         awaitPointerEventScope {
             var pressed = false
             var moved = false
@@ -1329,19 +1347,20 @@ private fun Modifier.singleClickWithoutConsumingSelection(
                     PointerEventType.Press -> {
                         pressed = true
                         moved = false
-                        acceptedPress = accept(change.position)
+                        acceptedPress = currentAccept(change.position)
                         downX = change.position.x
                         downY = change.position.y
                     }
                     PointerEventType.Move -> if (pressed && ((change.position.x - downX) * (change.position.x - downX) + (change.position.y - downY) * (change.position.y - downY) > 36f)) moved = true
                     PointerEventType.Release -> {
-                        if (pressed && acceptedPress && !moved) onClick()
+                        if (pressed && acceptedPress && !moved) currentOnClick()
                         pressed = false
                     }
                 }
             }
         }
     }
+}
 
 /** Markdown 编辑快捷键（Ctrl+B/I/`）：在按键隧道阶段消费，避免字符落入正文。 */
 private fun Modifier.markdownFormatKeys(onToggle: (String, String) -> Unit): Modifier =
