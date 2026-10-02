@@ -2,7 +2,49 @@
 
 > Android 13/AAOS 中新增 C/C++ 与 Java 可执行模块和库的学习资料，覆盖源码构建、预编译导入、依赖、分区安装及设备侧验证。代码片段说明模块类型与关键属性；模块名、路径和目标分区应按实际产品调整。维护者：session-to-knowledge。
 
-**Q1: [learning] [tags:Android.bp] system/core/init/Android.bp 中的 defaults、soong_config_module_type 和构建变量如何改变模块配置？**
+**Q1: AAOS 构建中的 Soong 和 Soong 模块分别是什么？**
+
+**Soong 是 Android 的构建系统之一；Soong 模块是它构建图中的基本单元。** `Android.bp` 声明模块，Soong 读取声明并解析依赖与构建变体，生成 Ninja 构建规则；Ninja 再执行具体的编译、链接等命令。
+
+读一个模块定义时，先看这三部分：
+
+1. **类型**：决定模块要执行哪类构建规则，例如 `cc_binary` 构建 C/C++ 可执行文件，`cc_library_shared` 构建共享库，`java_library` 构建 Java 库。
+2. **属性**：描述模块的输入和构建方式，例如 `name` 是模块名，`srcs` 指定源文件，`shared_libs` 声明共享库依赖。
+3. **依赖**：模块通过依赖属性连接成构建图，Soong 据此确定构建顺序，并为适用的架构、产品配置或分区生成变体。
+
+模块不一定对应一个最终文件：`cc_defaults` 用于复用构建属性，`filegroup` 用于组织文件；而能产出文件的模块也不一定自动进入产品镜像，是否打包由产品配置决定。
+
+**Q2: AAOS 项目什么时候需要新增或修改 Android.bp，模块声明与产品打包如何区分？**
+
+当需要把源码或预编译文件纳入构建，或改变已有模块的输入、依赖、编译属性、变体和安装位置时，才新增或修改 `Android.bp`。若模块已经定义，只是要让产品包含它，应修改产品配置中的模块清单，而不是重复定义模块。
+
+按改动目标选择位置：
+
+1. **新增构建目标**：在源码所属目录的 `Android.bp` 声明模块，按产物选择类型；源码编译使用 `cc_*`、`java_*` 等类型，导入预编译产物则使用对应类型，例如 `cc_prebuilt_binary` 或 `java_import`。
+2. **调整已有目标**：优先修改该模块现有定义，变更 `srcs`、依赖、编译选项或分区属性；不要只因想换产物文件名就复制一份模块，可检查 `stem` 等属性是否已满足需求。
+3. **选择产品内容**：若目标只是让已定义模块进入产品，在产品配置中加入对应模块名（例如 `PRODUCT_PACKAGES`）；`Android.bp` 定义“如何构建”，产品配置决定“本产品包含什么”。
+
+`Android.bp` 是声明式配置，不写 Makefile 式的流程控制；需要按架构或目标变体调整属性时，使用模块类型支持的 `arch`、`target`、defaults 等机制，具体字段以当前 Android 分支的 Soong 定义为准。
+
+下面的最小示例声明一个共享库和依赖它的可执行文件：
+
+```bp
+cc_library_shared {
+    name: "libvehicle_util",
+    srcs: ["VehicleUtil.cpp"],
+    export_include_dirs: ["include"],
+}
+
+cc_binary {
+    name: "vehicle_diag",
+    srcs: ["main.cpp"],
+    shared_libs: ["libvehicle_util"],
+}
+```
+
+`shared_libs` 中写的是 Soong 模块名，不是库文件路径；它既声明链接依赖，也让 Soong 将库纳入构建图。Java 模块使用 `java_library`、`android_app` 等类型，具体可用属性取决于模块类型和 Android 分支。写完后可用 `m vehicle_diag` 单独构建目标；需要把它安装进设备镜像时，还要确认产品配置包含该模块，并核对安装分区属性。
+
+**Q3: [learning] [tags:Android.bp] system/core/init/Android.bp 中的 defaults、soong_config_module_type 和构建变量如何改变模块配置？**
 
 defaults 模块集中保存多个模块共用的编译属性与依赖；`soong_config_module_type` 则把指定类型的属性开放给 Soong 配置变量。`init_defaults` 让 init 相关模块共享安全编译选项、库依赖和按构建变体调整的宏定义。
 
@@ -79,7 +121,11 @@ init_first_stage_cc_defaults {
 
 
 
-**Q2: init_first_stage 与 init_second_stage 在 system/core/init/Android.bp 中如何区分源码、链接方式和安装目标？**
+
+
+
+
+**Q4: init_first_stage 与 init_second_stage 在 system/core/init/Android.bp 中如何区分源码、链接方式和安装目标？**
 
 两个模块都生成名为 `init` 的不同构建变体产物，但承担不同启动阶段：`init_first_stage` 是放入 ramdisk 根目录的静态可执行文件，`init_second_stage` 则以 `main.cpp` 和 `libinit` 组成，并按 platform 或 recovery 目标选择附属文件与依赖。
 
@@ -137,7 +183,11 @@ cc_binary {
 
 
 
-**Q3: system/core/init/Android.bp 如何构建 init 测试、主机校验工具和生成文件？**
+
+
+
+
+**Q5: system/core/init/Android.bp 如何构建 init 测试、主机校验工具和生成文件？**
 
 该文件把设备测试、基准测试、测试辅助库、主机校验程序与生成规则声明为不同模块。它们复用部分 init 源码或 defaults，但目标平台、依赖和用途不同，不能把它们都当作设备启动程序。
 
@@ -200,7 +250,11 @@ cc_binary {
 
 
 
-**Q4: 阅读 system/core/init/Android.bp 时，源码变量、libinit、phony 模块和 init_second_stage 如何组成模块依赖图？**
+
+
+
+
+**Q6: 阅读 system/core/init/Android.bp 时，源码变量、libinit、phony 模块和 init_second_stage 如何组成模块依赖图？**
 
 这个文件先定义可复用的源码集合和许可，再由具体 Soong 模块组合成库、可执行文件与别名目标。变量本身不是模块；只有被模块的 `srcs`、`defaults` 等属性引用后，才参与相应模块的构建图。
 
@@ -274,7 +328,11 @@ cc_binary {
 
 
 
-**Q5: 我现在会写Android.bp，说说写完之后有什么用是怎么生效的？**
+
+
+
+
+**Q7: 我现在会写Android.bp，说说写完之后有什么用是怎么生效的？**
 
 
 
@@ -286,7 +344,11 @@ cc_binary {
 
 
 
-**Q6: 在 AAOS 构建中，Soong、Make/Kati、Ninja、Android.bp/Android.mk 和 m 各自承担什么角色，模块声明又怎样流转为构建动作？**
+
+
+
+
+**Q8: 在 AAOS 构建中，Soong、Make/Kati、Ninja、Android.bp/Android.mk 和 m 各自承担什么角色，模块声明又怎样流转为构建动作？**
 
 各角色的职责列表如下：
 
@@ -315,7 +377,11 @@ Android 13 处于渐进迁移阶段，同一构建树中可以同时有 Android.
 
 
 
-**Q7: 在 AAOS 产品中新增 C/C++ 命令行程序时，`cc_binary`、`PRODUCT_PACKAGES` 和 `m <模块名>` 分别做什么？**
+
+
+
+
+**Q9: 在 AAOS 产品中新增 C/C++ 命令行程序时，`cc_binary`、`PRODUCT_PACKAGES` 和 `m <模块名>` 分别做什么？**
 
 `cc_binary` 声明一个由 Soong 编译的本机可执行模块，`PRODUCT_PACKAGES` 请求产品安装它，`m <模块名>` 则构建该模块及其依赖。构建一个模块与把它打进最终镜像是不同动作。
 
@@ -340,7 +406,11 @@ cc_binary {
 
 
 
-**Q8: 什么时候使用 `cc_prebuilt_binary` 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
+
+
+
+
+**Q10: 什么时候使用 `cc_prebuilt_binary` 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
 
 只有已经针对 Android 目标 ABI 与运行时构建的 ELF 才适合作为 AAOS 预编译可执行文件导入。宿主机 Linux 程序通常依赖 GNU libc，而 Android 使用 Bionic；即使架构相同，也不能据此认为二进制可运行。
 
@@ -356,7 +426,11 @@ Soong 的预编译模块会检查模块类型和目标架构，运行时还要�
 
 
 
-**Q9: C/C++ 动态库、静态库和使用者模块之间如何声明依赖与安装？**
+
+
+
+
+**Q11: C/C++ 动态库、静态库和使用者模块之间如何声明依赖与安装？**
 
 `cc_library_shared` 构建 `.so`，`cc_library_static` 构建静态库，消费模块通过 `shared_libs` 或 `static_libs` 声明依赖。显式依赖让构建图先构建依赖；若可执行程序进入产品包集合，所需共享库通常由依赖关系纳入安装闭包。
 
@@ -388,7 +462,11 @@ cc_binary {
 
 
 
-**Q10: 使用 `cc_prebuilt_library_shared` 时，如何保证 `.so` 的架构、文件名和头文件导出相互匹配？**
+
+
+
+
+**Q12: 使用 `cc_prebuilt_library_shared` 时，如何保证 `.so` 的架构、文件名和头文件导出相互匹配？**
 
 预编译共享库要按目标 ABI 提供正确二进制，并在 Soong 声明实际源文件、安装名与公开头文件目录。`arch` 分支应对应源码树中真实存在的 ABI 目录和文件，不能让模块名、`stem` 与文件路径互相矛盾。
 
@@ -421,7 +499,11 @@ cc_prebuilt_library_shared {
 
 
 
-**Q11: Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 `app_process`？**
+
+
+
+
+**Q13: Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 `app_process`？**
 
 Soong 的 `java_library` 编译 Java 源码；设置 `installable: true` 可生成可安装的设备侧 JAR，产品包配置负责将其放入镜像。Android 设备并不把普通 JAR 名称当作 shell 命令直接执行，示例通过 `app_process` 启动运行时并指定主类。
 
@@ -447,7 +529,11 @@ java_library {
 
 
 
-**Q12: `java_library` 与 `java_import` 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
+
+
+
+
+**Q14: `java_library` 与 `java_import` 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
 
 `java_library` 从源码构建 Java 模块，`java_import` 将已有 JAR 声明为 Soong 模块；消费者通过模块名建立依赖。一个 JAR 依赖是静态编入还是作为运行时依赖，必须结合 Soong 属性和产物检查，不能只看 `.jar` 后缀判断。
 
@@ -465,7 +551,11 @@ java_library {
 
 
 
-**Q13: Java 的 `installable`、`product_specific` 和 `PRODUCT_PACKAGES` 分别控制什么？**
+
+
+
+
+**Q15: Java 的 `installable`、`product_specific` 和 `PRODUCT_PACKAGES` 分别控制什么？**
 
 `installable` 控制模块是否作为可安装产物生成，`product_specific` 指定模块的产品分区归属，`PRODUCT_PACKAGES` 将模块请求纳入某个产品。三者回答不同问题，不能互相替代。
 
@@ -485,7 +575,11 @@ java_library {
 
 
 
-**Q14: 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 `PRODUCT_PACKAGES`？**
+
+
+
+
+**Q16: 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 `PRODUCT_PACKAGES`？**
 
 一般通过 Soong 的模块依赖关系，构建系统能构建并安装可执行模块所需的共享库依赖；产品包集合通常只需选择产品入口模块。但这依赖依赖声明正确且安装分区兼容。
 
@@ -501,7 +595,11 @@ java_library {
 
 
 
-**Q15: 如何验证新增加的 Soong 模块从源码定义到设备运行的完整链路？**
+
+
+
+
+**Q17: 如何验证新增加的 Soong 模块从源码定义到设备运行的完整链路？**
 
 验证应分别确认模块被发现、可编译、被产品选择、安装到预期分区，并能在设备上加载运行。
 
@@ -511,9 +609,6 @@ java_library {
 4. 本机二进制可直接从 shell 启动；Java JAR 则按实际安装路径设置 `CLASSPATH` 并用 `app_process` 启动主类。
 
 出现问题时区分 Soong 声明错误、目标 ABI 不匹配、模块未进入产品、安装路径错误、动态库缺失与运行时 API/类加载失败，避免用一次成功编译代替端到端验证。
-
-
-
 
 
 
