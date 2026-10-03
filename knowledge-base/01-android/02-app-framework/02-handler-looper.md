@@ -1,6 +1,6 @@
 # Handler 消息机制与 MessageQueue 实现
 
-> 学习资料（文章模式沉淀）。边界：本文回答"Handler/Looper/MessageQueue 的契约与线程边界、Android 17 DeliQueue 的实现与迁移"；锁等待诊断归 16-app-practice/05，Binder 语义归 01-architecture/04。经典机制与 DeliQueue 部分分属 Android 通用与 Android 17 语境，逐题标注。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"Handler/Looper/MessageQueue 的契约与线程边界、Android 17 DeliQueue 的实现与迁移"；锁等待与线程稳定性实践见 [应用线程与 IPC 稳定性](08-app-thread-ipc-stability.md)，Binder 语义归 01-architecture/04。经典机制与 DeliQueue 部分分属 Android 通用与 Android 17 语境，逐题标注。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Handler、Looper、MessageQueue 和 Message 如何配合把工作交给目标线程？**
 

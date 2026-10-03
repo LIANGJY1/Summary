@@ -27,7 +27,7 @@ Android 上要掌握的使用规则：
 
 1. **确认**：meminfo 观察 Native PSS 随操作次数线性增长；`dalvik.vm.checkjni` 打开后跑用例，CheckJNI 会以 `JNI DETECTED ERROR IN APPLICATION` 报出部分误用（ART 调试开关见 06-art-runtime.md Q2）；
 2. **修复纪律**：Get/Release 严格配对；用 RAII 包装（构造 Get、析构 Release）避免早退路径漏放；
-3. **工具链**：heapprofd 等 native 内存工具可定位分配点——监控体系见 [../16-app-practice/04-stability-leaks.md](../16-app-practice/04-stability-leaks.md) Q10–Q16。
+3. **工具链**：heapprofd 等 native 内存工具可定位分配点——监控体系见 [../07-memory/03-app-memory-stability.md](../07-memory/03-app-memory-stability.md) Q10–Q16。
 
 **Q4: @FastNative 与 @CriticalNative 加速什么？各自的硬约束与版本可用性是什么？**
 

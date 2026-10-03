@@ -1,6 +1,6 @@
 # Activity 与窗口生命周期
 
-> 学习资料（文章模式沉淀）。主线：Activity 启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、透明主题的尺寸陷阱、Configuration 变更的两条路径与 relaunch 语义、状态保存时机、启动模式与任务栈、切换动画期间的双窗口、首帧与启动度量、可见性与内存回调、车机多用户多显示下的归属差异。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityThread.java、`core/java/android/internal/policy/PhoneWindow.java`、ViewRootImpl.java），版本相关结论按官方文档口径（2026-09 检索）。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../16-app-practice/07-startup-optimization.md)，ANR 契约见 [ANR](../15-performance/03-anr.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：Activity 启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、透明主题的尺寸陷阱、Configuration 变更的两条路径与 relaunch 语义、状态保存时机、启动模式与任务栈、切换动画期间的双窗口、首帧与启动度量、可见性与内存回调、车机多用户多显示下的归属差异。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityThread.java、`core/java/android/internal/policy/PhoneWindow.java`、ViewRootImpl.java），版本相关结论按官方文档口径（2026-09 检索）。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../15-performance/11-app-startup-optimization.md)，ANR 契约见 [ANR](../15-performance/03-anr.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Activity 执行到 onResume 后界面还没出现，首帧前后经历了哪些阶段？**
 

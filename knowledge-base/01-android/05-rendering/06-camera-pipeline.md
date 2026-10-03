@@ -1,6 +1,6 @@
 # 相机管线：缓冲、栅栏与时间戳
 
-> 学习资料（文章模式沉淀）。边界：本文回答"Camera 输出流的 BufferQueue、fence 交接、ZSL 与时间戳基准"；应用侧 CameraX 用法归 16-app-practice，性能归因归 15-performance。证据：AAOS13 源码核对，逐题标注。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"Camera 输出流的 BufferQueue、fence 交接、ZSL 与时间戳基准"；应用侧 CameraX 与媒体实战见 [应用媒体与混合渲染](10-app-media-hybrid-practice.md)，性能归因归 15-performance。证据：AAOS13 源码核对，逐题标注。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Camera2 一次 capture request 的 preview、record、analysis 多路输出共用同一块 buffer 吗？收到 metadata 能证明图像输出就绪吗？**
 

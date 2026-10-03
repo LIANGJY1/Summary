@@ -1,6 +1,6 @@
 # 主线程与异步时序：缺陷模式与修复范式
 
-> 学习资料（文章模式沉淀）。主线：主线程同步 Binder 的病灶形态与四种修复范式（缓存直读加异步补拉、专用线程池加代数守卫、专用串行 HandlerThread、IO 线程加旧值先显），以及延迟任务可取消、Fragment 迟到回调失效、并发容器选型、回调禁反查滞后缓存、刷新源直订事实事件、防抖不吞真实请求、防御机制留退出通道、乐观更新可被事实源撤销、长驻订阅自愈三件套、终态事件直达快路径等异步时序防回归规则。源文档：`Summary/project/yadi/git提交与缺陷分析` 下 00_主报告 §5 模式四、SystemUI.md、BTPhone.md 及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码均节选自真实 diff）。ANR 超时契约与 InputDispatcher 计时等平台机制见 [../15-performance/03-anr.md](../15-performance/03-anr.md)，本文只写项目缺陷模式与修复范式视角；偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](03-crash-protection.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。 2026-09-26 二次修订：新增 03-crash-protection Q20（SIR-7156 隐式依赖链断裂与平台控件不重对齐）；段落并列项拆为列表。
+> 学习资料（文章模式沉淀）。主线：主线程同步 Binder 的病灶形态与四种修复范式（缓存直读加异步补拉、专用线程池加代数守卫、专用串行 HandlerThread、IO 线程加旧值先显），以及延迟任务可取消、Fragment 迟到回调失效、并发容器选型、回调禁反查滞后缓存、刷新源直订事实事件、防抖不吞真实请求、防御机制留退出通道、乐观更新可被事实源撤销、长驻订阅自愈三件套、终态事件直达快路径等异步时序防回归规则。源文档：`Summary/project/yadi/git提交与缺陷分析` 下 00_主报告 §5 模式四、SystemUI.md、BTPhone.md 及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码均节选自真实 diff）。ANR 超时契约与 InputDispatcher 计时等平台机制见 [../15-performance/03-anr.md](../15-performance/03-anr.md)，本文只写项目缺陷模式与修复范式视角；偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](../15-performance/10-app-crash-patterns.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。 2026-09-26 二次修订：新增 03-crash-protection Q20（SIR-7156 隐式依赖链断裂与平台控件不重对齐）；段落并列项拆为列表。
 
 **Q1: 车载应用在主线程调用 getProperty、Car.createCar 这类车服接口，为什么是本仓库最大性能病灶？症状有哪几种形态？**
 

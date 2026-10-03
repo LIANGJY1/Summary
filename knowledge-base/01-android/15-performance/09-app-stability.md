@@ -1,6 +1,6 @@
 # 稳定性治理：度量、崩溃与 ANR
 
-> 学习资料（文章模式沉淀）。主线：把用户现象分流为可核对的证据，用统一口径算指标，按构建产物聚合归因，再落到 Java/Native 崩溃采集与 ANR 治理动作。源文档：android-internals-wiki §20.1《应用稳定性度量、聚合与归因》、§20.2《Java Crash、异常架构与线程堆栈分析》、§20.3《Native Crash、堆栈回溯与符号化》、§20.4《ANR 治理策略》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（registerAnrWarningListener、ProfilingTrigger、getAnrInfo 为 Android 16/17 能力，AAOS13 无；ApplicationExitInfo 的 REASON 常量 AAOS13 为 15 个、Android 14 起增至 17 个），工程实践按材料口径转写、不确定处已弱化；Play vitals 门槛与统计口径已与官方文档核对（官方页面 2026-08-26 更新）。ANR 机制层（检测器、AnrHelper、trace 采集与 Android 17 预警）见 [../15-performance/03-anr.md](../15-performance/03-anr.md)；lmkd 与 OOM 的机制层见 [../07-memory/01-memory-management.md](../07-memory/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：把用户现象分流为可核对的证据，用统一口径算指标，按构建产物聚合归因，再落到 Java/Native 崩溃采集与 ANR 治理动作。源文档：android-internals-wiki §20.1《应用稳定性度量、聚合与归因》、§20.2《Java Crash、异常架构与线程堆栈分析》、§20.3《Native Crash、堆栈回溯与符号化》、§20.4《ANR 治理策略》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（registerAnrWarningListener、ProfilingTrigger、getAnrInfo 为 Android 16/17 能力，AAOS13 无；ApplicationExitInfo 的 REASON 常量 AAOS13 为 15 个、Android 14 起增至 17 个），工程实践按材料口径转写、不确定处已弱化；Play vitals 门槛与统计口径已与官方文档核对（官方页面 2026-08-26 更新）。ANR 机制层（检测器、AnrHelper、trace 采集与 Android 17 预警）见 [../15-performance/03-anr.md](03-anr.md)；lmkd 与 OOM 的机制层见 [../07-memory/01-memory-management.md](../07-memory/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 用户报障"闪退、卡死、白屏"时，为什么必须先区分故障事件与进程结局，怎样据此选择第一手证据？**
 

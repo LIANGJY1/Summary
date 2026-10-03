@@ -1,6 +1,6 @@
 # Android 权限系统（android.permission.*）
 
-> 学习资料（文章模式沉淀）。主线：框架层权限系统的定位（android.permission.* 是 Java 框架实现的"应用对能力"授权体系，内核不参与判定）、它与内核沙箱（UID/SELinux/seccomp，见 [09-app-sandbox.md](09-app-sandbox.md)；策略层见 [11-selinux.md](11-selinux.md)）的分工与互补、以及它向内核桥接的设计（权限映射补充组，经 Zygote SetGids 生效）。来源：2026-09-26 对话深讲；实践细节（运行时授权弹窗流程、AppOps 调试）属应用实操，后续进 16-app-practice 册。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：框架层权限系统的定位（android.permission.* 是 Java 框架实现的"应用对能力"授权体系，内核不参与判定）、它与内核沙箱（UID/SELinux/seccomp，见 [09-app-sandbox.md](09-app-sandbox.md)；策略层见 [11-selinux.md](11-selinux.md)）的分工与互补、以及它向内核桥接的设计（权限映射补充组，经 Zygote SetGids 生效）。来源：2026-09-26 对话深讲；应用侧权限使用与排障细节应随具体 API 场景归入对应的应用框架或服务实践册。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: android.permission.* 是什么机制？它属于哪一层？**
 

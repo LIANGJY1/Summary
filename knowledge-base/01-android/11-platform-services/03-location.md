@@ -1,6 +1,6 @@
 # 位置服务链路
 
-> 学习资料（文章模式沉淀）。边界：本文回答"LocationManager 的 provider 语义、请求合并、权限改写与回调背压"；功耗策略归 14-cpu-power，应用实践归 16-app-practice。源文档：android-internals-wiki §1.25（Android 17 语境）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"LocationManager 的 provider 语义、请求合并、权限改写与回调背压"；功耗策略归 14-cpu-power，应用侧定位实践见相应应用与功耗主题册。源文档：android-internals-wiki §1.25（Android 17 语境）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 向 LocationManager 的 network provider 提交 QUALITY_HIGH_ACCURACY 请求，会自动启动 GPS 吗？**
 

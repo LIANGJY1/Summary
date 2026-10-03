@@ -1,6 +1,6 @@
 # I/O 与存储实践：文件、数据库、缓存、媒体与网络
 
-> 学习资料（文章模式沉淀）。主线：应用侧 I/O 实践——文件与键值存储、SQLite/Room 与序列化、缓存与离线优先、MediaStore 与 Photo Picker、移动网络连接与容灾、HTTP/2/HTTP/3 与 gRPC/ECH 的选型和排查方法。源文档：android-internals-wiki 第 24 章《I/O 与网络优化》§24.1–§24.6；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（Photo Picker 扩展能力、DocumentsContract 回收站与同步状态、`HttpEngine`、ECH 为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；SQLite WAL 默认参数（连接池 4、WAL 同步 NORMAL、自动 checkpoint 100 页）已按 AAOS13 `config.xml` 核对，OkHttp 5.4.0、Room 3、MMKV 等独立发布组件按材料口径转写并标注组件版本。存储架构、FUSE 与 SharedPreferences/DataStore 的机制层见 [../06-storage/02-storage-io.md](../06-storage/02-storage-io.md)；缓存与内存预算的应用侧实践见 [12-memory-practice.md](12-memory-practice.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：应用侧 I/O 实践——文件与键值存储、SQLite/Room 与序列化、缓存与离线优先、MediaStore 与 Photo Picker、移动网络连接与容灾、HTTP/2/HTTP/3 与 gRPC/ECH 的选型和排查方法。源文档：android-internals-wiki 第 24 章《I/O 与网络优化》§24.1–§24.6；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（Photo Picker 扩展能力、DocumentsContract 回收站与同步状态、`HttpEngine`、ECH 为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；SQLite WAL 默认参数（连接池 4、WAL 同步 NORMAL、自动 checkpoint 100 页）已按 AAOS13 `config.xml` 核对，OkHttp 5.4.0、Room 3、MMKV 等独立发布组件按材料口径转写并标注组件版本。存储架构、FUSE 与 SharedPreferences/DataStore 的机制层见 [../06-storage/02-storage-io.md](02-storage-io.md)；缓存与内存预算的应用侧实践见 [12-memory-practice.md](../07-memory/04-app-memory-practice.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: StrictMode 在开发期检测主线程 I/O 的能力边界是什么？I/O 切到工作线程后就安全了吗？**
 

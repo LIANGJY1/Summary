@@ -60,7 +60,7 @@
 1. **gfxinfo 查询**（含 framestats 变体）：例如 `dumpsys gfxinfo <包名>`。应用级帧统计与阶段耗时。它属于 ActivityManagerService 的 dump 命令，不是窗口服务的命令（ActivityManagerService.java 与 WindowManagerShellCommand.java 归属核对；后者提供 `dumpsys window`）。
 2. **dumpsys SurfaceFlinger --latency <窗口名>** 与 --latency-clear：单窗口的呈现时间戳序列，回答"帧是准时到的还是迟到的"。适合确认掉帧是应用提交晚还是合成/呈现晚。
 3. **SurfaceFlinger 图层查询**：使用 `dumpsys SurfaceFlinger` 或 `--list`。图层与缓冲状态。
-4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答"这一帧的时间花在哪"。工具与类别用法见 [Perfetto 采集与 SQL 分析](../17-tools/04-perfetto-sql.md)。
+4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答"这一帧的时间花在哪"。工具与类别用法见 [Perfetto 采集与 SQL 分析](../15-performance/16-perfetto-analysis.md)。
 5. **帧时间线 / 帧指标采集**：FrameMetrics 回调可把逐帧数据收进自有采集，用于线上分布统计。
 
 选型原则：先确定要回答"应用内还是应用外"，再选工具；不要用一类工具的数据去解释另一类工具的现象。
@@ -101,7 +101,7 @@
 
 三类表现与三类原因对应：卡顿且内存平稳，常见于大位图每帧重传或大面积渐变模糊（每帧产生大量绘制指令或纹理上传）；卡顿并伴随内存上涨，常见于在绘制路径分配对象或解码大图；内存缓慢上涨且不回落，要查硬件层纹理与未释放的缓冲。
 
-排查手段是内存分类统计加绘制侧验证（[内存实践](../16-app-practice/12-memory-practice.md)）。一条实用纪律是"大图不进内存路径"：能用下采样尺寸解决的，不要解码原图；能在资源变体里给不同屏幕不同尺寸的，不要运行时缩放。
+排查手段是内存分类统计加绘制侧验证（[内存实践](../07-memory/04-app-memory-practice.md)）。一条实用纪律是"大图不进内存路径"：能用下采样尺寸解决的，不要解码原图；能在资源变体里给不同屏幕不同尺寸的，不要运行时缩放。
 
 **Q12: SurfaceView 区域变黑或偏移，如何分别确认图层、位置和 buffer？**
 
@@ -125,7 +125,7 @@
 
 把"靠人眼看"变成"可判定"，可以落实为四项检查：
 
-1. **埋点**：逐帧指标与应用级状态快照线上采集，掉帧率与白屏时长按版本跟踪（[线上诊断](../16-app-practice/18-observability-diagnostics.md)）。
+1. **埋点**：逐帧指标与应用级状态快照线上采集，掉帧率与白屏时长按版本跟踪（[线上诊断](../15-performance/12-app-observability-governance.md)）。
 2. **可视化对比**：关键界面在多分辨率、多密度、多字号、多语言、深浅色下的截图基线对比，差异纳入评审；车机上还要按不同 occupant zone 显示各采一份。
 3. **状态驱动测试**：把夜间模式、字号缩放、语言切换、UX 限制变化、电源状态、显示热插拔做成可触发的用例，而不是靠人工记得去点。
 4. **走查清单**：按窗口与内容分类列出必查项（首帧、透明与层级、insets 避让、多字号不破版、分心限制形态、返回栈、异常恢复），每项写清判定标准，避免"看起来没问题"式验收。

@@ -305,6 +305,13 @@ fun AppRoot(store: AppStore, windowState: WindowState, window: AwtWindow, onClos
                         Log.d("Ctrl+Shift+F 题库搜索栏 → ${store.questionSearchVisible.value}")
                         true
                     }
+                    // Ctrl+Shift+F 可能与本机输入法/桌面快捷键冲突；Ctrl+F 提供标准搜索备用键，重复按不收起。
+                    e.type == KeyEventType.KeyDown && e.key == Key.F && e.isCtrlPressed && !e.isShiftPressed &&
+                        tab == "题库" && store.selectedSourcePath !in store.sourceReadmeDocuments -> {
+                        store.questionSearchVisible.value = true
+                        Log.d("Ctrl+F 打开题库搜索栏")
+                        true
+                    }
                     else -> false
                 }
             },

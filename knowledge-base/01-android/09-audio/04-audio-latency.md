@@ -1,6 +1,6 @@
 # 音频延迟与应用实践
 
-> 学习资料（文章模式沉淀）。主线：应用侧的音频延迟口径与实测方法、控制面与数据面分工、FAST 轨接纳条件、AAudio 路径回退、数据回调纪律与 xrun 归因、Offload 取舍与收益验证、AudioTrack/SoundPool 使用语义、AAudio 缓冲调优。Q1–Q5 转自 [../03-ui/04-window-system.md](../03-ui/04-window-system.md)（原「显示窗口与音频链路」册的音频部分，2026-09-28 迁入；android-internals-wiki §1.20 来源，机制按本地 AAOS13 源码核对），Q6–Q7 转自 [../16-app-practice/15-power-practice.md](../16-app-practice/15-power-practice.md)（材料 Android 17 口径与 AAOS13 差异已随题标注）。音频子系统机制见 [01-aosp-audio.md](01-aosp-audio.md)；蓝牙音频见 [05-bluetooth-audio.md](05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：应用侧的音频延迟口径与实测方法、控制面与数据面分工、FAST 轨接纳条件、AAudio 路径回退、数据回调纪律与 xrun 归因、Offload 取舍与收益验证、AudioTrack/SoundPool 使用语义、AAudio 缓冲调优。Q1–Q5 转自 [../03-ui/04-window-system.md](../03-ui/04-window-system.md)（原「显示窗口与音频链路」册的音频部分，2026-09-28 迁入；android-internals-wiki §1.20 来源，机制按本地 AAOS13 源码核对），Q6–Q7 转自 [../14-cpu-power/03-app-power-practice.md](../14-cpu-power/03-app-power-practice.md)（材料 Android 17 口径与 AAOS13 差异已随题标注）。音频子系统机制见 [01-aosp-audio.md](01-aosp-audio.md)；蓝牙音频见 [05-bluetooth-audio.md](05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 48 kHz 下 240 帧的缓冲区就是 5 ms 输出延迟吗？FEATURE_AUDIO_LOW_LATENCY 声明为 true 能证明当前设备延迟低吗？**
 

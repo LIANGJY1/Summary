@@ -1,6 +1,6 @@
 # 视频播放与合成路径
 
-> 学习资料（文章模式沉淀）。边界：本文回答"视频帧如何经 SurfaceView/MediaCodec/tunneled 路径上屏、编解码能力与容器格式支持的版本边界"；渲染机制归 01–02 册，应用侧 Media3 实践归 16-app-practice。证据：AAOS13 源码核对，逐题标注。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"视频帧如何经 SurfaceView/MediaCodec/tunneled 路径上屏、编解码能力与容器格式支持的版本边界"；渲染机制归 01–02 册，应用侧 Media3 与混合渲染实战见 [应用媒体与混合渲染](10-app-media-hybrid-practice.md)。证据：AAOS13 源码核对，逐题标注。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 用了 SurfaceView 的视频就一定走硬件 overlay 吗？怎么确认目标帧的实际合成路径？**
 

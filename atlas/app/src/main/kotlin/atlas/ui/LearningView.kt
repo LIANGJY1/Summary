@@ -427,7 +427,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
-    // 搜索栏默认隐藏，Ctrl+Shift+F 召出/收起（状态在 store：跨页签保留，根窗口统一处理按键）。
+    // 搜索栏默认隐藏，Ctrl+Shift+F 切换、Ctrl+F 打开（状态在 store：跨页签保留，根窗口统一处理按键）。
     // 收起即清词与范围——否则会留下看不见的过滤条件继续生效。
     val searchFocusRequester = remember { FocusRequester() }
     // 搜索区与页面根的窗口坐标：供"点击搜索区之外自动收起"判定
@@ -440,7 +440,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             query = ""
             searchScope = QuestionSearchScope.ALL
             // 收起可能来自键盘、点击外部等多条路径，但都汇到这一个状态：无论哪条都要把焦点
-            // 交还根节点——焦点悬空后后续按键到不了任何处理层，Ctrl+Shift+F 会"失灵"
+            // 交还根节点——焦点悬空后后续按键到不了任何处理层，搜索快捷键会"失灵"
             runCatching { rootFocus.requestFocus() }
         }
     }
@@ -485,6 +485,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     fun toggleBatchSelection(key: String) {
         selectedQuestionKeys = if (key in selectedQuestionKeys) selectedQuestionKeys - key else selectedQuestionKeys + key
     }
+    val allVisibleQuestionsSelected = visible.isNotEmpty() &&
+        visible.all { sourceQuestionKey(it) in selectedQuestionKeys }
     val dragging = reorderMode && draggingKey != null && query.isBlank()
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
@@ -701,7 +703,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 )
             }
         } else {
-        // 搜索栏（输入框 + 范围行）默认隐藏，Ctrl+Shift+F 召出并聚焦；点击其外任意区域自动收起
+        // 搜索栏默认隐藏，由 Ctrl+Shift+F 切换或 Ctrl+F 打开并聚焦；点击其外任意区域自动收起
         if (store.questionSearchVisible.value) {
             Column(
                 Modifier.fillMaxWidth().onGloballyPositioned { searchRectInWindow = it.boundsInWindow() },
@@ -761,6 +763,19 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
             if (batchTagMode) {
                 Text("已选 ${selectedQuestionKeys.size} 道", fontSize = 12.sp, color = Theme.Muted)
+                TextButton(
+                    onClick = {
+                        selectedQuestionKeys = if (allVisibleQuestionsSelected) {
+                            emptySet()
+                        } else {
+                            visible.mapTo(mutableSetOf(), ::sourceQuestionKey)
+                        }
+                    },
+                    enabled = visible.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                ) {
+                    Text(if (allVisibleQuestionsSelected) "取消全选" else "全选", fontSize = 12.sp)
+                }
                 OutlinedButton(
                     onClick = { batchTagText = ""; showBatchTagDialog = true },
                     enabled = selectedQuestionKeys.isNotEmpty(),

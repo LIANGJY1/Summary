@@ -195,7 +195,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         return link
     }
 
-    /** 题库页：搜索栏可见性（默认隐藏，Ctrl+Shift+F 召出/收起；跨页签保留） */
+    /** 题库页：搜索栏可见性（默认隐藏；Ctrl+Shift+F 切换、Ctrl+F 打开；跨页签保留） */
     val questionSearchVisible = mutableStateOf(false)
 
     /** 工具页：USB 一键转无线进行中（按钮禁用 + 文案切换） */

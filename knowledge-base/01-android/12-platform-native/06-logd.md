@@ -1,6 +1,6 @@
 # logd 日志链路
 
-> 学习资料（文章模式沉淀）。边界：本文回答"一条日志从调用到 logd 的路径、级别过滤省什么、丢弃与裁剪机制、logcat 过滤执行位置"；R8 构建期删日志归 16-app-practice/16。源文档：android-internals-wiki §1.27（Android 17 语境）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"一条日志从调用到 logd 的路径、级别过滤省什么、丢弃与裁剪机制、logcat 过滤执行位置"；R8 构建期删日志与包体积治理见 [应用 CPU 与体积优化](../14-cpu-power/04-app-cpu-size-optimization.md)。源文档：android-internals-wiki §1.27（Android 17 语境）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 一条 Log.d() 从调用到 logd 要经过什么？native 层的级别过滤能省掉哪些成本、省不掉哪些？**
 

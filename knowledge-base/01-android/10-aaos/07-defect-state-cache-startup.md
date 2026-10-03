@@ -1,6 +1,6 @@
 # 状态缓存与启动时序：从卡开机到缓存失步的因果链
 
-> 学习资料（文章模式沉淀）。主线：该项目 761 条缺陷修复中状态管理与缓存占 77 条，叠加异步时序后的高危形态集中在启动时序（类加载路径执行 IO 导致卡开机）、状态机提前 return 盲区、暂存数据覆盖写、退出路径未复位、缓存与真实源失步五类，本文沿因果链提炼各形态的可迁移规则与排查入口。源文档：`Summary/project/yadi/git提交与缺陷分析` 00_主报告 §4.2 A 级清单、§5 模式四、Setting.md 等分册及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码块均节选自真实 diff）。主线程 Binder 分流、迟到回调失效、广播事务归属等异步范式由 [01-main-thread-async.md](01-main-thread-async.md) 承载，本文不重复展开。偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](03-crash-protection.md)，组合状态跨端同步见 [07-kanzi-state-sync.md](07-kanzi-state-sync.md)，开机存储准备的平台背景见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。 2026-09-26 二次修订：消除跨题引用改为题内自足；段落并列项拆为列表；新增 02-system-boot Q7（同入口连点的跳转锁 + launchMode 双保险）；新增 Q4（privapp-permissions 白名单未同步导致开机异常）、Q22（派生状态刷新时机链）、Q23（列表渲染空值兜底）。
+> 学习资料（文章模式沉淀）。主线：该项目 761 条缺陷修复中状态管理与缓存占 77 条，叠加异步时序后的高危形态集中在启动时序（类加载路径执行 IO 导致卡开机）、状态机提前 return 盲区、暂存数据覆盖写、退出路径未复位、缓存与真实源失步五类，本文沿因果链提炼各形态的可迁移规则与排查入口。源文档：`Summary/project/yadi/git提交与缺陷分析` 00_主报告 §4.2 A 级清单、§5 模式四、Setting.md 等分册及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码块均节选自真实 diff）。主线程 Binder 分流、迟到回调失效、广播事务归属等异步范式由 [01-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md) 承载，本文不重复展开。偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](../15-performance/10-app-crash-patterns.md)，组合状态跨端同步见 [07-kanzi-state-sync.md](09-kanzi-state-sync.md)，开机存储准备的平台背景见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。 2026-09-26 二次修订：消除跨题引用改为题内自足；段落并列项拆为列表；新增 02-system-boot Q7（同入口连点的跳转锁 + launchMode 双保险）；新增 Q4（privapp-permissions 白名单未同步导致开机异常）、Q22（派生状态刷新时机链）、Q23（列表渲染空值兜底）。
 
 **Q1: 单例 object 的 init 块在应用启动极早期执行 mkdirs 落盘，为什么会卡住整个开机？（SIR-8227）**
 
@@ -239,7 +239,7 @@ SIR-8227 的门控设计按读写区分各分支：
      }
 ```
 
-判断规则：手势/动画控件必须成对处理进入与取消——拖动回调改了哪些属性，取消回调就要复位哪些；只复位视觉属性不复位状态变量，下次手势基准错位，只复位状态不复位视觉，残像仍在。偶现加 A 级的组合优先怀疑"未达阈值的取消"这类非主流分支，该案例的偶现排查视角（为什么只有取消路径触发）见 [03-crash-protection.md](03-crash-protection.md)。
+判断规则：手势/动画控件必须成对处理进入与取消——拖动回调改了哪些属性，取消回调就要复位哪些；只复位视觉属性不复位状态变量，下次手势基准错位，只复位状态不复位视觉，残像仍在。偶现加 A 级的组合优先怀疑"未达阈值的取消"这类非主流分支，该案例的偶现排查视角（为什么只有取消路径触发）见 [03-crash-protection.md](../15-performance/10-app-crash-patterns.md)。
 
 **Q12: 设备"断开/移除"只做断连不解绑数据，为什么列表会残留图标或分类错误？（SIR-7499、SIR-6786）**
 

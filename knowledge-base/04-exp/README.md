@@ -8,7 +8,7 @@
 
 不收（与邻居分工）：
 
-1. 技术根因（某类缺陷的机制与修法）→ [../01-android/18-defect-patterns/](../01-android/18-defect-patterns/)
+1. 技术根因（某类缺陷的机制与修法）→ 按知识主题归入 [Android 对应主题册](../01-android/README.md)
 2. 项目事实档案（架构、模块、个人职责、面试表达）→ [career/work-project-analysis/](../career/work-project-analysis)（2026-10-03 已建立，首册 Launcher 项目车辆服务案例）
 3. 单次事件的排查过程 → `issue/`
 4. 可迁移的**技术**设计权衡 → [design-principles.md](../design-principles.md) 等 ROUTING 大类

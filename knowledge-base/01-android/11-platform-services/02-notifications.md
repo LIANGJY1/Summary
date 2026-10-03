@@ -1,6 +1,6 @@
 # 通知服务链路
 
-> 学习资料（文章模式沉淀）。边界：本文回答"NotificationManager 的进程边界、限流、渠道与权限语义"；SystemUI 渲染归 03-ui，应用通知实践归 16-app-practice。源文档：android-internals-wiki §1.23（Android 17 语境），POST_NOTIFICATIONS 与渠道行为已与官方文档核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"NotificationManager 的进程边界、限流、渠道与权限语义"；SystemUI 渲染归 03-ui，应用通知使用与排障见相应应用实践题。源文档：android-internals-wiki §1.23（Android 17 语境），POST_NOTIFICATIONS 与渠道行为已与官方文档核对。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 调用 NotificationManager.notify() 返回后，系统已经完成了哪些工作、哪些还没有发生？**
 

@@ -15,7 +15,7 @@
 
 对应的防回归清单四条：新增颜色必配 night 值；样式一律走 token；动态资源名改静态引用；UI 提测跑"日夜 × 分辨率"矩阵。
 
-深浅色切换涉及 Activity 重建与生命周期的行为类缺陷（切换后不刷新、重建残留），其机制分析（`configChanges` 接管 uiMode 后必须自建完整刷肤路径、Fragment 视图重建时 Handler 残留消息要判活生命周期 owner）见 [01-main-thread-async.md](01-main-thread-async.md)。
+深浅色切换涉及 Activity 重建与生命周期的行为类缺陷（切换后不刷新、重建残留），其机制分析（`configChanges` 接管 uiMode 后必须自建完整刷肤路径、Fragment 视图重建时 Handler 残留消息要判活生命周期 owner）见 [01-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md)。
 
 **Q2: 布局里把 textColor 写成 #000000 这类硬编码色值，为什么浅色模式测试通过仍会在深色模式翻车？正确写法是什么？**
 
