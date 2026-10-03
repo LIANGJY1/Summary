@@ -1,0 +1,898 @@
+[
+ {
+  "path": "knowledge-base/01-android/README.md",
+  "sha256": "12e050219285d43dddf0147f3ccd26733aabd1cc55151b2027d9adbdd49b552e",
+  "h1": "Android 学习资料目录",
+  "q_count": 0,
+  "bytes": 34492
+ },
+ {
+  "path": "knowledge-base/01-android/面试高频索引.md",
+  "sha256": "a4be2b04659880844a10301264f2aa7831651a33a1e0f2e33b926351822798d7",
+  "h1": "面试高频索引",
+  "q_count": 0,
+  "bytes": 11743
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/01-Android系统架构.md",
+  "sha256": "725fd4105963fe4605030b3ab03203f53e502f263ac7241881427986a84586d0",
+  "h1": "Android 系统架构",
+  "q_count": 16,
+  "bytes": 39038
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/02-Android系统启动流程.md",
+  "sha256": "8bf0908fb53b0290c197bad22e26274c7b8b95495cfb53449f58cdbfbf061288",
+  "h1": "Android 系统启动流程",
+  "q_count": 44,
+  "bytes": 64039
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/03-Binder.md",
+  "sha256": "9cf47b9c3b2b328603fa96173c55db7075fa0c38664bdca74e4ef5457990954e",
+  "h1": "Binder",
+  "q_count": 10,
+  "bytes": 12535
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/04-Sanbox.md",
+  "sha256": "a543aceeded5760b6d0b33d569b90d23fdc89ab18d4960f68dc3d0c13df24a9a",
+  "h1": "应用沙箱",
+  "q_count": 16,
+  "bytes": 20481
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/05-Art.md",
+  "sha256": "dae48ecf908c58d6f04ebc3e84ec02b0e03e3fcbabd69a633b36a0f5afceec18",
+  "h1": "ART",
+  "q_count": 5,
+  "bytes": 4741
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/06-JNI.md",
+  "sha256": "913e2564a9695ab734814d61ca492992688b8d4d1c81ef19d4b66bd2310bec8f",
+  "h1": "JNI",
+  "q_count": 3,
+  "bytes": 3579
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/07-Android分区.md",
+  "sha256": "5c66f2b9210b01e9500797cb867a16670ad1a4986bb092d5ba7bd6fd29467ccb",
+  "h1": "Android 分区",
+  "q_count": 3,
+  "bytes": 3554
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/08-SystemServer.md",
+  "sha256": "2f30dd003c0566f62a4a95afc4ce7f40d40106006fb5b7f9fc4ba3e8bdaae4a3",
+  "h1": "SystemServer",
+  "q_count": 2,
+  "bytes": 2600
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/09-HAL.md",
+  "sha256": "973396e90d3acc21b42e44d435b3d63d46b546ede94bf41f2a82c94171126ef0",
+  "h1": "HAL",
+  "q_count": 3,
+  "bytes": 3446
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/10-Kernel.md",
+  "sha256": "ac7c712ee68ee79ec078731dd39efe53991f913ea7bcac7643bdb1dfa924e90e",
+  "h1": "Android 内核与 GKI",
+  "q_count": 6,
+  "bytes": 7879
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/11-版本演进与图形栈预加载.md",
+  "sha256": "a56d18f3c3628404af0062c002952e994e9a86e80602d9290da3ec3fabc84389",
+  "h1": "版本演进与图形栈预加载",
+  "q_count": 14,
+  "bytes": 13042
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/12-类加载ART编译与JNI链接.md",
+  "sha256": "3f87f4e00125103b0276566265198cec6b56b111e592a993e34974748e6b77bb",
+  "h1": "类加载、ART 编译与 JNI 链接",
+  "q_count": 16,
+  "bytes": 14987
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/13-MessageQueue锁竞争与Binder深化.md",
+  "sha256": "dcac3be90b3469c55a35bf87e10a63d3c91a7a6a21fa5dc27a8c06ff732c50ac",
+  "h1": "MessageQueue 锁竞争与 Binder 深化",
+  "q_count": 19,
+  "bytes": 27312
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/14-系统服务调度核心.md",
+  "sha256": "6c23c1065578594445c03142fb1435b7acc35fad1a0de155c24b670f0e5a6873",
+  "h1": "系统服务调度核心",
+  "q_count": 17,
+  "bytes": 24261
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/15-安装归档与资源配置.md",
+  "sha256": "044086367e5ba7e59c62642428444f593562c5eee9d2253f40e651fd62861b13",
+  "h1": "安装归档与资源配置",
+  "q_count": 13,
+  "bytes": 14199
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/16-显示与窗口链路.md",
+  "sha256": "6ee5ba89b8f808035c67e37999cc77b7784d4d8cebb2f26ee164b4654a4ca8ac",
+  "h1": "显示与窗口链路",
+  "q_count": 6,
+  "bytes": 7466
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/17-Telephony与Connectivity.md",
+  "sha256": "08851c2d16043c10abf4bdf64d0c8443b9da0114790bc37d7d27be51e2b8a8e7",
+  "h1": "Telephony 与 Connectivity",
+  "q_count": 12,
+  "bytes": 14754
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/18-Notification-Biometric-Location.md",
+  "sha256": "2f4d8bd1ea94ff47f8cfbb99051485a64dc9618f5a7e5ed26ebcc5fd500a98e7",
+  "h1": "通知、生物识别与位置系统服务链路",
+  "q_count": 16,
+  "bytes": 21115
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/19-AVF可观测与AI手机技术栈.md",
+  "sha256": "03ba2e7dcc61fba23eb73f2e5c622e9888ba91d9c63995a2977013c979fd54be",
+  "h1": "AVF 虚拟化、logd 日志、BPF 与端侧 AI 技术栈",
+  "q_count": 16,
+  "bytes": 22606
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/20-SELinux.md",
+  "sha256": "82ca5be0783d71cf42c5b3c265867c1d60ced0ac5dce5ec39f03425958f88dfc",
+  "h1": "Android SELinux",
+  "q_count": 28,
+  "bytes": 46889
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/21-Permission.md",
+  "sha256": "fb99c4d6423043f8095ff3bbd3aab21b1362b8c4362ffb5993f33369ea6e16f1",
+  "h1": "Android 权限系统（android.permission.*）",
+  "q_count": 3,
+  "bytes": 4524
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/22-四大组件.md",
+  "sha256": "cf8d8b71b010c5aa8d623498c6d81a3f4de049c566694192ab630b15083670bb",
+  "h1": "Android 四大组件：职责、启动方式与生命周期",
+  "q_count": 6,
+  "bytes": 12025
+ },
+ {
+  "path": "knowledge-base/01-android/01-architecture/23-Handler消息机制.md",
+  "sha256": "4a3b20bebe9edd0e15131c5fa9348dab6df387d1892881704574ac74dd491a11",
+  "h1": "Handler 消息机制",
+  "q_count": 5,
+  "bytes": 3594
+ },
+ {
+  "path": "knowledge-base/01-android/02-rendering/01-渲染管线与VSync调度.md",
+  "sha256": "d1690d152364e376f0d73412e2da9f7a091cb9ed288d83be2ebd8d3e71aa1c64",
+  "h1": "渲染管线与 VSync 调度",
+  "q_count": 30,
+  "bytes": 35200
+ },
+ {
+  "path": "knowledge-base/01-android/02-rendering/02-GPU合成与显示管线.md",
+  "sha256": "4cfd307b5409f88879f2a05305d14baa6948e1116fe981e51bf4c5cca45cc43a",
+  "h1": "GPU 合成与显示管线",
+  "q_count": 30,
+  "bytes": 42364
+ },
+ {
+  "path": "knowledge-base/01-android/02-rendering/03-多窗口折叠屏与显示服务.md",
+  "sha256": "45d71467f2d4e90867581dd8e50f82b97fab2ae7e1bb2e1d41d82d3a7e02d097",
+  "h1": "多窗口、折叠屏与显示服务",
+  "q_count": 25,
+  "bytes": 41994
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/01-输入系统.md",
+  "sha256": "90ddf5d0ed98a5893723a3a82ae2d234d44cd7277cb3f606b01ad3be8eaa474a",
+  "h1": "Android 输入系统：分发、延迟与安全边界",
+  "q_count": 26,
+  "bytes": 39908
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/02-应用层事件分发与多点触控.md",
+  "sha256": "a6940cd6762205fd2d29d45ff73adc0da5ff5ce130760415bc6e047505e42cb2",
+  "h1": "应用层事件分发：方法链、返回值语义与多点触控",
+  "q_count": 21,
+  "bytes": 32133
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/03-按键系统与键值映射.md",
+  "sha256": "0be904c4c6b18e7dddd28042e92878184b0aef05ca251d0128d52959c15bc5dc",
+  "h1": "按键系统与键值映射：扫描码、键值定制与物理按键接入",
+  "q_count": 17,
+  "bytes": 28326
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/04-设备接入与InputReader.md",
+  "sha256": "e68728e84c630fed6d44e58c0ae80a6b6823179e38f7fad8ec7fae0e07d00926",
+  "h1": "设备接入与 InputReader：内核 input 事件、设备分类与触摸适配",
+  "q_count": 17,
+  "bytes": 24678
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/05-焦点分发与多屏输入.md",
+  "sha256": "e3209e3175f474b6faa5dd98cf7a31736f0076869cfbd847aff74a722221c776",
+  "h1": "焦点分发与多屏输入：窗口命中、每屏焦点与分发管线组件",
+  "q_count": 14,
+  "bytes": 19449
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/06-AAOS车机输入.md",
+  "sha256": "abbb1d5295ecc751b9405012b7e329729a84106b94667df3dbb1d72f03d6392f",
+  "h1": "AAOS 车机输入：VHAL 按键链路、CarInputService 与旋钮",
+  "q_count": 17,
+  "bytes": 25186
+ },
+ {
+  "path": "knowledge-base/01-android/03-input/07-输入排查工具与实战.md",
+  "sha256": "d5f485620519ab9dd397315123a8423043c19dbc844e9d7df118eb29cb3d70bd",
+  "h1": "输入排查工具与实战：命令族、队列字段与现场决策树",
+  "q_count": 17,
+  "bytes": 26511
+ },
+ {
+  "path": "knowledge-base/01-android/04-storage/01-存储与IO.md",
+  "sha256": "19969bc5adaabdcaa686f76d58a3c91237a7de71c8984764cead8c1e68508dc2",
+  "h1": "存储与 I/O：架构分层、文件系统调度与配置持久化",
+  "q_count": 22,
+  "bytes": 27153
+ },
+ {
+  "path": "knowledge-base/01-android/05-memory/01-内存管理与压力治理.md",
+  "sha256": "a95e53ccf4f30a030a128460a9df63d548be7eea6c73a7d172cdf4468caf145f",
+  "h1": "Android 内存管理与压力治理",
+  "q_count": 24,
+  "bytes": 34562
+ },
+ {
+  "path": "knowledge-base/01-android/05-memory/02-回收压缩与专项内存.md",
+  "sha256": "b24db61b45272ec54ebec11225c8c97c1f361872697fc4cc2011824a764c0c18",
+  "h1": "回收压缩与专项内存",
+  "q_count": 25,
+  "bytes": 35176
+ },
+ {
+  "path": "knowledge-base/01-android/06-system/01-AOSP性能优化.md",
+  "sha256": "404e32f6832985fd82b8ecdc1bc144db15a58ae2709a36d82143f6882d9097ee",
+  "h1": "AOSP 性能优化",
+  "q_count": 31,
+  "bytes": 51615
+ },
+ {
+  "path": "knowledge-base/01-android/06-system/02-OEM与设备差异.md",
+  "sha256": "f9413a6c312aede5f0416d94f25544e34e8ac3d815606d51db21148a62ea4fbc",
+  "h1": "OEM 与设备差异",
+  "q_count": 40,
+  "bytes": 63368
+ },
+ {
+  "path": "knowledge-base/01-android/06-system/03-CarService服务速览.md",
+  "sha256": "7312d726f050f0389a070f0a64f354eb2beb890c0572aa9b69d0f86bd339e08c",
+  "h1": "CarService 服务速览",
+  "q_count": 9,
+  "bytes": 10127
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/01-流畅性.md",
+  "sha256": "86e051bbdb1a0d8eb9559633d9d73e4575b66749547c4aa16a03a106f498e14c",
+  "h1": "流畅性：卡顿定义、分析方法与系统链路",
+  "q_count": 29,
+  "bytes": 37730
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/02-响应速度.md",
+  "sha256": "ba176a11217e43122479f79de70a4a0f96e7450895510b0b4be0baa24c305dbe",
+  "h1": "响应速度：从输入到反馈的延迟分析与专项优化",
+  "q_count": 30,
+  "bytes": 48166
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/03-ANR.md",
+  "sha256": "05ab01c38a9405e706232aef540ea97577d13d23cfe69f8d4114132ed4516c94",
+  "h1": "ANR：超时契约、诊断与预警",
+  "q_count": 28,
+  "bytes": 33419
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/04-内存性能.md",
+  "sha256": "0736d561589a0aeb50c1c942a69a52fac3a2ef42c4198b3ae0c4160ab02c3fe6",
+  "h1": "内存性能：增长归因、低内存影响与抖动诊断",
+  "q_count": 23,
+  "bytes": 27270
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/05-功耗.md",
+  "sha256": "487eb424548b1e347091652f2335e8b8bf71b114050fa4444e6f06e70185a0b5",
+  "h1": "Android 功耗：模型、归因与 App 优化",
+  "q_count": 25,
+  "bytes": 41929
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/06-网络性能.md",
+  "sha256": "d4dd2d6d5796d25f5bd446b641334aa1cbc9f93f9c8f280625ee05adec6448fe",
+  "h1": "Android 网络性能：请求分段、TLS 与 DNS 诊断",
+  "q_count": 20,
+  "bytes": 29873
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/07-渲染管线-基础与图形API.md",
+  "sha256": "646ad8aa92d5450aa72b8b5f48f6a01b255c81da633fccf4386dafacaa3ad8e5",
+  "h1": "渲染管线专题：出图分型与图形 API",
+  "q_count": 28,
+  "bytes": 38651
+ },
+ {
+  "path": "knowledge-base/01-android/07-performance/08-渲染管线-跨框架与媒体.md",
+  "sha256": "eacb2932439c02d6d530bd30768fbc928867912db28ca2085f5a334101828c3a",
+  "h1": "渲染管线专题：跨框架与媒体管线",
+  "q_count": 35,
+  "bytes": 46705
+ },
+ {
+  "path": "knowledge-base/01-android/08-cpu-power/01-调度与功耗框架.md",
+  "sha256": "85606b5f0d88b052f5522d421ca900607a4f437c06169a1f5998280776d591db",
+  "h1": "调度与功耗框架",
+  "q_count": 25,
+  "bytes": 33267
+ },
+ {
+  "path": "knowledge-base/01-android/08-cpu-power/02-能效专项.md",
+  "sha256": "94cce40a5b62526eedc1112f018fce1e8af683d5bd3f91193507bffc73e93263",
+  "h1": "能效专项：LLM DVFS、传感器批处理与 CPU Cache",
+  "q_count": 17,
+  "bytes": 22870
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/01-稳定性治理-度量与崩溃.md",
+  "sha256": "fd9326638f79ba6400b98aa0660bb41236f8abe1f1644747edf1250dbb9177e4",
+  "h1": "稳定性治理：度量、崩溃与 ANR",
+  "q_count": 25,
+  "bytes": 39807
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/02-稳定性治理-资源泄漏.md",
+  "sha256": "71b44f5d755961cb5ba22d39169794595fdd5510da66f7d46982a8fc0b704341",
+  "h1": "稳定性治理：资源泄漏与进程恢复",
+  "q_count": 25,
+  "bytes": 39081
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/03-稳定性治理-线程与IPC.md",
+  "sha256": "d31e001af13e0823c5088def2b7820fbed3ec9b41548e99e021612ade868da9c",
+  "h1": "稳定性治理：线程、协程与 IPC",
+  "q_count": 20,
+  "bytes": 31678
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/04-稳定性治理-Native与SDK.md",
+  "sha256": "328bad1fb440855eabac898cb39f7fe1c14ddc8519fc55d003bdc6e76da02263",
+  "h1": "稳定性治理：Native 检测、Hook、动态库与 SDK",
+  "q_count": 24,
+  "bytes": 41451
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/05-启动优化.md",
+  "sha256": "7edb9cc89e0e77c86afe9a7b957df892cb316f6bb6f59109170da171d62b7b8e",
+  "h1": "启动优化：应用侧启动治理",
+  "q_count": 34,
+  "bytes": 50491
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/06-渲染实战-View与Compose基础.md",
+  "sha256": "1123f8787e9c06774f1b5f3064415059c1176e222346c680e290f24751eee567",
+  "h1": "渲染实战：View 与 Compose 基础",
+  "q_count": 24,
+  "bytes": 37256
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/07-渲染实战-Compose进阶.md",
+  "sha256": "20fc116b1f007fd886406bfd324df63a85cb18adfc3a2ac6f9a73fd4c266202a",
+  "h1": "渲染实战：Compose 进阶",
+  "q_count": 24,
+  "bytes": 36954
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/08-渲染实战-图像显示与页面.md",
+  "sha256": "b2faad537b91b0782019c5bf893fb6711225db662e052a9c5c617a4b2bdd31b7",
+  "h1": "渲染实战：图像显示、帧率监控与页面切换",
+  "q_count": 26,
+  "bytes": 36169
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/09-渲染实战-媒体与混合栈.md",
+  "sha256": "3a8cc80e1e2e1b71360f6b0c8d0837af5b6178173e6e4bc57319eaddf0f55c8d",
+  "h1": "渲染优化实战：Vulkan/Impeller、WebView、Media3、CameraX、App Widget 与系统取色",
+  "q_count": 24,
+  "bytes": 48159
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/10-内存实践.md",
+  "sha256": "71ba64ea38c274ae7d7d1f7aadee5dd891fcb6ad7dbc84ee3d1bd09959e591b9",
+  "h1": "内存实践：堆预算、泄漏治理、Native 排查与线上监控",
+  "q_count": 32,
+  "bytes": 49062
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/11-IO与存储实践.md",
+  "sha256": "f88da03af2da54c446db25b704e0c4e0a19abe09c8acd60002c89ce60a04f843",
+  "h1": "I/O 与存储实践：文件、数据库、缓存、媒体与网络",
+  "q_count": 39,
+  "bytes": 56885
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/12-网络与连接实践.md",
+  "sha256": "03714c9ed9988960d1af74eee2b5db6f37834510612d4144b6f9c9c00d74bc8e",
+  "h1": "网络与连接实践：HTTPDNS、选网、配额与近场连接治理",
+  "q_count": 28,
+  "bytes": 37579
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/13-功耗优化实践.md",
+  "sha256": "bb6a7605a73c37b1b5389ad3db5ccd52105831165063b059442b2c92ccad58cb",
+  "h1": "功耗优化实践：诊断取证与 App 侧治理",
+  "q_count": 27,
+  "bytes": 37297
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/14-CPU与体积优化.md",
+  "sha256": "2335a86fd8f7710af4b88485cef77230584f49612d42972e9aed22a55781250b",
+  "h1": "CPU 与体积优化",
+  "q_count": 27,
+  "bytes": 39757
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/15-可观测性-体系与治理.md",
+  "sha256": "da22f1df951f3cd06df13d9e2eb0eef373b33691e8e9247f8a2ee1fbd116aae9",
+  "h1": "可观测性体系与治理",
+  "q_count": 27,
+  "bytes": 39590
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/16-可观测性-线上诊断.md",
+  "sha256": "60580f924c348e09676fb3dd14d2bd348c50de937302b826925c7eb949b088a0",
+  "h1": "可观测性线上诊断",
+  "q_count": 33,
+  "bytes": 59778
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/17-资源与值域注解.md",
+  "sha256": "5e40146f67013b283bfcf8aae48b5b62eb17426bf543e3b2610ead5815c95cd1",
+  "h1": "Android 资源与值域注解",
+  "q_count": 2,
+  "bytes": 1047
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/18-应用开发机制与常用API.md",
+  "sha256": "0b39ef81f7b1a58adac0d7739803905a74ad349858e4c647e8e803e565aea303",
+  "h1": "应用开发机制与常用 API",
+  "q_count": 9,
+  "bytes": 6829
+ },
+ {
+  "path": "knowledge-base/01-android/09-app-practice/19-MVP架构.md",
+  "sha256": "a13096e23b70ab5a93481e27c56201b81cf528eb010d72e09e6739c3bdc74dcc",
+  "h1": "Android MVP 架构",
+  "q_count": 6,
+  "bytes": 3684
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/01-Perfetto-采集与SQL分析.md",
+  "sha256": "816caef26e1eb81b20a29a7a0b51887a52c5cfca1a7b667ed0ae60cab6e5fa91",
+  "h1": "Perfetto 采集与 SQL 分析",
+  "q_count": 35,
+  "bytes": 52334
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/02-Perfetto-进阶与SDK.md",
+  "sha256": "cf7184856cf855f577915a2b85627f45771a972d2ac5d0f51871c060fc406c07",
+  "h1": "Perfetto 进阶：Profile 火焰图、CPU 频率、BufferQueue、Agent 协议、SDK 与 FrameTimeline",
+  "q_count": 30,
+  "bytes": 51123
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/03-性能分析工具.md",
+  "sha256": "32491c5e726452c53ae7898eb8bfaaf4661edbd9eb4f77b28ecf5244531df7a9",
+  "h1": "性能分析工具",
+  "q_count": 36,
+  "bytes": 51657
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/04-GPU与专项工具.md",
+  "sha256": "aa51bf3a6088c2763fbb7374ddf564d6fe7d7fa8c2e8b796f0dbb2df182cc9e7",
+  "h1": "GPU 与专项工具",
+  "q_count": 30,
+  "bytes": 55041
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/05-性能方法论.md",
+  "sha256": "1c365f174ca0f0a1fd4a3d70b23eb3eabab604f990afd0950581c46d74236d6d",
+  "h1": "性能方法论",
+  "q_count": 33,
+  "bytes": 54208
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/06-APM-平台与SDK.md",
+  "sha256": "9a32908deb02f3fe5ec58756cd5250f2f04215f8cd6620a79cae17cfac6fe54f",
+  "h1": "APM 平台与 SDK",
+  "q_count": 30,
+  "bytes": 52793
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/07-APM-专项原理与架构.md",
+  "sha256": "d7a31e096090ea2b1c40f795d3cd702da2c599e768389e20ac405d2ed13f2a52",
+  "h1": "APM 专项原理与架构",
+  "q_count": 32,
+  "bytes": 59935
+ },
+ {
+  "path": "knowledge-base/01-android/10-tools/08-学习方法与检查清单.md",
+  "sha256": "30f3060e55ca9ceef1de3e8cc3f4c79fdc3db4bc5710e974ffb030d33a4aa122",
+  "h1": "学习方法与检查清单",
+  "q_count": 10,
+  "bytes": 12672
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/01-车控信号语义.md",
+  "sha256": "4cc70298ff52f998a9882a210666fd94712f26e6dfe048ac84b154f17bc78a09",
+  "h1": "车控信号语义：超时显示、双编码与值域换算",
+  "q_count": 24,
+  "bytes": 45177
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/02-主线程与异步时序.md",
+  "sha256": "c45d98433d8cc14db6ceee42fd889ebe16a8eaebeb30e300c1bc86b53ed7d215",
+  "h1": "主线程与异步时序：缺陷模式与修复范式",
+  "q_count": 27,
+  "bytes": 48390
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/03-蓝牙机制.md",
+  "sha256": "6fc029223a7009e73d366bcc02a931443564a3fe5202d675a8dc20d178c9e887",
+  "h1": "蓝牙机制：缺陷模式与修复范式",
+  "q_count": 31,
+  "bytes": 60515
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/04-Kanzi双端状态同步.md",
+  "sha256": "adfc151509bad2f752f0d639d689c0ce79475c0a7a9bdb67e8367428231111ec",
+  "h1": "Kanzi 双端状态同步：状态残留、乐观更新与能力差异",
+  "q_count": 18,
+  "bytes": 33529
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/05-UI还原与主题适配.md",
+  "sha256": "796f084d6979100e9436fa900ba23bdec683060e135047d33c032f436eb2645e",
+  "h1": "UI 还原与主题适配：资源完整性与设计稿落地的可迁移规则",
+  "q_count": 31,
+  "bytes": 46335
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/06-状态缓存与启动时序.md",
+  "sha256": "e92690b55b1cdeb5648efdea56db84a07dad45c7a59e53b1efe29d35af27e8a9",
+  "h1": "状态缓存与启动时序：从卡开机到缓存失步的因果链",
+  "q_count": 26,
+  "bytes": 49712
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/07-崩溃防护与偶现排查.md",
+  "sha256": "6dc1540ac121846ed6baa9ae55e6c08e52265a871b2fa63b04e42394adbcfeec",
+  "h1": "崩溃防护与偶现排查：缺陷形态与排查方法",
+  "q_count": 20,
+  "bytes": 31650
+ },
+ {
+  "path": "knowledge-base/01-android/11-defects/08-提交治理与防回归.md",
+  "sha256": "eb9b8a139bd21d3c379598f6c306bff83a410027305bef29e40efd4c559d10d7",
+  "h1": "提交治理与防回归：让每笔提交可追溯、可复盘",
+  "q_count": 20,
+  "bytes": 27068
+ },
+ {
+  "path": "knowledge-base/01-android/12-platform-native/01-内核与原生层.md",
+  "sha256": "3d59e78d3be5b2870b8701aa79ed894b6ab967efe22fc09bf037ad54ef297bef",
+  "h1": "内核与原生层：Binder 驱动、共享内存与 GKI 边界",
+  "q_count": 20,
+  "bytes": 32832
+ },
+ {
+  "path": "knowledge-base/01-android/12-platform-native/02-Bionic链接器与命名空间.md",
+  "sha256": "92767e98125033ca16c832bb1a533148fd84514bdb6b112351d0ec9904232b33",
+  "h1": "Bionic 动态链接器：命名空间隔离与符号解析",
+  "q_count": 17,
+  "bytes": 30342
+ },
+ {
+  "path": "knowledge-base/01-android/12-platform-native/03-aconfig特性开关.md",
+  "sha256": "d677ccf2c4321c591f64bc2ac2f34d448e27711295c74a983031a0fac412b5fb",
+  "h1": "Aconfig 特性开关：声明、生成代码与运行时存储",
+  "q_count": 14,
+  "bytes": 19505
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/01-AOSP音频子系统.md",
+  "sha256": "2ce932c20028a09486de1843e4d71f8af81720573fddea6e7c51a71ce4016475",
+  "h1": "AOSP 音频子系统",
+  "q_count": 17,
+  "bytes": 16739
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/02-AAOS车机音频.md",
+  "sha256": "edf93127f327d783cae21505f5e0fecc6b4e0ef468d383df72fb78b6bb3392e6",
+  "h1": "AAOS 车机音频",
+  "q_count": 15,
+  "bytes": 15087
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/03-音频延迟与应用实践.md",
+  "sha256": "fd7eeda18fd69fc7838a3b468247f0059ba6a8ab1b00c1767edde9c74fa2a08c",
+  "h1": "音频延迟与应用实践",
+  "q_count": 11,
+  "bytes": 12126
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/04-蓝牙音频.md",
+  "sha256": "43c79baf71dfef2ebc8bb4f7e2492a4e1a7ff40d9f3749aa3572585e59a95ea7",
+  "h1": "蓝牙音频",
+  "q_count": 8,
+  "bytes": 9647
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/05-手机侧音频焦点与路由.md",
+  "sha256": "28330bd3807ca92a7bada6b377ef043175545c9dde38e74080022bc2e17d1d12",
+  "h1": "手机侧音频焦点与路由",
+  "q_count": 7,
+  "bytes": 5854
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/06-audio-decisions.md",
+  "sha256": "6bc6ccc812c38ffe50e94644088c1ac68113ccbdd2b192fcd59edc3da3ef588e",
+  "h1": "音效与音源决策：先决定声音的语义",
+  "q_count": 6,
+  "bytes": 10072
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/07-focus-api.md",
+  "sha256": "7518920be2c516d79a15e56a361e72e0972899e41ebeca0fc06396c77d2a127a",
+  "h1": "应用焦点契约：怎样申请、响应和释放",
+  "q_count": 4,
+  "bytes": 9365
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/08-focus-flow.md",
+  "sha256": "7e6836d4ccb1ba89f80348a1002f19fafcca1fe58279abe67a8d4c5e8a1fe499",
+  "h1": "焦点系统调用链：AudioManager 到 CarAudioFocus",
+  "q_count": 4,
+  "bytes": 6362
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/09-car-focus.md",
+  "sha256": "e5febb79e3d96cf670e142d8656a03c5f91b0b1fc7f35257a968f3dcf67395a5",
+  "h1": "AAOS 焦点矩阵与音区：何时共存、抢占、拒绝或等待",
+  "q_count": 5,
+  "bytes": 5837
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/10-routing-volume.md",
+  "sha256": "f6f542b11066b284c7b4dac16c8dd61bcee309adccaf6b62d21475e6bcf673ed",
+  "h1": "路由配置与音量组：声音走向哪只扬声器",
+  "q_count": 4,
+  "bytes": 5804
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/11-playback-hal.md",
+  "sha256": "96ebc99561231163c6b11217da10e5370384604a2b6bc01e63a5c633ff6964d9",
+  "h1": "播放数据与 HAL：PCM 怎样变成车内声音",
+  "q_count": 5,
+  "bytes": 6845
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/12-diagnostics.md",
+  "sha256": "0a4c9847f6a3d7dc6c639b381c368ad9a91b485b94159d5417d50cc63cbe4340",
+  "h1": "全链路实验与排障：从点击到扬声器逐层取证",
+  "q_count": 6,
+  "bytes": 8964
+ },
+ {
+  "path": "knowledge-base/01-android/13-audio/README.md",
+  "sha256": "29ccceb5a2b2c06f903ba1f34ac03b066d3e502d9da5173a7549f7529fbe6fbf",
+  "h1": "AAOS 音频焦点与播放学习路径",
+  "q_count": 0,
+  "bytes": 2602
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/01-Android网络框架.md",
+  "sha256": "a0c304f7acb0810b7996be760ee61f12ac3b038414a9e797e3f43fe153d2b15f",
+  "h1": "Android 网络框架",
+  "q_count": 16,
+  "bytes": 12904
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/02-车机多APN与虚拟网卡.md",
+  "sha256": "2ab62824156ef6bb3125b80fd80a109bab000195111471420c25e202f4a427ac",
+  "h1": "车机多 APN 与虚拟网卡",
+  "q_count": 19,
+  "bytes": 17055
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/03-Android-VPN.md",
+  "sha256": "20cd6bbca3be1a3b3582dc1c60ef2735e9432f55c496f87d617ba79526c298aa",
+  "h1": "Android VPN",
+  "q_count": 10,
+  "bytes": 8692
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/04-蜂窝数据与无线连接.md",
+  "sha256": "f97cee576746967cbe3a42ec7734dd6a4d2dc8b58ab69714d9fc9b01f27cbf59",
+  "h1": "蜂窝数据与无线连接",
+  "q_count": 20,
+  "bytes": 18003
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/05-车载网络架构与设计.md",
+  "sha256": "f51bf2c98d2ed3cf4ab5dd08a922317bbddb6b6355dbcc7f51c7596371c445f8",
+  "h1": "车载网络架构与设计",
+  "q_count": 14,
+  "bytes": 11785
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/06-网络排查工具与实践.md",
+  "sha256": "3f7ac654ff6b8dbfed223fa4c7be2061e17c9d46708a8bb9e1db4a3c30d69571",
+  "h1": "网络排查工具与实践",
+  "q_count": 10,
+  "bytes": 8394
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/07-车机网络安全.md",
+  "sha256": "7413580800c363318d8f2b9e50ffd21c2b15887aeaea665eb7fc47a4f73dbf27",
+  "h1": "车机网络安全",
+  "q_count": 8,
+  "bytes": 7063
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/08-应用网络编程与系统约束.md",
+  "sha256": "02a953176b84573ac15201ba7193943b3a6503cf4a41ee422be0b465d3691595",
+  "h1": "应用网络编程与系统约束",
+  "q_count": 14,
+  "bytes": 13265
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/09-传输细节与协议设计.md",
+  "sha256": "3f38bca98ecd888f77d1d66b4b90bc4d0aeba1a1ed9bc98987a7d1f346357bab",
+  "h1": "传输细节与协议设计",
+  "q_count": 16,
+  "bytes": 15465
+ },
+ {
+  "path": "knowledge-base/01-android/14-network/10-网络分层原理与地基机制.md",
+  "sha256": "d7db75075f9f59863f1b1b20a75e08438afe2d6ff891b275c8c525792bf3da08",
+  "h1": "网络分层原理与地基机制",
+  "q_count": 14,
+  "bytes": 11053
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/01-activity.md",
+  "sha256": "8228d6fdf40158c55fb7409e0023de1bb173fa23bc4a55e37c6e8b42ea57c39c",
+  "h1": "Activity 与窗口生命周期",
+  "q_count": 25,
+  "bytes": 20812
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/02-view.md",
+  "sha256": "eb95434ad1bc70f2e7395d078dc2db8bed265a6d32961831d36fb833ed7ab804",
+  "h1": "View 测量、布局与绘制",
+  "q_count": 19,
+  "bytes": 16303
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/03-resources.md",
+  "sha256": "cef935f46d0580a48717adf02f294bce7540f3a2745f8749e3ac9cd318e98d3a",
+  "h1": "资源、主题与多屏适配",
+  "q_count": 19,
+  "bytes": 16088
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/04-compose.md",
+  "sha256": "4315eec86b343c1a27001b43937521ab8ed17e66405f34e15a71e870bfcb8225",
+  "h1": "Compose 运行期与 View 互操作",
+  "q_count": 15,
+  "bytes": 12775
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/05-window-system.md",
+  "sha256": "807c8c299412bc2386e67eafd93d446826b6168d2a0dca5d4a23e1abab57be45",
+  "h1": "窗口系统与 WindowManagerService",
+  "q_count": 17,
+  "bytes": 16906
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/06-aaos-ui.md",
+  "sha256": "ad2b48730d80280aceb4f9525a437155df6cf14d01e8a7ee7d1e174d47d9f64a",
+  "h1": "AAOS 车机 UI 架构与 CarService",
+  "q_count": 15,
+  "bytes": 15551
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/07-driving-safety.md",
+  "sha256": "c5e3b64cc8e15a8d741cb64ea3276735706e020bd2ed12b480c71c3d26814e6f",
+  "h1": "车机交互安全与驾驶分心",
+  "q_count": 15,
+  "bytes": 12689
+ },
+ {
+  "path": "knowledge-base/01-android/15-ui/08-ui-debugging.md",
+  "sha256": "53bc54d8cd79e4fb6f3c698f79047e9a2801cf4fc587d65bcb7e55b83d3788e7",
+  "h1": "UI 疑难排查与体验踩坑",
+  "q_count": 15,
+  "bytes": 13617
+ },
+ {
+  "path": "knowledge-base/01-android/16-project-architecture/01-应用进程启动与全局服务生命周期.md",
+  "sha256": "298776f3b308aeda2d422943390b6e43fc7a6ef43822e9d39723ae35e80f21c3",
+  "h1": "Launcher 项目架构案例：全局车辆服务与首页 Activity 的协作",
+  "q_count": 1,
+  "bytes": 7740
+ },
+ {
+  "path": "knowledge-base/01-android/17-car-app/01-Launcher.md",
+  "sha256": "1851599a9bf21450a5ba7097ea8216f767b833dda5e17c9ddbefc8754ba25944",
+  "h1": null,
+  "q_count": 6,
+  "bytes": 6734
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/01-product-config.md",
+  "sha256": "62c1d0516e93828972159b8a20a656932655c0aafb454dea5b0bb3200dc261c5",
+  "h1": "Android 产品配置与裁剪",
+  "q_count": 14,
+  "bytes": 14896
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/02-soong-modules.md",
+  "sha256": "a8608c6fdb1f4098fac4c84e0642bae6d1e75b2321aa08c31ee45f1f31b038a6",
+  "h1": "AAOS 添加 Soong 模块",
+  "q_count": 24,
+  "bytes": 64608
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/03-android-kernel-build.md",
+  "sha256": "d04029c4c8c5efe5316683dc9e68d3bb664c80bf7ee69155a7c8333b5ae83c13",
+  "h1": "Android 内核构建与验证",
+  "q_count": 12,
+  "bytes": 11168
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/04-linux-kernel-drivers.md",
+  "sha256": "c080d48647dd9bbcf12317e6f81e0a4d34071c9cd6126017a3ffcca534ca5cfd",
+  "h1": "Linux 内核驱动与字符设备",
+  "q_count": 15,
+  "bytes": 13897
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/05-android-executables.md",
+  "sha256": "b6e786bf31d16fa37f91a7be786b1479ec3853a49ba70a4b37e8c7395dd3e61b",
+  "h1": "Android 可执行文件",
+  "q_count": 6,
+  "bytes": 6584
+ },
+ {
+  "path": "knowledge-base/01-android/18-build-system/06-android-system-images.md",
+  "sha256": "06e19ba51e770305d6d8fc1d0302275a70adceca8954b120f732e7e919f2342a",
+  "h1": "Android 系统镜像",
+  "q_count": 8,
+  "bytes": 8659
+ }
+]

@@ -873,18 +873,24 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     fun showToast(msg: String) { Log.i("toast: $msg"); toast.value = msg; scope.launch { delay(2600); toast.value = null } }
 
-    /** 暂存知识库仓库全部变更；已有 HEAD 时 amend 最近提交，否则创建首个 update 提交。 */
+    /** 仅提交当前选中的题库文档；已有 HEAD 时 amend 最近提交，否则创建首个 update 提交。 */
     fun updateLibraryRepository() {
         if (!libraryUpdateLock.compareAndSet(false, true)) {
             showToast("Update 正在执行")
             return
         }
         libraryUpdateRunning = true
+        val selectedDocumentPath = selectedSourcePath
         scope.launch {
             try {
                 val library = libraryRoot()
                 if (!library.isDirectory) {
                     showToast("知识库目录不可用")
+                    return@launch
+                }
+                val document = sourceDocumentFile(selectedDocumentPath).canonicalFile
+                if (!document.isFile) {
+                    showToast("当前文档不可用")
                     return@launch
                 }
                 val rootResult = runGitCommand(library, listOf("rev-parse", "--show-toplevel"))
@@ -893,22 +899,14 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     return@launch
                 }
                 val repository = File(rootResult.second.trim()).canonicalFile
-
-                val addResult = runGitCommand(repository, listOf("add", "."))
-                if (addResult.first != 0) {
-                    showGitUpdateFailure("git add .", addResult)
+                val repositoryPath = repository.toPath()
+                val documentPath = document.toPath()
+                if (!documentPath.startsWith(repositoryPath)) {
+                    showToast("当前文档不在知识库 Git 仓库中")
                     return@launch
                 }
-
-                val stagedResult = runGitCommand(repository, listOf("diff", "--cached", "--quiet"))
-                if (stagedResult.first == 0) {
-                    showToast("没有可提交的更改")
-                    return@launch
-                }
-                if (stagedResult.first != 1) {
-                    showGitUpdateFailure("检查暂存区", stagedResult)
-                    return@launch
-                }
+                val relativePath = repositoryPath.relativize(documentPath).toString()
+                    .replace(File.separatorChar, '/')
 
                 val headResult = runGitCommand(repository, listOf("rev-parse", "--verify", "--quiet", "HEAD"))
                 val hasCommit = when (headResult.first) {
@@ -919,10 +917,30 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                         return@launch
                     }
                 }
-                val commitArgs = if (hasCommit) {
-                    listOf("commit", "--amend", "--no-edit")
+
+                val addResult = runGitCommand(repository, listOf("add", "-A", "--", relativePath))
+                if (addResult.first != 0) {
+                    showGitUpdateFailure("暂存当前文档", addResult)
+                    return@launch
+                }
+
+                val documentDiff = if (hasCommit) {
+                    runGitCommand(repository, listOf("diff", "--quiet", "HEAD", "--", relativePath))
                 } else {
-                    listOf("commit", "-m", "update")
+                    runGitCommand(repository, listOf("diff", "--cached", "--quiet", "--", relativePath))
+                }
+                if (documentDiff.first == 0) {
+                    showToast("当前文档没有可提交的更改")
+                    return@launch
+                }
+                if (documentDiff.first != 1) {
+                    showGitUpdateFailure("检查当前文档改动", documentDiff)
+                    return@launch
+                }
+                val commitArgs = if (hasCommit) {
+                    listOf("commit", "--amend", "--no-edit", "--only", "--", relativePath)
+                } else {
+                    listOf("commit", "-m", "update", "--only", "--", relativePath)
                 }
                 val commitResult = runGitCommand(repository, commitArgs, timeoutMs = 120_000L)
                 if (commitResult.first != 0) {
@@ -930,8 +948,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     return@launch
                 }
 
-                Log.i("知识库 Git Update 完成 root=${repository.absolutePath} amend=$hasCommit 输出=${commitResult.second.trim().take(500)}")
-                showToast(if (hasCommit) "已更新：并入最近一次提交" else "已创建 update 提交")
+                Log.i("知识库 Git Update 完成 root=${repository.absolutePath} path=$relativePath amend=$hasCommit 输出=${commitResult.second.trim().take(500)}")
+                showToast(if (hasCommit) "已将 ${document.name} 并入最近一次提交" else "已提交 ${document.name}")
                 refreshSourceQuestionGitDiff()
             } catch (error: Exception) {
                 Log.e("知识库 Git Update 失败", error)
@@ -1475,6 +1493,59 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         reloadKnowledgeFiles()
         Log.i("同源题目写回成功 path=${entry.sourcePath} Q${entry.number}")
         return true
+    }
+
+    /** 为当前源文档中选中的多道题追加同一标签，并一次性写回。 */
+    fun addTagToSourceQuestions(entries: List<SourceQuestions.Entry>, rawTag: String): Boolean {
+        val tag = SourceQuestions.normalizeTags(listOf(rawTag)).singleOrNull()
+        if (tag == null) {
+            showToast("请输入一个有效标签")
+            return false
+        }
+        if (entries.isEmpty() || entries.any { it.sourcePath != selectedSourcePath } || entries.map { it.startOffset }.distinct().size != entries.size) {
+            showToast("请选择当前文档中的题目")
+            return false
+        }
+        val expectedDocument = entries.first().document
+        if (entries.any { it.document != expectedDocument }) {
+            showToast("题目源文档不一致，请重新选择")
+            return false
+        }
+        val file = sourceQuestionFile()
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != expectedDocument) {
+            Log.w("批量添加题目标签冲突：源文件已变化 file=${file.absolutePath}")
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+
+        val targets = entries.filterNot { tag in it.tags }
+        if (targets.isEmpty()) {
+            showToast("所选题目都已有「$tag」标签")
+            return false
+        }
+        return runCatching {
+            var updated = current
+            targets.sortedByDescending { it.startOffset }.forEach { entry ->
+                updated = SourceQuestions.replace(
+                    entry.copy(document = updated),
+                    entry.question,
+                    entry.answer,
+                    entry.status,
+                    SourceQuestions.normalizeTags(entry.tags + tag),
+                )
+            }
+            MdStores.atomicWrite(file, updated)
+            reloadKnowledgeFiles()
+            Log.i("批量添加题目标签成功 path=$selectedSourcePath tag=$tag count=${targets.size}")
+            showToast("已为 ${targets.size} 道题添加「$tag」标签")
+            true
+        }.onFailure { error ->
+            Log.e("批量添加题目标签失败 path=$selectedSourcePath tag=$tag", error)
+            reloadKnowledgeFiles()
+            showToast("批量添加标签失败：${error.message ?: error.javaClass.simpleName}")
+        }.getOrElse { false }
     }
 
     /** 在当前源文档中调整题目顺序；文档被外部修改时拒绝覆盖并重新加载。 */

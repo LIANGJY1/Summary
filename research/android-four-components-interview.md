@@ -1,6 +1,6 @@
 # Android 四大组件面试资料核查
 
-> 调研日期：2026-09-30。用途：为 `knowledge-base/01-android/01-architecture/22-四大组件.md` 的面试级回答提供一手依据。以 Android Developers 文档及 AOSP 为准；掘金文仅作为待核查的二手材料。
+> 调研日期：2026-09-30。用途：为 `knowledge-base/01-android/02-app-framework/01-four-components.md` 的面试级回答提供一手依据。以 Android Developers 文档及 AOSP 为准；掘金文仅作为待核查的二手材料。
 
 ## 掘金文章核查
 

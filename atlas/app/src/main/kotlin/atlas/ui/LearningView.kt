@@ -413,11 +413,16 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var showCreateSingle by remember { mutableStateOf(false) }
     var showCreateBatch by remember { mutableStateOf(false) }
     var showMoreActions by remember { mutableStateOf(false) }
+    var statusMenuTarget by remember { mutableStateOf<String?>(null) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
     var sidebarExpanded by remember { mutableStateOf(true) }
     var sidebarWidth by remember { mutableStateOf(320.dp) }
     var sidebarDragging by remember { mutableStateOf(false) }
     var reorderMode by remember { mutableStateOf(false) }
+    var batchTagMode by remember { mutableStateOf(false) }
+    var selectedQuestionKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBatchTagDialog by remember { mutableStateOf(false) }
+    var batchTagText by remember { mutableStateOf("") }
     var draggingKey by remember { mutableStateOf<String?>(null) }
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
@@ -446,6 +451,24 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var listViewportHeight by remember { mutableStateOf(0f) }
     // AppStore 在原地 clear/addAll 题目列表；取不可变快照作为缓存与手势 key，确保换文档后失效。
     val sourceQuestionsSnapshot = store.sourceQuestions.toList()
+    LaunchedEffect(store.selectedSourcePath) {
+        batchTagMode = false
+        selectedQuestionKeys = emptySet()
+        showBatchTagDialog = false
+    }
+    LaunchedEffect(sourceQuestionsSnapshot) {
+        if (batchTagMode) {
+            batchTagMode = false
+            selectedQuestionKeys = emptySet()
+            showBatchTagDialog = false
+        }
+    }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) {
+            batchTagMode = false
+            selectedQuestionKeys = emptySet()
+        }
+    }
     val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else sourceQuestionsSnapshot
     val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
         entry.question.contains(query.trim(), ignoreCase = true) ||
@@ -457,6 +480,11 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         sourceQuestionsSnapshot.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
     }
     val canReorderList = reorderMode && query.isBlank() && visible.size == sourceQuestionsSnapshot.size
+    val selectedEntries = sourceQuestionsSnapshot.filter { sourceQuestionKey(it) in selectedQuestionKeys }
+
+    fun toggleBatchSelection(key: String) {
+        selectedQuestionKeys = if (key in selectedQuestionKeys) selectedQuestionKeys - key else selectedQuestionKeys + key
+    }
     val dragging = reorderMode && draggingKey != null && query.isBlank()
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
@@ -495,6 +523,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         KnowledgeTree.build(treeDocuments)
     }
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
+    val canBatchTag = selectedMappedDocument.isNotBlank() && !reorderMode && query.isBlank() &&
+        SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)
     val selectedReadmeDocument = store.selectedSourcePath.takeIf { it in mappedReadmeDocuments }
     LaunchedEffect(selectedReadmeDocument) {
         if (selectedReadmeDocument != null) store.questionSearchVisible.value = false
@@ -559,7 +589,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     rect?.contains(pageOriginInWindow + press.position) != true
                             }
                             PointerEventType.Release -> {
-                                if (dismissSearchOnRelease && store.questionSearchVisible.value) {
+                                if (dismissSearchOnRelease && store.questionSearchVisible.value && statusMenuTarget == null) {
                                     Log.d("点击搜索区之外，收起题库搜索栏")
                                     store.questionSearchVisible.value = false
                                 }
@@ -714,7 +744,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             Text("同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
             Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
-            if (query.isBlank()) {
+            if (query.isBlank() && !batchTagMode) {
                 OutlinedButton(
                     onClick = {
                         reorderMode = !reorderMode
@@ -729,11 +759,41 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text(if (reorderMode) "完成排序" else "调整顺序", fontSize = 12.sp)
                 }
             }
+            if (batchTagMode) {
+                Text("已选 ${selectedQuestionKeys.size} 道", fontSize = 12.sp, color = Theme.Muted)
+                OutlinedButton(
+                    onClick = { batchTagText = ""; showBatchTagDialog = true },
+                    enabled = selectedQuestionKeys.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text("添加标签", fontSize = 12.sp)
+                }
+                TextButton(
+                    onClick = {
+                        batchTagMode = false
+                        selectedQuestionKeys = emptySet()
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                ) {
+                    Text("取消", fontSize = 12.sp, color = Theme.Muted)
+                }
+            } else if (canBatchTag) {
+                OutlinedButton(
+                    onClick = {
+                        batchTagMode = true
+                        selectedQuestionKeys = emptySet()
+                        expanded = emptySet()
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text("批量标签", fontSize = 12.sp)
+                }
+            }
             TooltipArea(
                 tooltip = {
                     Surface(color = Theme.Elevated, shape = MaterialTheme.shapes.small) {
                         Text(
-                            "暂存知识库仓库全部变更；已有提交时会更新最近一次提交",
+                            "仅提交当前选中的文档；已有提交时会并入最近一次提交，其他暂存改动会保留",
                             Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                             fontSize = 11.sp,
                             color = Theme.MdH1,
@@ -793,15 +853,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             )
         }
         Spacer(Modifier.height(6.dp))
-        if (SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
-            Text(
-                if (reorderMode) "排序模式：按住任意题目卡片拖动换位，松开后自动保存并重新编号。"
-                else if (query.isBlank()) "点击题目显示答案；卡片右侧勾选图标 = 已完成，时钟图标 = 学习中；橙色题号、边框和正文差异表示内容相对 git 最近提交有改动；需要调整顺序时点击右上角「调整顺序」。"
-                else "点击题目显示答案；搜索结果仅供查看，清空搜索后可调整顺序。",
-                fontSize = 11.sp,
-                color = Theme.Muted,
-            )
-        } else {
+        if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
         Spacer(Modifier.height(8.dp))
@@ -890,6 +942,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 val entryKey = sourceQuestionKey(entry)
                 val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isExpanded = entryKey in expanded
+                val isBatchSelected = entryKey in selectedQuestionKeys
                 val isDragging = draggingKey == entryKey
                 val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
                 // 内容相对 git HEAD 有未提交改动：橙色题号/边框 + 行内着色（比对异步完成，加载中不标色）
@@ -943,6 +996,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
                             when {
+                                isBatchSelected -> lerp(Theme.Panel, Theme.Selected, 0.48f)
                                 // 展开态抬升为 Elevated 内容面：与收起卡一眼可辨（2026-09-29 用户反馈），
                                 // 悬停仍只作用于收起卡；拖拽中不透明浮起（下层文字不透出重影）。
                                 isExpanded -> Theme.Elevated
@@ -953,8 +1007,9 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             MaterialTheme.shapes.small,
                         )
                         .border(
-                            if (isExpanded) 1.dp else 1.dp,
+                            if (isBatchSelected) 1.5.dp else 1.dp,
                             if (isDragging) Theme.Accent
+                            else if (isBatchSelected) Theme.Accent.copy(alpha = 0.78f)
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
                             else if (isExpanded) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
                             else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.36f)
@@ -965,8 +1020,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         .singleClickWithoutConsumingSelection(
                             accept = { !reorderMode && it.y < cardTopTapHeightPx },
                         ) {
-                            locateSource(entry.sourcePath)
-                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                            if (batchTagMode) {
+                                toggleBatchSelection(entryKey)
+                            } else {
+                                locateSource(entry.sourcePath)
+                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                            }
                         }
                         .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
@@ -1005,36 +1064,48 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
+                                    if (batchTagMode) {
+                                        Checkbox(
+                                            checked = isBatchSelected,
+                                            onCheckedChange = { toggleBatchSelection(entryKey) },
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                    }
                                     Text(
                                         "Q${entry.number}",
                                         modifier = if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
-                                            locateSource(entry.sourcePath)
-                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                            if (batchTagMode) {
+                                                toggleBatchSelection(entryKey)
+                                            } else {
+                                                locateSource(entry.sourcePath)
+                                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                            }
                                         },
                                         fontSize = 11.sp,
                                         color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
                                     )
                                     if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
                                     entry.tags.take(3).forEach { tag ->
-                                        SourceQuestionTag(tag, !reorderMode, store.settings.questionTagFontSize) { editingEntry = entry }
+                                        SourceQuestionTag(tag, !reorderMode && !batchTagMode, store.settings.questionTagFontSize) { editingEntry = entry }
                                     }
                                     if (entry.tags.size > 3) {
                                         Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
                                     }
-                                    if (entry.tags.isEmpty() && !reorderMode) {
+                                    if (entry.tags.isEmpty() && !reorderMode && !batchTagMode) {
                                         SourceQuestionTag(
                                             "＋ 标签",
                                             true,
                                             store.settings.questionTagFontSize,
                                             isPlaceholder = true,
                                             visible = cardHovered || isExpanded,
-                                        ) { editingEntry = entry }
+                                        ) { if (!batchTagMode) editingEntry = entry }
                                     }
                                     Spacer(
                                         Modifier.weight(1f).height(18.dp).clickable(
                                             interactionSource = cardInteraction,
                                             indication = null,
-                                            enabled = !reorderMode,
+                                            enabled = !reorderMode && !batchTagMode,
                                         ) {
                                             locateSource(entry.sourcePath)
                                             expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
@@ -1060,8 +1131,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     key(entryKey, entry.question) {
                                         SelectionContainer(
                                             modifier = Modifier.singleClickWithoutConsumingSelection {
-                                                locateSource(entry.sourcePath)
-                                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                                if (batchTagMode) {
+                                                    toggleBatchSelection(entryKey)
+                                                } else {
+                                                    locateSource(entry.sourcePath)
+                                                    expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                                }
                                             },
                                         ) {
                                             Text(
@@ -1082,20 +1157,38 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 }
                             }
                         }
-                        Box(
-                            Modifier.align(Alignment.TopEnd)
-                                .width(statusGutterWidth)
-                                .height(18.dp)
-                                .clickable(
-                                    interactionSource = cardInteraction,
-                                    indication = null,
-                                    enabled = !reorderMode,
-                                ) {
-                                    locateSource(entry.sourcePath)
-                                    expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                        if (!batchTagMode) {
+                            Box(
+                                Modifier.align(Alignment.TopEnd)
+                                    .width(statusGutterWidth)
+                                    .height(18.dp)
+                                    .clickable(
+                                        interactionSource = cardInteraction,
+                                        indication = null,
+                                        enabled = !reorderMode,
+                                    ) {
+                                        locateSource(entry.sourcePath)
+                                        expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                    },
+                            )
+                            QuestionStatusControl(
+                                status = entry.status,
+                                modifier = Modifier.align(Alignment.TopEnd),
+                                enabled = !reorderMode,
+                                expanded = statusMenuTarget == entryKey,
+                                onExpandedChange = { expandedMenu ->
+                                    statusMenuTarget = if (expandedMenu) entryKey else statusMenuTarget.takeUnless { it == entryKey }
                                 },
-                        )
-                        QuestionStatusIcon(entry.status, Modifier.align(Alignment.TopEnd))
+                                onStatusSelected = { status ->
+                                    statusMenuTarget = null
+                                    locateSource(entry.sourcePath)
+                                    if (status != entry.status) {
+                                        store.saveSourceQuestion(entry, entry.question, entry.answer, status, entry.tags)
+                                    }
+                                    if (store.questionSearchVisible.value) store.questionSearchVisible.value = false
+                                },
+                            )
+                        }
                     }
                     // 展开/收起必须带高度动画：直接增删答案块会让卡片高度瞬间跳变，下方卡片只能靠弹簧
                     // 滑过来补位，过渡期盖在答案上互相重叠。高度连续变化后，跟随卡片才能同步滑动不脱节。
@@ -1202,6 +1295,39 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     }
     if (showCreateBatch) {
         BatchCreateSourceQuestionsDialog(store, selectedMappedDocument) { showCreateBatch = false }
+    }
+    if (showBatchTagDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchTagDialog = false },
+            title = { Text("批量添加标签") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("为已选 ${selectedEntries.size} 道题追加同一个标签，已有标签会保留。", fontSize = 13.sp, color = Theme.Muted)
+                    OutlinedTextField(
+                        value = batchTagText,
+                        onValueChange = { batchTagText = it.replace('\n', ' ').replace('\r', ' ') },
+                        label = { Text("标签") },
+                        placeholder = { Text("例如：init") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = batchTagText.isNotBlank() && selectedEntries.isNotEmpty(),
+                    onClick = {
+                        if (store.addTagToSourceQuestions(selectedEntries, batchTagText)) {
+                            showBatchTagDialog = false
+                            batchTagMode = false
+                            selectedQuestionKeys = emptySet()
+                        }
+                    },
+                ) { Text("添加到 ${selectedEntries.size} 道题") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showBatchTagDialog = false }) { Text("取消") }
+            },
+        )
     }
     editingEntry?.let { entry ->
         EditSourceQuestionDialog(
@@ -1971,40 +2097,86 @@ private fun questionStatusAccent(status: QuestionStatus): Color = when (status) 
 }
 
 @Composable
-private fun QuestionStatusIcon(status: QuestionStatus, modifier: Modifier = Modifier) {
-    if (status == QuestionStatus.TODO) return
+private fun QuestionStatusControl(
+    status: QuestionStatus,
+    modifier: Modifier = Modifier,
+    enabled: Boolean,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onStatusSelected: (QuestionStatus) -> Unit,
+) {
+    val description = when (status) {
+        QuestionStatus.TODO -> "待学习"
+        QuestionStatus.LEARNING -> "学习中"
+        QuestionStatus.DONE -> "已完成"
+    }
+    Box(modifier.size(24.dp)) {
+        Box(
+            Modifier.align(Alignment.Center)
+                .size(24.dp)
+                .semantics { contentDescription = "状态：$description" }
+                .clickable(enabled = enabled) { onExpandedChange(true) },
+            contentAlignment = Alignment.Center,
+        ) {
+            QuestionStatusGlyph(status, Modifier.size(18.dp))
+        }
+        DropdownMenu(
+            expanded = expanded && enabled,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            QuestionStatus.values().forEach { candidate ->
+                DropdownMenuItem(
+                    text = { Text(candidate.key) },
+                    leadingIcon = { QuestionStatusGlyph(candidate, Modifier.size(18.dp)) },
+                    onClick = { onStatusSelected(candidate) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuestionStatusGlyph(status: QuestionStatus, modifier: Modifier = Modifier) {
     val accent = questionStatusAccent(status)
-    val description = if (status == QuestionStatus.DONE) "已完成" else "学习中"
     Canvas(
-        modifier.size(18.dp)
-            .semantics { contentDescription = description },
+        modifier.size(18.dp),
     ) {
         val stroke = 1.5.dp.toPx()
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = size.minDimension / 2f - stroke
         drawCircle(accent.copy(alpha = 0.88f), radius, center, style = Stroke(width = stroke))
-        if (status == QuestionStatus.DONE) {
-            val check = Path().apply {
-                moveTo(center.x - 3.4.dp.toPx(), center.y + 0.1.dp.toPx())
-                lineTo(center.x - 1.0.dp.toPx(), center.y + 2.5.dp.toPx())
-                lineTo(center.x + 3.8.dp.toPx(), center.y - 2.7.dp.toPx())
+        when (status) {
+            QuestionStatus.TODO -> drawLine(
+                accent,
+                Offset(center.x - radius * 0.45f, center.y),
+                Offset(center.x + radius * 0.45f, center.y),
+                stroke,
+                cap = StrokeCap.Round,
+            )
+            QuestionStatus.DONE -> {
+                val check = Path().apply {
+                    moveTo(center.x - 3.4.dp.toPx(), center.y + 0.1.dp.toPx())
+                    lineTo(center.x - 1.0.dp.toPx(), center.y + 2.5.dp.toPx())
+                    lineTo(center.x + 3.8.dp.toPx(), center.y - 2.7.dp.toPx())
+                }
+                drawPath(check, accent, style = Stroke(width = stroke, cap = StrokeCap.Round))
             }
-            drawPath(check, accent, style = Stroke(width = stroke, cap = StrokeCap.Round))
-        } else {
-            drawLine(
-                accent,
-                Offset(center.x, center.y),
-                Offset(center.x, center.y - radius * 0.52f),
-                stroke,
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                accent,
-                center,
-                Offset(center.x + radius * 0.42f, center.y + radius * 0.25f),
-                stroke,
-                cap = StrokeCap.Round,
-            )
+            QuestionStatus.LEARNING -> {
+                drawLine(
+                    accent,
+                    Offset(center.x, center.y),
+                    Offset(center.x, center.y - radius * 0.52f),
+                    stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    accent,
+                    center,
+                    Offset(center.x + radius * 0.42f, center.y + radius * 0.25f),
+                    stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
         }
     }
 }

@@ -1,0 +1,105 @@
+old_path	new_path	reason	affected_links_checked
+01-architecture/01-Android系统架构.md	01-architecture/01-system-architecture.md	rename to kebab-case English stem	
+01-architecture/02-Android系统启动流程.md	01-architecture/02-system-boot.md	rename to kebab-case English stem	
+01-architecture/03-Binder.md	01-architecture/04-binder.md	rename to kebab-case English stem	
+01-architecture/04-Sanbox.md	01-architecture/09-app-sandbox.md	rename to kebab-case English stem	
+01-architecture/05-Art.md	01-architecture/06-art-runtime.md	rename to kebab-case English stem	
+01-architecture/06-JNI.md	01-architecture/07-jni.md	rename to kebab-case English stem	
+01-architecture/07-Android分区.md	06-storage/01-partitions.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/08-SystemServer.md	01-architecture/03-system-server.md	rename to kebab-case English stem	
+01-architecture/09-HAL.md	01-architecture/05-hal.md	rename to kebab-case English stem	
+01-architecture/10-Kernel.md	12-platform-native/01-kernel-gki.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/11-版本演进与图形栈预加载.md	05-rendering/05-graphic-stack-preload.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/12-类加载ART编译与JNI链接.md	01-architecture/06-art-runtime.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/13-MessageQueue锁竞争与Binder深化.md	01-architecture/04-binder.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/14-系统服务调度核心.md	11-platform-services/01-broadcast.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/15-安装归档与资源配置.md	01-architecture/08-package-management.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/16-显示与窗口链路.md	03-ui/04-window-system.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/17-Telephony与Connectivity.md	08-network/02-cellular-wireless.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/18-Notification-Biometric-Location.md	11-platform-services/02-notifications.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/19-AVF可观测与AI手机技术栈.md	12-platform-native/07-bpf.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/20-SELinux.md	01-architecture/11-selinux.md	rename to kebab-case English stem	
+01-architecture/21-Permission.md	01-architecture/10-permissions.md	rename to kebab-case English stem	
+01-architecture/22-四大组件.md	02-app-framework/01-four-components.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/23-Handler消息机制.md	02-app-framework/02-handler-looper.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+02-rendering/01-渲染管线与VSync调度.md	05-rendering/01-render-pipeline-vsync.md	rename to kebab-case English stem	
+02-rendering/02-GPU合成与显示管线.md	05-rendering/02-gpu-composition-display.md	rename to kebab-case English stem	
+02-rendering/03-多窗口折叠屏与显示服务.md	05-rendering/03-multi-window-foldable.md	rename to kebab-case English stem	
+03-input/01-输入系统.md	04-input/01-input-system.md	rename to kebab-case English stem	
+03-input/02-应用层事件分发与多点触控.md	04-input/02-app-event-dispatch.md	rename to kebab-case English stem	
+03-input/03-按键系统与键值映射.md	04-input/04-key-mapping.md	rename to kebab-case English stem	
+03-input/04-设备接入与InputReader.md	04-input/03-input-reader.md	rename to kebab-case English stem	
+03-input/05-焦点分发与多屏输入.md	04-input/05-focus-multi-display.md	rename to kebab-case English stem	
+03-input/06-AAOS车机输入.md	04-input/06-aaos-input.md	rename to kebab-case English stem	
+03-input/07-输入排查工具与实战.md	04-input/07-input-diagnostics.md	rename to kebab-case English stem	
+04-storage/01-存储与IO.md	06-storage/02-storage-io.md	rename to kebab-case English stem	
+05-memory/01-内存管理与压力治理.md	07-memory/01-memory-management.md	rename to kebab-case English stem	
+05-memory/02-回收压缩与专项内存.md	07-memory/02-reclaim-compression.md	rename to kebab-case English stem	
+06-system/01-AOSP性能优化.md	15-performance/07-platform-optimization.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+06-system/02-OEM与设备差异.md	14-cpu-power/01-scheduler-power-framework.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+06-system/03-CarService服务速览.md	10-aaos/03-car-services.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+07-performance/01-流畅性.md	15-performance/01-smoothness.md	rename to kebab-case English stem	
+07-performance/02-响应速度.md	15-performance/02-responsiveness.md	rename to kebab-case English stem	
+07-performance/03-ANR.md	15-performance/03-anr.md	rename to kebab-case English stem	
+07-performance/04-内存性能.md	15-performance/04-memory-performance.md	rename to kebab-case English stem	
+07-performance/05-功耗.md	15-performance/05-power.md	rename to kebab-case English stem	
+07-performance/06-网络性能.md	15-performance/06-network-performance.md	rename to kebab-case English stem	
+07-performance/07-渲染管线-基础与图形API.md	05-rendering/04-graphics-api.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+07-performance/08-渲染管线-跨框架与媒体.md	16-app-practice/11-rendering-media-hybrid.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+08-cpu-power/01-调度与功耗框架.md	14-cpu-power/01-scheduler-power-framework.md	rename to kebab-case English stem	
+08-cpu-power/02-能效专项.md	14-cpu-power/02-energy-efficiency.md	rename to kebab-case English stem	
+09-app-practice/01-稳定性治理-度量与崩溃.md	16-app-practice/03-stability-metrics-crash.md	rename to kebab-case English stem	
+09-app-practice/02-稳定性治理-资源泄漏.md	16-app-practice/04-stability-leaks.md	rename to kebab-case English stem	
+09-app-practice/03-稳定性治理-线程与IPC.md	16-app-practice/05-stability-threads-ipc.md	rename to kebab-case English stem	
+09-app-practice/04-稳定性治理-Native与SDK.md	16-app-practice/06-stability-native-sdk.md	rename to kebab-case English stem	
+09-app-practice/05-启动优化.md	16-app-practice/07-startup-optimization.md	rename to kebab-case English stem	
+09-app-practice/06-渲染实战-View与Compose基础.md	16-app-practice/08-rendering-view-compose.md	rename to kebab-case English stem	
+09-app-practice/07-渲染实战-Compose进阶.md	16-app-practice/09-rendering-compose-advanced.md	rename to kebab-case English stem	
+09-app-practice/08-渲染实战-图像显示与页面.md	16-app-practice/10-rendering-image-pages.md	rename to kebab-case English stem	
+09-app-practice/09-渲染实战-媒体与混合栈.md	16-app-practice/11-rendering-media-hybrid.md	rename to kebab-case English stem	
+09-app-practice/10-内存实践.md	16-app-practice/12-memory-practice.md	rename to kebab-case English stem	
+09-app-practice/11-IO与存储实践.md	16-app-practice/13-io-storage-practice.md	rename to kebab-case English stem	
+09-app-practice/12-网络与连接实践.md	16-app-practice/14-network-practice.md	rename to kebab-case English stem	
+09-app-practice/13-功耗优化实践.md	16-app-practice/15-power-practice.md	rename to kebab-case English stem	
+09-app-practice/14-CPU与体积优化.md	16-app-practice/16-cpu-size-optimization.md	rename to kebab-case English stem	
+09-app-practice/15-可观测性-体系与治理.md	16-app-practice/17-observability-governance.md	rename to kebab-case English stem	
+09-app-practice/16-可观测性-线上诊断.md	16-app-practice/18-observability-diagnostics.md	rename to kebab-case English stem	
+09-app-practice/17-资源与值域注解.md	16-app-practice/01-resource-annotations.md	rename to kebab-case English stem	
+09-app-practice/18-应用开发机制与常用API.md	02-app-framework/04-parcel.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+09-app-practice/19-MVP架构.md	16-app-practice/02-mvp-architecture.md	rename to kebab-case English stem	
+10-tools/01-Perfetto-采集与SQL分析.md	17-tools/04-perfetto-sql.md	rename to kebab-case English stem	
+10-tools/02-Perfetto-进阶与SDK.md	17-tools/05-perfetto-advanced.md	rename to kebab-case English stem	
+10-tools/03-性能分析工具.md	17-tools/03-performance-tools.md	rename to kebab-case English stem	
+10-tools/04-GPU与专项工具.md	17-tools/06-gpu-tools.md	rename to kebab-case English stem	
+10-tools/05-性能方法论.md	17-tools/02-performance-methodology.md	rename to kebab-case English stem	
+10-tools/06-APM-平台与SDK.md	17-tools/07-apm-platform.md	rename to kebab-case English stem	
+10-tools/07-APM-专项原理与架构.md	17-tools/08-apm-internals.md	rename to kebab-case English stem	
+10-tools/08-学习方法与检查清单.md	17-tools/01-diagnosis-method.md	rename to kebab-case English stem	
+11-defects/01-车控信号语义.md	18-defect-patterns/06-vehicle-signal-semantics.md	rename to kebab-case English stem	
+11-defects/02-主线程与异步时序.md	18-defect-patterns/01-main-thread-async.md	rename to kebab-case English stem	
+11-defects/03-蓝牙机制.md	18-defect-patterns/05-bluetooth-mechanisms.md	rename to kebab-case English stem	
+11-defects/04-Kanzi双端状态同步.md	18-defect-patterns/07-kanzi-state-sync.md	rename to kebab-case English stem	
+11-defects/05-UI还原与主题适配.md	18-defect-patterns/04-ui-theme-fidelity.md	rename to kebab-case English stem	
+11-defects/06-状态缓存与启动时序.md	18-defect-patterns/02-state-cache-startup.md	rename to kebab-case English stem	
+11-defects/07-崩溃防护与偶现排查.md	18-defect-patterns/03-crash-protection.md	rename to kebab-case English stem	
+11-defects/08-提交治理与防回归.md	OUT:knowledge-base/04-exp/01-提交治理与防回归.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+12-platform-native/01-内核与原生层.md	12-platform-native/04-shared-memory.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+12-platform-native/03-aconfig特性开关.md	13-build-system/07-aconfig.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+13-audio/01-AOSP音频子系统.md	09-audio/01-aosp-audio.md	rename to kebab-case English stem	
+13-audio/02-AAOS车机音频.md	09-audio/03-aaos-audio.md	rename to kebab-case English stem	
+13-audio/03-音频延迟与应用实践.md	09-audio/04-audio-latency.md	rename to kebab-case English stem	
+13-audio/04-蓝牙音频.md	09-audio/05-bluetooth-audio.md	rename to kebab-case English stem	
+13-audio/05-手机侧音频焦点与路由.md	09-audio/02-phone-audio-focus.md	rename to kebab-case English stem	
+14-network/01-Android网络框架.md	08-network/01-network-framework.md	rename to kebab-case English stem	
+14-network/02-车机多APN与虚拟网卡.md	08-network/06-multi-apn-veth.md	rename to kebab-case English stem	
+14-network/03-Android-VPN.md	08-network/05-vpn.md	rename to kebab-case English stem	
+14-network/04-蜂窝数据与无线连接.md	08-network/02-cellular-wireless.md	rename to kebab-case English stem	
+14-network/05-车载网络架构与设计.md	08-network/07-vehicle-network.md	rename to kebab-case English stem	
+14-network/06-网络排查工具与实践.md	08-network/09-network-diagnostics.md	rename to kebab-case English stem	
+14-network/07-车机网络安全.md	08-network/08-vehicle-security.md	rename to kebab-case English stem	
+14-network/08-应用网络编程与系统约束.md	08-network/03-app-network-constraints.md	rename to kebab-case English stem	
+14-network/09-传输细节与协议设计.md	08-network/04-transport-protocols.md	rename to kebab-case English stem	
+14-network/10-网络分层原理与地基机制.md	OUT:knowledge-base/网络/01-network-fundamentals.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+16-project-architecture/01-应用进程启动与全局服务生命周期.md	OUT:knowledge-base/career/work-project-analysis/01-launcher-vehicle-service.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+17-car-app/01-Launcher.md	10-aaos/06-car-launcher.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+18-build-system/04-linux-kernel-drivers.md	12-platform-native/02-driver-runtime.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
