@@ -16,15 +16,15 @@
 
 定位启动故障时，先辨别停在哪一层和哪一个里程碑：进程创建、HOME Activity 启动、首帧、动画退出、全局 boot 属性、用户解锁及用户级广播不能互相替代。此处 Boot ROM/Bootloader/内核依据文档已核对的官方资料；Framework 与 AAOS 行为以 Android 13 `AAOS13_study` 源码锚点 `abec84ef9` 为准。
 
-**Q2: [done] [tags:系统启动,init] init 进程的 main.cpp 是被谁拉起的，如何拉起的？**
+**Q2: [done] [tags:系统启动,init] init 进程的入口是什么，是如何拉起的？**
 
-内核启动的是 `/init` 可执行文件，不是 `main.cpp` 源码。根据设备布局，`/init` 可能是 ramdisk 中的首阶段程序，也可能指向系统分区中的 `/system/bin/init`；首阶段准备好系统后，通过 `execv` 进入由 `main.cpp` 编译出的 init 程序。
+ramdisk 的 `/init` 是可执行文件，不是进程。内核创建 PID 1 的 `kernel_init` 内核线程后，通过 `kernel_execve("/init")` 装载它。执行切到 ELF 入口 `_start` 时，同一个 PID 1 才开始运行用户态 init；Bionic 初始化后再调用 C++ `main()`。这是转换已有任务，不是 `fork` 新进程。
 
-1. **源码如何变成 init：**[Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:251>) 将 `main.cpp` 编进 `init_second_stage` 模块，并用 `stem: "init"` 将产物命名为 `init`，安装到 `/system/bin/init`。模块还链接 `libinit` 提供实现代码；启动时执行的是二进制文件，不是源码。
+1. **首阶段如何接力：**独立 ramdisk 布局下，`/init` 是静态链接的 `init_first_stage`。程序从 `_start` 经 Bionic 初始化，进入 `first_stage_main.cpp` 的 `main()`。挂载系统分区后，它通过 `execv` 执行 `/system/bin/init`，并传入 `selinux_setup`。
 
-2. **ramdisk 布局如何启动：**内核执行 ramdisk 根目录的 `/init`，它通常是由 `first_stage_*.cpp` 构建的 `init_first_stage`，不是 `main.cpp` 编译出的程序。首阶段挂载系统分区后，[调用 `execv`](</home/liang/Project/MyProject/AAOS13_study/system/core/init/first_stage_init.cpp:435>)，以 `selinux_setup` 参数接力启动系统 init。
+2. **系统 init 如何构建：**`system/core/init/Android.bp` 将 `main.cpp` 编入 `init_second_stage` 模块，并链接 `libinit`。`stem: "init"` 将产物命名为 `init`。若省略，文件名默认取模块名 `init_second_stage`。产物安装到 `/system/bin/init`。启动时，动态链接器先装载依赖，再进入程序的 `_start`，由 Bionic 调用 `main.cpp` 中的 `main()`。
 
-3. **main.cpp 如何选择阶段：**[main()](</home/liang/Project/MyProject/AAOS13_study/system/core/init/main.cpp:65>) 根据参数路由：`selinux_setup` 进入 SELinux 设置，完成后[再次 `execv`](</home/liang/Project/MyProject/AAOS13_study/system/core/init/selinux.cpp:1098>) 并传入 `second_stage`，进入 `SecondStageMain()`。System-as-root 下，`/init` 可链接到 `/system/bin/init`，首次无阶段参数时进入 `FirstStageMain()`。`execv` 替换程序映像、不创建进程，因此 PID 始终是 1。
+3. **main() 如何分流阶段：**`main()` 收到 `selinux_setup` 时调用 `SetupSelinux()`。SELinux 初始化完成后，再通过 `execv` 传入 `second_stage`，进入 `SecondStageMain()`。`execv` 替换 PID 1 的程序映像，不创建新进程。System-as-root 布局下，`/init` 可指向 `/system/bin/init`，无阶段参数时直接进入 `FirstStageMain()`。
 
 **Q3: [tags:系统启动] verified boot（AVB）是怎么保证"启动运行的代码没有被篡改"的？**
 
@@ -243,43 +243,7 @@ service 选项决定单个进程的退出、重启和分组启动行为；`class
 2. **故障表现**：验签或哈希错误可能触发回退、重试或失败状态，影响哪些服务继续启动取决于 rc 对状态属性的等待条件；“卡动画/黑屏”是可能症状，不足以单独证明 APEX 损坏；
 3. **排查入口**：`getprop apexd.status`、`logcat -s apexd`、`ls /apex`、`pm list packages --apex`；日志锚点 "Bootstrapping done" / "Marking APEXd as activated/ready"。
 
-**Q19: [tags:系统启动] Zygote 是怎么被拉起的？启动后依次做什么？**
-
-Zygote 由 init 按服务配置启动，随后在自身启动流程中预加载运行环境、创建 `system_server` 并开始接收应用进程请求。Android 17 的主线如下：
-
-1. `init.zygote64.rc` 声明 Zygote 服务，`zygote-start` 触发器执行 `start zygote`。
-2. init fork/exec `/system/bin/app_process64`，并传入 `--zygote`、`--start-system-server` 等参数。具体参数以设备选用的 zygote rc 文件为准。
-3. app_process 初始化 ART 并进入 `ZygoteInit.main()`。未启用延迟预加载时，先加载常用类、资源与共享库。
-4. Zygote 创建 `ZygoteServer`，使用 init 传入的 Zygote socket 与可选的 USAP 池 socket。
-5. 主 Zygote 根据 `--start-system-server` 调用 `forkSystemServer()` 创建 `system_server`。
-6. 父 Zygote 进入 `runSelectLoop()`，等待后续应用进程创建请求。
-
-`system_server` 是主 Zygote 启动流程直接 fork 的子进程，不是 init 通过应用请求 socket 创建的服务。init 监督 Zygote 服务；system_server 的崩溃恢复由 Zygote 与 init 的上层恢复链处理。
-
-**Q20: [tags:系统启动] Zygote 的 preload 到底预加载了哪些东西？为什么所有应用进程能直接共享？**
-
-preload 阶段把"每个应用都需要的公共物"只加载一次：preloaded-classes 清单里的常用框架类、系统资源（drawable/color 资源表）、图形相关初始化与 JCA 安全 Provider；此后所有 fork 出的进程靠写时复制物理共享这些页——读到的都是同一份内存，谁写了那一页才真正复制。
-
-机制：
-
-1. **时机**：主 Zygote 在进入 socket 循环前执行 preload；次 Zygote 用 `--enable-lazy-preload` 跳过大头，只为 32 位应用按需补载；
-2. **共享原理**：fork 复制页表而不复制物理页，preload 出来的类元数据与资源位图因此成为全体后代共享的只读页——"省时间"与"省内存"两个收益同源于此；
-3. **代价**：清单里的每个类都被全体应用背着——加类开机变慢、删类各应用首载变慢，preloaded-classes 的每次调整都是全局权衡。
-
-收束：排查应用首帧慢时，"目标类不在 preload 清单、首次加载要自己付全部成本"是一个常被忽略的取证点。
-
-**Q21: [tags:系统启动] Zygote preload 用开机成本换取什么？删减预加载清单或使用 lazy preload 分别要注意什么？**
-
-预加载把一部分应用启动工作转移到 Zygote 启动阶段，并让 fork 后代通过 COW 共享相应内存。调优时要同时衡量开机成本、共享内存收益和首启延迟。
-
-1. **预加载范围**：主 Zygote 在 fork `system_server` 前加载 Framework 类、资源、app-process HAL 与图形驱动、共享库和字体缓存等。AAOS 13 所用源码的 `frameworks/base/config/preloaded-classes` 约有 1.6 万行；数量随源码分支变化。
-2. **扩展清单的代价**：增加预加载项可能减少应用启动期类加载，却会增加 Zygote 启动工作、共享页占用和脏页风险。
-3. **删减清单的代价**：移除预加载项可减少启动工作，但使用这些类的应用可能在首次加载时承担额外成本。
-4. **评估方法**：在干净开机和多应用场景记录 Zygote 预加载时长、`system_server` ready 时间、Zygote PSS、代表应用 TTID/TTFD，以及低内存设备上的重启与 swap。Boot image profile 调优会同时考虑 boot classpath Profile、system_server Profile 与预加载清单，数据应来自真实 CUJ 并随系统镜像发布。
-5. **lazy preload 的边界**：`--enable-lazy-preload` 跳过启动时的 preload，但首次收到 preload 请求时，`ZygoteInit.lazyPreload()` 仍执行同一套完整预加载。因此它改变支付时间，不是增量拆分。AAOS 13 材料中的主 64 位 Zygote 不传该参数，32 位 secondary Zygote 传入；验证时分别记录 primary 的 ZygotePreload、secondary 的 ZygoteInitTiming_lazy，以及首个 32 位进程请求前后的延迟。
-6. **应用专属类**：业务应用自己的类通常不属于系统 Zygote 的通用预加载集合，不应通过扩展系统预加载解决单个应用的启动问题。
-
-**Q22: [tags:系统启动] Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
+**Q19: [tags:系统启动] Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
 
 Zygote 是带有 ART 运行时和公共预加载内容的模板进程。它通过 fork 派生 `system_server` 与应用进程，使后代复用初始化状态并以写时复制共享尚未修改的物理页。
 
@@ -292,6 +256,42 @@ init 第二阶段解析 `.rc` 后启动 Zygote。Zygote 完成预加载后由主
 3. **同一起点**：所有进程从一致的运行环境出发。
 
 COW 不等于零成本，后续写入和应用初始化会逐步产生私有页。主 Zygote 在初始化期间调用 `forkSystemServer()` 创建 `system_server`；普通应用由 `system_server` 经 Zygote 请求创建。
+
+**Q20: [tags:系统启动] Zygote 是怎么被拉起的？启动后依次做什么？**
+
+Zygote 由 init 按服务配置启动，随后在自身启动流程中预加载运行环境、创建 `system_server` 并开始接收应用进程请求。Android 17 的主线如下：
+
+1. `init.zygote64.rc` 声明 Zygote 服务，`zygote-start` 触发器执行 `start zygote`。
+2. init fork/exec `/system/bin/app_process64`，并传入 `--zygote`、`--start-system-server` 等参数。具体参数以设备选用的 zygote rc 文件为准。
+3. app_process 初始化 ART 并进入 `ZygoteInit.main()`。未启用延迟预加载时，先加载常用类、资源与共享库。
+4. Zygote 创建 `ZygoteServer`，使用 init 传入的 Zygote socket 与可选的 USAP 池 socket。
+5. 主 Zygote 根据 `--start-system-server` 调用 `forkSystemServer()` 创建 `system_server`。
+6. 父 Zygote 进入 `runSelectLoop()`，等待后续应用进程创建请求。
+
+`system_server` 是主 Zygote 启动流程直接 fork 的子进程，不是 init 通过应用请求 socket 创建的服务。init 监督 Zygote 服务；system_server 的崩溃恢复由 Zygote 与 init 的上层恢复链处理。
+
+**Q21: [tags:系统启动] Zygote 的 preload 到底预加载了哪些东西？为什么所有应用进程能直接共享？**
+
+preload 阶段把"每个应用都需要的公共物"只加载一次：preloaded-classes 清单里的常用框架类、系统资源（drawable/color 资源表）、图形相关初始化与 JCA 安全 Provider；此后所有 fork 出的进程靠写时复制物理共享这些页——读到的都是同一份内存，谁写了那一页才真正复制。
+
+机制：
+
+1. **时机**：主 Zygote 在进入 socket 循环前执行 preload；次 Zygote 用 `--enable-lazy-preload` 跳过大头，只为 32 位应用按需补载；
+2. **共享原理**：fork 复制页表而不复制物理页，preload 出来的类元数据与资源位图因此成为全体后代共享的只读页——"省时间"与"省内存"两个收益同源于此；
+3. **代价**：清单里的每个类都被全体应用背着——加类开机变慢、删类各应用首载变慢，preloaded-classes 的每次调整都是全局权衡。
+
+收束：排查应用首帧慢时，"目标类不在 preload 清单、首次加载要自己付全部成本"是一个常被忽略的取证点。
+
+**Q22: [tags:系统启动] Zygote preload 用开机成本换取什么？删减预加载清单或使用 lazy preload 分别要注意什么？**
+
+预加载把一部分应用启动工作转移到 Zygote 启动阶段，并让 fork 后代通过 COW 共享相应内存。调优时要同时衡量开机成本、共享内存收益和首启延迟。
+
+1. **预加载范围**：主 Zygote 在 fork `system_server` 前加载 Framework 类、资源、app-process HAL 与图形驱动、共享库和字体缓存等。AAOS 13 所用源码的 `frameworks/base/config/preloaded-classes` 约有 1.6 万行；数量随源码分支变化。
+2. **扩展清单的代价**：增加预加载项可能减少应用启动期类加载，却会增加 Zygote 启动工作、共享页占用和脏页风险。
+3. **删减清单的代价**：移除预加载项可减少启动工作，但使用这些类的应用可能在首次加载时承担额外成本。
+4. **评估方法**：在干净开机和多应用场景记录 Zygote 预加载时长、`system_server` ready 时间、Zygote PSS、代表应用 TTID/TTFD，以及低内存设备上的重启与 swap。Boot image profile 调优会同时考虑 boot classpath Profile、system_server Profile 与预加载清单，数据应来自真实 CUJ 并随系统镜像发布。
+5. **lazy preload 的边界**：`--enable-lazy-preload` 跳过启动时的 preload，但首次收到 preload 请求时，`ZygoteInit.lazyPreload()` 仍执行同一套完整预加载。因此它改变支付时间，不是增量拆分。AAOS 13 材料中的主 64 位 Zygote 不传该参数，32 位 secondary Zygote 传入；验证时分别记录 primary 的 ZygotePreload、secondary 的 ZygoteInitTiming_lazy，以及首个 32 位进程请求前后的延迟。
+6. **应用专属类**：业务应用自己的类通常不属于系统 Zygote 的通用预加载集合，不应通过扩展系统预加载解决单个应用的启动问题。
 
 **Q23: [tags:系统启动] Zygote 的 fork 模型有哪些硬约束？"zygote 本体没有 Binder"是怎么来的？**
 
