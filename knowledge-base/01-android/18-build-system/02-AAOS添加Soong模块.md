@@ -73,7 +73,7 @@ cc_binary {
 
 这个文件声明一个系统应用和它的支撑模块：1 个 `android_app` 主体、4 个 `android_library` 源码库、3 个预编译导入和 1 个权限白名单。解读主线：第 1～4 项逐组解析应用块的属性，看它如何变成可安装、可启动的 APK；第 5～7 项解析支撑模块如何接入构建图；第 8 项是声明之外必查的事；第 9 项回答什么时候选 `android_app`。每个属性按“提供什么输入、当前值什么效果、省略后回退到什么默认”三问解读；仅凭模块声明不能断言 APK 已被产品打包。
 
-1. **完整声明与源码输入：**`NsrVehicleService` 用 `android_app` 声明应用模块，完整块如下（属性名称与顺序与源文件一致）；本项解析模块类型与源码输入属性，其余属性在第 2～4 项分组解析：
+1. **模块类型与源码输入：**`NsrVehicleService` 使用 `android_app` 声明 APK 模块。此组代码集中展示模块身份、源码、AIDL 搜索路径、资源和 Manifest；`...` 表示省略其他属性，片段仅用于说明，不是完整可编译声明。
 
     ```bp
     android_app {
@@ -84,20 +84,76 @@ cc_binary {
             "vehiclebase/src/main/aidl/**/*.aidl",
         ],
         aidl: {
-            local_include_dirs: [
-                "vehiclebase/src/main/aidl",
-            ],
-            include_dirs: [
-                "frameworks/base/media/java",
-            ],
+            local_include_dirs: ["vehiclebase/src/main/aidl"],
+            include_dirs: ["frameworks/base/media/java"],
         },
         resource_dirs: ["app/src/main/res"],
         manifest: "app/src/main/AndroidManifest.xml",
+        ...
+    }
+    ```
+
+    1. **模块类型：**`android_app` 声明可安装 APK 模块；同样源码若声明为 `android_library`，则产出供其他模块依赖的库。
+    2. **模块名：**`name` 是 Soong 模块名，供依赖和产品配置引用；省略会导致模块无法注册，也不等于 APK 包名。
+    3. **源码输入：**`srcs` 路径相对当前 `Android.bp`。应用 Java 和 `vehiclebase` Java 直接编入 APK；AIDL glob 选中并编译该目录下的 AIDL，`**` 表示递归匹配子目录。
+    4. **模块内 AIDL 搜索根：**`aidl.local_include_dirs` 相对当前模块目录，为 `import` 提供搜索根，不负责选择编译文件。例如，`IVehicleSdkService.aidl` 导入 `com.yadea.apf.vehiclesdk.ITirePressureListener`，编译器会在该根下查找 `com/yadea/apf/vehiclesdk/ITirePressureListener.aidl`。文件即使匹配 `srcs`，仍需搜索根才能按包名找到。
+    5. **源码树 AIDL 搜索根：**`aidl.include_dirs` 也为 `import` 提供搜索根，但路径相对 Android 源码树根目录；`local_include_dirs` 相对模块目录。这里指向平台媒体 AIDL，不会自动编译这些文件，也不建立模块依赖。当前 AIDL 导入未见平台媒体接口，无法仅凭此配置确认它必需。
+    6. **资源目录：**`resource_dirs` 指定应用资源。默认目录是模块下的 `res`，这里使用非默认路径，所以显式配置。
+    7. **Manifest：**`manifest` 指定应用清单。默认位置在模块目录下，这里显式选择 `app/src/main/AndroidManifest.xml`。
+
+    简言之：`srcs` 选择编译输入，AIDL include 目录提供 `import` 搜索根；两者不能互相替代。
+
+2. **编译依赖与 native 库：**此组代码展示编译 classpath、静态依赖和 JNI 库的声明：
+
+    ```bp
+    android_app {
+        ...
+        libs: ["android.car"],
+        static_libs: [
+            "yadea_anwsdkservice",
+            "IviCommSdk",
+            "TboxSDK",
+            "androidx.annotation_annotation",
+            "androidx.core_core",
+        ],
+        jni_libs: ["libYDBleHandshake"],
+        use_embedded_native_libs: true,
+        ...
+    }
+    ```
+
+    1. **编译依赖：**`NsrCarManager.java` 使用 `android.car` API；搜索 `name: "android.car"` 可定位其 Soong 模块。`libs` 引用模块名，为编译器提供类型，不把代码打入 APK，运行时由 AAOS 系统提供，近似 Gradle `compileOnly`。
+    2. **打包依赖：**应用运行时需要、系统又不提供的库用 `static_libs`；库代码会并入 APK，Android 库的资源和 Manifest 也会合并。APK 会增加多少取决于实际内容和代码裁剪；本例关闭了优化，不能假设未用代码会被移除。它近似 Gradle `implementation`；Gradle 的 `api`/`implementation` 区别主要是依赖是否传递给下游编译。“静态”指并入 APK，不是 C++ 静态库。
+    3. **JNI 库：**`jni_libs` 声明需要随 APK 提供的 native 模块，确保 `System.loadLibrary` 能找到对应 `.so`；省略不会自动打包，运行时可能抛出 `UnsatisfiedLinkError`。
+    4. **Native 库打包：**`use_embedded_native_libs: true` 可让 `.so` 不压缩地放入 APK，供系统直接加载，并设置 Manifest 的 `android:extractNativeLibs="false"`。常见用途是省去安装时解压、避免额外的 `.so` 文件副本；需确认没有组件依赖文件系统中的 `.so` 路径。AAOS 13 普通应用默认值为 `false`，通常无需启用。
+
+3. **包名、API、签名与分区：**此组代码展示应用身份、编译 API、签名和安装分区：
+
+    ```bp
+    android_app {
+        ...
         package_name: "com.yadea.apf.vehicleservice",
         platform_apis: true,
         certificate: "platform",
         privileged: true,
         system_ext_specific: true,
+        ...
+    }
+    ```
+
+    1. **包名：**`package_name` 固定 APK 包名；省略时沿用 Manifest 包名，需与权限白名单等按包名匹配的配置一致。
+    2. **平台 API：**`platform_apis: true` 允许针对平台内部 API 编译；本块未设 `sdk_version`，所以显式选择平台 API。通常用于源码树内构建且确实依赖 SDK 未公开 API 的系统组件；只用公开或 System API 时配置相应 `sdk_version`。系统/特权应用身份本身不要求开启此项。
+    3. **签名证书：**`certificate: "platform"` 中的 `platform` 是 Soong 预置证书名，表示用 Android 平台签名密钥签 APK；不是安装分区，也不等于 `platform_apis` 或 `privileged`。应用需要与平台组件匹配签名身份时使用；否则用产品默认签名。
+    4. **特权身份：**`privileged: true` 将应用安装到特权应用目录。应用需要申请特权权限时使用；权限仍须在对应分区的白名单中授权。
+    5. **安装分区：**`system_ext_specific: true` 将应用安装到 `system_ext`。应用属于系统扩展时使用，并让特权权限白名单与应用位于同一分区；省略时使用默认分区。
+
+    这些属性各管一项：包名确定应用身份，平台 API 和证书决定编译与签名方式，`privileged` 决定特权应用资格，分区属性决定安装位置；白名单 XML 单独声明权限授权。
+
+4. **构建开关与安装关联：**此组代码展示优化、预优化、产品条件和关联模块：
+
+    ```bp
+    android_app {
+        ...
         optimize: {
             enabled: false,
         },
@@ -109,75 +165,27 @@ cc_binary {
                 enabled: false,
             },
         },
-        libs : ["android.car"],
-        static_libs: [
-            "yadea_anwsdkservice",
-            "IviCommSdk",
-            "TboxSDK",
-            "androidx.annotation_annotation",
-            "androidx.core_core",
-        ],
-        jni_libs: [
-            "libYDBleHandshake",
-        ],
-        use_embedded_native_libs: true,
-        required: [
-            "privapp_whitelist_com.yadea.apf.vehicleservice",
-        ],
+        required: ["privapp_whitelist_com.yadea.apf.vehicleservice"],
     }
     ```
 
-    1. `android_app` 是应用模块类型，产物是可安装的 APK：`srcs` 编译为 DEX，`resource_dirs` 的资源经 AAPT2 打包，与 `manifest` 合并出应用身份与组件声明，按 `certificate` 签名，按分区属性安装。块内其余属性都是这条链路的输入；同样源码改用 `android_library` 只产出供依赖编译的库，不走 APK 链路。
-    2. `name: "NsrVehicleService"`：Soong 模块名，依赖引用与产品配置都用它。必需属性，省略则目标无法注册；它决定默认产物文件名，但不等于 APK 的应用包名。
-    3. `srcs`：参与编译的源码，相对 `Android.bp` 所在目录解析：
-       1. `app/src/main/java/**/*.java` 纳入应用自身的 Java 源码。
-       2. `vehiclebase/src/main/java/**/*.java` 把 `vehiclebase` 的 Java 源码也直接编入本 APK。
-       3. `vehiclebase/src/main/aidl/**/*.aidl` 把该目录 AIDL 纳入输入，由 Soong 生成接口代码。
-       4. `**` 表示递归匹配子目录。省略某一项后，对应文件不会因 `aidl` 目录配置而自动编译，缺类型时编译报错。
-    4. `aidl.local_include_dirs: ["vehiclebase/src/main/aidl"]`：AIDL `import` 的解析路径，只管“到哪里找”，纳入编译仍由 `srcs` 决定。省略后被导入文件不在其他可见路径时，AIDL 生成阶段报找不到导入。
-    5. `aidl.include_dirs: ["frameworks/base/media/java"]`：平台媒体 AIDL 的搜索根，是源码树路径，不等于建立模块依赖。省略且这些接口无其他可见途径时导入失败。
-    6. `resource_dirs: ["app/src/main/res"]`：应用资源目录。默认是模块目录下的 `res`，此处为非默认路径所以显式给出；省略则回退默认目录，缺资源时引用资源失败。
-    7. `manifest: "app/src/main/AndroidManifest.xml"`：应用 Manifest，默认位置是模块目录，显式给出是为了选择这里的非默认文件。缺失或选错导致构建失败或应用声明错误。
+    1. **代码优化：**`optimize.enabled: false` 关闭此分支的 R8 优化、压缩与混淆；具体流程以产品配置为准，不能从该值推断设置动机。
+    2. **DEX 预优化：**`dex_preopt.enabled: false` 关闭镜像构建阶段的 DEX 预优化，与 R8 是两个独立开关。
+    3. **PDK 条件：**`product_variables.pdk.enabled: false` 表示 PDK 变量为真时禁用该模块；省略时不应用这条条件覆盖。
+    4. **关联白名单：**`required` 将白名单 XML 模块加入应用的构建/安装依赖闭包，名字须与其模块声明一致；它不代表产品已选择本应用。
 
-    `aidl` 两个目录只解决“到哪里找被导入的 AIDL”，哪些 AIDL 参与编译由 `srcs` 决定。
-
-2. **编译依赖与 native 库：**完整声明末段的 `libs`、`static_libs`、`jni_libs` 与 `use_embedded_native_libs` 把依赖库接进 APK：
-
-    1. `libs: ["android.car"]`：把 Car API 加入编译 classpath，供编译器检查引用；平台库不复制进 APK，运行时实现由系统提供。省略且无其他依赖导出这些符号时编译失败。
-    2. `static_libs`：静态并入 APK 的库依赖。源码 `import` 不会自动建立依赖，省略后缺类型或资源时编译失败，库的资源与 Manifest 合并也不会发生：
-       1. `yadea_anwsdkservice`：项目服务库源码模块。
-       2. `IviCommSdk`：下文声明的 AAR 导入模块。
-       3. `TboxSDK`：下文声明的 JAR 导入模块。
-       4. `androidx.annotation_annotation`：AndroidX 注解库。
-       5. `androidx.core_core`：AndroidX Core 库。
-    3. `jni_libs: ["libYDBleHandshake"]`：APK 依赖的 JNI 库，对应下文的预编译 `.so` 模块。省略后不会因 `System.loadLibrary` 自动打包，运行到加载处抛 `UnsatisfiedLinkError`。
-    4. `use_embedded_native_libs: true`：native 库以未压缩形式嵌入 APK，并设 Manifest 的 `android:extractNativeLibs="false"`，运行时直接从 APK 加载。AAOS 13 普通应用默认 `false`（库提取到 APK 外），显式 `true` 同时改变打包布局与加载路径。
-
-3. **包名、API、签名与分区：**声明中部的五个属性决定 APK 身份与安装形态：
-
-    1. `package_name: "com.yadea.apf.vehicleservice"`：固定 APK 包名，须与权限白名单等按包名匹配的配置一致。省略沿用 Manifest 包名，两者不一致时白名单匹配不到应用。
-    2. `platform_apis: true`：允许针对平台内部 API 编译。本块未设 `sdk_version`，此分支下必须显式 `true` 消除 API 模式歧义，否则配置报错；改走 SDK API 时应设相符的 `sdk_version`。
-    3. `certificate: "platform"`：平台证书签名，是签名级权限与系统组件信任的基础。省略时用产品默认证书，可能安装成功但平台权限校验失败，且须在产品签名策略允许范围内。
-    4. `privileged: true`：归入特权应用目录，有资格获得特权权限；它不绕过白名单，省略即无特权身份。
-    5. `system_ext_specific: true`：安装到 `system_ext` 分区。省略走默认分区，与白名单分区不一致时权限配置不生效。
-
-    四者各管一事：`privileged` 管权限资格，平台证书管签名身份，白名单 XML 管授权配置，`system_ext_specific` 管分区位置。
-
-4. **构建开关与安装关联：**其余四个属性调整构建行为或挂载关联模块：
-
-    1. `optimize.enabled: false`：关闭 R8 优化、压缩与混淆（具体流程随分支配置）。普通应用默认启用优化，显式关闭保留未优化构建；动机须查项目提交说明，不能凭值反推。
-    2. `dex_preopt.enabled: false`：关闭镜像构建阶段的 DEX 预优化（默认启用），镜像不含预优化产物，运行时转解释或 JIT。它与 R8 优化是两个独立开关。
-    3. `product_variables.pdk.enabled: false`：产品变量 `pdk` 为真时把模块 `enabled` 覆盖为 `false`，即从 PDK 构建排除；省略则模块照常参与。
-    4. `required: ["privapp_whitelist_com.yadea.apf.vehicleservice"]`：把白名单 XML 模块挂进本应用的构建/安装闭包，名字须与下文 `prebuilt_etc` 的 `name` 完全一致。`required` 不等于产品已选择本应用。
-
-5. **支撑库模块：**`android_library` 块按子模块拆分可复用实现。声明库只建立构建目标：是否被 APK 依赖取决于消费方的 `static_libs`，是否进入镜像取决于产品选择。
+5. **源码库模块：**`android_library` 把 Java 源码和 Android 资源构建成供其他模块依赖的库，不是可安装 APK。先完整展示第一个库，说明它的属性；后续库只突出新增或不同配置：
 
     ```bp
     android_library {
         name: "yadea_vehiclesdk",
         manifest: "vehiclesdk/src/main/AndroidManifest.xml",
-        srcs: ["vehiclesdk/src/main/java/**/*.java"],
-        static_libs: ["yadea_vehiclebase"],
+        srcs: [
+            "vehiclesdk/src/main/java/**/*.java",
+        ],
+        static_libs: [
+            "yadea_vehiclebase",
+        ],
         optimize: {
             enabled: false,
         },
@@ -185,7 +193,7 @@ cc_binary {
 
     android_library {
         name: "yadea_vehiclebase",
-        manifest: "vehiclebase/src/main/AndroidManifest.xml",
+        ...
         srcs: [
             "vehiclebase/src/main/aidl/**/*.aidl",
             "vehiclebase/src/main/java/**/*.java",
@@ -195,30 +203,23 @@ cc_binary {
         },
         platform_apis: true,
         libs: ["android.car"],
-        optimize: {
-            enabled: false,
-        },
+        ...
     }
 
     android_library {
         name: "yadea_nsrspeechsdk",
-        manifest: "nsrspeechsdk/src/main/AndroidManifest.xml",
-        srcs: ["nsrspeechsdk/src/main/java/**/*.java"],
+        ...
         static_libs: [
             "yadea_vehiclesdk",
             "yadea_anwsdkservice",
             "IviCommSdk",
         ],
-        libs: ["android.car"],
-        platform_apis: true,
-        optimize: {
-            enabled: false,
-        },
+        ...
     }
 
     android_library {
         name: "yadea_anwsdkservice",
-        manifest: "anwsdkservice/src/main/AndroidManifest.xml",
+        ...
         srcs: [
             "anwsdkservice/src/main/java/**/*.java",
             "anwsdkservice/src/main/aidl/**/*.aidl",
@@ -226,20 +227,22 @@ cc_binary {
         aidl: {
             local_include_dirs: ["anwsdkservice/src/main/aidl"],
         },
-        platform_apis: true,
-        optimize: {
-            enabled: false,
-        },
+        ...
     }
     ```
 
-    1. 每个库携带本子模块的 `manifest` 与 `srcs`，路径都在非默认的 `*/src/main/` 下所以显式给出；`srcs` 只纳入本库源码，glob 语义与应用块相同。
-    2. 依赖链：`yadea_nsrspeechsdk` 静态依赖 `yadea_vehiclesdk`、`yadea_anwsdkservice` 与 `IviCommSdk`，`yadea_vehiclesdk` 再依赖 `yadea_vehiclebase`。省略即断开对应传递关系。
-    3. `yadea_vehiclebase` 与 `yadea_anwsdkservice` 的 `aidl.local_include_dirs` 指向各自 AIDL 根，作用同应用块。
-    4. `platform_apis: true` 与 `libs: ["android.car"]` 的含义同应用块：按平台 API 编译、Car API 进 classpath。
-    5. 四处 `optimize.enabled: false` 均关闭默认启用的 R8 优化。
+    1. **模块类型与名称：**`android_library` 产出供依赖的库，不单独安装；`name` 是 Soong 模块名，必须唯一，供其他模块引用。
+    2. **Manifest：**`manifest` 指定库的清单，路径相对当前 `Android.bp`。省略时默认使用模块目录下的 `AndroidManifest.xml`，该文件不存在就无法构建；本例文件在 `vehiclesdk/src/main/`，所以显式指定。
+    3. **源码：**`srcs` 选择本库参与编译的文件；路径相对 `Android.bp`，`**/*.java` 递归匹配 Java 源码。它可省略，但省略后不会编译本库 Java 文件。
+    4. **静态依赖：**`static_libs` 声明本库依赖的其他模块；这里依赖 `yadea_vehiclebase`。该属性可省略；若源码用到其他库的类型却未通过依赖提供，构建会缺少对应类型或资源。
+    5. **优化开关：**`optimize.enabled: false` 显式关闭库优化；它不是必需属性。AAOS 13 的 `android_library` 默认已关闭优化，因此此处显式设置与省略效果相同。
+    6. **后续库的新增属性：**`yadea_vehiclebase` 和 `yadea_anwsdkservice` 还声明 AIDL 输入；`yadea_vehiclebase` 另声明平台 API 和 Car API 依赖：
+        1. `aidl.local_include_dirs`：可选搜索根；只有 AIDL `import` 需要按本地目录查找时才配置，不负责选择编译文件。
+        2. `platform_apis`：本例未设 `sdk_version`，所以设为 `true`；若按 SDK 编译，则配置对应 `sdk_version`。
+        3. `libs`：可选编译依赖；源码需要该模块提供的 Car API 类型时才添加 `android.car`。
+    7. **依赖链：**`yadea_nsrspeechsdk` 依赖 `yadea_vehiclesdk`、`yadea_anwsdkservice` 和 `IviCommSdk`。这些关系只建立在对应模块声明中，不能推断它们已被 `NsrVehicleService` 依赖或打入 APK。
 
-6. **预编译导入：**`android_library_import`、`java_import` 与 `cc_prebuilt_library_shared` 把现成 AAR、JAR 和 `.so` 接入构建图，不从源码重编：
+6. **预编译库：**这三种模块把现成的 AAR、JAR 或 `.so` 接入构建图，不从源码编译：
 
     ```bp
     android_library_import {
@@ -264,15 +267,17 @@ cc_binary {
     }
     ```
 
-    1. `IviCommSdk` 的 `aars` 与 `TboxSDK` 的 `jars` 指向库文件，依赖方经 `static_libs` 引用模块名即可拿到其中的类。省略文件列表后依赖方编译失败，AAR 的资源与 Manifest 也不再参与合并。
-    2. `libYDBleHandshake` 的 `target.android_arm64` 把 `srcs` 的 `.so` 限定到 ARM64 目标。未提供其他架构变体，就不能认为其他架构可构建。
-    3. `system_ext_specific: true`：把 `.so` 安排到 `system_ext` 分区，与应用分区对应，保证动态链接器可见。
-    4. `check_elf_files: false`：关闭预编译 ELF 校验，通常用于缺构建依赖信息的库；代价是放弃 ABI、依赖与符号版本一致性检查。
+    1. **AAR/JAR：**`aars`、`jars` 指向预编译文件；应用通过 `static_libs` 引用对应模块。AAR 的资源和 Manifest 也会参与合并。
+    2. **Native 库：**`target.android_arm64` 只为 ARM64 提供该 `.so`；没有其他架构变体时，不能据此认为其他架构可构建。应用通过 `jni_libs` 引用模块。
+    3. **安装与校验：**`system_ext_specific: true` 指定模块安装分区；`check_elf_files: false` 关闭 ELF 文件校验，也就失去相应的 ABI、依赖和符号版本检查。
 
-7. **特权权限白名单：**应用 `required` 引用的 XML 安装模块：
+7. **特权权限白名单：**`required` 把白名单 XML 模块关联到应用，两个模块的关键配置如下：
 
     ```bp
-    required: ["privapp_whitelist_com.yadea.apf.vehicleservice"],
+    android_app {
+        ...
+        required: ["privapp_whitelist_com.yadea.apf.vehicleservice"],
+    }
 
     prebuilt_etc {
         name: "privapp_whitelist_com.yadea.apf.vehicleservice",
@@ -283,27 +288,21 @@ cc_binary {
     }
     ```
 
-    1. `prebuilt_etc` 把现成 XML 作为分区 `etc` 下的文件安装，不编译内容。
-    2. `name`：模块标识，必须与应用 `required` 完全一致，否则依赖无法连接。
-    3. `system_ext_specific: true`：与应用同分区，系统读取特权权限配置时才能按包名匹配。
-    4. `src`：指向现成 XML，是必需输入，省略报缺源文件。内容须与包名和权限匹配，声明本身不生成授权规则。
-    5. `sub_dir: "permissions"`：使文件落到 `system_ext/etc/permissions/`。省略则落 `etc` 根目录，系统可能不读。
-    6. `filename_from_src: true`：用源文件名作安装名。省略则默认用模块名，不带 `.xml`，可能不符合系统扫描规则。
+    1. **安装关联：**`required` 的模块名必须与 `prebuilt_etc.name` 一致；应用被产品选择安装时，白名单模块随依赖安装。
+    2. **安装位置：**`system_ext_specific: true` 与 `sub_dir: "permissions"` 将 XML 安装到 `system_ext/etc/permissions/`；`filename_from_src: true` 保留源文件名。
+    3. **权限内容：**`src` 指向现成 XML；系统按包名和权限读取其中规则。仅声明该模块不会自动授予权限。
 
-8. **声明之外必查的三件事：**属性解读完，还有三件声明本身回答不了的事：
+8. **构建前还需核对：**`Android.bp` 不能单独回答依赖闭包、重复类和产品安装结果：
 
-    1. **依赖闭包**：应用源码 `import com.yadea.apf.vehiclesdk`，但 `static_libs` 未列 `yadea_vehiclesdk`。Java `import` 不建立 Soong 依赖，须确认有其他已声明依赖导出该库，或产品规则建立了可见依赖。
-    2. **重复源码**：APK 的 `srcs` 与 `yadea_vehiclebase` 声明了同一批 `vehiclebase` 源码。若该库又经依赖链进入 APK，可能产生重复类，需查完整构建图确认。
-    3. **产品打包**：`Android.bp` 只回答“如何构建”，是否进入镜像取决于 `PRODUCT_PACKAGES` 等产品选择。应核对产品配置、Soong 安装清单与分区文件，`required` 不能替代产品选择。
+    1. **依赖闭包：**应用源码导入 `com.yadea.apf.vehiclesdk`，但应用的 `static_libs` 未列 `yadea_vehiclesdk`；确认是否由其他已声明依赖提供。Java `import` 不会建立 Soong 依赖。
+    2. **重复类：**应用 `srcs` 和 `yadea_vehiclebase` 都列入 `vehiclebase` 源码；若该库也进入 APK，可能重复定义类，需核对最终依赖图。
+    3. **产品安装：**模块声明只定义构建规则；是否进入镜像要查 `PRODUCT_PACKAGES`、Soong 安装清单和目标分区。`required` 不会替代产品对应用的选择。
 
-9. **何时选择 `android_app`：**选择依据是产物形态与安装方式，而不是代码语言：
+9. **模块类型怎么选：**按需要的产物和安装方式选择：
 
-    1. **需要 APK 形态**：要声明 Manifest 组件、携带资源、申请权限或按分区安装为应用——选 `android_app`。本例需要平台签名、特权白名单和 `system_ext` 安装，属于这种情况。
-    2. **只复用代码或资源**：供其他模块依赖编译、自身不安装——选 `android_library`，本例 `yadea_*` 系列即这一角色。
-    3. **设备侧 Java 程序但不需要 APK**：无界面、不合并资源的后台服务或命令行程序——选 `java_library` 加 `installable: true`，由 `app_process` 启动，没有 Manifest 组件与权限体系可用。
-    4. **已有现成 APK**：无源码、只调签名或安装位置——用 `android_app_import` 导入。源码在仓内时优先 `android_app` 重编，避免产物与源码脱节。
-
-    判断入口一句话：产物要成为安装单元选 `android_app`（无源码用 `android_app_import`），只参与编译选 `android_library`，只要可执行形态选可安装 JAR。
+    1. **可安装应用 APK：**需要 Manifest、应用资源、权限或分区安装时用 `android_app`；已有 APK 要导入时用 `android_app_import`。
+    2. **可复用 Android 库：**供应用合并 Java 代码、资源或 Manifest 时用 `android_library`；已有 AAR 用 `android_library_import`。
+    3. **Java 库或程序：**只需 Java 依赖用 `java_library`；已有 JAR 用 `java_import`。是否单独安装和如何启动需另行配置，不能把 JAR 等同于 APK。
 
 **参考：**
 
@@ -1165,3 +1164,21 @@ java_library {
 7. **界定 root 的能力：**`adb root` 让 ADB shell 链路中的命令以 root 身份运行，不会自动关闭 SELinux，也不保证系统分区可写。`adb remount` 是否成功还受 Verified Boot、动态分区和 remount 配置影响；分析实际权限时，应分别确认进程 UID、SELinux enforcing 状态和分区挂载状态。
 
 8. **核对最终设备：**有设备或构建产物时，先查看 `ro.build.type`、`ro.debuggable`、`ro.secure`、`ro.adb.secure` 和 `service.adb.root`，再运行 `adb shell id` 确认实际 UID；`getenforce` 用于确认 SELinux 模式，`adb remount` 的结果用于确认分区写入能力。源码结论与设备属性不一致时，以实际产品配置和最终镜像为准。
+
+
+**Q24: 应用要在 Android 源码树中编译时，怎样判断 `platform_apis`、签名、特权身份和安装分区该如何配置？**
+
+不要照抄其他应用的属性。先确认应用需要哪类 API、权限由谁授予、是否需要特权权限，以及产品要把应用安装到哪个分区；四项分别控制编译 API、签名身份、特权安装和安装位置。
+
+1. **确认编译 API：**检查代码实际使用的 API，并用目标分支的 SDK 编译验证。
+    1. 只用公开 API：配置匹配的 `sdk_version`，例如 `current`。
+    2. 只用 System API：分支提供对应 SDK 时，配置 `system_current`。
+    3. 确实调用 SDK 未公开的平台 API：源码树内构建时设 `platform_apis: true`，省略 `sdk_version`。它只影响编译可见 API，不授予运行时权限。
+
+2. **确认签名证书：**查看应用申请的权限及权限定义处的 `protectionLevel`。只有需要与权限定义方匹配平台签名身份时才设 `certificate: "platform"`；否则使用产品默认签名。不能只因应用是系统应用或调用了平台 API 就选平台证书。
+
+3. **确认特权权限：**如果确实需要 `privileged` 级权限，才设 `privileged: true`，并在应用所在分区的 `privapp-permissions` 白名单中列出获准权限。没有这类权限需求时不必设置；`signature` 级权限与特权权限要按权限定义分别判断。
+
+4. **确认安装分区：**先查产品配置和相似模块的安装路径，确定应用属于 `system`、`system_ext` 等哪个分区。只有目标是 `system_ext` 时才设 `system_ext_specific: true`；特权权限白名单也要放在对应分区。省略时不要猜默认位置，构建后检查实际安装路径。
+
+5. **按证据核实：**在源码中搜索相似 `android_app`、权限定义、白名单 XML 和产品的 `PRODUCT_PACKAGES`；再用目标分支 Soong 文档确认属性规则，构建模块并检查 APK 签名、Manifest 和安装路径。相似模块只能作线索，最终以本应用的 API、权限和产品配置为准。
