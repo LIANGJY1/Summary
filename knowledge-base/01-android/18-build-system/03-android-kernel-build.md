@@ -1,6 +1,6 @@
-# AAOS 13 模拟器内核编译与验证
+# Android 内核构建与验证
 
-> AAOS 13 x86_64 模拟器内核定制学习资料。重点是让源码版本、配置、工具链、模块和运行目标保持一致，并用启动日志与设备状态验证结果。文中的 5.15.41、commit、clang 目录和镜像文件名是材料所述模拟器环境的案例值，不是所有 AAOS 设备的固定值。维护者：session-to-knowledge。
+> Android 内核构建与验证资料，以 AAOS 13 x86_64 模拟器为案例，并补充平台构建与 Android Common Kernel 的边界。重点是让源码版本、配置、工具链、模块和运行目标保持一致。文中的版本号、commit、工具链目录和镜像文件名均为案例值，不是所有设备的固定值。维护者：session-to-knowledge。
 
 **Q1: 为什么定制 AAOS 模拟器内核时，不能只选相同的 Linux 主版本或随意使用 `gki_defconfig`？**
 
@@ -91,3 +91,11 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 材料的 Ubuntu 案例列出 `build-essential`、`flex`、`bison`、`libssl-dev`、`libncurses-dev`、`libelf-dev` 和 `dwarves`。其中 `libelf-dev` 提供 ELF 处理开发头文件/库，`dwarves` 提供 `pahole`，用于相关 BTF/DWARF 处理；其他包支持本机编译、配置界面和加密等构建环节。遇到 `gelf.h` 缺失或 BTF 生成失败时，结合当前构建日志确认具体主机依赖。
 
 不要把这份 Ubuntu 安装清单当成所有内核分支与 Linux 发行版的固定清单；优先参考目标内核仓库的构建说明，并以实际构建错误补齐依赖。
+
+**Q12: 为什么编译 Android 平台不等于编译内核，Android Common Kernel 应怎样单独构建？**
+
+AOSP 平台构建通常使用产品配置指定的内核镜像，内核源码和构建目标可能位于独立 checkout；修改内核后必须按匹配分支单独构建，再确认产品实际使用了新产物。
+
+1. **源码与工具：**Android Common Kernel 使用独立分支、配置和工具链。现代分支使用 Bazel/Kleaf，例如 `tools/bazel run //common:kernel_aarch64_dist`；具体目标以该分支说明为准。
+2. **版本边界：**`build.sh` 在 Android 14 及以上不受支持；不要把旧分支脚本套用到新版本，也不要仅凭平台 Android 版本推断内核分支。
+3. **集成验证：**GKI 镜像不一定包含 vendor modules、DTBO、`vendor_boot` 或签名产物。按设备构建流程集成匹配产物，并用启动日志和设备状态确认实际运行版本。

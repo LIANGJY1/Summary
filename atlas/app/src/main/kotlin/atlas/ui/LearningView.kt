@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +47,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
@@ -60,6 +64,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
@@ -541,19 +547,25 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             // 搜索栏可见时，点击搜索区之外（树、题卡、空白处）即收起；不消费事件，点击照常生效
             .pointerInput(Unit) {
                 awaitPointerEventScope {
+                    var dismissSearchOnRelease = false
                     while (true) {
                         val event = awaitPointerEvent()
                         val press = event.changes.firstOrNull()
-                        if (
-                            event.type == PointerEventType.Press &&
-                            store.questionSearchVisible.value &&
-                            press != null
-                        ) {
-                            val rect = searchRectInWindow
-                            if (rect?.contains(pageOriginInWindow + press.position) != true) {
-                                Log.d("点击搜索区之外，收起题库搜索栏")
-                                store.questionSearchVisible.value = false
+                        when (event.type) {
+                            PointerEventType.Press -> {
+                                val rect = searchRectInWindow
+                                dismissSearchOnRelease = store.questionSearchVisible.value &&
+                                    press != null &&
+                                    rect?.contains(pageOriginInWindow + press.position) != true
                             }
+                            PointerEventType.Release -> {
+                                if (dismissSearchOnRelease && store.questionSearchVisible.value) {
+                                    Log.d("点击搜索区之外，收起题库搜索栏")
+                                    store.questionSearchVisible.value = false
+                                }
+                                dismissSearchOnRelease = false
+                            }
+                            else -> Unit
                         }
                     }
                 }
@@ -717,6 +729,27 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text(if (reorderMode) "完成排序" else "调整顺序", fontSize = 12.sp)
                 }
             }
+            TooltipArea(
+                tooltip = {
+                    Surface(color = Theme.Elevated, shape = MaterialTheme.shapes.small) {
+                        Text(
+                            "暂存知识库仓库全部变更；已有提交时会更新最近一次提交",
+                            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            fontSize = 11.sp,
+                            color = Theme.MdH1,
+                        )
+                    }
+                },
+                delayMillis = 450,
+            ) {
+                OutlinedButton(
+                    onClick = { store.updateLibraryRepository() },
+                    enabled = !store.libraryUpdateRunning,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text(if (store.libraryUpdateRunning) "更新中…" else "Update", fontSize = 12.sp)
+                }
+            }
             Box {
                 OutlinedButton(
                     onClick = { showMoreActions = true },
@@ -763,7 +796,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         if (SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
             Text(
                 if (reorderMode) "排序模式：按住任意题目卡片拖动换位，松开后自动保存并重新编号。"
-                else if (query.isBlank()) "点击题目显示答案；橙色标记 = 内容相对 git 最近提交有改动；需要调整顺序时点击右上角「调整顺序」。"
+                else if (query.isBlank()) "点击题目显示答案；卡片右侧勾选图标 = 已完成，时钟图标 = 学习中；橙色题号、边框和正文差异表示内容相对 git 最近提交有改动；需要调整顺序时点击右上角「调整顺序」。"
                 else "点击题目显示答案；搜索结果仅供查看，清空搜索后可调整顺序。",
                 fontSize = 11.sp,
                 color = Theme.Muted,
@@ -859,7 +892,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 val isExpanded = entryKey in expanded
                 val isDragging = draggingKey == entryKey
                 val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
-                // 内容相对 git HEAD 有未提交改动：橙色边框 + Q 标签 + 行内着色（比对异步完成，加载中不标色）
+                // 内容相对 git HEAD 有未提交改动：橙色题号/边框 + 行内着色（比对异步完成，加载中不标色）
                 val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
                 val gitDirty = gitDiff?.changed == true
                 val cardElevation by animateDpAsState(
@@ -939,106 +972,130 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 ) {
                     // 卡片内侧宽度最多 992dp；题面与下方答案都从同一内边距起排。
                     // 不能仅将题面收至 880dp，否则展开答案会比题面左移。
-                    Row(
-                        Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = SourceQuestionContentWidth),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        if (reorderMode) {
-                            Surface(
-                                color = if (isDragging) Theme.Pressed else Theme.Selected,
-                                shape = MaterialTheme.shapes.small,
-                            ) {
-                                Text(
-                                    "${displayIndex + 1}",
-                                    Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                    color = Theme.Accent,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    if (gitDirty) "Q${entry.number} ·有改动" else "Q${entry.number}",
-                                    modifier = if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
-                                        locateSource(entry.sourcePath)
-                                        expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                    },
-                                    fontSize = 11.sp,
-                                    color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
-                                )
-                                QuestionStatusMark(entry.status)
-                                if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
-                                entry.tags.take(3).forEach { tag ->
-                                    SourceQuestionTag(tag, !reorderMode, store.settings.questionTagFontSize) { editingEntry = entry }
-                                }
-                                if (entry.tags.size > 3) {
-                                    Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
-                                }
-                                if (entry.tags.isEmpty() && !reorderMode) {
-                                    SourceQuestionTag(
-                                        "＋ 标签",
-                                        true,
-                                        store.settings.questionTagFontSize,
-                                        isPlaceholder = true,
-                                        visible = cardHovered || isExpanded,
-                                    ) { editingEntry = entry }
-                                }
-                                Spacer(
-                                    Modifier.weight(1f).height(18.dp).then(
-                                        if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
-                                            locateSource(entry.sourcePath)
-                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                        },
-                                    ),
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
-                            // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
-                            // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）。
-                            // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
-                            // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
-                            // 排序时文字选择无意义，整卡都是拖拽热区。
-                            // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
-                            // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val statusGutterWidth = ((maxWidth - SourceQuestionContentWidth + 28.dp) / 2).coerceAtLeast(28.dp)
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .padding(end = 28.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .widthIn(max = SourceQuestionContentWidth),
+                            verticalAlignment = Alignment.Top,
+                        ) {
                             if (reorderMode) {
-                                Text(
-                                    remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                    style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
-                                    color = Theme.MdH1,
-                                )
-                            } else {
-                                key(entryKey, entry.question) {
-                                    SelectionContainer(
-                                        modifier = Modifier.singleClickWithoutConsumingSelection {
+                                Surface(
+                                    color = if (isDragging) Theme.Pressed else Theme.Selected,
+                                    shape = MaterialTheme.shapes.small,
+                                ) {
+                                    Text(
+                                        "${displayIndex + 1}",
+                                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                        color = Theme.Accent,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                val displayQuestion = remember(entry.question, gitDiff) {
+                                    annotatedQuestionDiff(entry.question, gitDiff)
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        "Q${entry.number}",
+                                        modifier = if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
                                             locateSource(entry.sourcePath)
                                             expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                                         },
-                                    ) {
-                                        Text(
-                                            remember(entry.question, gitDiff) { annotatedQuestionDiff(entry.question, gitDiff) },
-                                            // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
-                                            style = ui.typography.itemTitle.copy(
-                                                fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
-                                                lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
-                                                fontWeight = FontWeight.Medium,
-                                            ),
-                                            color = Theme.MdH1,
-                                        )
+                                        fontSize = 11.sp,
+                                        color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
+                                    )
+                                    if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
+                                    entry.tags.take(3).forEach { tag ->
+                                        SourceQuestionTag(tag, !reorderMode, store.settings.questionTagFontSize) { editingEntry = entry }
+                                    }
+                                    if (entry.tags.size > 3) {
+                                        Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
+                                    }
+                                    if (entry.tags.isEmpty() && !reorderMode) {
+                                        SourceQuestionTag(
+                                            "＋ 标签",
+                                            true,
+                                            store.settings.questionTagFontSize,
+                                            isPlaceholder = true,
+                                            visible = cardHovered || isExpanded,
+                                        ) { editingEntry = entry }
+                                    }
+                                    Spacer(
+                                        Modifier.weight(1f).height(18.dp).clickable(
+                                            interactionSource = cardInteraction,
+                                            indication = null,
+                                            enabled = !reorderMode,
+                                        ) {
+                                            locateSource(entry.sourcePath)
+                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                        },
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
+                                // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
+                                // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）。
+                                // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
+                                // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
+                                // 排序时文字选择无意义，整卡都是拖拽热区。
+                                // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
+                                // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
+                                if (reorderMode) {
+                                    Text(
+                                        displayQuestion,
+                                        style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                        color = Theme.MdH1,
+                                    )
+                                } else {
+                                    key(entryKey, entry.question) {
+                                        SelectionContainer(
+                                            modifier = Modifier.singleClickWithoutConsumingSelection {
+                                                locateSource(entry.sourcePath)
+                                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                            },
+                                        ) {
+                                            Text(
+                                                displayQuestion,
+                                                // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
+                                                style = ui.typography.itemTitle.copy(
+                                                    fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
+                                                    lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                ),
+                                                color = Theme.MdH1,
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                            if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
-                                Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                                if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
+                                    Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                                }
                             }
                         }
+                        Box(
+                            Modifier.align(Alignment.TopEnd)
+                                .width(statusGutterWidth)
+                                .height(18.dp)
+                                .clickable(
+                                    interactionSource = cardInteraction,
+                                    indication = null,
+                                    enabled = !reorderMode,
+                                ) {
+                                    locateSource(entry.sourcePath)
+                                    expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                },
+                        )
+                        QuestionStatusIcon(entry.status, Modifier.align(Alignment.TopEnd))
                     }
                     // 展开/收起必须带高度动画：直接增删答案块会让卡片高度瞬间跳变，下方卡片只能靠弹簧
                     // 滑过来补位，过渡期盖在答案上互相重叠。高度连续变化后，跟随卡片才能同步滑动不脱节。
@@ -1913,22 +1970,42 @@ private fun questionStatusAccent(status: QuestionStatus): Color = when (status) 
     QuestionStatus.TODO -> Theme.Muted
 }
 
-/**
- * 列表里的状态标记用「圆点 + 文字」而不是圆角药丸：药丸底色在深色卡片上发灰发脏，
- * 而一屏几十道题里绝大多数都是默认态，所以默认态直接不渲染——缺省即未完成，
- * 只有需要被看见的进行中/已完成才占位。文案直接用文件里的英文 key，
- * 界面上看到的词就是 Q 行里写的词，不用在脑子里维护一层翻译。
- */
 @Composable
-private fun QuestionStatusMark(status: QuestionStatus) {
+private fun QuestionStatusIcon(status: QuestionStatus, modifier: Modifier = Modifier) {
     if (status == QuestionStatus.TODO) return
     val accent = questionStatusAccent(status)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    val description = if (status == QuestionStatus.DONE) "已完成" else "学习中"
+    Canvas(
+        modifier.size(18.dp)
+            .semantics { contentDescription = description },
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(accent))
-        Text(status.key, fontSize = 11.sp, color = accent)
+        val stroke = 1.5.dp.toPx()
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val radius = size.minDimension / 2f - stroke
+        drawCircle(accent.copy(alpha = 0.88f), radius, center, style = Stroke(width = stroke))
+        if (status == QuestionStatus.DONE) {
+            val check = Path().apply {
+                moveTo(center.x - 3.4.dp.toPx(), center.y + 0.1.dp.toPx())
+                lineTo(center.x - 1.0.dp.toPx(), center.y + 2.5.dp.toPx())
+                lineTo(center.x + 3.8.dp.toPx(), center.y - 2.7.dp.toPx())
+            }
+            drawPath(check, accent, style = Stroke(width = stroke, cap = StrokeCap.Round))
+        } else {
+            drawLine(
+                accent,
+                Offset(center.x, center.y),
+                Offset(center.x, center.y - radius * 0.52f),
+                stroke,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                accent,
+                center,
+                Offset(center.x + radius * 0.42f, center.y + radius * 0.25f),
+                stroke,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 

@@ -22,7 +22,47 @@
 
 
 
-**Q2: verified boot（AVB）是怎么保证"启动运行的代码没有被篡改"的？**
+
+
+
+
+
+
+**Q2: [learning] [tags:ramdisk] ramdisk 是什么？明明有真分区，开机为什么还要一块内存里的临时根文件系统？**
+
+ramdisk 是随启动镜像提供的一份**最小启动文件包**。Bootloader 将它载入 RAM，Linux 内核解开文件包并从里面运行 `/init`，init 才能继续挂载 `system`、`vendor` 等真正的系统分区。
+
+1. **先分清三个名词：**它们分别指文件包、内核解包过程和解包后的初始根目录：
+
+    1. `ramdisk`：Android 对启动镜像中这份文件包的常用称呼，通常是压缩的 `cpio` 归档。`cpio` 类似 `tar`，用于保存文件路径、内容和权限等信息。文件包通常含 `/init`、`fstab` 和少量启动配置。它不是一块独立的 RAM 磁盘设备，也不是完整 Android 系统。
+    2. `initramfs`：Linux 对这种启动归档及其解包方式的称呼。内核把归档里的目录树展开到启动时的初始根文件系统。
+    3. `rootfs`：内核最初使用的根文件系统，通常由内存型 `ramfs` 或 `tmpfs` 支撑。解包后，内核从这个初始根目录找到 `/init`。它是启动时的 `/`，不是 ramdisk 归档本身，也不代表每个进程之后看到的根目录都相同。
+
+2. **为什么需要它：**内核启动后要运行 `/init`，再由 init 读取 `fstab` 并挂载 `system`、`vendor` 等分区。有些设备还要先加载存储驱动，才能读到这些分区。可是在分区挂载前，init、fstab 和早期驱动也不能从这些分区读取。ramdisk 先提供这批启动必需的文件，打破“先挂分区才能读挂载工具，先有挂载工具才能挂分区”的依赖。
+
+3. **文件包存在哪里：**ramdisk 的归档保存在闪存中的启动镜像，启动时才被加载到 RAM。启动镜像是包含内核、ramdisk 等启动数据的文件，存放在设备的启动相关分区。具体布局依设备首发 Android 版本和升级路径而定。Android 12 首发设备的通用 ramdisk 位于 `boot.img`；Android 13 首发设备的通用 ramdisk 移至 `init_boot.img`。厂商 ramdisk 通常放在 `vendor_boot.img`。从旧版升级的设备可能继续沿用旧布局。此布局可查 AOSP 的 GKI 启动分区说明。
+
+4. **开机时怎么使用：**启动接力分三步：
+
+    1. Bootloader 将内核和启动镜像中的 ramdisk 加载到内存。
+    2. 内核初始化后，把 ramdisk 归档展开到 `rootfs`，并执行其中的 `/init` 作为 PID 1。
+    3. Android 第一阶段 init 读取早期 `fstab`，挂载启动所需分区，并在需要时加载挂载这些分区所需的厂商内核模块。之后 init 继续进入后续阶段，详见 Q3。
+
+因此，“ramdisk 是临时的”指解包后位于 RAM 的初始文件系统会在关机断电后消失。ramdisk 归档仍保存在闪存的启动镜像中，下次开机再加载一次。
+
+**Q3: [done] [tags:init] init 进程的 main.cpp 是被谁拉起的，如何拉起的？**
+
+内核启动的是 `/init` 可执行文件，不是 `main.cpp` 源码。根据设备布局，`/init` 可能是 ramdisk 中的首阶段程序，也可能指向系统分区中的 `/system/bin/init`；首阶段准备好系统后，通过 `execv` 进入由 `main.cpp` 编译出的 init 程序。
+
+1. **源码如何变成 init：**[Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:251>) 将 `main.cpp` 编进 `init_second_stage` 模块，并用 `stem: "init"` 将产物命名为 `init`，安装到 `/system/bin/init`。模块还链接 `libinit` 提供实现代码；启动时执行的是二进制文件，不是源码。
+
+2. **ramdisk 布局如何启动：**内核执行 ramdisk 根目录的 `/init`，它通常是由 `first_stage_*.cpp` 构建的 `init_first_stage`，不是 `main.cpp` 编译出的程序。首阶段挂载系统分区后，[调用 `execv`](</home/liang/Project/MyProject/AAOS13_study/system/core/init/first_stage_init.cpp:435>)，以 `selinux_setup` 参数接力启动系统 init。
+
+3. **`main.cpp` 如何选择阶段：**[main()](</home/liang/Project/MyProject/AAOS13_study/system/core/init/main.cpp:65>) 根据参数路由：`selinux_setup` 进入 SELinux 设置，完成后[再次 `execv`](</home/liang/Project/MyProject/AAOS13_study/system/core/init/selinux.cpp:1098>) 并传入 `second_stage`，进入 `SecondStageMain()`。System-as-root 下，`/init` 可链接到 `/system/bin/init`，首次无阶段参数时进入 `FirstStageMain()`。`execv` 替换程序映像、不创建进程，因此 PID 始终是 1。
+
+
+
+**Q4: [done] verified boot（AVB）是怎么保证"启动运行的代码没有被篡改"的？**
 
 Android Verified Boot（AVB）用签名元数据和分区摘要建立从 Bootloader 到只读系统分区的验证链；各级失败后是拒绝启动、进入恢复流程还是显示警告，取决于设备锁定状态、验证模式和产品实现。
 
@@ -36,19 +76,7 @@ Android Verified Boot（AVB）用签名元数据和分区摘要建立从 Bootloa
 
 
 
-
-
-**Q3: ramdisk 是什么？明明有真分区，开机为什么还要一块内存里的临时根文件系统？**
-
-ramdisk 是打包进内存的临时根文件系统：构建系统把 init 二进制、fstab 和少量基础工具打成 cpio 归档塞进 boot 镜像，内核启动时解包到一块内存文件系统（ramfs/tmpfs）上作为最初的根。Linux 里这个最初的根有个专名叫 rootfs，是所有进程根挂载点的原型、不可卸载；它完全活在内存里，重启即消失。
-
-为什么要多此一举——鸡生蛋问题：挂载真正的分区需要挂载程序、fstab 和驱动，这些代码与数据本身得先有个地方住；内核只管机制、不带这些内容，所以必须有一块"随内核一起交付的种子文件系统"。
-
-GKI 时代的布局：boot.img = GKI 内核 + 通用 ramdisk（init、通用 fstab 片段）；vendor_boot.img = vendor ramdisk（vendor 的内核模块、vendor fstab 与 rc 片段）。
-
-
-
-**Q4: 内核是怎么启动第一个用户态进程 /init 的？为什么说它不是 fork 出来的？**
+**Q5: 内核是怎么启动第一个用户态进程 /init 的？为什么说它不是 fork 出来的？**
 
 不是 fork，是"内核线程 execve 变身"：内核初始化尾声创建的 kernel_init 内核线程（PID 1 此时已存在，但只是没有用户地址空间的内核态任务）在收尾时调用 kernel_execve("/init")——丢弃旧地址空间、装载新 ELF 程序、建立页表与入口栈，回落用户态时执行的就是 init 的 main 函数；exec 失败（找不到 /init、ELF 损坏）则内核 panic，开机失败。
 
@@ -60,7 +88,13 @@ GKI 时代的布局：boot.img = GKI 内核 + 通用 ramdisk（init、通用 fst
 
 
 
-**Q5: 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
+
+
+
+
+
+
+**Q6: 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
 
 内核已把控制权交给 `/init`，但 init 第一阶段的工作尚未完成；此刻不能把 init 后续挂载、装载的内容算作内核已完成的状态。逐项清点：
 
@@ -76,347 +110,11 @@ GKI 时代的布局：boot.img = GKI 内核 + 通用 ramdisk（init、通用 fst
 
 
 
-**Q6: init 进程的 main.cpp 是被谁拉起的，如何拉起的？**
 
-# Android 启动中的 `init`：从源码到 `/init`，再到 `main()`
 
-先给出整条链路的骨架：
 
-```text
-源码
-  ├─ system/core/init/main.cpp
-  │    └─ 编译进 init_second_stage，设备上的文件名为 init
-  │         └─ 安装到 system 分区中的 /system/bin/init
-  │
-  └─ system/core/init/first_stage_*.cpp
-       └─ 编译进 init_first_stage，设备上的文件名也为 init
-            └─ ramdisk 设备中放在 ramdisk 根目录，路径为 /init
 
-设备启动
-  → 内核执行根目录下的 /init
-  → 第一阶段准备好系统分区
-  → 执行 /system/bin/init
-  → main() 按参数进入 SELinux 阶段、完整 init 阶段
-```
 
-理解时要始终区分三样东西：
-
-1. `main.cpp` 是**源代码文件**。
-2. `init` 是**编译出来的可执行文件**。
-3. `/init`、`/system/bin/init` 是设备启动时使用的**文件路径**。
-
-可执行文件叫 `init`，不代表它一定来自 `main.cpp`。AAOS13 这份源码里有两个构建模块都可能生成文件名为 `init` 的程序，但它们源码不同、放置位置不同、启动职责也不同。
-
----
-
-## 一、`main.cpp` 是怎样编译成 `init` 的
-
-### 1. `Android.bp` 声明了这个程序的构建规则
-
-在 [system/core/init/Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:251>) 中，定义了一个 Soong C++ 可执行程序：
-
-```bp
-cc_binary {
-    name: "init_second_stage",
-    stem: "init",
-    defaults: ["init_defaults"],
-    static_libs: ["libinit"],
-    srcs: ["main.cpp"],
-    ...
-}
-```
-
-逐项解释：
-
-- `cc_binary`：构建 C/C++ 可执行文件。
-- `name: "init_second_stage"`：这是构建系统内部的**模块名**，用来引用和构建这个模块。
-- `stem: "init"`：输出文件名使用 `init`，而不是模块名 `init_second_stage`。
-- `srcs: ["main.cpp"]`：`main.cpp` 是这个可执行程序的入口源文件之一。
-- `static_libs: ["libinit"]`：把 `libinit` 静态链接进可执行文件。`libinit` 包含大量 init 实现代码，例如 `first_stage_init.cpp`、`init.cpp`、`selinux.cpp` 等；这些源码列表也在同一个 [Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:34>) 中声明。
-
-因此关系是：
-
-```text
-模块名：init_second_stage
-入口源码：system/core/init/main.cpp
-依赖实现：libinit 及其源码
-设备文件名：init
-```
-
-`main.cpp` 并不是启动时被系统单独读取的文件。构建时，编译器把它编译成目标文件，再与其他目标文件、静态库及运行库链接，形成一个可执行程序。启动时，系统加载的是这个最终的 `init` 可执行文件。
-
-### 2. 文件会出现在哪些构建目录
-
-Android 构建中会经过“中间产物”和“产品安装目录”。
-
-**Soong 中间产物**通常在：
-
-```text
-$OUT_DIR/soong/.intermediates/system/core/init/init_second_stage/<目标变体>/init
-```
-
-其中 `<目标变体>` 会包含设备架构、CPU 特性等信息，名称随具体产品和构建配置变化。
-
-**产品文件系统的安装暂存目录**通常是：
-
-```text
-$PRODUCT_OUT/system/bin/init
-```
-
-常见默认目录形式是：
-
-```text
-out/target/product/<产品名>/system/bin/init
-```
-
-这里的 `PRODUCT_OUT` 表示当前产品的构建输出目录；`OUT_DIR` 和产品名可因开发环境而不同。Android 构建系统会把暂存目录中的内容继续打包进相应的分区镜像。
-
-### 3. 通常怎么触发构建
-
-先初始化 Android 构建环境并选择产品，再请求构建目标。典型用法类似：
-
-```bash
-source build/envsetup.sh
-lunch <产品名>-userdebug
-m init
-```
-
-`init` 是一个便于请求构建相关模块的目标；Soong 模块本身叫 `init_second_stage`。如果想直接指定 Soong 模块，也可请求：
-
-```bash
-m init_second_stage
-```
-
-若要构建 ramdisk 用的首阶段程序，可以请求：
-
-```bash
-m init_first_stage
-```
-
-构建启动相关镜像通常还会请求 `bootimage`；启用独立 init boot 镜像的产品可能使用 `initbootimage`。具体要构建哪个镜像，取决于设备的产品和分区配置。这些目标在 [build/make/core/main.mk](</home/liang/Project/MyProject/AAOS13_study/build/make/core/main.mk:1575>) 中声明。
-
-> 这份源码没有告诉我们你实际选择了哪个 `lunch` 产品，因此这里只能给出通用的输出路径模式，不能替你确认某台设备最终产物的精确变体目录或采用哪种镜像布局。
-
----
-
-## 二、`/init` 是什么，为什么它可能是符号链接
-
-### 1. `/init` 表示根目录下名为 `init` 的文件
-
-Linux 路径以 `/` 开头时，表示从进程看到的**根目录**开始查找。
-
-```text
-/init
-```
-
-意思是：
-
-```text
-从根目录 / 开始，找一个名为 init 的文件
-```
-
-它不是一个特殊语法，也不是 `main()` 的名字。它只是内核启动用户态时所执行的一个路径。在 Android 的启动布局里，这个路径通常是 `/init`；实际内核行为也可能受启动参数影响。
-
-### 2. `/init` 有两种常见形态
-
-#### 形态 A：`/init` 是一个可执行文件
-
-在使用 ramdisk 的设备上，ramdisk 根目录通常放着一个独立的首阶段程序：
-
-```text
-/init
-```
-
-它由 `init_first_stage` 模块构建，文件名通过 `stem: "init"` 指定。它的源码列表包括 `first_stage_init.cpp` 和 `first_stage_main.cpp`，**不包括 `main.cpp`**，见 [system/core/init/Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:315>)。
-
-这个模块的几个关键配置是：
-
-```bp
-static_executable: true,
-ramdisk: true,
-install_in_root: true,
-```
-
-含义是：它构建为静态可执行文件，并安装到 ramdisk 根目录。这里选择静态链接，是为了让早期启动程序在系统分区和普通运行环境还没准备好时能够运行。
-
-#### 形态 B：`/init` 是一个符号链接
-
-有些设备上，根目录的 `/init` 是指向 `/system/bin/init` 的符号链接：
-
-```text
-/init -> /system/bin/init
-```
-
-它不是第二份程序。访问 `/init` 时，文件系统沿着链接找到 `/system/bin/init` 并执行它。
-
-项目在 [system/core/rootdir/Android.mk](</home/liang/Project/MyProject/AAOS13_study/system/core/rootdir/Android.mk:174>) 中定义了创建这个链接的规则。`init_first_stage` 的构建默认配置也明确避免在 system-as-root 配置下覆盖这个链接，见 [system/core/init/Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:301>)。
-
-**判断 `/init` 是普通文件还是符号链接，要看实际设备采用的启动布局；不能只看路径名。**
-
----
-
-## 三、启动镜像、ramdisk 和根目录分别是什么
-
-这几个词容易混为一谈，实际对应不同层次。
-
-### 1. 启动镜像是交给启动流程使用的镜像容器
-
-启动镜像可以粗略理解成：供设备启动链读取的一类镜像文件。根据 Android 版本、设备和产品配置，里面可能包含内核、ramdisk 等启动内容，也可能由 `boot.img`、`init_boot.img`、`vendor_boot.img` 等多个镜像分担。
-
-因此，**ramdisk 不是“启动镜像”的同义词**。ramdisk 是一种文件系统内容；启动镜像可以把它包含进去。实际布局要看产品配置。
-
-这个仓库的构建规则会用 `mkbootfs` 把 ramdisk 暂存目录打包成：
-
-```text
-$PRODUCT_OUT/ramdisk.img
-```
-
-相关规则见 [build/make/core/Makefile](</home/liang/Project/MyProject/AAOS13_study/build/make/core/Makefile:876>)。镜像随后会根据配置被装入 boot 或 init boot 镜像；对应的选择逻辑也在 [build/make/core/Makefile](</home/liang/Project/MyProject/AAOS13_study/build/make/core/Makefile:967>) 中。
-
-### 2. ramdisk 是启动早期可用的一小套文件系统内容
-
-可以把 ramdisk 想成启动初期先拿到的一套精简目录和文件，例如：
-
-```text
-/
-├── init
-├── dev/
-├── proc/
-├── sys/
-└── ...
-```
-
-它通常由启动镜像携带，在启动早期进入内存并成为可访问的根文件系统内容。关键是：**它提供了早期 `/init`，让系统能先运行程序，再准备真正的系统分区。**
-
-这很有用，因为真实系统分区可能还不能直接使用：设备需要先初始化设备节点、识别分区、建立必要的块设备映射、处理验证和挂载等工作。在这些准备完成之前，系统分区里的 `/system/bin/init` 可能还不可访问。ramdisk 提供的首阶段程序正是用来完成这些早期准备工作的。
-
-### 3. 根目录 `/` 不是“根用户”，而是路径查找的起点
-
-根目录 `/` 是文件系统树的最顶端。比如：
-
-```text
-/system/bin/init
-```
-
-表示从根目录进入 `system`、再进入 `bin`，最后找到 `init`。
-
-挂载可以把一个文件系统放到现有目录树中的某个位置。例如把系统分区挂载到 `/system` 后，目录树看起来可以是：
-
-```text
-/                   ← 当前根文件系统，可能来自 ramdisk
-├── init
-└── system/         ← 挂载点
-    └── bin/
-        └── init
-```
-
-之后，启动代码可以进行 `switch_root`，把原来挂载在 `/system` 的系统文件系统切换成新的根目录。切换后目录树的视角变为：
-
-```text
-/                   ← 原先的 /system 文件系统现在成为根
-├── bin/
-│   └── init
-└── ...
-```
-
-这时实际的 init 路径是：
-
-```text
-/bin/init
-```
-
-但 Android 的具体文件系统布局和切换后路径处理要结合设备配置看。AOSP 这份 init 文档描述的主链是：首阶段先准备和挂载系统，之后执行 `/system/bin/init`；对于 system-as-root，则系统文件系统已经是根目录。见 [system/core/init/README.md](</home/liang/Project/MyProject/AAOS13_study/system/core/init/README.md:1019>)。
-
----
-
-## 四、ramdisk 设备和 System-as-root 设备的区别
-
-### 1. 使用 ramdisk 的设备：先有临时根，再准备系统根
-
-典型流程是：
-
-```text
-启动镜像中的 ramdisk
-  → 内核从 ramdisk 提供的 /init 启动 init_first_stage
-  → 首阶段准备设备并挂载 system 等分区
-  → 系统分区可访问
-  → 首阶段执行 /system/bin/init
-```
-
-在这个布局中，ramdisk 的 `/init` 一般是 `init_first_stage`。它必须够早、够小，负责让真正的系统文件系统变得可用。源码中首阶段挂载完成后，调用：
-
-```cpp
-execv("/system/bin/init", {".../system/bin/init", "selinux_setup", nullptr});
-```
-
-见 [system/core/init/first_stage_init.cpp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/first_stage_init.cpp:435>)。
-
-AOSP 的说明也写明：这类设备会把 `system.img` 挂载为 `/system`，再将它切换为 `/`，并释放 ramdisk 内容，见 [system/core/init/README.md](</home/liang/Project/MyProject/AAOS13_study/system/core/init/README.md:1034>)。
-
-### 2. System-as-root：系统内容一开始就作为根目录使用
-
-System-as-root 可以先这样理解：
-
-> 启动时，设备可见的 `/` 根目录已经来自系统文件系统内容，而不是先由一套独立的 ramdisk 内容长期充当根目录，再把系统分区切换上来。
-
-因此，`/system/bin/init` 在初始根目录下就可以访问，根目录中的 `/init` 可以是指向它的符号链接。
-
-这**不表示设备完全不做首阶段工作**。init 仍然可以先运行 `FirstStageMain`，完成需要的早期设备和挂载准备，再继续后面的启动阶段。区别重点是：它不需要像传统 ramdisk 布局那样，先靠一个独立 ramdisk 里的 init 把 system 分区变得可访问。
-
-AOSP init 文档对这种布局的说明是：首阶段 init 属于 `/system/bin/init`，根目录的 `/init` 链接到它；系统镜像本身已经作为根文件系统使用，因此不需要再把 `system.img` 挂载成 `/system` 后切换根目录，见 [system/core/init/README.md](</home/liang/Project/MyProject/AAOS13_study/system/core/init/README.md:1029>)。
-
----
-
-## 五、两个名字都叫 `init`，但并非同一个程序
-
-这是理解源码和设备文件时最容易踩的坑。
-
-| 构建模块 | 主要源码 | 输出文件名 | 典型用途 |
-|---|---|---|---|
-| `init_second_stage` | `main.cpp`，并链接 `libinit` | `init` | 系统分区中的 `/system/bin/init` |
-| `init_first_stage` | `first_stage_main.cpp`、`first_stage_init.cpp` 等 | `init` | ramdisk 根目录中的 `/init` |
-
-它们可能同名，但不是同一份程序。`init_first_stage` 在 [Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:365>) 中声明为静态可执行文件，并配置安装到 ramdisk 根目录；而 `init_second_stage` 是由 `main.cpp` 构建的系统 init 程序。
-
-设备采用 System-as-root 配置时，源码注释表明 `init_first_stage` 不应覆盖 `/init` 符号链接；是否安装首阶段独立程序由 `BOARD_BUILD_SYSTEM_ROOT_IMAGE` 等配置影响，见 [Android.bp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/Android.bp:294>)。
-
----
-
-## 六、最终启动时，`main.cpp` 怎么进入运行
-
-无论 `main.cpp` 对应的可执行文件是启动时直接运行，还是在首阶段之后运行，程序最终都通过 `main()` 根据参数决定阶段。
-
-源码的分发逻辑在 [system/core/init/main.cpp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/main.cpp:65>)：
-
-```text
-运行 init 可执行文件
-  ├─ argv[1] == "selinux_setup"
-  │    └─ SetupSelinux()
-  ├─ argv[1] == "second_stage"
-  │    └─ SecondStageMain()
-  └─ 没有阶段参数
-       └─ FirstStageMain()
-```
-
-第一阶段准备完成后，init 执行：
-
-```text
-execv("/system/bin/init", "selinux_setup")
-```
-
-SELinux 阶段准备完成后，再执行：
-
-```text
-execv("/system/bin/init", "second_stage")
-```
-
-第二次 `execv` 的位置见 [system/core/init/selinux.cpp](</home/liang/Project/MyProject/AAOS13_study/system/core/init/selinux.cpp:1098>)。
-
-`execv` 的关键性质是：它用另一个可执行文件替换当前进程的程序映像，但**不创建新进程**。因此它不是“init 启动一个新的 init 子进程”；整个接力仍然是 PID 1，只是同一个进程在不同阶段换了程序映像，并通过参数告诉 `main()` 下一步该做什么。
-
-综合起来，最准确的回答是：
-
-> 内核启动用户态时执行的是根目录路径 `/init`。在 ramdisk 设备上，它通常是 ramdisk 里的独立首阶段 init；在 System-as-root 布局下，它可以是指向系统 init 的符号链接。首阶段完成后，init 通过 `execv` 执行 `/system/bin/init`。`/system/bin/init` 是构建系统将 `main.cpp` 与 init 实现代码编译、链接得到的可执行文件；它进入 `main()` 后按参数依次运行 SELinux 设置阶段和完整 init 阶段。
 
 **Q7: Android init 进程怎么理解？都做了什么？**
 
@@ -430,6 +128,12 @@ init 是内核启动的第一个用户态进程（PID 1）、所有用户态进�
 4. **服务监督与收尸**：作为 PID 1 `waitpid()` 回收子进程；服务退出后按 `.rc` 定义决定是否重启。
 
 理解它的用处：所有"谁负责重启某个服务"的答案最终都落在 init 的服务监督上——system_server 崩溃后 Zygote 自杀，再由 init 重启 Zygote、重新 fork system_server，这条恢复链的管理者就是 init。
+
+
+
+
+
+
 
 
 
@@ -451,6 +155,12 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 
 
+
+
+
+
+
+
 **Q9: /dev、/proc、/sys 这三个伪文件系统怎么理解？init 为什么要先挂载它们？**
 
 三个都是伪文件系统：它们把内核维护的设备、进程状态和设备模型信息呈现为文件接口，内容不按普通磁盘文件方式存放。init 第一阶段先挂载它们，是因为后续初始化需要读取启动状态、发现设备节点并访问内核设备模型。
@@ -465,6 +175,12 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 
 
+
+
+
+
+
+
 **Q10: GKI 时代，为什么内核模块要放在 vendor ramdisk 里而不是编进内核？**
 
 GKI（Generic Kernel Image，通用内核镜像）把通用内核与符合 KMI（内核模块接口）的厂商模块分开交付，降低通用内核更新与设备专属驱动之间的耦合。设备驱动并非全部都是模块：部分可以内建，部分可在对应分区挂载后加载；只有挂载关键分区前就必须可用的模块，才需要放在早期可读取的 vendor ramdisk 等位置。
@@ -472,6 +188,12 @@ GKI（Generic Kernel Image，通用内核镜像）把通用内核与符合 KMI�
 需要早于 vendor/system 挂载的模块放进 vendor ramdisk，是启动顺序的要求，不意味着所有厂商驱动都必须外置到这里。否则若某个存储驱动正是挂载相应分区的前置条件，就会形成“先挂分区才能取模块、先有模块才能挂分区”的依赖环；init 第一阶段从 ramdisk 加载该类模块来打破这个环。
 
 因此判断模块放置位置应问“它是否是早期挂载的前置依赖”，而不是笼统按“厂商驱动”归类；`LoadKernelModules` 的具体模块集合由设备配置决定。
+
+
+
+
+
+
 
 
 
@@ -491,6 +213,12 @@ fstab（file system table）是文件系统挂载声明表：纯文本，每行�
 fs_mgr_flags 关键字决定挂载策略：wait 等设备节点出现再挂；avb= 做 verified boot 校验；first_stage_logical 第一阶段就要处理；latemount 可以等到 post-fs-data 再挂；encrypted 涉及加密卷。
 
 表有两份：第一阶段的精简版打进 ramdisk（彼时只能读 ramdisk），完整版在 vendor 分区（/vendor/etc/fstab.<板级名>）。
+
+
+
+
+
+
 
 
 
@@ -517,6 +245,12 @@ Treble 下 system 与 vendor 独立更新，而内核只接受单一二进制策
 
 
 
+
+
+
+
+
+
 **Q13: init 的属性服务是怎么工作的？为什么系统里到处都在用属性？**
 
 属性服务是 init 维护的全局键值对仓库：各分区 prop 文件提供初始值，其他进程经属性 socket 向 init 提交写入请求，init 校验请求方的 SELinux 上下文后写入一块进程间共享的内存区并广播变更——读属性是纯内存读取，写属性必须经过 init。
@@ -528,6 +262,12 @@ Treble 下 system 与 vendor 独立更新，而内核只接受单一二进制策
 3. **典型闭环**：system_server 装配完成后置 sys.boot_completed=1，监听该属性的系统组件与测试框架由此得知开机完成。
 
 边界：写权限由 SELinux 精确控制到"哪个域能写哪个前缀"；属性有长度与数量上限，不适合传大块数据。
+
+
+
+
+
+
 
 
 
@@ -561,6 +301,12 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 
 
+
+
+
+
+
+
 **Q15: init 第二阶段的主循环怎么运转？为什么每轮只执行一条命令？**
 
 第二阶段的 init 是单线程事件泵——epoll、signalfd、属性 socket 三路事件源汇入一个主循环，每轮只推进一条 Command，间隙处理 SIGCHLD 收割、属性变化与 ctl 控制消息。每轮一条不是性能设计而是活性设计：防止长命令饿死事件响应，让关机请求、崩溃收割的响应延迟有上界。
@@ -572,6 +318,12 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 3. 内置动作（QueueBuiltinAction）的函数指针既当命令又当配对条件，oneshot 执行完从队列与登记表一并删除；关机路径 ClearQueue 清空队列但故意保留登记表项，保证 shutdown 序列能跑完。
 
 边界：`wait_for_prop` 全局同时只允许一个等待，rc 里连续两条是串行等待；这种分片调度适合看护型常驻进程，吞吐型后台任务不适用。
+
+
+
+
+
+
 
 
 
@@ -595,6 +347,12 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 
 
 
+
+
+
+
+
+
 **Q17: init 是怎么把一个服务进程拉起来的？Service::Start 里有哪些容易忽略的细节？**
 
 每个服务由 init fork 出子进程再 exec 目标二进制；fork 之前 init 把服务声明的 socket 先创建好、fork 后子进程直接继承 fd；fork 之后父进程建好 cgroup 进程组、经管道写一个字节放行，子进程才 exec。
@@ -606,6 +364,12 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 3. **exec 之后**：服务状态经 init.svc.<名字> 属性汇报，退出后进入 Reap 裁决流程。
 
 边界："继承优于显式传输"只适用于有亲缘关系且 fork 顺序明确的进程树；无亲缘进程间传 fd 要走 SCM_RIGHTS。
+
+
+
+
+
+
 
 
 
@@ -625,6 +389,12 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 
 
 
+
+
+
+
+
+
 **Q19: APEX 在启动链的哪一步激活？APEX 损坏时设备表现成什么样？**
 
 在该 Android 13 启动配置中，init 会在 Zygote/system_server 启动前等待 apexd 的激活状态；apexd 扫描内置和数据分区中的候选包，完成校验与挂载后更新状态属性。激活失败时是否回退、重试或阻塞后续启动取决于失败类型与恢复策略，不能概括成所有 APEX 错误都永久卡在同一个状态。
@@ -632,6 +402,12 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 1. **两段激活**：早期 bootstrap 阶段先处理启动关键依赖；`/data` 可用后再处理活动 APEX 并完成后续激活阶段；具体组件与属性状态以目标分支实现为准；
 2. **故障表现**：验签或哈希错误可能触发回退、重试或失败状态，影响哪些服务继续启动取决于 rc 对状态属性的等待条件；“卡动画/黑屏”是可能症状，不足以单独证明 APEX 损坏；
 3. **排查入口**：`getprop apexd.status`、`logcat -s apexd`、`ls /apex`、`pm list packages --apex`；日志锚点 "Bootstrapping done" / "Marking APEXd as activated/ready"。
+
+
+
+
+
+
 
 
 
@@ -656,6 +432,12 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 
 
 
+
+
+
+
+
+
 **Q21: Zygote 的 preload 到底预加载了哪些东西？为什么所有应用进程能直接共享？**
 
 preload 阶段把"每个应用都需要的公共物"只加载一次：preloaded-classes 清单里的常用框架类、系统资源（drawable/color 资源表）、图形相关初始化与 JCA 安全 Provider；此后所有 fork 出的进程靠写时复制物理共享这些页——读到的都是同一份内存，谁写了那一页才真正复制。
@@ -672,6 +454,12 @@ preload 阶段把"每个应用都需要的公共物"只加载一次：preloaded-
 
 
 
+
+
+
+
+
+
 **Q22: Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
 
 Zygote 是带完整 ART 运行时和预加载类/资源的模板进程，所有应用进程和 `system_server` 都由它 fork 出来，用"写时复制"换取启动速度和内存共享。init 第二阶段解析 `.rc` 后启动 Zygote；Zygote 完成类与资源预加载、直接 fork 出 `system_server` 后，进入 socket 循环等待后续进程创建请求。
@@ -683,6 +471,12 @@ fork 之后父子进程共享未修改的物理页，写入时才真正复制（
 3. **同一起点**：所有进程从一致的运行环境出发。
 
 边界：COW 不等于零成本——后续写入和应用初始化会逐步产生私有页。`system_server` 由主 Zygote 在初始化期间直接调用 `forkSystemServer()` 创建；普通应用则由 system_server 通过 Zygote 请求创建。
+
+
+
+
+
+
 
 
 
@@ -706,6 +500,12 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 
 
 
+
+
+
+
+
+
 **Q24: 主 Zygote 和次 Zygote 怎么分工？preload 与 USAP 池各有什么坑？**
 
 64 位主 Zygote 负责 fork system_server 与 64 位应用；32 位次 Zygote（`--enable-lazy-preload`）只服务 32 位应用，不 fork system_server，且 system_server 启动前会等次 Zygote 就绪，两者互为看门狗。preload 是双刃剑：加进 preloaded-classes 的类被所有进程共享，但开机时间变长；删类则各应用首次加载变慢，不是纯优化。USAP 池开启时禁止并发多 fork，调试器附加场景会退回普通 fork 路径。
@@ -713,6 +513,12 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 机制：次 Zygote 的判定依据是 `ro.product.cpu.abilist` 与自身 abi-list 不一致；`--start-system-server` 只出现在主 Zygote 命令行上；USAP（Unspecialized App Process）预 fork 待命、取用时只补 specialize，失败回退主 socket 路径；但 USAP 改变了 fork 时机，依赖 fork 路径注入的框架（Magisk/Zygisk/Riru 等，社区案例）开启后可能失效，排查注入类异常先查 USAP 开关。
 
 收束：排查"应用启动走了哪条路"先确认三点——设备是否 64/32 双 Zygote、USAP 是否开启、是否处于调试附加场景。
+
+
+
+
+
+
 
 
 
@@ -744,6 +550,12 @@ Zygote 是所有应用进程的模板，fork 会原样复制线程与地址空�
 
 
 
+
+
+
+
+
+
 **Q26: system_server 的四波装配顺序为什么改不得？BootPhase 广播解决了什么问题？**
 
 startBootstrapServices → startCoreServices → startOtherServices → startApexServices 四波的顺序是硬依赖（AMS 依赖 PMS、WMS 依赖 AMS/IMS），改顺序直接启动失败；四波之外的弱依赖靠 SystemServiceManager 的 PHASE_* 阶段广播解耦——服务只声明自己在哪个阶段做什么（onBootPhase），不需要知道彼此的启动顺序。一句话：强依赖用排序表达，弱依赖用阶段事件表达。
@@ -763,6 +575,12 @@ BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 �
 
 
 
+
+
+
+
+
+
 **Q27: system_server 的单点风险靠什么兜底？Watchdog 是怎么工作的？**
 
 单进程装下所有服务换来了服务间进程内直调的简单，也把崩溃域合并成一个；兜底是双层——Watchdog 监控各关键线程心跳、超时杀掉 system_server 进程，之后接 init 侧的 critical 崩溃计数兜底（默认 4 分钟窗口内第 5 次退出触发 fatal，开机完成前同样计数）。
@@ -770,6 +588,12 @@ BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 �
 机制与取舍：Watchdog 在 Bootstrap 波最先启动，各关键线程定期喂狗；system_server 被杀后走恢复链（Zygote 自杀 → init 重启 Zygote → 重新 fork）。取舍是"集中式的风险要配自动化的看护"：服务交互极频繁时拆分成本高于崩溃成本，集中加看护更划算；低耦合服务则应拆出去——Android 把部分服务移入 APEX/Mainline 正是反向操作。
 
 边界：调试时反复 kill Zygote 会因 critical 规则把设备直接带回 bootloader，不是 bug。
+
+
+
+
+
+
 
 
 
@@ -799,6 +623,12 @@ BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 �
 
 
 
+
+
+
+
+
+
 **Q29: Android 13 的 systemReady 回调怎样协调 system_server 服务就绪与当前用户启动？**
 
 `systemReady()` 是 AMS 与 SystemServer 的启动交接点，不等于“回调一结束就由 AMS 给所有设备的 user 0 拉起桌面”。AMS 先打开进程和 Activity 管理的就绪门闩，再运行 `goingCallback` 让 SystemServer 推进后续服务阶段；回调返回后才重新读取当前用户，并按用户模式决定 HOME 启动路径。
@@ -811,6 +641,12 @@ BootPhase 从 PHASE_WAIT_FOR_DEFAULT_DISPLAY(100) 经 200/480/500/520/550/600 �
 这里的 HOME 请求仍不是指定启动 CarLauncher：ATMS 要针对用户和显示区域解析 HOME 候选，设备配置、默认 HOME 和包状态决定最终组件。`systemReady()` 也不等于桌面首帧或系统 boot 完成；Activity idle、动画退出和每用户广播仍各有独立门槛。
 
 同进程服务调用仍有两类接口：跨进程经 ServiceManager 注册 Binder 服务，进程内经 LocalServices 注册 `*Internal` 接口；服务一旦拆出进程，进程内接口不能继续充当跨进程契约。
+
+
+
+
+
+
 
 
 
@@ -836,6 +672,12 @@ CarService 起链路（Android 13 批注）：
 
 
 
+
+
+
+
+
+
 **Q31: CarSystemUI 和 CarLauncher 是怎么在不 fork 原生代码的前提下完成车机化的？**
 
 CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原生源码，而是在 manifest 声明 CarSystemUIAppComponentFactory，进程创建时把 Dagger 根组件替换为车机版（CarGlobalRootComponent/CarWMComponent），原生 SystemUI 的启动编排（SystemUIService → startServicesIfNeeded → Dagger 展开 CoreStartable）原样复用。CarLauncher 是 ATMS 发起 HOME 请求后可能被 PackageManager 选中的组件；它用 TaskView 把地图 App（另一个进程的受控任务）嵌进桌面，并用 HomeCardModule 装配顶部/底部卡片。
@@ -851,6 +693,12 @@ CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原�
 
 
 
+
+
+
+
+
+
 **Q32: 误删或禁用了桌面应用，设备开机会怎样？FallbackHome 是干什么的？**
 
 禁用当前用户的真实桌面不必然导致 boot loop，但也不能假定任意设备、任意用户都必定有同一个 fallback。AOSP 可通过 Settings 的 `FallbackHome` 在凭据加密存储尚不可用时提供过渡 HOME；Framework 还会按 system user 设置条件启用 `SystemUserHomeActivity`。实际候选和回退顺序由系统版本、用户类型、包状态及产品配置决定。
@@ -858,6 +706,12 @@ CarSystemUI 走"合并构建 + AppComponentFactory 换依赖图"：不 fork 原�
 1. **FallbackHome**：以低优先级 HOME 候选常驻；解锁前它就是 resolve 结果，`onCreate` 注册 `ACTION_USER_UNLOCKED` 广播，解锁后 `finish()` 让系统重新 resolve 到真桌面；
 2. **SystemUserHomeActivity**：Framework 中的占位 HOME 组件，作用范围是 system user；AMS 按 split system user 的 setup 状态或系统属性决定是否启用它。它不是任意前台用户都可用的通用桌面；
 3. **实用**：`cmd package query-activities -a android.intent.action.MAIN -c android.intent.category.HOME` 可查询 HOME 候选；禁用桌面前应在目标 Android 版本和目标用户下核实实际解析结果。
+
+
+
+
+
+
 
 
 
@@ -876,6 +730,12 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 
 
 
+
+
+
+
+
+
 **Q34: FBE 设备重启后、用户还没输锁屏密码，闹钟类应用怎么才能正常响？LOCKED_BOOT_COMPLETED 和 BOOT_COMPLETED 是什么关系？**
 
 `directBootAware="true"` 的组件在用户解锁前就能被系统拉起并收到 `LOCKED_BOOT_COMPLETED`，但此时只能访问设备加密（DE）存储；用户输完锁屏收到 `ACTION_USER_UNLOCKED` 后，凭据加密（CE）存储才可用——FBE 的 DE/CE 密钥机制见 [../04-storage/01-存储与IO.md](../04-storage/01-存储与IO.md)。
@@ -884,6 +744,12 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 2. **DE 存储用法**：`createDeviceProtectedStorageContext()` 拿 DE 上下文，可用 `moveSharedPreferencesFrom()/moveDatabaseFrom()` 在解锁后把数据迁到 CE；
 3. **任务重建**：CE 侧的 alarm/job 重启即丢——directBootAware 接收器要用 DE 存储持久化"重启前有任务"的标记，解锁后重建；
 4. **典型 bug**：只把恢复闹钟注册在 `BOOT_COMPLETED`（FBE 设备上它要等解锁后才发，用户不解锁就永远不发）；directBootAware 组件里直接打开 CE 路径抛 `FileNotFoundException` 或 SQLite "cannot open file"。
+
+
+
+
+
+
 
 
 
@@ -905,6 +771,12 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 
 
 
+
+
+
+
+
+
 **Q36: webview_zygote 是什么？应用声明 isolatedProcess 的服务跑在什么进程里？**
 
 webview_zygote 是供 WebView 渲染进程使用的专用 Zygote；`android:isolatedProcess="true"` 服务则使用隔离 UID 和对应 SELinux 域。二者都涉及隔离进程，但普通 isolated service 不因此变成 WebView renderer，也不必由 webview_zygote 孵化。
@@ -914,6 +786,12 @@ webview_zygote 是供 WebView 渲染进程使用的专用 Zygote；`android:isol
 3. **进程孵化器选择**：主/次 Zygote 由 `ro.zygote` 与设备 ABI 配置决定，`webview_zygote` 是 WebView 的专用孵化器；应用还可通过 `android:useAppZygote="true"` 请求应用专属 Zygote。不能仅凭 `isolatedProcess="true"` 推断进程来自 webview_zygote。
 
 
+
+
+
+
+
+
 **Q37: 在 system_server 里写代码和读代码各有哪些纪律？**
 
 主线程纪律：system_server 主线程承担 SystemServer 启动控制流及投递到其 Looper 的工作，但系统服务也可拥有独立 HandlerThread、线程池和 Binder 线程；不能说所有服务消息都跑在主线程。主线程上的同步 Binder、磁盘 I/O 或长计算仍会阻塞它依赖的启动/服务路径，因此要检查调用线程、超时和锁依赖。读码时，任务与 Activity 生命周期编排主要看 ATMS（wm 包），进程管理等看 AMS（am 包）。
@@ -921,6 +799,12 @@ webview_zygote 是供 WebView 渲染进程使用的专用 Zygote；`android:isol
 运行期重启判定：`sys.boot_completed` 已置位后的 system_server 重启视为 runtime restart（soft reboot），很多服务走精简初始化路径；缺陷是"开机完成前崩溃过一次再重启"时 mRuntimeRestart 仍为 false（源码 TODO 亦承认），据此做条件初始化会踩坑。
 
 收束：判断一段 system_server 代码的行为是否合法，先问三个问题——它跑在哪个线程、是否假设冷启动、该逻辑属于 AMS 还是 ATMS。
+
+
+
+
+
+
 
 
 
@@ -942,6 +826,12 @@ Watchdog 是 `system_server` 内置看门狗：受监控线程必须定期推进
 
 
 
+
+
+
+
+
+
 **Q39: system_server 崩溃后，系统靠什么恢复？**
 
 恢复链分三步：
@@ -953,6 +843,12 @@ Watchdog 是 `system_server` 内置看门狗：受监控线程必须定期推进
 用户感知是"界面闪一下回到桌面"，代价是全部 Java 系统服务的运行状态丢失，所有应用进程被连带终止——每个由 Zygote fork 出的子进程都设置了父进程死亡信号（PDEATHSIG），Zygote 一死即收到 SIGKILL。
 
 排查要点：先确认"是谁死了"——`ps -A -o PID,PPID,NAME` 看 system_server 的父进程是否指向 Zygote、Zygote 是否换了新 pid；Zygote socket 只解释应用进程的创建请求，与 system_server 的崩溃恢复无关。
+
+
+
+
+
+
 
 
 
@@ -978,6 +874,12 @@ Reap 会触发的系统级后果分三类，不能把“写入故障属性”和
 
 
 
+
+
+
+
+
+
 **Q41: 设备反复重启进不了桌面（boot loop）——init 对关键服务反复崩溃的判据是什么？adb 不可用时怎么拿到上一次崩溃的日志？**
 
 init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口内计数超过 4，也就是第 5 次崩溃时触发 fatal；开机完成前崩溃同样进入计数逻辑。触发后的重启目标由服务配置决定，不能概括为所有设备都进 bootloader。
@@ -986,6 +888,12 @@ init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口
 2. **排查动作**：日志里 grep `avc: denied`、`critical process`、`Fatal signal`、`service exited`；pstore 不可读时用 recovery 模式拉日志；
 3. **调试逃生口**：在设备构建与调用权限允许时，`setprop init.svc_debug.no_fatal.<服务名> true` 可临时关闭该服务的 critical fatal 处理，以便收集日志；这不是量产设备上的通用恢复方案；
 4. **边界**：Verified Boot 镜像校验失败发生在用户态日志可用之前，应查 Bootloader/串口/recovery 证据；它与 init 运行后的服务崩溃循环属于不同阶段。
+
+
+
+
+
+
 
 
 
@@ -1000,6 +908,12 @@ init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口
 3. **Zygote 服务退出**：logcat 中 init 报告 `Service 'zygote' ... received signal`，随后观察 init 是否重启 Zygote，以及 system_server PID 是否随新 Zygote 改变；zygote 服务的 `onrestart` 配置会影响其他 native 服务；
 4. **system_server Watchdog**：`*** WATCHDOG KILLING SYSTEM PROCESS` 和 `Blocked in ...` 是 Watchdog 证据；结合 `pre_watchdog`/`watchdog` DropBox 记录及线程栈找阻塞点。通常表现为 Framework 重启，不等于内核重启；
 5. **区分内核重启与 Framework 重启**：对比 `/proc/sys/kernel/random/boot_id`、进程 PID、`sys.boot_completed` 和 pstore。内核 boot_id 改变说明经历内核启动；PID/Framework 状态变化但 boot_id 未变更说明应优先查用户态恢复链。BOOT_COMPLETED 是否再次出现不能单独作为判据。
+
+
+
+
+
+
 
 
 
@@ -1020,6 +934,12 @@ Framework 源码锚点是 `frameworks/base/services/core/java/com/android/server
 
 
 
+
+
+
+
+
+
 **Q44: AAOS 13 启动 HOME 时，PackageManager 怎样决定是否运行 CarLauncher，进程又怎样进入 Activity？**
 
 AMS/ATMS 发出的是带用户和显示上下文的 HOME 请求，不是对 CarLauncher 类名的硬编码启动。ATMS 解析出目标组件后，才走通用 Activity 启动链；若目标进程不存在，AMS 才请求 Zygote 创建进程，之后通过 ActivityThread 创建 Activity。
@@ -1031,6 +951,12 @@ AMS/ATMS 发出的是带用户和显示上下文的 HOME 请求，不是对 CarL
 5. 子进程进入 ActivityThread、attach 到 system_server 后，客户端事务才创建目标 Activity。只有解析结果确实为 CarLauncher，控制流才进入它的 `onCreate()`。
 
 定位“Launcher 没起来”时，先用目标用户查询实际 HOME 解析结果，再查 ActivityTaskManager 启动记录和进程状态；Manifest 声明只能证明组件有资格成为候选，不能证明 PackageManager 最终选中了它。源码锚点包括 `RootWindowContainer.java`、`ActivityTaskManagerService.java`、`ActivityStartController.java`、`ProcessList.java`、`ActivityThread.java` 和 CarLauncher 的 `AndroidManifest.xml`，均按 Android 13 checkout `abec84ef9` 核对。
+
+
+
+
+
+
 
 
 

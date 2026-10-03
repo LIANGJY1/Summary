@@ -12,6 +12,8 @@ Product 决定产品镜像的产品级内容与身份，Device/Board 提供设�
 
 `sdk_car_x86_64-userdebug` 中，`sdk_car_x86_64` 是产品名，`userdebug` 是变体；`x86_64` 只是产品命名中表达架构的部分。应通过所选产品配置和 `get_build_var` 等构建工具查询真实架构配置，不能把字符串拆分结果当作独立架构字段。
 
+`lunch` 目标格式随 Android 版本变化：Android 13 使用 `product-build_variant` 两段式；Android 17 使用 `product-release_config-build_variant` 三段式。不要跨版本照搬格式，应以当前源码树运行 `lunch` 显示的目标为准。
+
 **Q2: `source build/envsetup.sh`、`lunch`、`AndroidProducts.mk` 和 `COMMON_LUNCH_CHOICES` 如何共同确定构建目标？**
 
 `envsetup.sh` 将构建辅助函数定义到当前 Shell；`lunch` 选择产品和变体，并设置后续构建使用的目标配置。产品文件注册和菜单展示是两个相关但不同的步骤。
@@ -69,13 +71,12 @@ Overlay 用资源替换机制覆盖目标包中的资源，无需直接修改被
 
 不要只根据 `grep` 命中行删除所有同名内容；搜索结果可能包含注释、文档、依赖模块或不同产品配置。材料中的 `make -j16-` 写法不正确，若本意是 16 路并行，应写成 `make -j16`；`Rice14-eng` 也只是示例目标，必须确认它已在当前源码树注册。`make clean` 通常不是验证产品裁剪的必要步骤；增量构建是否重建取决于目标依赖关系。
 
-**Q8: Android 构建中的 `system`、`vendor`、`odm` 和 `product` 分区分别承载什么差异？**
+**Q8: Soong 模块安装到哪个分区由什么决定，怎样确认它进入了哪个镜像？**
 
-这些分区用于隔离不同来源与更新边界的系统内容，但不能把组织角色与分区做一一绝对映射；产品实际内容还受 Treble 规则、模块安装属性和设备配置约束。
+模块类型支持的安装属性和产品配置共同决定安装分区；`PRODUCT_PACKAGES` 负责选择是否构建并安装模块，不负责选择分区。
 
-一般理解是：`system` 承载通用 Android 平台内容；`vendor` 承载 SoC/供应商相关实现；`odm` 承载板级或设备级定制；`product` 承载产品层应用、资源和配置。Google、SoC 厂商、ODM、OEM 是开发与集成角色，常分别维护相关内容，但实际项目可因架构和分区策略而异。
-
-选择安装分区时，应依据模块的接口稳定性、所有权和产品配置属性（例如 Soong 的 `vendor: true`、`product_specific: true`），并核查构建产物路径与分区兼容性。不能仅因某功能“属于 OEM”就认定它必须放在 `product` 分区。
+1. **确认分区：**查看模块类型及其安装属性，按产品规则确定目标分区；省略属性时按该模块类型的默认安装规则处理。
+2. **确认产物：**用 `get_build_var PRODUCT_OUT` 获取输出目录，检查对应分区暂存目录和 `installed-files-*.txt` 清单，再确认目标 `.img` 已生成。
 
 **Q9: `PRODUCT_DEVICE`、`BoardConfig.mk` 和 `PRODUCT_NAME` 的关系是什么？**
 

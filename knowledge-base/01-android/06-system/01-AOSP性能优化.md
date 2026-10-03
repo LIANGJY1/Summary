@@ -36,32 +36,36 @@ DeliQueue 针对消息入队争用：旧 MessageQueue 用同一把对象 monitor
 
 做法：跨版本实验把 OS、target、Mainline、kernel 与产品配置作为独立变量记录，固定 APK、数据集、温度与电源条件；能用 compat change 或 feature flag 在同一设备做 A/B 时优先成对比较；报告 P50/P95 与样本数，不把官方公开的内部百分比（如 DeliQueue 的 missed frames 下降 4%）当作业务目标。
 
-**Q5: Android 17 的 lunch target 为什么是三段式？Android 13 本地树怎么选 target，三种 build variant 有什么边界？**
+**Q5: 性能测试应选什么构建变体，怎样避免把调试差异当成优化收益？**
 
-Android 17 的 lunch target 是 product_name-release_config-build_variant 三段，例如 aosp_cf_x86_64_only_phone-aosp_current-userdebug，release config 选择 feature launch flag 的发布配置。按 AAOS13 源码核对，本地 build/make/envsetup.sh 的 lunch 仍是两段式 product-variant（默认示例即 aosp_arm-eng），没有 release config 段——旧文章的两段式 target 不能直接套到 Android 17，反之也不能把三段式搬回旧 tag；拿不准时运行无参数 lunch 查看当前 tag 可用的组合，并检查输出中的 TARGET_PRODUCT、TARGET_BUILD_VARIANT 与 OUT_DIR。
+调试和定位可用 `userdebug`；量产性能结论应在匹配产品的 `user` 构建上复测。`userdebug` 的 root、remount 和调试行为会影响测试条件，不能直接当作量产数据。
 
-source build/envsetup.sh 把 lunch、m 等命令加载进当前 shell，每个新 shell 都要执行一次；m 不指定 -j 时自行选择并发度，先采用默认值、经主机测量后再调。三种 build variant 的边界：user 是生产配置，最接近量产安全基线但缺少 root 调试；userdebug 保留 adb root、remount 等能力，framework 修改通常用它定位与功能验证；eng 调试检查更多，不能作为发布性能基线。需要报告绝对性能数字时，用匹配量产的 user 构建复测，并把 userdebug 与 user 的差异写入报告，不能用"足够接近"省略。
+1. **定位问题：**使用 `userdebug` 复现、采集日志和验证 framework 修改。
+2. **测量发布性能：**使用产品对应的 `user` 构建，在相同设备、温度、电源和负载下对比。
+3. **记录结果：**记录产品、构建变体、平台与内核版本及测试条件；若先在 `userdebug` 上测量，应单独标注，不能与 `user` 数据混为一组。
 
-**Q6: AOSP 构建里 Soong、Kati、Ninja 各管什么？改了 framework 代码后怎样编译、同步到设备并让它生效？**
+**Q6: 改了 framework 性能代码后，怎样构建、同步到设备并验证改动？**
 
-Soong 读取 Android.bp，Kati 处理遗留 Android.mk，二者生成构建图，Ninja 执行具体命令；日常入口是 m，通常不直接调 Ninja。三层的故障表现不同：模块名、属性或可见性错误发生在 Soong 解析阶段，Android.mk 转换问题出现在 Kati 阶段，编译器与链接错误由 Ninja 报出具体 action。改完构建描述可先跑 m nothing 做结构校验——它解析并验证构建结构、不生成产物，但类型检查与链接错误仍要编译受影响模块才会出现。
+先构建对应模块，再按安装分区同步产物；随后选择进程重启或整机重启，并用设备端证据确认运行的是新版本。
 
-同步流程按产物所在分区走：
+例如，修改位于 system 分区的服务后，可按以下流程操作：
 
 ```bash
 m services
 adb root && adb remount
-adb sync 06-system
+adb sync system
 adb shell stop && adb shell start
 ```
 
-adb sync 接受 system、system_ext、product、vendor 等分区名，不接受 framework 这类模块名；改动位于 APEX、boot image 或 early-boot 代码时完整 adb reboot 更稳妥。stop/start 只重启 Zygote 与依赖它的 Java 进程，不会重新执行 bootloader、init 与 early-boot 路径，研究启动时延必须完整重启；首次 remount 可能要先 adb disable-verity 并重启，关闭 verity 只用于隔离的开发设备。模块名来自 Android.bp 的 name，文件路径不等于模块名；单文件 push 风险高于分区同步，因为类路径里可能还有 dexpreopt 产物、架构变体或关联 APEX，同步后行为未变时应核对设备端文件哈希与 build fingerprint。
+`adb sync` 的参数是分区名，不是 `framework` 这类模块名；应按模块实际安装位置选择 `system`、`system_ext`、`product` 或 `vendor`。普通 Java 服务可在同步后重启相关进程；APEX、boot image 或 early-boot 改动需要完整重启。研究启动耗时时也必须整机重启，因为 `stop/start` 不会重新执行 bootloader、init 和 early-boot。
+
+首次 `adb remount` 可能需要在隔离的开发设备上关闭 verity 并重启。同步后行为未变时，核对设备端文件哈希、build fingerprint 和实际安装分区；再用相同测试负载与性能 trace 验证改动是否生效。
 
 **Q7: 用 Cuttlefish 验证 framework 改动的边界在哪？为什么 Android 内核必须单独构建？**
 
 Cuttlefish 适合验证纯 AOSP framework 行为、系统服务与 CTS；它与真机的差异集中在 HAL 及依赖具体硬件的部分，GPU 合成、热控制、SoC 调度、相机和功耗结论仍需真机。使用 CI 产物时 cvd-host_package.tar.gz 与设备 image 必须来自同一次构建，主机包与镜像混搭不能靠"能启动"证明组合受支持；运行前确认 /dev/kvm 存在且当前用户有权限。把自编译 AOSP 刷入 Pixel 前还要核对四件事：当前 tag 存在目标产品与 lunch 配置、driver binaries 与设备和平台 build 匹配、bootloader/radio 固件满足镜像要求、允许 OEM unlocking 且已备份数据——fastboot flashing unlock 与 flashall -w 都涉及数据清除。
 
-内核方面，AOSP 平台树只带预编译 kernel binary，完整内核源码与构建规则在独立 checkout：Android 13 起的现代 Android Common Kernel 用 Bazel/Kleaf 构建（如 tools/bazel run //common:kernel_aarch64_dist），build.sh 在 Android 14 及以上不受支持。单个 GKI 镜像不包含 vendor modules、DTBO、vendor_boot 与签名处理，单独刷入任意 Pixel 不构成完整方案；平台 tag 与内核 tag 是两个锚点，不能互换或互相反推。
+内核源码和构建目标通常独立于 Android 平台树，因此平台编译成功不能证明已生成或集成修改后的内核。性能实验应记录并匹配平台与内核版本；内核构建、集成边界按对应内核分支的配置和产物验证。
 
 **Q8: 内核里某个机制"存在"就能说明设备启用了吗？评估 Android 17 GKI 6.18 的调度与内存改动要满足哪三个条件？**
 

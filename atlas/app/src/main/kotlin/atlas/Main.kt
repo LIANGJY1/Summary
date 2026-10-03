@@ -70,8 +70,15 @@ import atlas.ui.settingsTabLabel
 import atlas.ui.topLevelTabs
 import kotlinx.coroutines.delay
 import atlas.core.Log
+import java.awt.AWTEvent
+import java.awt.Component
 import java.io.File
+import java.awt.Toolkit
+import java.awt.Window as AwtWindow
+import java.awt.event.AWTEventListener
+import java.awt.event.MouseEvent
 import javax.swing.JFileChooser
+import javax.swing.SwingUtilities
 
 fun main() {
     installImeCompatFlags()
@@ -108,7 +115,7 @@ fun main() {
                     fontScale = store.settings.globalFontSize / 14f,
                     spec = resolveTheme(store.settings),
                 ) {
-                    AppRoot(store, windowState) {
+                    AppRoot(store, windowState, window) {
                         store.stopAaosCommand()
                         exitApplication()
                     }
@@ -163,7 +170,7 @@ internal fun logImeRuntimeCapability() {
 }
 
 @Composable
-fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
+fun AppRoot(store: AppStore, windowState: WindowState, window: AwtWindow, onClose: () -> Unit) {
     val ui = atlasUiTokens()
     LaunchedEffect(Unit) {
         Log.timed("应用 boot()", warnMs = 1000) { runCatching { store.boot() }.onFailure { Log.e("boot() 异常", it) } }
@@ -179,14 +186,19 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
     var settingsSection by remember { mutableStateOf("root") }
     var toolsDestination by remember { mutableStateOf(ToolsDestination.LOG_DECRYPT) }
     var showPalette by remember { mutableStateOf(false) }
-    // 鼠标侧键的页面导航历史（浏览器语义，§6.4.36）：记录 (页签, 设置二级页) 组合，后退/前进沿栈回溯。
+    // 鼠标侧键的页面导航历史（浏览器语义，§6.4.36/6.4.52）：记录页签、设置二级页及题库当前文档。
     // 恢复经 navRestoreTarget 标记过滤——同帧写两个 state 只重启一次 effect，命中标记即视为恢复而非新导航。
-    data class NavEntry(val tab: String, val settingsSection: String)
-    val navHistory = remember { mutableStateListOf(NavEntry(tab, settingsSection)) }
+    data class NavEntry(val tab: String, val settingsSection: String, val sourcePath: String? = null)
+    fun currentNavEntry() = NavEntry(
+        tab = tab,
+        settingsSection = settingsSection,
+        sourcePath = store.selectedSourcePath.takeIf { tab == "题库" },
+    )
+    val navHistory = remember { mutableStateListOf(currentNavEntry()) }
     var navIndex by remember { mutableStateOf(0) }
     var navRestoreTarget by remember { mutableStateOf<NavEntry?>(null) }
-    LaunchedEffect(tab, settingsSection) {
-        val entry = NavEntry(tab, settingsSection)
+    LaunchedEffect(tab, settingsSection, store.selectedSourcePath.takeIf { tab == "题库" }) {
+        val entry = currentNavEntry()
         if (entry == navRestoreTarget) { navRestoreTarget = null; return@LaunchedEffect }
         navRestoreTarget = null
         if (navHistory.lastOrNull() == entry) { navIndex = navHistory.size - 1; return@LaunchedEffect }
@@ -202,7 +214,10 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
         navRestoreTarget = entry
         tab = entry.tab
         settingsSection = entry.settingsSection
-        Log.d("鼠标${if (delta < 0) "后退" else "前进"} → ${entry.tab}/${entry.settingsSection} (${target + 1}/${navHistory.size})")
+        if (entry.tab == "题库" && entry.sourcePath != null && entry.sourcePath != store.selectedSourcePath) {
+            store.selectSourceDocument(entry.sourcePath)
+        }
+        Log.d("鼠标${if (delta < 0) "后退" else "前进"} → ${entry.tab}/${entry.settingsSection}/${entry.sourcePath.orEmpty()} (${target + 1}/${navHistory.size})")
     }
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(store.libraryReady) {
@@ -233,6 +248,30 @@ fun AppRoot(store: AppStore, windowState: WindowState, onClose: () -> Unit) {
             SetupView(store)
         }
         return
+    }
+    // Linux/X11 maps the physical back/forward buttons (X buttons 8/9) to AWT buttons 6/7;
+    // Compose Desktop only exposes AWT buttons 4/5 as PointerButtons.Back/Forward.
+    // Keep the Compose path below for platforms that report the standard buttons, and bridge
+    // X11's extra-button numbering here.
+    DisposableEffect(window) {
+        if (System.getProperty("os.name").startsWith("Linux", ignoreCase = true)) {
+            val toolkit = Toolkit.getDefaultToolkit()
+            val listener = AWTEventListener { event ->
+                val mouseEvent = event as? MouseEvent ?: return@AWTEventListener
+                if (mouseEvent.id != MouseEvent.MOUSE_PRESSED) return@AWTEventListener
+                val source = mouseEvent.source as? Component ?: return@AWTEventListener
+                val sourceWindow = if (source is AwtWindow) source else SwingUtilities.getWindowAncestor(source)
+                if (sourceWindow !== window) return@AWTEventListener
+                when (mouseEvent.button) {
+                    6 -> { mouseEvent.consume(); navGo(-1) }
+                    7 -> { mouseEvent.consume(); navGo(+1) }
+                }
+            }
+            toolkit.addAWTEventListener(listener, AWTEvent.MOUSE_EVENT_MASK)
+            onDispose { toolkit.removeAWTEventListener(listener) }
+        } else {
+            onDispose {}
+        }
     }
     WindowResizeBorders(windowState) {
     Column(

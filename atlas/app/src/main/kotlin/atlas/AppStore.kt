@@ -134,6 +134,9 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     var pendingPreview by mutableStateOf<String?>(null)
 
     val toast = mutableStateOf<String?>(null)
+    var libraryUpdateRunning by mutableStateOf(false)
+        private set
+    private val libraryUpdateLock = AtomicBoolean(false)
 
     /** 工具页：27HM 日志解密的运行状态（跨页签保留，进程在 scope 托管的 IO 协程里跑） */
     val hcToolRun = mutableStateOf<Tools.ToolRun?>(null)
@@ -869,6 +872,91 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     }
 
     fun showToast(msg: String) { Log.i("toast: $msg"); toast.value = msg; scope.launch { delay(2600); toast.value = null } }
+
+    /** 暂存知识库仓库全部变更；已有 HEAD 时 amend 最近提交，否则创建首个 update 提交。 */
+    fun updateLibraryRepository() {
+        if (!libraryUpdateLock.compareAndSet(false, true)) {
+            showToast("Update 正在执行")
+            return
+        }
+        libraryUpdateRunning = true
+        scope.launch {
+            try {
+                val library = libraryRoot()
+                if (!library.isDirectory) {
+                    showToast("知识库目录不可用")
+                    return@launch
+                }
+                val rootResult = runGitCommand(library, listOf("rev-parse", "--show-toplevel"))
+                if (rootResult.first != 0) {
+                    showToast("当前知识库不在 Git 仓库中")
+                    return@launch
+                }
+                val repository = File(rootResult.second.trim()).canonicalFile
+
+                val addResult = runGitCommand(repository, listOf("add", "."))
+                if (addResult.first != 0) {
+                    showGitUpdateFailure("git add .", addResult)
+                    return@launch
+                }
+
+                val stagedResult = runGitCommand(repository, listOf("diff", "--cached", "--quiet"))
+                if (stagedResult.first == 0) {
+                    showToast("没有可提交的更改")
+                    return@launch
+                }
+                if (stagedResult.first != 1) {
+                    showGitUpdateFailure("检查暂存区", stagedResult)
+                    return@launch
+                }
+
+                val headResult = runGitCommand(repository, listOf("rev-parse", "--verify", "--quiet", "HEAD"))
+                val hasCommit = when (headResult.first) {
+                    0 -> true
+                    1 -> false
+                    else -> {
+                        showGitUpdateFailure("检查最近提交", headResult)
+                        return@launch
+                    }
+                }
+                val commitArgs = if (hasCommit) {
+                    listOf("commit", "--amend", "--no-edit")
+                } else {
+                    listOf("commit", "-m", "update")
+                }
+                val commitResult = runGitCommand(repository, commitArgs, timeoutMs = 120_000L)
+                if (commitResult.first != 0) {
+                    showGitUpdateFailure("git ${commitArgs.drop(1).joinToString(" ")}", commitResult)
+                    return@launch
+                }
+
+                Log.i("知识库 Git Update 完成 root=${repository.absolutePath} amend=$hasCommit 输出=${commitResult.second.trim().take(500)}")
+                showToast(if (hasCommit) "已更新：并入最近一次提交" else "已创建 update 提交")
+                refreshSourceQuestionGitDiff()
+            } catch (error: Exception) {
+                Log.e("知识库 Git Update 失败", error)
+                showToast("Update 失败：${error.message ?: error.javaClass.simpleName}")
+            } finally {
+                libraryUpdateRunning = false
+                libraryUpdateLock.set(false)
+            }
+        }
+    }
+
+    private fun runGitCommand(
+        repository: File,
+        args: List<String>,
+        timeoutMs: Long = 30_000L,
+    ): Pair<Int, String> = execCapture(
+        listOf("git", "-C", repository.absolutePath) + args,
+        timeoutMs,
+    )
+
+    private fun showGitUpdateFailure(command: String, result: Pair<Int, String>) {
+        val details = result.second.trim().take(240).ifBlank { "exit ${result.first}" }
+        Log.w("知识库 Git Update 失败 command=$command exit=${result.first} output=$details")
+        showToast("$command 失败：$details")
+    }
 
     fun openSkillEditor(skillName: String) {
         val file = Inbox.skillFile(skillName) ?: run {

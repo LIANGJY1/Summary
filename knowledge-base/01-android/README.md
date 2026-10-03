@@ -29,11 +29,17 @@
 
 ## 系统与厂商（源书第四部分）
 
-- [system/](06-system/) — AOSP 性能优化（构建/AutoFDO/Profile 编译/启动耗时/Rust）、OEM 与设备差异（SoC、游戏模式、Power HAL、AAOS）、CarService 服务速览（媒体源/蓝牙/遥测/诊断/投影）
+- [system/](06-system/) — AOSP 性能优化（性能构建变体、AutoFDO/Profile、启动耗时、Rust）、OEM 与设备差异（SoC、游戏模式、Power HAL、AAOS）、CarService 服务速览（媒体源/蓝牙/遥测/诊断/投影）
 
 ## 构建与集成
 
-- [18-complie/](18-complie/) — Android/AAOS 产品配置与应用裁剪、Soong C/C++/Java 模块、AAOS 13 模拟器内核编译，以及 Linux 字符设备驱动与验证
+- [18-build-system/](18-build-system/) — Android/AAOS 产品配置、Soong/Kati/Ninja 构建流程、内核与驱动构建，以及可执行文件和系统镜像。
+  - [01-product-config.md](18-build-system/01-product-config.md) — Product、lunch 与产品配置
+  - [02-soong-modules.md](18-build-system/02-soong-modules.md) — Android.bp、模块依赖与构建流程
+  - [03-android-kernel-build.md](18-build-system/03-android-kernel-build.md) — Android 内核构建与验证
+  - [04-linux-kernel-drivers.md](18-build-system/04-linux-kernel-drivers.md) — Linux 驱动与字符设备
+  - [05-android-executables.md](18-build-system/05-android-executables.md) — Android 可执行文件
+  - [06-android-system-images.md](18-build-system/06-android-system-images.md) — Android 系统镜像
 
 ## 应用实践（源书第五部分）
 
