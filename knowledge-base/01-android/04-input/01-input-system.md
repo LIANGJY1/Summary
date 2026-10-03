@@ -66,11 +66,11 @@
 
 只能作为粗略描述。初次 `DOWN` 执行窗口命中测试并建立触摸状态，后续 `MOVE`/`UP` 通常延续已有目标、不在每个采样点重新选窗；但过程中多种情况会改变目标或终止原手势：
 
-- 父容器在应用内拦截（`onInterceptTouchEvent()` 返回 true），原子 View 收到 `ACTION_CANCEL`；
-- 系统手势监视器通过 `pilferPointers()` 抢占指针，原目标被分发器合成 `CANCEL`；
-- 触摸拆分把不同触点 ID 分给不同目标；窗口消失、变得不可触摸或连接断开；
-- 安全策略（窗口被遮挡、`DROP_INPUT` 类 `InputConfig`、UID 与令牌不匹配）要求丢弃；
-- 子 View 被移除、窗口失焦或系统取消手势时清理 `TouchTarget`。
+1. 父容器在应用内拦截（`onInterceptTouchEvent()` 返回 true），原子 View 收到 `ACTION_CANCEL`；
+2. 系统手势监视器通过 `pilferPointers()` 抢占指针，原目标被分发器合成 `CANCEL`；
+3. 触摸拆分把不同触点 ID 分给不同目标；窗口消失、变得不可触摸或连接断开；
+4. 安全策略（窗口被遮挡、`DROP_INPUT` 类 `InputConfig`、UID 与令牌不匹配）要求丢弃；
+5. 子 View 被移除、窗口失焦或系统取消手势时清理 `TouchTarget`。
 
 因此分析手势问题要同时看 `DOWN` 的命中结果、后续拦截决策、触点 ID 与 `CANCEL`，不能只看最终 `onTouchEvent()` 返回值。按键按焦点窗口分发（无屏幕坐标），指针动作按触摸状态分发，触摸目标不一定与键盘焦点相同。
 
@@ -78,9 +78,9 @@
 
 三类旁路能力作用不同，权限都在系统侧：
 
-- **`InputFilter`（全局过滤器）**：隐藏系统接口，由 WMS/IMS 经 `WindowManagerInternal.setInputFilter()` 安装（按 AAOS13 源码核对，`InputManagerService.setInputFilter()` 保存过滤器并只向原生同步启用状态），可拦截原事件后决定放行、消费或经 `sendInputEvent()` 发替代事件，典型实现是 `AccessibilityInputFilter`。普通应用没有入口。
-- **`InputMonitor`（监视窗口）**：`InputManagerService.monitorGestureInput()` 创建手势监视通道与 spy window，调用方必须持有 `android.permission.MONITOR_INPUT`（按 AAOS13 源码核对，平台清单声明于 `AndroidManifest.xml`，保护级别为 `signature|recents`）。监控阶段只读副本；接管需另调 `pilferPointers()`，且不能注入替代事件。SystemUI 的边缘返回手势即此模式。
-- **无障碍按键过滤**：需服务配置声明 `canRequestFilterKeyEvents` 能力并在运行时置 `FLAG_REQUEST_FILTER_KEY_EVENTS`；`onKeyEvent()` 收到副本，返回 true 表示消费。判定发生在 `AccessibilityManagerService`/`KeyEventDispatcher` 与服务进程一侧的异步等待，材料按 Android 17 核对的等待上限为 500 ms，不是 `InputDispatcher` 同步等待远端 Binder。
+1. **`InputFilter`（全局过滤器）**：隐藏系统接口，由 WMS/IMS 经 `WindowManagerInternal.setInputFilter()` 安装（按 AAOS13 源码核对，`InputManagerService.setInputFilter()` 保存过滤器并只向原生同步启用状态），可拦截原事件后决定放行、消费或经 `sendInputEvent()` 发替代事件，典型实现是 `AccessibilityInputFilter`。普通应用没有入口。
+2. **`InputMonitor`（监视窗口）**：`InputManagerService.monitorGestureInput()` 创建手势监视通道与 spy window，调用方必须持有 `android.permission.MONITOR_INPUT`（按 AAOS13 源码核对，平台清单声明于 `AndroidManifest.xml`，保护级别为 `signature|recents`）。监控阶段只读副本；接管需另调 `pilferPointers()`，且不能注入替代事件。SystemUI 的边缘返回手势即此模式。
+3. **无障碍按键过滤**：需服务配置声明 `canRequestFilterKeyEvents` 能力并在运行时置 `FLAG_REQUEST_FILTER_KEY_EVENTS`；`onKeyEvent()` 收到副本，返回 true 表示消费。判定发生在 `AccessibilityManagerService`/`KeyEventDispatcher` 与服务进程一侧的异步等待，材料按 Android 17 核对的等待上限为 500 ms，不是 `InputDispatcher` 同步等待远端 Binder。
 
 版本边界：Android 17 的 `InputFilter` 是 C++ 包装层加 Rust 实现的辅助功能过滤器（防重复键、慢速键、粘滞键），`EventHub`/`InputReader`/`InputDispatcher` 仍是 C++；AAOS13 源码中不存在这套 Rust 过滤器，"InputFlinger 已用 Rust 重写"的说法不成立。无障碍触摸另有 API 34 起的 `setMotionEventSources()` 通用运动事件来源监听，与触摸探索的 `FLAG_SEND_MOTION_EVENTS` 不是同一开关。
 
@@ -132,8 +132,8 @@ Perfetto 上的表现是：一个批只出现一次 Java `deliverInputEvent`；�
 
 两者作用于不同阶段，可组合但不能互相替代：
 
-- **无缓冲分发**：`View.requestUnbufferedDispatch(event)` 让当前序列（到 `ACTION_UP` 前）的真实样本经 `consumeBatchedInputEvents(-1)` 立即送达，缩短 `MOVE` 进入应用前的等待；代价是事件更早逐个到达、CPU 与回调压力增加，官方文档提示它不适合多数应用，随意启用可能造成滚动抖动并失去系统重采样收益；
-- **前缓冲渲染**：Jetpack 低延迟图形（`GLFrontBufferedRenderer`、`CanvasFrontBufferedRenderer`、`LowLatencyCanvasView`）把短生命周期增量内容画到专用前缓冲图层，缩短笔迹从提交到可见的路径，代价是可能出现撕裂。
+1. **无缓冲分发**：`View.requestUnbufferedDispatch(event)` 让当前序列（到 `ACTION_UP` 前）的真实样本经 `consumeBatchedInputEvents(-1)` 立即送达，缩短 `MOVE` 进入应用前的等待；代价是事件更早逐个到达、CPU 与回调压力增加，官方文档提示它不适合多数应用，随意启用可能造成滚动抖动并失去系统重采样收益；
+2. **前缓冲渲染**：Jetpack 低延迟图形（`GLFrontBufferedRenderer`、`CanvasFrontBufferedRenderer`、`LowLatencyCanvasView`）把短生命周期增量内容画到专用前缓冲图层，缩短笔迹从提交到可见的路径，代价是可能出现撕裂。
 
 前缓冲适合签名、白板、手写笔迹这类增量区域小、预测段可被真实样本修正的场景；整屏列表滚动与普通按钮反馈不适合。手写的完整流程是：读真实样本与历史点，必要时无缓冲分发，`MotionPredictor` 只产生短时间窗的临时预测点画在前缓冲层，真实样本到达后修正，抬笔经 `commit()` 提交多缓冲层。
 
@@ -157,11 +157,11 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 回调分三层（已与官方文档核对）：
 
-- **平台提交回调 `OnBackInvokedCallback`**（API 33）：只有 `onBackInvoked()`，提交后通知，没有进度方法；
-- **平台进度回调 `OnBackAnimationCallback`**（API 34）：`onBackStarted()`/`onBackProgressed()`/`onBackCancelled()`/`onBackInvoked()`，可接收开始、进度、取消与提交；
-- **AndroidX 兼容层 `OnBackPressedCallback`**：`handleOnBackPressed()` 一直可用，进度方法自 activity 1.8.0 增加，且只有框架 API 34+ 才由系统驱动。
+1. **平台提交回调 `OnBackInvokedCallback`**（API 33）：只有 `onBackInvoked()`，提交后通知，没有进度方法；
+2. **平台进度回调 `OnBackAnimationCallback`**（API 34）：`onBackStarted()`/`onBackProgressed()`/`onBackCancelled()`/`onBackInvoked()`，可接收开始、进度、取消与提交；
+3. **AndroidX 兼容层 `OnBackPressedCallback`**：`handleOnBackPressed()` 一直可用，进度方法自 activity 1.8.0 增加，且只有框架 API 34+ 才由系统驱动。
 
-清单属性语义随版本变化：Android 13/14 用于显式加入新模型（开发者选项测试动画）；Android 15 移除开发者开关，已加入的应用显示返回主屏、跨任务、跨 Activity 三类系统动画；Android 16 起对目标版本为 36+ 的应用默认启用，仍可设 `false` 临时退出，且启用后旧 `onBackPressed()` 不再调用、`KEYCODE_BACK` 不再分发给应用。API 36 新增 `PRIORITY_SYSTEM_NAVIGATION_OBSERVER` 观察者回调（值为 -2，只观察不消费），API 37 起允许注册多个。
+清单属性语义随版本变化：Android 13/14 用于显式加入新模型（开发者选项测试动画）；Android 15 移除开发者开关，已加入的应用显示返回主屏、跨任务、跨 Activity 三类系统动画；Android 16 起对目标版本为 36+ 的应用默认启用，仍可设 `false` 临时退出，且启用后旧 `onBackPressed()` 不再调用、`KEYCODE_BACK` 不再分发给应用。API 36 新增 `PRIORITY_SYSTEM_NAVIGATION_OBSERVER` 观察者优先级（值为 -2，只观察不消费）；API 36 同时只允许注册一个此优先级回调，API 37 起才允许注册多个。普通 `OnBackInvokedCallback` 自 API 33 起就支持注册多个，按优先级及同优先级的注册顺序分发。
 
 应用侧判断路径时不能把所有返回手势当成 `KEYCODE_BACK`：提前分发分支经 WM Shell 解析 `BackNavigationInfo`，只有找不到有效返回信息等兜底条件才注入返回键。
 
@@ -195,8 +195,8 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 两者都必须运行时从 `ViewConfiguration` 获取，不能用源码后备常量：
 
-- **TouchSlop**：`TOUCH_SLOP = 8` 只是给没有 `Context` 的旧代码兜底的 dp 后备值（按 AAOS13 源码核对，`ViewConfiguration.java`）；正常路径是 `ViewConfiguration.get(context).getScaledTouchSlop()`，框架从 `config_viewConfigurationTouchSlop` 资源读取像素值，设备可用资源覆盖校准。判定是否开始拖动通常用从 `DOWN` 起的总位移，而不是相邻 `MOVE` 的增量，否则许多小增量永远越不过阈值；
-- **Fling 速度**：50 dp/s 与 8000 dp/s 同样是后备常量，运行时取 `getScaledMinimumFlingVelocity()`/`getScaledMaximumFlingVelocity()`（像素每秒），并把 `computeCurrentVelocity(1000, max)` 的限幅参数与比较阈值保持同一单位。Android 14 起还有按输入设备、轴、source 的变体，设备或轴组合无效时最小值返回 `Integer.MAX_VALUE`、最大值返回 `Integer.MIN_VALUE` 表示不支持。
+1. **TouchSlop**：`TOUCH_SLOP = 8` 只是给没有 `Context` 的旧代码兜底的 dp 后备值（按 AAOS13 源码核对，`ViewConfiguration.java`）；正常路径是 `ViewConfiguration.get(context).getScaledTouchSlop()`，框架从 `config_viewConfigurationTouchSlop` 资源读取像素值，设备可用资源覆盖校准。判定是否开始拖动通常用从 `DOWN` 起的总位移，而不是相邻 `MOVE` 的增量，否则许多小增量永远越不过阈值；
+2. **Fling 速度**：50 dp/s 与 8000 dp/s 同样是后备常量，运行时取 `getScaledMinimumFlingVelocity()`/`getScaledMaximumFlingVelocity()`（像素每秒），并把 `computeCurrentVelocity(1000, max)` 的限幅参数与比较阈值保持同一单位。Android 14 起还有按输入设备、轴、source 的变体，设备或轴组合无效时最小值返回 `Integer.MAX_VALUE`、最大值返回 `Integer.MIN_VALUE` 表示不支持。
 
 TouchSlop 过大拖动启动显得迟钝，过小会把抖动误判为拖动；调整自定义控件时阈值来源应可随设备配置变化，业务代码不复制数字。
 
@@ -240,9 +240,9 @@ View 分发没有通用的"谁先超过 TouchSlop 谁获胜"规则：`ACTION_DOW
 
 三类设备的映射器与事件语义不能互换（映射器由 `InputDevice::createMappers()` 按设备类别创建）：
 
-- **鼠标**：`CursorInputMapper` 处理相对位移，先经速度曲线更新系统光标，再生成带屏幕坐标的 `SOURCE_MOUSE` 事件（未按键是 `ACTION_HOVER_MOVE`，滚轮是 `ACTION_SCROLL` + `AXIS_VSCROLL/HSCROLL`）；
-- **触控板**：`TouchpadInputMapper` 先经手势识别库解释，普通模式下应用收到的是鼠标或已分类手势事件，不能反推"硬件只报了一个相对坐标"；
-- **触摸屏**：`MultiTouchInputMapper` 直接产出 `SOURCE_TOUCHSCREEN` 的多点 `MotionEvent`。
+1. **鼠标**：`CursorInputMapper` 处理相对位移，先经速度曲线更新系统光标，再生成带屏幕坐标的 `SOURCE_MOUSE` 事件（未按键是 `ACTION_HOVER_MOVE`，滚轮是 `ACTION_SCROLL` + `AXIS_VSCROLL/HSCROLL`）；
+2. **触控板**：`TouchpadInputMapper` 先经手势识别库解释，普通模式下应用收到的是鼠标或已分类手势事件，不能反推"硬件只报了一个相对坐标"；
+3. **触摸屏**：`MultiTouchInputMapper` 直接产出 `SOURCE_TOUCHSCREEN` 的多点 `MotionEvent`。
 
 source 描述分发语义：`SOURCE_MOUSE` 属于 `SOURCE_CLASS_POINTER`（坐标即指针位置），`SOURCE_MOUSE_RELATIVE` 属于 `SOURCE_CLASS_TRACKBALL`（指针捕获期间的相对移动），`SOURCE_TOUCHPAD` 属于 `SOURCE_CLASS_POSITION`（原始触点），判断输入类型要同时看设备能力、source、action 与轴值。
 

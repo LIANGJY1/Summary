@@ -8,7 +8,7 @@
 
 - 某门语言的语法、类型系统、集合、并发模型、泛型/反射/元编程等语言特性与惯用法
 - 该语言标准库与官方工具链行为（编译器、构建对语言特性的处理）
-- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-生态与应用.md`）；练习/实验项目（如 `C++/cpp_practice_project/`）
+- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-ecosystem-and-android.md`）；练习/实验项目（如 `C++/cpp_practice_project/`）
 
 **不收**（退回 ROUTING.md 判据链 2–6）：
 
@@ -29,7 +29,7 @@
 
 ## 文件归并
 
-- 先找既有文件归并：主题相同/相邻并入既有文件；无处可归再新建，文件名用主题名（如 `java/泛型.md`），教学系列可用编号前缀（如 `kotlin/01-语法基础.md`），零散沉淀不编号。
+- 先找既有文件归并：主题相同/相邻并入既有文件；无处可归再新建，文件名用主题名（如 `java/generics.md`），教学系列可用编号前缀（如 `kotlin/01-syntax-basics.md`），零散沉淀不编号。
 - 讲解风格以本文件「问题式笔记质量门」和 [`../WRITING-GUIDE.md`](../WRITING-GUIDE.md) 为准；所有新增与修订内容都必须遵守，不沿用生成模型的默认文风。
 - **Q 序号＝文档位置序号**：问答标题（`**Qn:**`）按文中出现顺序从 Q1 起全文件连续编号——不按章重启、不按沉淀先后；后补的 Q 插进中间时，其后所有 Q 顺延重编，同文目录、文内交叉引用（如「见 Q7」）与跨文件引用（如「01 笔记 Q2」）一并同步更新。跨文件连续的只有章号，Q 号只保证单文件内连续。
 - 与语言版本相关的结论在文内注明版本，不为版本另建目录。
@@ -54,5 +54,5 @@
 | 子目录 | 语言 | 现状 |
 |---|---|---|
 | `C++/` | C++ | 学习笔记、Binder 源码笔记、练习项目 |
-| `java/` | Java | 语言与标准库主题笔记（基础类型与集合、并发与 Stream、异常和 I/O、注解、反射、泛型、JVM 运行时） |
-| `kotlin/` | Kotlin | 四文件笔记（章内目录）：01-语法基础 / 02-对象与类型设计 / 03-函数式与并发 / 04-生态与应用；另有学习笔记两个大文件 |
+| `java/` | Java | 语言与标准库主题笔记（core types and collections, concurrency and streams, exceptions and I/O, annotations, reflection, generics, JVM runtime） |
+| `kotlin/` | Kotlin | 四篇主题笔记：01-syntax-basics / 02-objects-and-types / 03-functional-and-concurrency / 04-ecosystem-and-android；另保留 [Kotlin 学习笔记完整版](kotlin/kotlin-learning-notes-complete.md)（300 题）。原 `kotlin_study_notes.md` 与该完整版重复，已去重，题目以完整版为唯一保留副本 |

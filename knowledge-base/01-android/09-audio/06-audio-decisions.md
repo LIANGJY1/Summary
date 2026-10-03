@@ -38,7 +38,15 @@
 
 焦点是协作式控制协议，不是音频数据的硬开关。授予表示系统允许逻辑声音开始，但播放器可能未加载、数据未写入、路由落错音区、音量组静音、HAL 未输出。失败后若应用违约继续调用 play，也可能有 PCM 送进混音器。车机应以焦点结果控制应用行为，但安全关键的声音不能仅靠其他应用自觉遵守焦点来保证可听。
 
-验证时分别取证：焦点结果与持有者、播放器状态、策略路由与 bus、设备/组增益、最终扬声器输出。来源：[AAOS 音频焦点文档的非强制边界](https://source.android.com/docs/automotive/audio/audio-focus)、[AAOS 音频概览](https://source.android.com/docs/automotive/audio)。
+定位时沿信号链逐层取证：
+
+1. **焦点状态：**记录请求结果、当前持焦者和失焦回调，确认应用是否遵守裁决。
+2. **播放器状态：**确认音源已加载、播放器处于播放态，并实际提交了 PCM 或外部音频数据。
+3. **路由状态：**确认策略把流送到预期音区、bus 和输出设备。
+4. **设备增益：**核对音量组、静音状态、ducking 增益和 HAL/DSP 控制结果。
+5. **声学结果：**在最终扬声器侧测量输出，确认故障是否发生在软件路径之后。
+
+来源：[AAOS 音频焦点文档的非强制边界](https://source.android.com/docs/automotive/audio/audio-focus)、[AAOS 音频概览](https://source.android.com/docs/automotive/audio)。
 
 **Q5: 车机界面里的“当前音源”与 AudioFocusInfo 的“当前持焦者”为什么不一定相同？**
 
@@ -52,10 +60,10 @@
 
 **Q6: FM 收音机等 Android 外部音源如何参与焦点，是否必须把模拟/数字音频送进 AudioFlinger？**
 
-外部媒体源应由 Android 应用代表，替它申请焦点并处理媒体按键。PCM 是否经过 Android 混音是另一项硬件方案选择。广播调谐器可通过 HwAudioSource/音频 patch 接入 Android 路由，也可在车载硬件下游混合。若选择后者，应用仍要在焦点变化时控制外部源，HAL 也须让车机知道它正在出声，否则媒体和外部音源可能互相盖住。
+外部媒体源应由 Android 应用代表，替它申请焦点并处理媒体按键。音频样本是否经过 Android 混音取决于硬件接入方案，不改变应用需要参与焦点协作这一点。
 
-1. **Android 媒体源**：应用提供媒体会话、管理播放状态与媒体键，并用 `USAGE_MEDIA` 等真实用途请求焦点。
-2. **音频 patch 路径**：HwAudioSource 可连接外部输入设备与输出路径，让路由和媒体会话更容易协同。必须有策略配置与 HAL 设备能力支持。
-3. **完全外部混音**：样本可能不进入 AudioFlinger，仍可通过应用代理焦点或 AudioControl HAL 外部焦点入口参与车机协作。安全提示音的硬件优先级最终由车辆系统保证。
+1. **由 Android 路由外部输入：**广播调谐器等输入可通过 HwAudioSource/音频 patch 接入系统策略与输出路径。具体连接要求策略配置和 HAL 设备能力支持，音频样本可由 Android 音频链路继续处理。
+2. **由车载硬件在 Android 下游混音：**外部输入样本可以不进入 AudioFlinger。Android 应用仍需提供媒体会话、报告播放状态、管理媒体键并按真实用途（如 `USAGE_MEDIA`）申请焦点；HAL 还需通过 AudioControl HAL 的外部焦点接口等机制告知系统外部源状态，避免它与 Android 媒体互相覆盖。
+3. **保护安全提示：**焦点是应用和系统组件之间的协作协议，不是硬件静音开关。必须保证可听的车辆告警要由车型系统设计确定其优先级和最终输出保障。
 
 来源：[AAOS 音频概览的外部媒体源建议](https://source.android.com/docs/automotive/audio)、[AAOS 连接输入设备与 HwAudioSource](https://source.android.com/docs/automotive/audio/optional-player)、[AudioControl HAL 外部焦点](https://source.android.com/docs/automotive/audio/audio-control-hal)。

@@ -4,7 +4,7 @@
 
 ## 面试冲刺
 
-- [面试高频索引](面试高频索引.md) — 高频面试主题 → 册·Q 速查（★ 必备 / ★★ 高频 / ★★★ 加分，AAOS 专项段落）
+- [面试高频索引](high-frequency-interview-index.md) — 高频面试主题 → 册·Q 速查（★ 必备 / ★★ 高频 / ★★★ 加分，AAOS 专项段落）
 
 ## 推荐学习顺序
 
@@ -18,14 +18,14 @@
 
 ## 01-architecture/
 
-- **跨层架构与系统服务：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 174 题）：
+- **跨层架构与系统服务：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 180 题）：
   - [01-system-architecture.md](01-architecture/01-system-architecture.md)（18 题）
-  - [02-system-boot.md](01-architecture/02-system-boot.md)（43 题）
-  - [03-system-server.md](01-architecture/03-system-server.md)（10 题）
-  - [04-binder.md](01-architecture/04-binder.md)（18 题）
+  - [02-system-boot.md](01-architecture/02-system-boot.md)（45 题）
+  - [03-system-server.md](01-architecture/03-system-server.md)（11 题）
+  - [04-binder.md](01-architecture/04-binder.md)（19 题）
   - [05-hal.md](01-architecture/05-hal.md)（3 题）
   - [06-art-runtime.md](01-architecture/06-art-runtime.md)（20 题）
-  - [07-jni.md](01-architecture/07-jni.md)（6 题）
+  - [07-jni.md](01-architecture/07-jni.md)（8 题）
   - [08-package-management.md](01-architecture/08-package-management.md)（9 题）
   - [09-app-sandbox.md](01-architecture/09-app-sandbox.md)（16 题）
   - [10-permissions.md](01-architecture/10-permissions.md)（3 题）
@@ -33,9 +33,9 @@
 
 ## 02-app-framework/
 
-- **应用框架与应用架构实践：四大组件、Handler/Looper 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 84 题）：
+- **应用框架与应用架构实践：四大组件、Handler/Looper 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 83 题）：
   - [01-four-components.md](02-app-framework/01-four-components.md)（6 题）
-  - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（12 题）
+  - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（11 题）
   - [03-content-provider.md](02-app-framework/03-content-provider.md)（4 题）
   - [04-parcel.md](02-app-framework/04-parcel.md)（2 题）
   - [05-collections-annotations.md](02-app-framework/05-collections-annotations.md)（3 题）
@@ -46,18 +46,18 @@
 
 ## 03-ui/
 
-- **UI 专题：Activity、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 246 题）：
+- **UI 专题：Activity、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 250 题）：
   - [01-activity.md](03-ui/01-activity.md)（27 题）
   - [02-view.md](03-ui/02-view.md)（27 题）
   - [03-resources.md](03-ui/03-resources.md)（23 题）
   - [04-window-system.md](03-ui/04-window-system.md)（20 题）
   - [05-compose.md](03-ui/05-compose.md)（19 题）
-  - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（17 题）
+  - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（18 题）
   - [07-driving-safety.md](03-ui/07-driving-safety.md)（18 题）
   - [08-ui-debugging.md](03-ui/08-ui-debugging.md)（16 题）
-  - [09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md)（24 题）
+  - [09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md)（26 题）
   - [10-app-compose-advanced-practice.md](03-ui/10-app-compose-advanced-practice.md)（24 题）
-  - [11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md)（31 题）
+  - [11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md)（32 题）
 
 ## 04-input/
 
@@ -72,10 +72,10 @@
 
 ## 05-rendering/
 
-- **渲染系统与应用图形实践：渲染管线、GPU 合成、图形 API、相机与媒体、应用图像/混合渲染及 GPU 诊断工具**（11 册 219 题）：
+- **渲染系统与应用图形实践：渲染管线、GPU 合成、图形 API、相机与媒体、应用图像/混合渲染及 GPU 诊断工具**（11 册 222 题）：
   - [01-render-pipeline-vsync.md](05-rendering/01-render-pipeline-vsync.md)（36 题）
   - [02-gpu-composition-display.md](05-rendering/02-gpu-composition-display.md)（33 题）
-  - [03-multi-window-foldable.md](05-rendering/03-multi-window-foldable.md)（25 题）
+  - [03-multi-window-foldable.md](05-rendering/03-multi-window-foldable.md)（28 题）
   - [04-graphics-api.md](05-rendering/04-graphics-api.md)（15 题）
   - [05-graphic-stack-preload.md](05-rendering/05-graphic-stack-preload.md)（6 题）
   - [06-camera-pipeline.md](05-rendering/06-camera-pipeline.md)（6 题）
@@ -116,8 +116,8 @@
 
 ## 09-audio/
 
-- **音频专项：AOSP/AAOS 音频、焦点、延迟与蓝牙音频；含蓝牙连接缺陷模式和点击音场景连续学习路径（README 见目录内）**（13 册 122 题）：
-  - [01-aosp-audio.md](09-audio/01-aosp-audio.md)（17 题）
+- **音频专项：AOSP/AAOS 音频、焦点、延迟与蓝牙音频；含蓝牙连接缺陷模式和点击音场景连续学习路径（README 见目录内）**（13 册 125 题）：
+  - [01-aosp-audio.md](09-audio/01-aosp-audio.md)（19 题）
   - [02-phone-audio-focus.md](09-audio/02-phone-audio-focus.md)（7 题）
   - [03-aaos-audio.md](09-audio/03-aaos-audio.md)（15 题）
   - [04-audio-latency.md](09-audio/04-audio-latency.md)（11 题）
@@ -129,18 +129,18 @@
   - [10-routing-volume.md](09-audio/10-routing-volume.md)（4 题）
   - [11-playback-hal.md](09-audio/11-playback-hal.md)（4 题）
   - [12-diagnostics.md](09-audio/12-diagnostics.md)（6 题）
-  - [13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md)（31 题）
+  - [13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md)（32 题）
 
 ## 10-aaos/
 
-- **AAOS 专题：应用开发、车机链路、CarService、VHAL、车辆电源与多用户、CarLauncher、车控信号和 Kanzi 状态同步**（9 册 95 题）：
-  - [01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md)（3 题）
-  - [02-vehicle-links.md](10-aaos/02-vehicle-links.md)（1 题）
+- **AAOS 专题：应用开发、车机链路、CarService、VHAL、车辆电源与多用户、CarLauncher、车控信号和 Kanzi 状态同步**（9 册 101 题）：
+  - [01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md)（5 题）
+  - [02-vehicle-links.md](10-aaos/02-vehicle-links.md)（3 题）
   - [03-car-services.md](10-aaos/03-car-services.md)（12 题）
   - [04-vhal-integration.md](10-aaos/04-vhal-integration.md)（4 题）
-  - [05-car-power-users.md](10-aaos/05-car-power-users.md)（3 题）
+  - [05-car-power-users.md](10-aaos/05-car-power-users.md)（4 题）
   - [06-car-launcher.md](10-aaos/06-car-launcher.md)（4 题）
-  - [07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md)（26 题）
+  - [07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md)（27 题）
   - [08-vehicle-signal-semantics.md](10-aaos/08-vehicle-signal-semantics.md)（24 题）
   - [09-kanzi-state-sync.md](10-aaos/09-kanzi-state-sync.md)（18 题）
 
@@ -148,8 +148,8 @@
 
 - **独立系统服务契约：广播、通知、位置、生物识别、aconfig 运行时、AVF 虚拟化、平台 AI 服务**（7 册 34 题）：
   - [01-broadcast.md](11-platform-services/01-broadcast.md)（4 题）
-  - [02-notifications.md](11-platform-services/02-notifications.md)（7 题）
-  - [03-location.md](11-platform-services/03-location.md)（5 题）
+  - [02-notifications.md](11-platform-services/02-notifications.md)（6 题）
+  - [03-location.md](11-platform-services/03-location.md)（6 题）
   - [04-biometrics.md](11-platform-services/04-biometrics.md)（5 题）
   - [05-aconfig-runtime.md](11-platform-services/05-aconfig-runtime.md)（5 题）
   - [06-avf-virtualization.md](11-platform-services/06-avf-virtualization.md)（4 题）
@@ -157,15 +157,15 @@
 
 ## 12-platform-native/
 
-- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 97 题）：
+- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 102 题）：
   - [01-kernel-gki.md](12-platform-native/01-kernel-gki.md)（11 题）
   - [02-driver-runtime.md](12-platform-native/02-driver-runtime.md)（11 题）
   - [03-binder-driver.md](12-platform-native/03-binder-driver.md)（10 题）
   - [04-shared-memory.md](12-platform-native/04-shared-memory.md)（10 题）
   - [05-bionic-linker.md](12-platform-native/05-bionic-linker.md)（21 题）
   - [06-logd.md](12-platform-native/06-logd.md)（3 题）
-  - [07-bpf.md](12-platform-native/07-bpf.md)（4 题）
-  - [08-rust-native.md](12-platform-native/08-rust-native.md)（3 题）
+  - [07-bpf.md](12-platform-native/07-bpf.md)（6 题）
+  - [08-rust-native.md](12-platform-native/08-rust-native.md)（6 题）
   - [09-app-native-stability.md](12-platform-native/09-app-native-stability.md)（24 题）
 
 ## 13-build-system/
@@ -221,18 +221,18 @@
 | 册 | 标题 | 题数 |
 | --- | --- | ---: |
 | [01-architecture/01-system-architecture.md](01-architecture/01-system-architecture.md) | Android 系统架构 | 18 |
-| [01-architecture/02-system-boot.md](01-architecture/02-system-boot.md) | Android 系统启动流程 | 43 |
-| [01-architecture/03-system-server.md](01-architecture/03-system-server.md) | SystemServer | 10 |
-| [01-architecture/04-binder.md](01-architecture/04-binder.md) | Binder | 18 |
+| [01-architecture/02-system-boot.md](01-architecture/02-system-boot.md) | Android 系统启动流程 | 45 |
+| [01-architecture/03-system-server.md](01-architecture/03-system-server.md) | SystemServer | 11 |
+| [01-architecture/04-binder.md](01-architecture/04-binder.md) | Binder | 19 |
 | [01-architecture/05-hal.md](01-architecture/05-hal.md) | HAL | 3 |
 | [01-architecture/06-art-runtime.md](01-architecture/06-art-runtime.md) | ART | 20 |
-| [01-architecture/07-jni.md](01-architecture/07-jni.md) | JNI | 6 |
+| [01-architecture/07-jni.md](01-architecture/07-jni.md) | JNI | 8 |
 | [01-architecture/08-package-management.md](01-architecture/08-package-management.md) | 应用包管理：安装、校验与归档 | 9 |
 | [01-architecture/09-app-sandbox.md](01-architecture/09-app-sandbox.md) | 应用沙箱 | 16 |
 | [01-architecture/10-permissions.md](01-architecture/10-permissions.md) | Android 权限系统（android.permission.*） | 3 |
 | [01-architecture/11-selinux.md](01-architecture/11-selinux.md) | Android SELinux | 28 |
 | [02-app-framework/01-four-components.md](02-app-framework/01-four-components.md) | Android 四大组件：职责、启动方式与生命周期 | 6 |
-| [02-app-framework/02-handler-looper.md](02-app-framework/02-handler-looper.md) | Handler 消息机制与 MessageQueue 实现 | 12 |
+| [02-app-framework/02-handler-looper.md](02-app-framework/02-handler-looper.md) | Handler 消息机制与 MessageQueue 实现 | 11 |
 | [02-app-framework/03-content-provider.md](02-app-framework/03-content-provider.md) | ContentProvider 服务链路 | 4 |
 | [02-app-framework/04-parcel.md](02-app-framework/04-parcel.md) | Parcel 与序列化契约 | 2 |
 | [02-app-framework/05-collections-annotations.md](02-app-framework/05-collections-annotations.md) | 集合与注解的框架契约 | 3 |
@@ -245,12 +245,12 @@
 | [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 23 |
 | [03-ui/04-window-system.md](03-ui/04-window-system.md) | 窗口系统与 WindowManagerService | 20 |
 | [03-ui/05-compose.md](03-ui/05-compose.md) | Compose 运行期与 View 互操作 | 19 |
-| [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 17 |
+| [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 18 |
 | [03-ui/07-driving-safety.md](03-ui/07-driving-safety.md) | 车机交互安全与驾驶分心 | 18 |
 | [03-ui/08-ui-debugging.md](03-ui/08-ui-debugging.md) | UI 疑难排查与体验踩坑 | 16 |
-| [03-ui/09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 24 |
+| [03-ui/09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 26 |
 | [03-ui/10-app-compose-advanced-practice.md](03-ui/10-app-compose-advanced-practice.md) | 渲染实战：Compose 进阶 | 24 |
-| [03-ui/11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md) | UI 还原与主题适配：资源完整性与设计稿落地的可迁移规则 | 31 |
+| [03-ui/11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md) | UI 还原与主题适配：资源完整性与设计稿落地的可迁移规则 | 32 |
 | [04-input/01-input-system.md](04-input/01-input-system.md) | Android 输入系统：分发、延迟与安全边界 | 27 |
 | [04-input/02-app-event-dispatch.md](04-input/02-app-event-dispatch.md) | 应用层事件分发：方法链、返回值语义与多点触控 | 21 |
 | [04-input/03-input-reader.md](04-input/03-input-reader.md) | 设备接入与 InputReader：内核 input 事件、设备分类与触摸适配 | 17 |
@@ -260,12 +260,12 @@
 | [04-input/07-input-diagnostics.md](04-input/07-input-diagnostics.md) | 输入排查工具与实战：命令族、队列字段与现场决策树 | 17 |
 | [05-rendering/01-render-pipeline-vsync.md](05-rendering/01-render-pipeline-vsync.md) | 渲染管线与 VSync 调度 | 36 |
 | [05-rendering/02-gpu-composition-display.md](05-rendering/02-gpu-composition-display.md) | GPU 合成与显示管线 | 33 |
-| [05-rendering/03-multi-window-foldable.md](05-rendering/03-multi-window-foldable.md) | 多窗口、折叠屏与显示服务 | 25 |
+| [05-rendering/03-multi-window-foldable.md](05-rendering/03-multi-window-foldable.md) | 多窗口、折叠屏与显示服务 | 28 |
 | [05-rendering/04-graphics-api.md](05-rendering/04-graphics-api.md) | 图形 API：EGL、Vulkan 与 NDK 出图接口 | 15 |
 | [05-rendering/05-graphic-stack-preload.md](05-rendering/05-graphic-stack-preload.md) | 图形栈预加载与驱动选择 | 6 |
 | [05-rendering/06-camera-pipeline.md](05-rendering/06-camera-pipeline.md) | 相机管线：缓冲、栅栏与时间戳 | 6 |
 | [05-rendering/07-media-playback.md](05-rendering/07-media-playback.md) | 视频播放与合成路径 | 6 |
-| [05-rendering/08-android-xr.md](05-rendering/08-android-xr.md) | Android XR 出图与预算 | 3 |
+| [05-rendering/08-android-xr.md](05-rendering/08-android-xr.md) | Android XR 应用出图、环境资产与帧预算 | 3 |
 | [05-rendering/09-app-image-page-rendering.md](05-rendering/09-app-image-page-rendering.md) | 渲染实战：图像显示、帧率监控与页面切换 | 26 |
 | [05-rendering/10-app-media-hybrid-practice.md](05-rendering/10-app-media-hybrid-practice.md) | 渲染优化实战：Vulkan/Impeller、WebView、Media3、CameraX、App Widget 与系统取色 | 33 |
 | [05-rendering/11-gpu-diagnostics-tools.md](05-rendering/11-gpu-diagnostics-tools.md) | GPU 与专项工具 | 30 |
@@ -286,7 +286,7 @@
 | [08-network/08-vehicle-security.md](08-network/08-vehicle-security.md) | 车机网络安全 | 8 |
 | [08-network/09-network-diagnostics.md](08-network/09-network-diagnostics.md) | 网络排查工具与实践 | 10 |
 | [08-network/10-app-network-practice.md](08-network/10-app-network-practice.md) | 网络与连接实践：HTTPDNS、选网、配额与近场连接治理 | 30 |
-| [09-audio/01-aosp-audio.md](09-audio/01-aosp-audio.md) | AOSP 音频子系统 | 17 |
+| [09-audio/01-aosp-audio.md](09-audio/01-aosp-audio.md) | AOSP 音频子系统 | 19 |
 | [09-audio/02-phone-audio-focus.md](09-audio/02-phone-audio-focus.md) | 手机侧音频焦点与路由 | 7 |
 | [09-audio/03-aaos-audio.md](09-audio/03-aaos-audio.md) | AAOS 车机音频 | 15 |
 | [09-audio/04-audio-latency.md](09-audio/04-audio-latency.md) | 音频延迟与应用实践 | 11 |
@@ -298,19 +298,19 @@
 | [09-audio/10-routing-volume.md](09-audio/10-routing-volume.md) | 路由配置与音量组：声音走向哪只扬声器 | 4 |
 | [09-audio/11-playback-hal.md](09-audio/11-playback-hal.md) | 播放数据与 HAL：PCM 怎样变成车内声音 | 4 |
 | [09-audio/12-diagnostics.md](09-audio/12-diagnostics.md) | 全链路实验与排障：从点击到扬声器逐层取证 | 6 |
-| [09-audio/13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md) | 蓝牙机制：缺陷模式与修复范式 | 31 |
-| [10-aaos/01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md) | AAOS 应用开发要点 | 3 |
-| [10-aaos/02-vehicle-links.md](10-aaos/02-vehicle-links.md) | 车机链路场景地图 | 1 |
-| [10-aaos/03-car-services.md](10-aaos/03-car-services.md) | CarService 服务速览 | 12 |
+| [09-audio/13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md) | 蓝牙机制：缺陷模式与修复范式 | 32 |
+| [10-aaos/01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md) | Android Auto 与 AAOS 应用执行、模板生命周期和媒体性能 | 5 |
+| [10-aaos/02-vehicle-links.md](10-aaos/02-vehicle-links.md) | Android 车机九类端到端链路、通信边界与排查方法 | 3 |
+| [10-aaos/03-car-services.md](10-aaos/03-car-services.md) | AAOS CarService 非核心服务：媒体、蓝牙、遥测与车载管理 | 12 |
 | [10-aaos/04-vhal-integration.md](10-aaos/04-vhal-integration.md) | VHAL 集成与契约 | 4 |
-| [10-aaos/05-car-power-users.md](10-aaos/05-car-power-users.md) | 车辆电源与多用户 | 3 |
+| [10-aaos/05-car-power-users.md](10-aaos/05-car-power-users.md) | AAOS 车辆电源、VHAL 属性与多用户服务 | 4 |
 | [10-aaos/06-car-launcher.md](10-aaos/06-car-launcher.md) | CarLauncher 实现与任务嵌入 | 4 |
-| [10-aaos/07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 26 |
+| [10-aaos/07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 27 |
 | [10-aaos/08-vehicle-signal-semantics.md](10-aaos/08-vehicle-signal-semantics.md) | 车控信号语义：超时显示、双编码与值域换算 | 24 |
 | [10-aaos/09-kanzi-state-sync.md](10-aaos/09-kanzi-state-sync.md) | Kanzi 双端状态同步：状态残留、乐观更新与能力差异 | 18 |
 | [11-platform-services/01-broadcast.md](11-platform-services/01-broadcast.md) | 广播队列与投递 | 4 |
-| [11-platform-services/02-notifications.md](11-platform-services/02-notifications.md) | 通知服务链路 | 7 |
-| [11-platform-services/03-location.md](11-platform-services/03-location.md) | 位置服务链路 | 5 |
+| [11-platform-services/02-notifications.md](11-platform-services/02-notifications.md) | 通知服务链路 | 6 |
+| [11-platform-services/03-location.md](11-platform-services/03-location.md) | 位置服务链路 | 6 |
 | [11-platform-services/04-biometrics.md](11-platform-services/04-biometrics.md) | 生物识别服务链路 | 5 |
 | [11-platform-services/05-aconfig-runtime.md](11-platform-services/05-aconfig-runtime.md) | aconfig 运行时：存储与 aflags | 5 |
 | [11-platform-services/06-avf-virtualization.md](11-platform-services/06-avf-virtualization.md) | AVF 虚拟化 | 4 |
@@ -320,9 +320,9 @@
 | [12-platform-native/03-binder-driver.md](12-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 10 |
 | [12-platform-native/04-shared-memory.md](12-platform-native/04-shared-memory.md) | 共享内存：ashmem、ION 与 DMA-BUF | 10 |
 | [12-platform-native/05-bionic-linker.md](12-platform-native/05-bionic-linker.md) | Bionic 动态链接器：命名空间隔离与符号解析 | 21 |
-| [12-platform-native/06-logd.md](12-platform-native/06-logd.md) | logd 日志链路 | 3 |
-| [12-platform-native/07-bpf.md](12-platform-native/07-bpf.md) | BPF 可观测与可编程边界 | 4 |
-| [12-platform-native/08-rust-native.md](12-platform-native/08-rust-native.md) | 平台 Rust 与 FFI | 3 |
+| [12-platform-native/06-logd.md](12-platform-native/06-logd.md) | Android 日志调用、丢弃与 logcat 过滤边界 | 3 |
+| [12-platform-native/07-bpf.md](12-platform-native/07-bpf.md) | BPF 可观测与可编程边界 | 6 |
+| [12-platform-native/08-rust-native.md](12-platform-native/08-rust-native.md) | 平台 Rust 与 FFI | 6 |
 | [12-platform-native/09-app-native-stability.md](12-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
 | [13-build-system/01-product-config.md](13-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
 | [13-build-system/02-soong-modules.md](13-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |

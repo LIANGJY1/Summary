@@ -4,11 +4,21 @@
 
 **Q1: `getevent` 有哪些参数？测触控上报率用哪个组合？**
 
-以 Android 13 的 toolbox 实现为准（按 AAOS13 源码核对，`system/core/toolbox/getevent.c`），常用参数：`-t` 打时间戳、`-l` 事件码显示助记符（与 `-t` 组合成 `-lt` 最常用）、`-i` 全设备信息（bus/vendor/product/version/name，确认设备身份第一步）、`-p` 列设备能力位、`-c N` 抓 N 条事件自动退出（脚本化取证）、`-r` 打印同步速率、`-s <bit>`/`-S` 查询开关状态（翻盖、耳机）、`-v` 详细输出、`-d` 打印 HID 描述符。
+Android 13 的 toolbox `getevent` 常用参数如下：
 
-`-r` 是测触控上报率的现成手段：它统计每秒 `SYN_REPORT` 次数（sync_rate），手指按住屏幕画圈即可读出 TP 实际报点节奏——验证"标称 120 Hz 上报是否属实"、"断触时是否掉帧"都用它，比看规格表可靠。`-c` 配合 `-lt` 可以做定时取证：`getevent -lt -c 200 /dev/input/event2` 抓 200 条事件后自动结束，配合复现步骤正好覆盖一次完整操作。
+1. `-t`：为事件打印时间戳。
+2. `-l`：把事件类型和代码显示为助记符；与 `-t` 组合的 `-lt` 便于按时间阅读事件流。
+3. `-i`：打印设备身份信息，例如 bus、vendor、product、version 和 name。
+4. `-p`：打印设备能力位。
+5. `-c N`：读取 N 条事件后退出，适合脚本化采集。
+6. `-r`：统计同步事件速率，可用于观察触控设备的 `SYN_REPORT` 频率。
+7. `-s <bit>` 和 `-S`：查询开关状态。
+8. `-v`：增加输出详细程度。
+9. `-d`：打印 HID 描述符信息。
 
-`-il` 的设备段还直接给出生效的配置文件路径（keyLayout/keyCharacterMap/configuration），这让它同时是按键映射排查的入口。注意 getevent 需要对 `/dev/input` 的读权限，user 版本上 shell 一般可用；读不到节点时先查 SELinux 而不是怀疑设备不存在。
+测触控上报率时，`-r` 统计每秒 `SYN_REPORT` 次数；按住屏幕移动可观察当前设备的报告频率，但该频率不等于显示刷新率，也不能单独证明每个报告都对应有效坐标变化。`-c` 配合 `-lt` 可限制采集量，例如 `getevent -lt -c 200 /dev/input/event2` 在读取 200 条事件后退出。
+
+`-il` 可同时列出设备信息及加载的 key layout、key character map 和 input device configuration 路径，便于确认映射文件命中情况。读取 `/dev/input` 需要相应权限；若 shell 无法访问节点，应结合构建类型、节点权限和 SELinux 拒绝日志判断，不能据此认定设备不存在。
 
 **Q2: 没有第三方工具时，`/proc/bus/input/devices` 和 sysfs 能回答什么问题？**
 
@@ -22,10 +32,10 @@ sysfs 侧的常用入口：`/sys/class/input/inputN/name`、`/sys/class/input/in
 
 输出按组件分段，从上到下对应分发链（按 AAOS13 源码核对，`InputDispatcher.cpp` 的 dump 实现与 EventHub/InputReader 各自的 dump）：
 
-- **Configuration 段**：分发器运行参数——按键重复的延迟与间隔、各显示器的策略，确认"配置与预期一致"从这里看；
-- **EventHub 段**：设备清单，每台设备的身份（bus/vid/pid/name）、能力摘要、加载的 `.kl`/`.kcm`/`.idc` 绝对路径、视口与校准参数——设备识别与映射问题的主入口；
-- **InputReader 段**：每设备的 mapper 状态、触摸参数（AssociatedDisplay、Orientation、仿射矩阵）、最近事件统计——坐标变换问题的主入口；
-- **InputDispatcher 段**：焦点状态（按屏）、窗口清单（`Windows:`：displayId、`touchableRegion`、超时、变换）、全局监视者、各连接的三段队列深度、注入状态与延迟聚合元数据——"事件给了谁、卡在哪"的主入口。
+1. **Configuration 段**：显示输入分发配置，例如按键重复参数和显示器策略；用来核对实际生效设置。
+2. **EventHub 段**：列出设备身份、能力、加载的 `.kl`/`.kcm`/`.idc` 文件路径及相关设备信息；用于排查设备发现和映射。
+3. **InputReader 段**：显示每台设备的 mapper 状态、AssociatedDisplay、Orientation、仿射矩阵等触摸坐标变换参数及最近事件统计；用于排查设备分类与坐标转换。
+4. **InputDispatcher 段**：显示焦点、窗口触摸区域、监视者、连接队列、注入状态和延迟统计；用于追踪事件目标与分发等待位置。
 
 阅读纪律：先确认问题归属哪一段再细读，整段通读效率低；多屏设备所有窗口条目都带 displayId，先按屏过滤再分析；改过配置或做过注入后，前后各取一次 dump 做对比比单次快照更有诊断力。
 
@@ -33,52 +43,61 @@ sysfs 侧的常用入口：`/sys/class/input/inputN/name`、`/sys/class/input/in
 
 三段队列的迁移语义不在此重复，这里给 dump 视角的字段口径（按 AAOS13 源码核对，`InputDispatcher.cpp`）：
 
-- **`InboundQueue: length=`（iq）**：全局入口队列深度，持续增长说明分发器线程或策略处理不过来；
-- **`OutboundQueue`（oq:<连接>）**：已选定目标、等待写入通道的事件，堆积说明通道可写性或前序完成反馈有问题；
-- **`WaitQueue`（wq:<连接>）**：已写入应用、等待 `FINISHED` 的事件，每条带 age——应用消费慢或未回报时这里持续增长且头部 age 逼近超时阈值，是输入 ANR 的第一现场；
-- **`RecentQueue`**：最近已分发事件的调试快照（带 age），只用于事后核对"发过什么"，不参与判定；
-- **`PendingEvent`**：分发器手里卡住未完成的事件（如等焦点窗口出现），带 age；
-- **`AppSwitch: pending, due in Xms`**：HOME/最近任务这类"应用切换"键有独立的短超时（数百毫秒级），此处显示切换延迟余量——切桌面卡顿时看它；
-- **命令队列与延迟统计**：`CommandQueue: size=` 反映分发器内部待执行命令；输出尾部的延迟聚合器给出输入延迟的分位统计，是量化手感问题的汇总口径。
+1. **`InboundQueue: length=`（iq）**：全局入口队列深度；持续增长表示分发器线程或策略处理速度跟不上。
+2. **`OutboundQueue`（oq:<连接>）**：已选定目标、等待写入通道的事件；堆积时检查通道可写性和前序事件完成反馈。
+3. **`WaitQueue`（wq:<连接>）**：已写入应用、等待 `FINISHED` 回执的事件。队列持续增长且队首 age 接近超时阈值时，应用消费或完成回报可能变慢。
+4. **`RecentQueue`**：最近分发事件的调试快照，可用于核对事件历史，不参与队列超时判定。
+5. **`PendingEvent`**：分发器当前尚未完成处理的事件，例如正在等待焦点窗口出现的事件；字段带有 age。
+6. **`AppSwitch: pending, due in Xms`**：应用切换键相关的待处理状态和剩余时间；桌面切换卡顿时可结合事件时间线检查。
+7. **命令队列与延迟统计**：`CommandQueue: size=` 表示分发器内部待执行命令数；延迟聚合字段是输入延迟观测数据，具体含义应按对应 Android 版本源码解释。
 
 判读组合：wq 堆积且 age 增长 → 查目标应用主线程；iq 堆积 → 查分发器调度与监视链；oq 堆积而 wq 空 → 查通道与完成回报路径；AppSwitch 频繁 pending → 查系统负载与桌面应用启动。
 
 **Q5: `adb shell input` 命令族有哪些成员？各适合什么验证？**
 
-以 Android 13 的实现为准（按 AAOS13 源码核对，`InputShellCommand.java`）：`tap x y`（单击）、`swipe x1 y1 x2 y2 [时长ms]`（滑动，时长缺省值较快，影响下游 `VelocityTracker` 的速度判定——测惯性滚动行为时要显式给一个真实的时长）、`draganddrop x1 y1 x2 y2 [时长]`（带长按起手的拖放语义）、`motionevent DOWN|MOVE|UP x y`（逐条合成手势，可拼出任意序列，配合脚本模拟断触/鬼触摸）、`keyevent [–longpress] <键码|助记符>`、`text "字符串"`（走 InputConnection 的文本注入，不产生按键）、`press`、`roll`（轨迹球增量）、`keycombination <键1> <键2>`（双键同时按下，测组合键逻辑）。
+Android 13 的 `InputShellCommand` 提供这些常用子命令：
 
-注入走 shell 身份的标准注入路径，目标是 shell 权限允许的范围。`swipe` 缺省时长 300 ms 且按线性插值逐帧注入 `MOVE`（按 AAOS13 源码核对，`InputShellCommand`），比真实手指的变速轨迹"匀速"得多——速度类断言（惯性、flick 判定）必须显式给贴近真手的时长；`draganddrop` 起手先等待系统长按超时再开始拖动；`motionevent` 与 `swipe` 的区别在控制粒度——需要精确控制每帧坐标（模拟真实手指轨迹、回放异常轨迹）用前者，快速验证用后者。
+1. `tap x y`：在坐标处注入一次点击。
+2. `swipe x1 y1 x2 y2 [duration(ms)]`：从起点滑到终点，可选时长单位为毫秒；缺省为 300 ms。
+3. `draganddrop x1 y1 x2 y2 [duration(ms)]`：先长按起点，再拖到终点；可选参数控制移动阶段时长。
+4. `motionevent DOWN|MOVE|UP|CANCEL x y`：注入单个运动事件，脚本可用多次调用拼成事件序列。
+5. `keyevent [--longpress] <keycode|keyname>`：注入按键；`--longpress` 让命令构造长按事件。
+6. `text "string"`：把可映射字符转换成虚拟键盘的 `KeyEvent` 序列注入，不调用 IME 的 `InputConnection`。字符是否能映射取决于虚拟键盘字符映射表。
+7. `press` 和 `roll`：分别注入轨迹球按键和轨迹球相对位移。
+8. `keycombination [-t duration(ms)] <keycode1> <keycode2> ...`：按给定顺序注入组合键；可选 `-t` 指定组合键持续时间，省略时采用命令实现的默认时长。
 
-选择指南：验证点击/滑动行为用 `tap`/`swipe`（时长参数给足）；验证按键分发与长按用 `keyevent --longpress`；验证文本逻辑（与按键无关）用 `text`；复现轨迹类 bug（断触、跳点后的应用表现）用 `motionevent` 序列回放。注意注入绕过真实硬件，"注入有效、真机无效"本身就是定位信息（问题在设备侧上游）。
+这些命令以 shell 身份通过系统输入注入接口发送事件；权限、窗口策略和设备构建类型仍会限制可注入范围。Android 13 中，`swipe` 默认时长是 300 ms，命令在线性插值的坐标点间注入 `MOVE`，不复现真实手指的加减速与采样抖动。验证 fling 速度时应显式提供时长和足够密集的坐标点。`draganddrop` 在开始移动前等待长按超时。需要控制每个坐标点时使用 `motionevent` 序列，快速验证路径时使用 `swipe`。
+
+按验证目标选择命令：点击与一般滑动用 `tap`/`swipe`；按键分发和长按用 `keyevent`；复现指定的运动事件轨迹用 `motionevent`。`text` 验证的是键盘字符映射与按键事件处理，不等价于测试 IME 的拼音组合、文本提交或删除行为；这类场景应通过真实 IME 或直接测试编辑器的 `InputConnection`。输入注入绕过真实硬件，注入成功而真机失败说明还需检查设备上报、驱动与 InputReader 路径。
 
 **Q6: `input` 命令、uiautomator、Instrumentation、monkey 四种注入怎么选？**
 
-四种入口都最终经系统注入，但身份、目标与等待语义不同，选型口径如下：
+四种入口都向系统注入事件，但目标选择和等待语义不同：
 
-- **`adb shell input`**：异步注入、不等待消费，快、适合脚本与冒烟；测不出"应用是否真的处理完"，也测不出输入 ANR；
-- **uiautomator / `UiAutomation`**：经受信任的无障碍连接注入，可跨应用窗口，支持同步模式；控件定位按资源 id/文本而非像素坐标，脚本对分辨率与布局变化鲁棒，是 UI 自动化首选；
-- **`Instrumentation.sendPointerSync()`**：同步等待事件被处理完（`WAIT_FOR_FINISH`），能验证"消费完成"；只能命中测试目标自身的窗口；"点击后界面是否真的响应"类断言用它，同步等待也可能把应用的输入阻塞放大成测试超时；
-- **monkey**：随机事件流做稳定性压测，走系统注入；事件语义与真实操作有偏差（坐标随机、节奏机械），发现的问题要人工复现归因。
+1. **`adb shell input`**：Android 13 的 `InputShellCommand` 对注入使用 `WAIT_FOR_FINISH`，等事件分发完成后命令才返回；这不代表后续绘制、动画或异步业务任务已经完成。适合命令行复现与冒烟，断言界面结果仍应等待明确的 UI 条件。
+2. **uiautomator / `UiAutomation`**：通过受信任的自动化连接注入，可跨应用操作，并可等待注入事件处理；按资源 id 或文本定位时，通常比像素坐标更能适应分辨率和布局变化。
+3. **`Instrumentation.sendPointerSync()`**：以同步注入模式等待输入分发完成，主要面向被测应用窗口；它不等待应用后续帧绘制或任意异步任务结束。
+4. **monkey**：生成随机事件流用于稳定性压力测试；坐标与节奏不代表真实用户轨迹，发现的问题需要记录种子和现场状态后再复现归因。
 
-关键差异一句话：同步注入能暴露"事件被消费但处理超时"的问题（等 `FINISHED` 时会撞上输入超时），异步注入永远不会——用异步注入验证"有没有 ANR 风险"会得到假阴性。回归测试里混用：uiautomator 做功能路径，`input`/monkey 做压力与随机。
+同步注入等待的是输入分发完成回执，而不是绘制或整个业务流程完成；它可能因分发超时而失败，但不能单独证明应用不会发生 ANR。回归测试可用 uiautomator 覆盖可定位的功能路径，用 `input` 重现特定事件，用 monkey 扩大随机状态覆盖。
 
 **Q7: 想在设备上构造一个虚拟输入设备做自动化，有什么现成命令？**
 
-Android 自带 `uinput` 命令（`frameworks/base/cmds/uinput`）：通过一个 JSON 描述（设备名、VID/PID、总线、能力声明：EV_KEY 的码位、EV_REL/EV_ABS 的轴）在内核里创建虚拟输入设备，然后把描述里带的事件序列写入该设备。它造出来的设备对 Android 完全等同于真实硬件——经 EventHub、受 `.kl` 映射、参与同一套能力位设备分类。
+Android 提供 `uinput` 命令（`frameworks/base/cmds/uinput`），它依据 JSON 设备描述创建虚拟输入设备并写入事件。描述包含设备名、VID/PID、总线类型和能力位；系统随后通过 EventHub 发现设备，再按设备属性加载映射并分类。它适合验证设备接入链，但不能据此证明具体硬件驱动行为相同。
 
-适用场景与限制：模拟手柄、旋钮（`REL_WHEEL` 触发 RotaryEncoderInputMapper）、多点触摸屏（声明 ABS_MT 轴后可发 Type B 事件）这类"需要设备身份"的测试；命令以 shell 身份直接打开 `/dev/uinput`（shell 域对该节点有访问授权，按 AAOS13 源码核对，`cmds/uinput` 的 JNI 直接 open，不经系统服务），支持 stdin 交互与脚本文件两种用法。与直接注入（`input motionevent`）的本质区别：注入绕过设备层，uinput 不绕过——测 InputReader 的设备接入、映射与分类逻辑只能用后者。
+它适合需要设备身份的测试，例如声明 `EV_KEY` 能力模拟手柄按键、声明 `REL_WHEEL` 能力验证 RotaryEncoderInputMapper，或声明 `ABS_MT` 轴并发送 Type B 事件模拟多点触摸设备。Android 13 的实现由 JNI 打开 `/dev/uinput`，并提供 stdin 交互和脚本文件等使用方式；设备节点访问仍受构建配置和 SELinux 权限约束。与 `input motionevent` 相比，uinput 会经过设备发现和 InputReader，后者则从系统注入路径直接构造事件；因此验证设备接入、映射和分类应使用 uinput。
 
-组合建议：设备级验证用 uinput（确认分类、映射、视口绑定正确），应用级验证用注入（快、无设备副作用）。两者的失败含义不同：uinput 设备事件在 `getevent` 可见但应用无响应 → 查映射与分类；注入无效 → 查应用与分发层。
+设备级验证使用 uinput 检查设备发现、映射和分类；应用级复现使用系统注入减少设备侧变量。若 uinput 事件在 `getevent` 可见但应用无响应，应继续核对 Android 设备分类、映射和目标窗口；若系统注入无效，则检查注入目标、窗口状态和应用分发逻辑。
 
 **Q8: Perfetto 里输入相关的轨道有哪些？怎么用它定位一次卡顿是输入侧还是渲染侧？**
 
 输入侧可直接读的信号如下：
 
-- **队列计数器轨道**：`iq`（全局队列）、`oq:<窗口名>`、`wq:<窗口名>` 的 `ATRACE_INT` 计数曲线——卡顿瞬间看 wq 是否抬升且维持，能区分"事件没送达"（iq 抬、oq/wq 平）与"应用消费慢"（wq 抬升不下）；计数器名用固定栈缓冲拼接，过长通道名会被截断，查询用 `oq:`/`wq:` 前缀匹配；
-- **调试数据源**：`android.input.inputevent`（仅 userdebug/eng 构建可配）直接记录分发器处理的原始事件字段与逐窗口分发决策，深定位"为什么给了这个窗口"时用它，量产 user 构建不可用；
-- **应用分发切片**：Java 层 `deliverInputEvent` 与原生 `dispatchInputEvent` 区段，后者带 historySize 提示批处理规模；
-- **Choreographer 输入回调**：`CALLBACK_INPUT` 区段落在帧工作最前，与 `CALLBACK_TRAVERSAL`、`doFrame` 对齐看"输入是否赶上了当帧"；
-- **慢事件报告**：分发器的 LatencyAggregator 在某事件端到端延迟超过阈值（200 ms 量级）且距上次报告足够久时，把"读取 → 分发 → 消费 → 完成 → GPU 完成 → 上屏"的分段耗时写入 statsd 慢事件原子（`SLOW_INPUT_EVENT_REPORTED`），两个阈值在进程启动时读取、改了要重启；`dumpsys input` 尾部只有聚合元数据（样本数、慢事件与跳过计数）——Android 13 没有按需查询延迟分位的接口，趋势结论靠 statsd/日志里的慢事件流或长时间窗口对比（按 AAOS13 源码核对，`LatencyAggregator.cpp` 的 `processSlowEvent`）。
+1. **队列计数器轨道**：`iq` 是全局入口队列，`oq:<窗口名>` 和 `wq:<窗口名>` 分别对应目标连接的待发队列与等待完成队列。卡顿时 `iq` 上升而 `oq/wq` 平稳，说明事件尚未进入目标应用；`wq` 持续上升则说明消费或完成回执变慢。通道名过长可能被固定长度缓冲截断，查询时可按 `oq:`/`wq:` 前缀筛选。
+2. **调试数据源**：`android.input.inputevent` 可记录分发器处理的事件字段与窗口分发决策；是否可用取决于构建类型与 trace 配置，量产 `user` 构建通常不可用。
+3. **应用分发切片**：Java 层 `deliverInputEvent` 和原生 `dispatchInputEvent` 切片用于定位应用收到事件后的处理区间；history size 可辅助判断批处理规模。
+4. **Choreographer 输入回调**：把 `CALLBACK_INPUT` 与 `CALLBACK_TRAVERSAL`、`doFrame` 对齐，可判断输入处理是否进入目标帧及是否挤占帧工作时间。
+5. **慢事件报告**：Android 13 的分发器 `LatencyAggregator` 在端到端延迟超过约 200 ms 的阈值、且距离上次报告足够久时，将“读取 → 分发 → 消费 → 完成 → GPU 完成 → 上屏”的分段耗时写入 `SLOW_INPUT_EVENT_REPORTED` statsd 事件。阈值在进程启动时读取，修改后需重启进程。`dumpsys input` 输出的是聚合元数据，包括样本、慢事件和跳过计数；查看分段耗时需采集相应 statsd/log 数据。Android 13 没有按需查询延迟分位的 `dumpsys input` 接口，趋势需要通过慢事件流或较长时间窗口对比。
 
 定位方法：选中卡顿帧，向前找同帧的输入回调——没有输入回调而帧超时是渲染侧问题；有输入回调且耗时长，看它内部停在应用自身切片还是等待；wq 曲线在卡顿窗口内增长则消费速度跟不上产出。渲染侧的帧分析（FrameTimeline、各阶段耗时）属另一套方法，不在此展开。
 
@@ -120,9 +139,9 @@ Android 自带 `uinput` 命令（`frameworks/base/cmds/uinput`）：通过一个
 
 三层机制各管一段：
 
-- **来电黑屏**：通话应用持有接近感应相关的唤醒锁（`PROXIMITY_SCREEN_OFF_WAKE_LOCK`），传感器报 near 时熄屏防脸触——应用层可见 API，行为可从 `dumpsys power` 的唤醒锁清单核对；
-- **口袋防误触**：OEM 在框架策略层或专用服务实现——near 状态时拦截触摸与电源键唤醒，通常加时长/姿态条件防误判。误判（传感器孔被皮套/污渍遮挡判 near）的表象就是"整机摸不动，掏出口袋恢复"；排查先看实时 proximity 值与切换日志，再查遮挡物；
-- **触摸劫持过滤**：应用自保的 `filterTouchesWhenObscured`（被上方窗口遮挡时静默丢弃触摸），与上面两者无关但症状相似（"这块点不动"）。
+1. **来电黑屏**：通话应用可申请 `PROXIMITY_SCREEN_OFF_WAKE_LOCK`，系统依据接近传感器状态关闭屏幕以避免脸部误触；可从 `dumpsys power` 的唤醒锁状态辅助核对。
+2. **口袋防误触**：设备厂商可在框架策略或专用服务中依据接近状态、持续时间和姿态拦截触摸或唤醒。传感器孔被遮挡可能造成误判，排查应同时看传感器读数和策略切换日志。
+3. **触摸遮挡过滤**：应用可启用 `filterTouchesWhenObscured` 等窗口遮挡防护；它处理覆盖窗口造成的触摸风险，与接近传感器策略不同，但也可能表现为局部点击无效。
 
 车机手套模式不是框架层机制：它是触控 IC 固件的灵敏度档位（厂商驱动的 sysfs/proc 节点切换），框架与应用无感知。定位"防误触类失效"先分清层：来电黑屏失效查唤醒锁与传感器数据；口袋模式误拦查策略条件与传感器误判；手套模式下无反应查 TP 固件档位。三者命令入口完全不同，混查低效。
 
@@ -130,12 +149,12 @@ Android 自带 `uinput` 命令（`frameworks/base/cmds/uinput`）：通过一个
 
 常见坑与对策：
 
-- **异步注入的时序假设**：`input tap` 返回不代表应用已处理，用例紧接着断言 UI 状态会与动画竞速——需要确定性时机的断言用同步注入（Instrumentation/uiautomator）或显式等待；
-- **坐标硬编码**：像素坐标随分辨率、字体缩放、深色模式布局变化漂移——改用 uiautomator 按控件定位注入，坐标注入只留给"测命中几何"的用例本身；
-- **`swipe` 时长缺省太快**：默认时长下速度判定（`VelocityTracker`）与真手差异大，惯性/fling 相关用例必须显式给贴近真手的时长，并保证注入轨迹采样密度（`motionevent` 序列逐帧给点）；
-- **触摸模式残留**：前序用例的触摸使设备处于触摸模式，后续 D-pad/旋钮焦点用例首次按键"只恢复焦点不动作"（触摸模式切回非触摸模式时焦点要先重建）——用例间重置触摸模式或显式先按一次导航键；
-- **输入法状态残留**：文本用例后 IME 未收起遮挡下一步的控件坐标——断言前先断言 IME 可见性而非假设状态；
-- **多设备/多屏**：注入默认主屏，多屏用例要显式 displayId，副驾屏用例在只有主屏激活电源策略时会被限制类逻辑拦截。
+1. **把命令返回当成界面稳定**：`input tap` 等待输入分发完成，但不等待动画、下一帧绘制或异步业务任务；断言应等待明确的 UI 状态或同步点。
+2. **坐标硬编码**：像素坐标会随分辨率、字体缩放和布局变化漂移；用 uiautomator 按控件定位，只有命中几何本身是测试目标时才固定坐标。
+3. **`swipe` 时长缺省太快**：默认轨迹的速度与真实手指差异较大；惯性或 fling 用例应显式设定时长，并在需要时用 `motionevent` 控制采样点。
+4. **触摸模式残留**：前序触摸可能让后续 D-pad/旋钮用例处于触摸模式；用例应显式建立所需焦点状态并在运行间清理状态。
+5. **输入法状态残留**：文本用例后 IME 可能仍显示并遮挡控件；断言前应检查 IME 可见性和焦点状态。
+6. **多设备和多屏**：注入默认面向默认显示屏；多屏用例应指定 displayId，并确认目标显示屏处于可接收输入的电源和窗口状态。车载副驾屏若受只激活主屏的电源策略约束，也可能被系统限制。
 
 这些坑的共同根源是"注入把连续的真实交互离散化了"，用例设计要补回时序与状态假设，失败重跑前先清状态再复现。
 
@@ -143,11 +162,11 @@ Android 自带 `uinput` 命令（`frameworks/base/cmds/uinput`）：通过一个
 
 按"事件停在哪个环节"分五类（社区案例库与本地机制的综合）：
 
-- **主线程同步 Binder 链**：wq 堆积、主线程 Native 态卡在 Binder 事务；本进程 CPU 不高，对端线程又卡在更下游——链条式等待，要沿 Binder 对端逐跳查；
-- **主线程等锁**：wq 堆积、主线程 Blocked 态、锁持有者是后台线程；输入侧表象与 Binder 类相同，区分靠 trace 的锁等待栈；
-- **主线程 I/O**：iowait 高、主线程 Running/D 状态交替；特征是"每次都慢但未必到 5 秒"，量大会演变成 ANR；
-- **进程被冻结**：CPU 极低、应用栈"空闲"、事件写入 socket 无人读——输入侧表象是 wq 堆积而应用"看起来没事"（用冻结开关 A/B 对照与 cgroup 快照验证）；车机后台冻结策略下高发；
-- **完成回报丢失/焦点缺失**：应用实际空闲但 wq 持续增长不消（回报路径 bug），或 `No focused window` 类 ANR（事件在等目标出现，常见于启动链路过慢、窗口迟迟未建）。
+1. **主线程同步 Binder 链**：wq 堆积，主线程停在 Native Binder 事务且本进程 CPU 不高；沿 Binder 对端线程逐层查找等待链。
+2. **主线程等锁**：wq 堆积，主线程处于阻塞状态，锁由后台线程持有；通过 trace 中的锁等待栈与 Binder 等待区分。
+3. **主线程 I/O**：主线程等待文件或设备 I/O，可能呈现 Running 与不可中断等待状态交替；多次短延迟也可能累积成超时。
+4. **进程冻结**：应用线程无法读取输入通道时，wq 可能持续堆积而 CPU 和线程栈看起来空闲；用冻结状态、cgroup 信息及受控 A/B 复测验证。
+5. **完成回报异常或焦点缺失**：应用空闲但完成回执未返回时，检查输入通道与回执链路；出现 `No focused window` 时，检查窗口创建和焦点建立是否过慢。
 
 快速识别口诀：先看 am_anr 类型分"有事件"与"无焦点"两族；有事件族再看 wq age 与应用栈/CPU 的组合——"忙"是前三类（用 trace 分辨 Binder/锁/IO），"闲"是后两类（查冻结与回报）。归因结论要与输入侧证据互证，单凭进程栈或单凭队列都不闭环。
 
@@ -176,8 +195,8 @@ Android 自带 `uinput` 命令（`frameworks/base/cmds/uinput`）：通过一个
 
 **Q17: 中文输入"丢字/字母被吞"怎么排查？组合输入的时序坑在哪？**
 
-现象是拼音组合期间或提交瞬间部分字母丢失、上屏内容与键入不一致，常见于 WebView 输入框与自绘输入控件。根因在**组合区域（composing region）的维护时序**：输入法用 `setComposingText()` 维护带下划线的预编辑串，更新一次预编辑在编辑框侧等价于"删除旧串、插入新串"；当编辑框侧的 `InputConnection` 实现对 `deleteSurroundingText`/`setComposingText` 的处理与 IME 的期望不同步（跨进程调用乱序、自绘控件自己维护文本模型、组合区边界与实际光标错位），删除就会带走不该删的字符——丢字是"删多"而不是"输少"。
+拼音组合期间或提交瞬间丢字，常见排查方向是编辑器对 composing region（组合区）的维护是否符合 `InputConnection` 契约。IME 可通过 `setComposingText()` 更新预编辑文本；若自绘编辑器的光标、组合区范围或替换逻辑与文本模型不一致，就可能覆盖或删除错误范围。不能仅凭现象断言是跨进程调用乱序。
 
-排查手法是**包装 `InputConnection` 取证**：让编辑框返回一个代理连接，拦截 `setComposingText`/`commitText`/`deleteSurroundingText`/`setComposingRegion` 的调用序列与参数，与 IME 侧的键入序列逐条比对，定位第一条"删除量超出预期"的调用；同时记录编辑框实际文本变化，区分"连接层给了对的内容、控件层没用上"（自绘控件的问题）与"连接层内容就错了"（时序问题）。
+排查时可在编辑器返回的 `InputConnection` 外包代理，记录 `setComposingText()`、`commitText()`、`deleteSurroundingText()`、`setComposingRegion()` 的参数和返回值，并同步记录光标、组合区和实际文本变化。按调用顺序找出首个“请求范围、编辑器状态、结果文本”不一致的位置，从而区分连接实现错误、编辑器模型更新错误和上层显示问题。
 
-修复原则按层次：控件侧实现 `InputConnection` 时不要绕过基类的组合区语义（`BaseInputConnection` 已处理组合区与 `deleteSurroundingText` 的换算）；确需自定义时，把校验拦在 `setComposingText` 层——发现新旧串衔接对不上就按内容差修正而不是执行字面删除，避免进入有问题的 delete-insert 路径。WebView 场景优先升级/固定内核版本复测，这类时序问题在部分内核版本有已知修复。回归验证用批量中文输入脚本（随机拼音串+分次提交+光标移动穿插），比手测可靠。
+自绘控件应优先复用 `BaseInputConnection` 的文本和组合区处理，并确保每个编辑操作后同步维护文本、选区与 composing region；只有在已证明基类行为不适配时才自定义协议处理。WebView 场景应记录 Android System WebView/Chrome 版本并做版本对照，先确认问题是否随内核版本变化，不要在没有复现证据时直接归因于已知内核缺陷。回归用例应覆盖连续组合更新、提交、光标移动和组合区删除，并检查最终文本及选区。

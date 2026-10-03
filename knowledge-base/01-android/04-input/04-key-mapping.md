@@ -1,6 +1,6 @@
 # 按键系统与键值映射：扫描码、键值定制与物理按键接入
 
-> 学习资料（文章模式沉淀）。主线：KeyEvent 携带的字段与"扫描码 → 按键码 → 字符/行为"三层映射、`.kl`/`.kcm`/`.idc` 三类配置文件的分工、语法与查找链、新增物理按键的端到端定制流程、黑屏唤醒键的框架裁决、方向盘按键的两条接入路线取舍、uinput 虚拟设备、媒体键与 HOME 等系统键的特殊路由、方向键焦点导航、fallback 合成键与按键排查路径。机制按本地 AAOS13 源码（Android 13，`frameworks/native/libs/input/`、`frameworks/base/services/core/java/com/android/server/policy/`）核对；内核驱动侧（gpio-keys、rotary-encoder、adc-keys）为官方内核文档口径（2026-09 检索，本地树未含内核源码）。按键分发的 InputStage 顺序与 key repeat 合成机制见 [01-input-system.md](01-input-system.md)；车机按键与旋钮的系统侧链路见 [06-aaos-input.md](06-aaos-input.md)，CarService 层概览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：KeyEvent 携带的字段与"扫描码 → 按键码 → 字符/行为"三层映射、`.kl`/`.kcm`/`.idc` 三类配置文件的分工、语法与查找链、新增物理按键的端到端定制流程、黑屏唤醒键的框架裁决、方向盘按键的两条接入路线取舍、uinput 虚拟设备、媒体键与 HOME 等系统键的特殊路由、方向键焦点导航、fallback 合成键与按键排查路径。机制按本地 AAOS13 源码（Android 13，`frameworks/native/libs/input/`、`frameworks/base/services/core/java/com/android/server/policy/`）核对；内核驱动侧（gpio-keys、rotary-encoder、adc-keys）为官方内核文档口径（2026-09 检索，本地树未含内核源码）。2026-10-04 复核：澄清 `getevent` 只能验证 Linux 事件码、不能证明 Android `KEYCODE` 映射结果；补记 `ACTION_MULTIPLE` 的 API 29 弃用边界。按键分发的 InputStage 顺序与 key repeat 合成机制见 [01-input-system.md](01-input-system.md)；车机按键与旋钮的系统侧链路见 [06-aaos-input.md](06-aaos-input.md)，CarService 层概览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 一条 KeyEvent 里 downTime、eventTime、scanCode、keyCode、metaState、repeatCount 分别是什么？为什么说按键信息有三层？**
 
@@ -46,12 +46,12 @@ key 116   KEYCODE_VOICE_ASSIST  WAKE
 
 必须配 `.idc` 的典型场景：
 
-- **旋钮类设备**：能力位无法自证身份，`.idc` 里 `device.type = rotaryEncoder` 是唯一判定依据（按 AAOS13 源码核对，`EventHub.cpp` 对旋钮类只认这个配置），配套 `device.scalingFactor`、`device.res` 定标；
-- **触摸屏绑定副屏**：`touch.displayId` 指定目标显示的 uniqueId，车机仪表屏/副驾屏触控绑定靠它；
-- **面板贴装方向与显示不一致**：`touch.orientation = ORIENTATION_90/180/270` 声明设备自身朝向；
-- **键盘指定专属布局**：`keyboard.layout`/`keyboard.characterMap` 点名映射文件；
-- **特殊功能键盘**：`keyboard.specialFunction = 1`（替代旧的 `.kcm` type 声明）；
-- **触控行为微调**：`touch.size.calibration`、`touch.wake` 等校准与策略属性族。
+1. **旋钮类设备**：能力位无法自证身份，`.idc` 里 `device.type = rotaryEncoder` 是唯一判定依据（按 AAOS13 源码核对，`EventHub.cpp` 对旋钮类只认这个配置），配套 `device.scalingFactor`、`device.res` 定标；
+2. **触摸屏绑定副屏**：`touch.displayId` 指定目标显示的 uniqueId，车机仪表屏/副驾屏触控绑定靠它；
+3. **面板贴装方向与显示不一致**：`touch.orientation = ORIENTATION_90/180/270` 声明设备自身朝向；
+4. **键盘指定专属布局**：`keyboard.layout`/`keyboard.characterMap` 点名映射文件；
+5. **特殊功能键盘**：`keyboard.specialFunction = 1`（替代旧的 `.kcm` type 声明）；
+6. **触控行为微调**：`touch.size.calibration`、`touch.wake` 等校准与策略属性族。
 
 `.idc` 的定位是"驱动机 Intelligence 之外的设备画像"：能力位描述硬件能发什么事件，`.idc` 描述这些事件该怎么解释。新接入一个输入设备而行为异常时，第一步就是 `dumpsys input` 查它的设备类型判定是否符合预期——判定错了，后面的 mapper 全错。
 
@@ -78,8 +78,8 @@ key 116   KEYCODE_VOICE_ASSIST  WAKE
 
 两条路线的本质区别是"按键数据走通用输入通道还是专用车机通道"：
 
-- **HID/uinput 路线**：MCU 把 CAN 报文翻译成 USB HID 键盘报文，或 SoC 上的服务用 `/dev/uinput` 创建虚拟键盘注入事件。事件经标准 evdev → EventHub → 按键分发全链路，需要配 `.kl` 做扫描码映射。适合"按键就是普通按键"的场景：无特殊长按语义、无需按显示路由、改动最小；弱点是按键进入 Android 后没有车载上下文（不知道该投到主屏还是仪表）。
-- **VHAL 路线**：MCU/车控服务把按键写进 `HW_KEY_INPUT` 属性，CarService 的 `InputHalService` 订阅并转成 `KeyEvent`，再由 `CarInputService` 按目标显示分发（按 AAOS13 源码核对，`InputHalService.java` 订阅三属性并在 `onHalEvents` 转换）。适合需要车载语义的场景：按键要区分主屏/仪表、要支持系统级长按（语音键长按、通话键接听）、要允许应用捕获独占。
+1. **HID/uinput 路线**：MCU 把 CAN 报文翻译成 USB HID 键盘报文，或 SoC 上的服务用 `/dev/uinput` 创建虚拟键盘注入事件。事件经标准 evdev → EventHub → 按键分发全链路，需要配 `.kl` 做扫描码映射。适合"按键就是普通按键"的场景：无特殊长按语义、无需按显示路由、改动最小；弱点是按键进入 Android 后没有车载上下文（不知道该投到主屏还是仪表）。
+2. **VHAL 路线**：MCU/车控服务把按键写进 `HW_KEY_INPUT` 属性，CarService 的 `InputHalService` 订阅并转成 `KeyEvent`，再由 `CarInputService` 按目标显示分发（按 AAOS13 源码核对，`InputHalService.java` 订阅三属性并在 `onHalEvents` 转换）。适合需要车载语义的场景：按键要区分主屏/仪表、要支持系统级长按（语音键长按、通话键接听）、要允许应用捕获独占。
 
 选型判断：按键只驱动当前界面交互，HID 路线省事；按键有整车级含义（语音、接听、息屏），VHAL 路线才能拿到按显示路由、长按处理与捕获仲裁。两条路线并存也常见——音量/媒体键走 HID，语音/接听走 VHAL；此时要防止同一物理键被两边重复上报。
 
@@ -137,7 +137,7 @@ fallback 是按键的第二轮分发：一条按键未被应用消费时，syste
 
 1. **确认硬件事件到达**：`getevent -lt` 按对应 `/dev/input/eventX`（先 `-il` 找到设备），按物理键看扫描码（`MSC_SCAN` 行给出原始扫描码）与 `EV_KEY value`。没有输出是驱动/接线问题，映射层无从谈起；
 2. **确认映射生效**：`dumpsys input` 里该设备的 `KeyLayoutFile` 显示实际加载的 `.kl` 绝对路径。显示 `Generic.kl` 说明专属映射没找到——核对文件名（Vendor_Product 规则）与分区路径（odm/vendor 优先）；按 A 出 B 多半是命中了错误的 Generic 映射或 `.kl` 里扫描码写错；
-3. **确认按键码正确**：`adb shell getevent -l` 的标签即按键码层的结果；或用 `adb shell input keyevent <KEYCODE>` 反向注入，隔离"映射层对了、应用没处理"的情况；
+3. **确认 Android 映射结果**：`getevent` 只显示 Linux `EV_KEY` 码，不能证明 `.kl` 已映射为预期 Android `KEYCODE`；核对设备实际加载的 `.kl`，再从应用 `onKeyDown` 日志读取 `keyCode`。`adb shell input keyevent <KEYCODE>` 会绕过物理设备的扫描码与 `.kl` 映射，只适合隔离应用/后续策略路径；
 4. **确认未被系统闸门消费**：对照系统键清单（HOME、电源等被 PhoneWindowManager 消费；车机硬键还要确认是否被 CarService 捕获/特殊处理），换一个应用（如打开设置）交叉验证"是全局被吃还是只有我的界面没处理"；
 5. **确认应用层逻辑**：`onKeyDown` 日志检查键码、`repeatCount` 与返回值——返回 true 才算消费；长按连发没防会表现为"按一下执行多次"。
 
@@ -151,8 +151,8 @@ fallback 是按键的第二轮分发：一条按键未被应用消费时，syste
 
 调试用 `adb shell input keycombination <键1> <键2>`（同时按下的语义）；两条间隔几十毫秒的独立 `keyevent` 注入可能进不了组合时间窗，组合逻辑没触发时先检查注入方式而不是先改代码。
 
-**Q17: `ACTION_MULTIPLE` 是什么？现在还有哪些场景会遇到？**
+**Q17: 已弃用的 `ACTION_MULTIPLE` 表示什么？兼容代码还要考虑吗？**
 
-`ACTION_MULTIPLE` 是 KeyEvent 除按下/抬起外的第三种动作，表示"一条事件携带多次按键或一串字符"：与输入法交互时框架可能投递，内容要么是"同一键码重复 N 次"，要么是一段要直接插入的字符序列（此时键码为 UNKNOWN、事件携带 characters）。按 AAOS13 源码核对（`KeyEvent` 类文档与分发逻辑），它是低带宽时代的压缩手段，现实意义是兼容：未被 `onKeyMultiple` 处理的"重复键码"形态会在分发时降级重放为多条按下/抬起，纯字符形态无法重放、直接按未处理返回。
+`ACTION_MULTIPLE` 是 `KeyEvent` 中除按下/抬起外的旧动作，表示同一键码重复多次，或 `KEYCODE_UNKNOWN` 携带一串字符。它自 API 29 起弃用，官方说明输入系统不再使用它；新输入路径不应依赖 IME 或外接设备一定会产生该动作。
 
-应用侧的取舍：新代码不主动处理它，但不要假设它不存在——批量文本进入按键通道的场景（扫码枪、某些外接输入设备）仍可能以它出现；需要批量字符语义时重写 `onKeyMultiple`，其余情况让基类的降级重放兜底。前提一并记住：软键盘输入默认不走 KeyEvent（文本经 InputConnection 进入应用），`ACTION_MULTIPLE` 只在按键事件体系内出现，目标 API 较新的应用收到的软键盘按键事件本身就该按"没有"设计。
+兼容代码仍可能在处理旧设备、旧应用自行构造的事件或测试注入时遇到它。`onKeyMultiple` 可处理旧事件；基类对未消费的重复键码事件可能降级重放为多组按下/抬起，而 `KEYCODE_UNKNOWN` 字符串事件不能按键码重放。新功能应使用文本编辑的 `InputConnection` 或明确的按键事件，而非主动生成 `ACTION_MULTIPLE`。软键盘默认通过 `InputConnection` 提交文本，不依赖 `ACTION_MULTIPLE`。

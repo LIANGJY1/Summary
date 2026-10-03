@@ -1,6 +1,6 @@
 # AAOS 车机输入：VHAL 按键链路、CarInputService 与旋钮
 
-> 学习资料（文章模式沉淀）。主线：车机物理按键从 VHAL 到应用的完整上行链路、三个 VHAL 输入属性的语义、InputHalService 的转换与防御、CarInputService 的分发顺序与语音/通话键长按、CustomInputEvent 的 OEM 约定、按键捕获（capture）的栈仲裁、旋钮的两条独立链路、RotaryService 的焦点导航模型与 FocusArea 契约、仪表按键路由、车机输入法、注入调试命令与"旋钮失灵"分层排查。机制按本地 AAOS13 源码（Android 13，`packages/services/Car/`、`packages/apps/Car/RotaryController/`、`hardware/interfaces/automotive/vehicle/`）核对；Rotary 交互模型与 FocusArea 属性按官方文档口径（source.android.com，2026-09 检索）。CarService 与 car-lib 总览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)；HID/uinput 接入路线与唤醒键见 [04-key-mapping.md](04-key-mapping.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：车机物理按键从 VHAL 到应用的完整上行链路、三个 VHAL 输入属性的语义、InputHalService 的转换与防御、CarInputService 的分发顺序与语音/通话键长按、CustomInputEvent 的 OEM 约定、按键捕获（capture）的栈仲裁、旋钮的两条独立链路、RotaryService 的焦点导航模型与 FocusArea 契约、仪表按键路由、车机输入法、注入调试命令与"旋钮失灵"分层排查。机制按本地 AAOS13 源码（Android 13，`packages/services/Car/`、`packages/apps/Car/RotaryController/`、`hardware/interfaces/automotive/vehicle/`）核对；Rotary 交互模型与 FocusArea 属性按官方文档口径（source.android.com，2026-09 检索）。2026-10-04 复核：重新确认“首次旋钮动作可能只用于进入旋转模式”的交互规则与 OEM 定制输入权限边界。CarService 与 car-lib 总览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)；HID/uinput 接入路线与唤醒键见 [04-key-mapping.md](04-key-mapping.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 车机物理按键从按下到应用响应的完整链路是什么？**
 
@@ -14,9 +14,9 @@
 
 三个属性都是 `INT32_VEC`、`ON_CHANGE`、只读，按本地 HAL 接口文件核对（`hardware/interfaces/automotive/vehicle/aidl/.../VehicleProperty.aidl`）：
 
-- **`HW_KEY_INPUT`（0x0A10）**：`[0]` 动作（`VehicleHwKeyInputAction`：0 按下、1 抬起）、`[1]` 标准 Android 按键码、`[2]` 目标显示（`VehicleDisplay`：MAIN=0、INSTRUMENT_CLUSTER=1）、`[3]` 可选的重复次数（≥1，缺省 1）；
-- **`HW_ROTARY_INPUT`（0x0A20）**：`[0]` 旋钮类型（`RotaryInputType`：SYSTEM_NAVIGATION=0、AUDIO_VOLUME=1）、`[1]` 定位点数（正=顺时针、负=逆时针）、`[2]` 目标显示、`[3..]` 相邻定位点之间的纳秒级时间差（定位点多于 1 时携带）；属性 timestamp 是第一个定位点的时刻。官方文档同时要求：同方向连续定位点必须合并为一个事件上报，不要拆成多条；
-- **`HW_CUSTOM_INPUT`（0x0A30）**：`[0]` 自定义输入码（官方给 `CUSTOM_EVENT_F1..F10`（1001–1010）作便捷命名，OEM 可用任意值）、`[1]` 目标显示、`[2]` 重复计数（0=非重复）。
+1. **`HW_KEY_INPUT`（0x0A10）**：`[0]` 动作（`VehicleHwKeyInputAction`：0 按下、1 抬起）、`[1]` 标准 Android 按键码、`[2]` 目标显示（`VehicleDisplay`：MAIN=0、INSTRUMENT_CLUSTER=1）、`[3]` 可选的重复次数（≥1，缺省 1）；
+2. **`HW_ROTARY_INPUT`（0x0A20）**：`[0]` 旋钮类型（`RotaryInputType`：SYSTEM_NAVIGATION=0、AUDIO_VOLUME=1）、`[1]` 定位点数（正=顺时针、负=逆时针）、`[2]` 目标显示、`[3..]` 相邻定位点之间的纳秒级时间差（定位点多于 1 时携带）；属性 timestamp 是第一个定位点的时刻。官方文档同时要求：同方向连续定位点必须合并为一个事件上报，不要拆成多条；
+3. **`HW_CUSTOM_INPUT`（0x0A30）**：`[0]` 自定义输入码（官方给 `CUSTOM_EVENT_F1..F10`（1001–1010）作便捷命名，OEM 可用任意值）、`[1]` 目标显示、`[2]` 重复计数（0=非重复）。
 
 三个属性都只面向驾驶员的两块屏（MAIN 与 CLUSTER），乘员屏输入不走 VHAL 输入属性（走标准 Android 输入子系统）。对角线 nudge 没有专用键值，官方做法是用水平与垂直事件序列合成。自定义键的码值语义是 OEM 内部约定，必须与 VHAL 实现和消费服务同步维护，改一边不改另一边就是"按了没反应"。
 
@@ -24,10 +24,10 @@
 
 按 AAOS13 源码核对（`packages/services/Car/service/src/com/android/car/hal/InputHalService.java`）：
 
-- **条件订阅**：维护三个能力标志（key/rotary/custom 各一个），按 VHAL 实际支持的属性决定订阅哪几个；三个都不支持时拒绝注册监听——VHAL 没实现输入属性时 CarService 侧整个按键链路静默不存在，排查第一步就是看这个标志；
-- **按键状态簿**：为每个按键记录最近一次按下的时间戳与已发按下次数，用于合成 `KeyEvent` 的 `repeatCount`；收到没有配对按下的抬起时用事件时间兜底补 `downTime`（防 HAL 实现异常导致崩溃）；
-- **旋钮防御**：定位点数为 0 丢弃；取绝对值前防 `Integer.MIN_VALUE` 溢出；目标显示只接受 MAIN 与 CLUSTER；数组长度必须恰好等于 3+定位点数-1，否则丢弃并打错误日志；
-- **显示类型转换**：`VehicleDisplay` 映射为 CarOccupantZoneManager 的显示类型常量，未知值归为 UNKNOWN。
+1. **条件订阅**：维护三个能力标志（key/rotary/custom 各一个），按 VHAL 实际支持的属性决定订阅哪几个；三个都不支持时拒绝注册监听——VHAL 没实现输入属性时 CarService 侧整个按键链路静默不存在，排查第一步就是看这个标志；
+2. **按键状态簿**：为每个按键记录最近一次按下的时间戳与已发按下次数，用于合成 `KeyEvent` 的 `repeatCount`；收到没有配对按下的抬起时用事件时间兜底补 `downTime`（防 HAL 实现异常导致崩溃）；
+3. **旋钮防御**：定位点数为 0 丢弃；取绝对值前防 `Integer.MIN_VALUE` 溢出；目标显示只接受 MAIN 与 CLUSTER；数组长度必须恰好等于 3+定位点数-1，否则丢弃并打错误日志；
+4. **显示类型转换**：`VehicleDisplay` 映射为 CarOccupantZoneManager 的显示类型常量，未知值归为 UNKNOWN。
 
 加工的含义是：VHAL 侧只需要按属性契约上报原始值，重复计数、时间戳语义、合法性全部由这一层统一保证——HAL 实现偷懒（如不带时间差数组）不会崩，但会在这一层被丢弃，现象是"旋钮部分转不动"。
 
@@ -49,8 +49,8 @@
 
 两条键的处理逻辑都遵循"投影优先"的优先级链：
 
-- **语音键**：长按依次尝试投影应用（注册了语音长按回调的）、蓝牙语音识别、默认语音助手；短按先给投影应用，否则拉起默认语音助手；
-- **通话键**：短按在振铃时接听；配置开启且通话中则挂断；都不是则给投影应用，最后拉起拨号盘。长按在振铃/通话场景同样先接听/挂断，否则给投影应用，最后重拨最后一个去电。
+1. **语音键**：长按依次尝试投影应用（注册了语音长按回调的）、蓝牙语音识别、默认语音助手；短按先给投影应用，否则拉起默认语音助手；
+2. **通话键**：短按在振铃时接听；配置开启且通话中则挂断；都不是则给投影应用，最后拉起拨号盘。长按在振铃/通话场景同样先接听/挂断，否则给投影应用，最后重拨最后一个去电。
 
 工程含义：车载语音键、通话键是整车级资源，AOSP 把语义集中在 CarService 而不是交给前台应用；应用想要定制这两个键的行为，正规途径是 `CarProjectionManager` 的按键事件回调（按事件类型订阅），而不是试图在 `onKeyDown` 里拦截——原始 `VOICE_ASSIST`/`CALL` 事件根本不会被注入系统。
 
@@ -74,8 +74,8 @@
 
 两条链路完全独立，事件类型、source、消费方都不同：
 
-- **VHAL 链**：旋钮信号经车控写进 `HW_ROTARY_INPUT`，`InputHalService` 转成 `RotaryEvent`（携带旋钮类型、顺逆时针、每个定位点的时间戳），交给 `CarInputService.onRotaryEvent`：先问捕获仲裁，无人捕获时按类型转成标准按键——导航旋钮转 `KEYCODE_NAVIGATE_NEXT/PREVIOUS`、音量旋钮转 `KEYCODE_VOLUME_UP/DOWN`，每个定位点一对按下/抬起——再走按键分发注入。调试命令 `cmd car_service inject-rotary` 注入的就是这条链；
-- **Linux 设备链**：旋钮接成内核 rotary encoder 设备，`RotaryEncoderInputMapper` 产生带 `AXIS_SCROLL` 轴的 `MotionEvent`（source 为 `SOURCE_ROTARY_ENCODER`），走标准焦点窗口分发，由 RotaryController（无障碍服务）或声明了旋钮滚动的可滚动容器消费。用 uinput 造 `REL_WHEEL` 设备可模拟这条链。
+1. **VHAL 链**：旋钮信号经车控写进 `HW_ROTARY_INPUT`，`InputHalService` 转成 `RotaryEvent`（携带旋钮类型、顺逆时针、每个定位点的时间戳），交给 `CarInputService.onRotaryEvent`：先问捕获仲裁，无人捕获时按类型转成标准按键——导航旋钮转 `KEYCODE_NAVIGATE_NEXT/PREVIOUS`、音量旋钮转 `KEYCODE_VOLUME_UP/DOWN`，每个定位点一对按下/抬起——再走按键分发注入。调试命令 `cmd car_service inject-rotary` 注入的就是这条链；
+2. **Linux 设备链**：旋钮接成内核 rotary encoder 设备，`RotaryEncoderInputMapper` 产生带 `AXIS_SCROLL` 轴的 `MotionEvent`（source 为 `SOURCE_ROTARY_ENCODER`），走标准焦点窗口分发，由 RotaryController（无障碍服务）或声明了旋钮滚动的可滚动容器消费。用 uinput 造 `REL_WHEEL` 设备可模拟这条链。
 
 判断手上的旋钮走哪条链：`getevent -lt` 有输出是设备链；无输出而 `dumpsys car_service --services InputHalService` 显示 rotary 支持且 VHAL 在上报，是 VHAL 链。两条链的"失灵"排查路径完全不同，混查是常见的时间黑洞。
 
@@ -107,9 +107,9 @@ RotaryService 对每个 `RotaryEvent`（或其按键化形式）先尝试移动�
 
 布局契约集中在三件事：
 
-- **FocusArea**（car-ui-lib 组件）：把界面划成 nudge 的粗导航单元。常用属性包括 `defaultFocus`（nudge 进入时的默认视图）、`nudgeLeft/Right/Up/Down`（显式指定相邻 FocusArea，几何搜索找不到目标时兜底）、`wrapAround`（旋转到头是否循环）。FocusArea 不允许嵌套；界面不写任何 FocusArea 时根视图成为隐式单元——nudge 在应用内失效、只剩旋转遍历，这是"nudge 失灵但旋转正常"的第一原因；
-- **FocusParkingView**：每个窗口需要一个（通常放在根布局角落），职责有三个——跨窗口移动焦点时先把焦点"停"到它身上（Android 不会自动清除另一窗口的焦点，没有它会出现双窗口同时聚焦）、旋转到头循环时识别"即将绕回"、应用启动时作为焦点的初始落点再转到最佳视图；
-- **可聚焦性**：能被旋钮聚焦的条件是 focusable + enabled + visible + 尺寸非零；想表达"显示为禁用但仍可聚焦"用自定义状态而非 `setEnabled(false)`。
+1. **FocusArea**（car-ui-lib 组件）：把界面划成 nudge 的粗导航单元。常用属性包括 `defaultFocus`（nudge 进入时的默认视图）、`nudgeLeft/Right/Up/Down`（显式指定相邻 FocusArea，几何搜索找不到目标时兜底）、`wrapAround`（旋转到头是否循环）。FocusArea 不允许嵌套；界面不写任何 FocusArea 时根视图成为隐式单元——nudge 在应用内失效、只剩旋转遍历，这是"nudge 失灵但旋转正常"的第一原因；
+2. **FocusParkingView**：每个窗口需要一个（通常放在根布局角落），职责有三个——跨窗口移动焦点时先把焦点"停"到它身上（Android 不会自动清除另一窗口的焦点，没有它会出现双窗口同时聚焦）、旋转到头循环时识别"即将绕回"、应用启动时作为焦点的初始落点再转到最佳视图；
+3. **可聚焦性**：能被旋钮聚焦的条件是 focusable + enabled + visible + 尺寸非零；想表达"显示为禁用但仍可聚焦"用自定义状态而非 `setEnabled(false)`。
 
 历史缓存的两个行为也要知道：反向 nudge 会回到上一个 FocusArea、并恢复其中上次聚焦的视图（两级缓存，超时与开关由 car-ui-lib 资源配置）。适配验证不要只测"能不能聚焦"，要按 nudge 进出、旋转遍历、边界循环、跨窗口移动四条路径走完。
 
@@ -117,8 +117,8 @@ RotaryService 对每个 `RotaryEvent`（或其按键化形式）先尝试移动�
 
 能，但只接收 VHAL 事件里目标显示为 INSTRUMENT_CLUSTER 的按键，主屏按键不会被转给仪表。两条路由（按 AAOS13 源码核对）：
 
-- **renderer 回调链（传统）**：`InstrumentClusterService` 在初始化时注册为 cluster 键监听，`CarInputService` 分发到仪表键时回调 `InstrumentClusterRenderingService.onKeyEvent()`——这是 cluster 渲染服务的公开空实现，OEM 的仪表渲染服务覆写后自行处理（比如注入到仪表自己的 Presentation）；
-- **全捕获链（ClusterHome）**：Android 13 的 cluster Home 方案不走 renderer 回调，而是以 cluster 包名申请 `TAKE_ALL_EVENTS_FOR_DISPLAY` 全量捕获仪表屏输入，按键直接进 cluster 应用。
+1. **renderer 回调链（传统）**：`InstrumentClusterService` 在初始化时注册为 cluster 键监听，`CarInputService` 分发到仪表键时回调 `InstrumentClusterRenderingService.onKeyEvent()`——这是 cluster 渲染服务的公开空实现，OEM 的仪表渲染服务覆写后自行处理（比如注入到仪表自己的 Presentation）；
+2. **全捕获链（ClusterHome）**：Android 13 的 cluster Home 方案不走 renderer 回调，而是以 cluster 包名申请 `TAKE_ALL_EVENTS_FOR_DISPLAY` 全量捕获仪表屏输入，按键直接进 cluster 应用。
 
 两条链互斥生效：注册了 renderer 监听时按键在 `CarInputService` 第 3 步就被截走，捕获栈里 cluster Home 的全量捕获对"已被 renderer 吃掉"的事件不可见。排查仪表按键问题的第一件事是确认设备用的哪条链（看是否有 cluster renderer 服务实现）。
 
@@ -128,16 +128,16 @@ AAOS 自带车机定制输入法 `packages/apps/Car/LatinIME`（包名与手机�
 
 驾驶限制与输入法的交叉：分心限制的完全受限组合里包含"禁用键盘"（`UX_RESTRICTIONS_NO_KEYBOARD`），驾驶状态下输入法弹窗本身会被限制逻辑拦下。
 
-排查"旋钮没法打字"按三层：确认是否存在旋钮输入法（`ime list -s`）；确认 RotaryService 的切换配置是否为空；确认当前限制状态是否禁了键盘。三层的日志特征完全不同，先分层再动手。
+`ime list -s` 中 `-s` 表示只列出当前已启用的输入法 service，不能单独证明某个服务是旋钮输入法；还要核对组件实现与 RotaryService 配置。排查“旋钮没法打字”按三层：确认是否存在旋钮输入法；确认 RotaryService 的切换配置是否为空；确认当前限制状态是否禁了键盘。三层的日志特征完全不同，先分层再动手。
 
 **Q15: 车机输入有哪些专用调试命令？**
 
 按 AAOS13 源码核对（`CarShellCommand.java`）与官方 readme：
 
-- **注入**：`adb shell cmd car_service inject-key [-d 0|1] [-t 延迟ms | -a down|up] <键码>`（缺省按下抬起成对，`-d 1` 投到仪表）；`inject-rotary [-d 显示] [-i 10|11] [-c true] [-dt 毫秒差列表]`（`-i` 10=导航旋钮、11=音量旋钮，`-dt` 要求降序非负）；`inject-custom-input [-d 显示] [-r 重复] F1..F10|整数`。注意这些命令直调 `CarInputService` 的注入入口，**走完整车载分发链（含捕获仲裁）**，与 `adb shell input keyevent`（绕过 CarService 直注入系统）语义不同——测车载行为用前者，测应用层行为用后者；
-- **状态**：`dumpsys car_service --services CarInputService`（长按配置、捕获控制器状态）、`--services InputHalService`（三个能力标志，VHAL 是否支持输入看这里）；
-- **无旋钮模拟旋控**：userdebug 版本开启 `settings put secure android.car.ROTARY_KEY_EVENT_FILTER 1` 后，用键盘模拟——WASD 或方向键 nudge、F 或逗号中心、R 或 Esc 返回、Q/C 逆时针旋转、E/V 顺时针（Shift 按住按 10 格计）；仅 debuggable 构建生效；
-- **模拟器**：`car_x86_64` 镜像的 Extended controls 有 Car rotary 面板。
+1. **注入**：`adb shell cmd car_service inject-key [-d 0|1] [-t 延迟ms | -a down|up] <键码>`（缺省按下抬起成对，`-d 1` 投到仪表）；`inject-rotary [-d 显示] [-i 10|11] [-c true] [-dt 毫秒差列表]`（`-i` 10=导航旋钮、11=音量旋钮，`-dt` 要求降序非负）；`inject-custom-input [-d 显示] [-r 重复] F1..F10|整数`。注意这些命令直调 `CarInputService` 的注入入口，**走完整车载分发链（含捕获仲裁）**，与 `adb shell input keyevent`（绕过 CarService 直注入系统）语义不同——测车载行为用前者，测应用层行为用后者；
+2. **状态**：`dumpsys car_service --services CarInputService`（长按配置、捕获控制器状态）、`--services InputHalService`（三个能力标志，VHAL 是否支持输入看这里）；
+3. **无旋钮模拟旋控**：userdebug 版本开启 `settings put secure android.car.ROTARY_KEY_EVENT_FILTER 1` 后，用键盘模拟——WASD 或方向键 nudge、F 或逗号中心、R 或 Esc 返回、Q/C 逆时针旋转、E/V 顺时针（Shift 按住按 10 格计）；仅 debuggable 构建生效；
+4. **模拟器**：`car_x86_64` 镜像的 Extended controls 有 Car rotary 面板。
 
 组合用法：怀疑捕获被抢占时，先用 `dumpsys` 看捕获栈，再分别用 `inject-key`（过 CarService）与 `input keyevent`（不过 CarService）注入同一键码——前者无响应后者有响应，问题定位在 CarService 层的仲裁；两者都无响应才往应用层查。
 
@@ -157,9 +157,9 @@ AAOS 自带车机定制输入法 `packages/apps/Car/LatinIME`（包名与手机�
 
 四个机制直接决定定制效果（按 AAOS13 源码核对，`RotaryService.java`）：
 
-- **触摸退出检测**：服务持有一个 0×0 的系统级悬浮窗口（`TYPE_APPLICATION_OVERLAY` 配 `FLAG_WATCH_OUTSIDE_TOUCH`），靠 `ACTION_OUTSIDE` 感知真实触摸并退出旋转模式、清掉焦点——即使服务崩溃重启留下状态残留也能被下一次触摸纠正；旋钮输入法键盘上产生的"触摸"按时间窗忽略，避免误退出；
-- **HUN（横幅通知）nudge 劫持**：横幅在屏幕底部时，向下的 nudge 被解释为"聚焦横幅"、向上为"从横幅逃逸"，方向由配置资源决定且必须与车机 SystemUI、通知侧的同名资源一致——三处配置不一致是"nudge 被横幅吃掉"类问题的第一原因；
-- **SurfaceView 特殊处理**：SurfaceView 的内容不在 View 树的普通绘制层，焦点高亮与可聚焦区域要按其内容位置修正（服务内有专用的 SurfaceView 辅助类），地图、视频类应用适配旋钮时重点验证；
-- **FocusArea 历史缓存**：反向 nudge 回上一个 FocusArea 并恢复其中上次聚焦的视图，缓存类型、过期时长与"旋转时是否清历史"由 car-ui-lib 资源控制，产品手感（要不要记住上次位置）调这里。
+1. **触摸退出检测**：服务持有一个 0×0 的系统级悬浮窗口（`TYPE_APPLICATION_OVERLAY` 配 `FLAG_WATCH_OUTSIDE_TOUCH`），靠 `ACTION_OUTSIDE` 感知真实触摸并退出旋转模式、清掉焦点——即使服务崩溃重启留下状态残留也能被下一次触摸纠正；旋钮输入法键盘上产生的"触摸"按时间窗忽略，避免误退出；
+2. **HUN（横幅通知）nudge 劫持**：横幅在屏幕底部时，向下的 nudge 被解释为"聚焦横幅"、向上为"从横幅逃逸"，方向由配置资源决定且必须与车机 SystemUI、通知侧的同名资源一致——三处配置不一致是"nudge 被横幅吃掉"类问题的第一原因；
+3. **SurfaceView 特殊处理**：SurfaceView 的内容不在 View 树的普通绘制层，焦点高亮与可聚焦区域要按其内容位置修正（服务内有专用的 SurfaceView 辅助类），地图、视频类应用适配旋钮时重点验证；
+4. **FocusArea 历史缓存**：反向 nudge 回上一个 FocusArea 并恢复其中上次聚焦的视图，缓存类型、过期时长与"旋转时是否清历史"由 car-ui-lib 资源控制，产品手感（要不要记住上次位置）调这里。
 
 改这些机制的正确姿势是配置优先：nudge 方向、旋转加速阈值、历史缓存都有资源/RRO 出口，直接改服务代码会给后续 OTA 合入埋冲突。验证手法：userdebug 版本 `settings put secure android.car.ROTARY_KEY_EVENT_FILTER 1` 开启键盘模拟旋控（WASD/方向键 nudge、F 或逗号中心、R 或 Esc 返回、Q/C 逆时针旋转、E/V 顺时针），配合 `dumpsys accessibility` 看服务绑定状态。

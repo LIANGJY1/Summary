@@ -30,7 +30,7 @@ enum class QuestionStatus(val key: String) {
 }
 
 object SourceQuestions {
-    const val TARGET_PATH = "knowledge-base/03-language/kotlin/01-语法基础.md"
+    const val TARGET_PATH = "knowledge-base/03-language/kotlin/01-syntax-basics.md"
     val DEFAULT_SUPPORTED_PATHS = listOf(TARGET_PATH)
 
     data class Entry(

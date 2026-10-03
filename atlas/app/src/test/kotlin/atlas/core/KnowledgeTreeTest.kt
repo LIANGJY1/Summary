@@ -10,7 +10,7 @@ class KnowledgeTreeTest {
     fun `builds nested knowledge base hierarchy`() {
         val tree = KnowledgeTree.build(
             listOf(
-                "knowledge-base/language/kotlin/01-语法基础.md",
+                "knowledge-base/language/kotlin/01-syntax-basics.md",
                 "knowledge-base/language/java/泛型.md",
                 "knowledge-base/README.md",
             ),
@@ -22,7 +22,7 @@ class KnowledgeTreeTest {
         assertTrue(language.isDirectory)
         assertEquals(listOf("java", "kotlin"), language.children.map { it.name })
         assertEquals(
-            "knowledge-base/language/kotlin/01-语法基础.md",
+            "knowledge-base/language/kotlin/01-syntax-basics.md",
             language.children.last().children.single().path,
         )
     }
@@ -44,7 +44,7 @@ class KnowledgeTreeTest {
     fun `returns directory ancestors for a selected file`() {
         assertEquals(
             setOf("knowledge-base", "knowledge-base/language", "knowledge-base/language/kotlin"),
-            KnowledgeTree.ancestorPaths("knowledge-base/language/kotlin/01-语法基础.md"),
+            KnowledgeTree.ancestorPaths("knowledge-base/language/kotlin/01-syntax-basics.md"),
         )
     }
 }

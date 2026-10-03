@@ -1,39 +1,34 @@
-# Android 权限系统（android.permission.*）
+# Android 权限系统
 
-> 学习资料（文章模式沉淀）。主线：框架层权限系统的定位（android.permission.* 是 Java 框架实现的"应用对能力"授权体系，内核不参与判定）、它与内核沙箱（UID/SELinux/seccomp，见 [09-app-sandbox.md](09-app-sandbox.md)；策略层见 [11-selinux.md](11-selinux.md)）的分工与互补、以及它向内核桥接的设计（权限映射补充组，经 Zygote SetGids 生效）。来源：2026-09-26 对话深讲；应用侧权限使用与排障细节应随具体 API 场景归入对应的应用框架或服务实践册。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：应用权限的声明与授权、Framework 检查、AppOps、Linux UID/GID 和 SELinux 的协作边界。应用沙箱机制见 `09-app-sandbox.md`，SELinux 策略细节见 `11-selinux.md`。应用侧 API 使用与排障按具体服务主题归档。
 
-**Q1: android.permission.* 是什么机制？它属于哪一层？**
+**Q1: Android 的 `android.permission.*` 是什么机制，权限检查发生在哪一层？**
 
-android.permission.* 是 Android 框架层的权限系统——纯用户态、纯 Java 框架实现：应用在 manifest 里用 uses-permission 声明所需能力，PackageManagerService 在安装时登记，system_server 里的服务在框架 API 入口检查"这个 UID 有没有这个权限"（checkPermission/enforceCallingPermission）。内核从头到尾不参与判定——它执法的是"框架能力的使用资格"，不是内核对象访问。
+Android 权限是由系统框架管理的访问控制契约：应用在 manifest 请求权限，系统按 protection level 和用户/系统授权状态决定是否授予，受保护的 API 或服务再依据调用者身份检查是否允许操作。它主要由 Android Framework 与系统服务实现，但不能简化为“纯 Java 检查”或“内核完全不参与”。
 
-组成与落点：
+1. **声明与授予**：`uses-permission` 表达应用的请求，不代表请求已获授权。PackageManager/PermissionManager 根据权限类型、安装状态、用户选择、系统签名或预装策略记录授权状态。普通权限通常自动授予，危险权限等还受运行时授权流程约束。
+2. **调用检查**：Framework API 或服务端在执行受保护操作前检查调用 UID、包名、权限状态，并可能进一步检查 AppOps、角色、前台状态或用户限制。具体检查点取决于 API，不能假定所有权限都只在安装时检查。
+3. **底层约束**：部分权限状态会映射为进程 supplementary GID 或其他系统状态。Linux DAC、内核网络检查和 SELinux 可在各自边界执行相应限制。大多数相机、位置等 API 则由框架服务做调用者授权与数据访问控制，不能仅凭权限名推断为直接访问设备节点。
 
-1. **声明与登记**：manifest 声明 → PMS 解析登记（packages.xml），安装期授予普通权限；
-2. **运行时授权**：Android 6.0 起危险权限（CAMERA、LOCATION 等）由用户在运行时授予/撤销，按应用粒度动态变化；
-3. **检查点**：框架服务入口（如 LocationManager 的实现先查 ACCESS_FINE_LOCATION）与组件启动（exported 组件、protected broadcast）。
+因此，定位一次权限拒绝应从具体 API 的检查路径开始，再确认系统记录的授权状态、AppOps 结果和实际进程的 UID/GID、SELinux 域。manifest 中出现权限名只证明应用提出了请求。
 
-收束：它是"应用对能力"的授权体系，执法点在 system_server 的 Java 服务里——与内核沙箱（04-Sanbox）分属两个平面。
+**Q2: Android 应用权限与 SELinux、Linux UID/GID 分别控制什么？它们怎样互补？**
 
-**Q2: 有了 SELinux，为什么还需要 android.permission.*？**
+三者处于不同的执行边界：应用权限表达应用能否使用某项受保护能力，UID/GID 与文件权限控制进程对内核资源的自主访问，SELinux 按安全域和对象标签实施强制访问控制。任何一层都不能替代另外两层。
 
-因为两者管的**对象、粒度、时效**完全不同，互为盲区——SELinux 判"进程对内核对象"（构建期静态、按域统一），permission 判"应用对框架能力"（运行期动态、按应用授权）。
+1. **Framework 权限与 AppOps**：系统服务可按调用 UID/包名及用户授权决定是否允许访问相机、定位、联系人等 API。AppOps 还能表达某些操作的运行状态或用户限制，实际关系按 API 与版本而变。
+2. **Linux DAC 与补充组**：进程 UID/GID 参与文件、设备节点和部分内核接口的访问判断。某些 Android 权限会映射到补充组，例如 `INTERNET` 与 `inet` 组有关联，内核网络路径可以据此限制创建 IP socket 的资格。
+3. **SELinux**：内核根据进程安全上下文、对象标签和策略决定访问是否允许。即使 Framework 权限检查通过，SELinux 仍可拒绝服务或进程访问某个文件、设备或 Binder 端点。反过来，SELinux 允许进程访问某对象也不代表应用获得了对应 Framework API 权限。
 
-三点展开：
+以相机为例，应用需要通过相机 API 和系统服务完成访问，Framework 检查调用者权限。CameraService 等可信组件再按自身 UID/GID 与 SELinux 域访问设备资源。`camera` 组用于设备侧权限配置，不应推导为第三方应用获授 `CAMERA` 权限后就直接获得该组。
 
-1. **对象不同**：SELinux 管"进程 ↔ 内核对象"（文件、设备节点、socket、属性）；但应用日常要的能力是框架服务——定位、相机、联系人，由 system_server 的 Java 服务提供，SELinux 域看不到"这是哪个应用在调服务"；
-2. **粒度不同**：SELinux 策略构建期固化、按域统一（所有三方应用同为 untrusted_app），无法表达"A 应用可以用相机、B 不行"；permission 按应用、按权限名、运行期动态——正是 6.0 起用户"运行时授权/随时撤销"的载体，这种用户交互 SELinux 做不了（策略不能因用户点了"允许"就重编）；
-3. **纵深互补**：permission 是准入判断（有没有资格用这个 API），SELinux 是执行兜底（框架被绕过或有漏洞时，进程对内核对象的访问仍被域拦）。反向同理：system_server 代应用执行时运行在自己的域里，SELinux 分不清请求来自哪个应用——区分调用者靠的正是 permission 检查。
+**Q3: Android 为什么需要 Framework 权限？部分权限怎样通过 UID/GID 影响内核访问？**
 
-收束：SELinux 判"进程对对象"、随镜像走；permission 判"应用对能力"、随用户走——两层互为对方的盲区补全。
+Framework 权限让系统能够按应用身份和用户授权管理高层能力，并把需要内核参与的少数访问限制映射到进程凭据。它不是把每项用户授权都翻译成一个 GID。每个权限的实现方式必须查对应平台配置与调用链。
 
-**Q3: 为什么设计 android.permission.*？它和内核沙箱是怎么衔接的？**
+1. **用户同意与最小授权**：危险权限等可通过系统界面让用户按应用作出授权决定。内核的文件模式位或 SELinux 策略本身不能代替这套面向应用的声明、解释和授权状态管理。
+2. **权限到 GID 的映射**：平台配置可为某些权限定义补充组。AOSP 的 `android.permission.INTERNET` 与 `inet`（GID 3003）存在这种关联，使内核网络访问规则能够约束没有相应资格的进程。应检查目标分支的 `platform.xml` 和 PermissionManager 实现，不能把一项权限的映射推广到所有权限。
+3. **进程凭据生效**：系统根据应用 UID 和已授予权限计算进程所需的 GID，进程创建或凭据更新路径再把它们应用到进程。实际生效时机和权限撤销后的处理应以目标 Android 版本源码为准。
+4. **相机权限的边界**：`CAMERA` 的普通应用授权由 Framework/相机服务检查。AOSP 历史上曾将该权限映射到 `camera` 组，后来删除了这项映射。当前不能用它作为“应用权限必然映射成设备节点 GID”的例子。设备节点所属的 `camera` 组仍可供可信相机服务使用。
 
-设计动机是生态层的知情同意：Android 是安装第三方应用的消费级系统，必须让用户知道并决定应用能干什么——"向用户展示能力清单并授权"这个概念任何内核机制都没有；且设计它时（Android 1.0）内核只有 DAC，SELinux 尚未引入，当时没有任何机制能表达"这个应用能用相机 API 但不能读短信"。
-
-它不是孤立的 Java 层摆设，而是一个**向下翻译层**——把 Java 层的用户授权翻译成内核可执行的能力：
-
-1. 部分权限映射为 UID 的补充组：INTERNET → inet 组、CAMERA → camera 组（Android 10 起）；
-2. 补充组随 Zygote specialize 的 SetGids 传入内核（见 04-Sanbox 的 specialize 链路），成为设备节点/内核能力的访问资格；
-3. 于是"用户授了 CAMERA 权"最终落成"该 UID 的进程对相机相关节点有组权限"——Java 授权与内核执行在 UID 上会师。
-
-收束：manifest 声明 → PMS 计算 gids 与授权表 → Zygote SetGids → 内核生效；框架授权与内核沙箱在 UID 这一点上会师——UID 既是 DAC 的主体，也是权限归属的主键。
+资料来源：AOSP `frameworks/base/data/etc/platform.xml` 的权限到 GID 映射、`PermissionManagerService` 的授权与 GID 计算实现，以及 `system/core/include/private/android_filesystem_config.h` 的 Android UID/GID 定义。具体映射随平台版本和产品配置变化。

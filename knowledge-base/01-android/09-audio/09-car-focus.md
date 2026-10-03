@@ -27,18 +27,36 @@ usage 是应用表达的细用途。CarAudioContext 把多个 usage 归成车机
 
 **Q3: 车机同时有音乐、导航、点击音三名请求者，为什么不能只查两两矩阵中的一格？**
 
-CarAudioFocus 对音区内所有当前持焦者逐个评估，也检查暂时失焦而等待恢复的请求。任一比较为拒绝，请求整体失败。可延迟的拒绝使请求进入延迟状态。能授予时，独占关系中的旧持有者收到 loss，其余可保持持焦。于是“点击声和音乐可共存”并不推出“通话中点击声也能播放”。
+CarAudioFocus 对音区内所有当前持焦者逐个评估，也检查暂时失焦而等待恢复的请求。一个请求要结合所有比较结果裁决：任一比较拒绝时整体失败；允许延迟的拒绝会使请求进入延迟状态；授予时，独占关系中的旧持有者收到 loss，其余可以继续持焦。因此“点击声和音乐可共存”并不推出“通话中点击声也能播放”。
 
-检查顺序应是：确定请求者 context 与 gain → 确定同一区的所有 holders/losers → 按持有者为行逐项查矩阵 → 叠加 gain/duck 选择 → 看最终返回与回调。AAOS 文档概括为拒绝优先、再独占、最后并发。源码还要处理失焦待恢复者及同 clientId 替换。来源：[AAOS 焦点说明](https://source.android.com/docs/automotive/audio/audio-focus)、[AAOS 13 CarAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。
+分析多请求场景时按以下顺序检查：
+
+1. 从新请求确定 context 与 gain。
+2. 列出同一音区内全部当前持有者与等待恢复的失焦请求。
+3. 以每个旧持有者为行，逐项读取矩阵与新请求的交互。
+4. 将 gain 和 duck 选项应用到每项交互，再核对整体返回值及各旧持有者收到的回调。
+
+AAOS 文档概括的处理次序是拒绝优先、其次独占、最后并发；A13 源码还处理失焦待恢复者和相同 clientId 的请求替换。来源：[AAOS 焦点说明](https://source.android.com/docs/automotive/audio/audio-focus)、[AAOS 13 CarAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。
 
 **Q4: 同一辆车主驾听音乐、副驾播视频，为什么副驾请求通常不抢主驾焦点？**
 
-AAOS 将焦点按 audio zone 独立管理，每区有自己的持焦者与音量/路由。副驾请求若正确落入副驾 zone，CarAudioFocus 只和该 zone 的持焦者比较，不应改变主驾的焦点。显示区域与音区有关联，但“画面在副驾屏”本身不能证明声音也在副驾区。
+AAOS 将焦点按 audio zone 独立管理，每区有自己的持焦者与音量/路由。副驾请求若正确落入副驾 zone，CarAudioFocus 只和该 zone 的持焦者比较，不会改变主驾焦点。显示区域与音区有关联，但“画面在副驾屏”本身不能证明声音也在副驾区。
 
-落区要核对请求关联的 user/UID、CarAudioService 对 UID/乘员的绑定，以及多区播放时显式携带的 `AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID`。希望同一应用在多个区同时出声，要逐区申请焦点并为各区建立正确路由，不能用一次主区焦点许可覆盖全车。来源：[AAOS 多区焦点](https://source.android.com/docs/automotive/audio/audio-focus)、[多区路由](https://source.android.com/docs/automotive/audio/audio-multizone-routing)、[AAOS 13 CarZonesAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarZonesAudioFocus.java)。
+诊断落区时应核对：
+
+1. 请求关联的 user 与 UID。
+2. CarAudioService 对 UID/乘员的音区绑定。
+3. 多区播放是否显式携带 `AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID`。
+
+同一应用要在多个区同时出声，需逐区申请焦点并为各区建立正确路由；一次主区焦点许可不会覆盖全车。来源：[AAOS 多区焦点](https://source.android.com/docs/automotive/audio/audio-focus)、[多区路由](https://source.android.com/docs/automotive/audio/audio-multizone-routing)、[AAOS 13 CarZonesAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarZonesAudioFocus.java)。
 
 **Q5: 焦点何时 DELAYED，为什么短点击声不应排队？**
 
-AAOS 13 CarAudioFocus 只对 `AUDIOFOCUS_GAIN` 且设置 `AUDIOFOCUS_FLAG_DELAY_OK` 的请求允许延迟。遇到当前持焦者拒绝但可等待时，返回 `AUDIOFOCUS_REQUEST_DELAYED`，应用不得立即播放。阻塞条件消失后通过监听器通知授予。一个延迟请求后来可能被另一请求替换，所以长期等待必须做好取消与状态核对。
+AAOS 13 CarAudioFocus 只对 `AUDIOFOCUS_GAIN` 且设置 `AUDIOFOCUS_FLAG_DELAY_OK` 的请求允许延迟。当前持焦者拒绝但请求可等待时，系统返回 `AUDIOFOCUS_REQUEST_DELAYED`；应用此时不能播放。阻塞条件消失后，监听器会收到授予通知，但等待中的请求也可能被另一请求替换。
 
-短点击音属于瞬时交互反馈，过时后再响会误导用户。它通常用瞬时焦点请求，失败则跳过这一声。持续媒体内容才考虑延迟，并在真正拿到焦点时复核用户仍想听。来源：[AAOS 13 CarAudioFocus 的 canReceiveDelayedFocus 与延迟请求](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)、[AudioFocusRequest 延迟规则](https://developer.android.com/reference/android/media/AudioFocusRequest)。
+是否接受延迟应按内容有效期决定：
+
+1. 短点击音是瞬时交互反馈，过时后再响可能误导用户；使用瞬时焦点请求，失败时跳过本次声音。
+2. 持续媒体可接受延迟，但应在等待期间处理取消，并在真正获得焦点时再次确认用户仍想播放。
+
+来源：[AAOS 13 CarAudioFocus 的 canReceiveDelayedFocus 与延迟请求](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)、[AudioFocusRequest 延迟规则](https://developer.android.com/reference/android/media/AudioFocusRequest)。

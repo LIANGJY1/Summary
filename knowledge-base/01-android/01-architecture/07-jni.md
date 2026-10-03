@@ -1,50 +1,75 @@
 # JNI
 
-> 学习资料（文章模式沉淀）。主线：JNI 定位与注册方式、引用与线程规则、性能与崩溃形态。类加载/ART 编译与 JNI 链接深挖见 [06-art-runtime.md](06-art-runtime.md)；2026-09-25 增补符号化与泄漏排查题（Q2–Q3）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：Java/Kotlin 与原生代码的边界、JNI 注册、引用和线程规则、性能与崩溃排查。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: Android 中的 JNI 如何理解？**
+**Q1: Android 中 JNI 连接了哪两类代码？ART 在调用 native 方法时做什么？**
 
-JNI（Java Native Interface）是 Java/Kotlin 与 C/C++ 原生代码互操作的标准接口：Java 层声明 `native` 方法、实现在 `.so` 里，经 `System.loadLibrary` 加载后由 ART 找到对应函数执行；它就是架构分层中"应用框架 ↔ 原生库与 ART"边界的落地方式——Framework 调 Skia、libbinder 等原生库都走 JNI。
+JNI（Java Native Interface）是 Java/Kotlin 代码与 C/C++ 原生实现互操作的接口。Java 层声明 `native` 方法，应用或系统库加载包含实现的 `.so` 后，ART 通过 JNI 绑定找到目标函数并完成调用边界转换。
 
-Android 上要掌握的使用规则：
+JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。例如 Framework 调用 Skia、libbinder 等原生实现时，会经 JNI 进入 native 代码。JNI 只提供互操作机制，不会自动处理对象生命周期、线程附着或 native 内存释放。
 
-1. **两种注册方式**：静态注册按 `Java_包名_类名_方法名` 命名查找；动态注册在 `JNI_OnLoad` 里用 `RegisterNatives` 绑定，不暴露导出符号，利于混淆与查找性能；
-2. **引用与线程规则**：局部引用随 native 方法返回自动释放（大循环里要 `DeleteLocalRef` 防局部引用表溢出），全局引用必须显式 `DeleteGlobalRef`；`JNIEnv` 线程私有，native 自建线程要先 `AttachCurrentThread`，跨线程只能缓存 `JavaVM`；
-3. **性能与崩溃形态**：每次跨界有状态切换与引用管理开销，高频调用应批量传数据并缓存 method/field ID；native 层崩溃表现为 tombstone（SIGSEGV/SIGABRT），用 `ndk-stack` 或 addr2line 符号化定位。
+**Q2: Android JNI 静态注册和动态注册有什么区别？应该如何选择？**
 
-**Q2: native 崩溃只有 "pc 0x… libfoo.so"，怎么符号化到源码行？线上包拿不到 tombstone 怎么办？**
+静态注册依赖导出函数名与 Java 类、方法名的约定，动态注册则在库加载时显式把 Java 方法映射到 native 函数。动态注册适合需要集中声明映射、避免导出大量 JNI 符号的项目。
 
-用未 strip 的 so（含 DWARF 符号；App 工程在 `obj/local/<abi>/` 或 `intermediates/merged_native_libs`）做符号化——so 必须与崩溃版本完全一致，backtrace 里是"库基址 + 相对偏移"，要用偏移而不是绝对地址求符号。
+1. **静态注册**：native 函数按 `Java_包名_类名_方法名` 命名，ART 根据约定查找实现。类名或方法签名变化时，符号名也必须同步变化。
+2. **动态注册**：在 `JNI_OnLoad` 中取得目标类并调用 `RegisterNatives`，把 Java 方法名、签名和函数指针绑定起来。未被其他用途导出的实现函数可以保持内部符号，映射关系集中在注册表中。Android 官方也建议性能敏感的方法显式注册，避免依赖按名称发现 native 符号。
+3. **选择边界**：两者都能实现 JNI 调用。动态注册便于显式管理方法签名和隐藏实现符号，但不会自动解决错误签名、类加载器或线程问题。选择时考虑工程生成方式、混淆规则和符号可见性需求。
 
-1. **ndk-stack**：实时 `adb logcat | ndk-stack -sym <unstripped 目录>`；离线 `ndk-stack -sym <目录> -dump tombstone_05`；
-2. **llvm-symbolizer**：对单个相对偏移求文件：行号（`llvm-symbolizer --obj=unstripped.so 0x<rel_pc>`）；
-3. **simpleperf 热点**：设备端采样、主机端报告——`app_profiler.py -p <包> -lib <unstripped 目录>` 自动收集 binary_cache，`report_html.py` 出带源码关联的报告；
-4. **线上**：非 debuggable 包拿不到 /data/tombstones，业界常用 breakpad/crashpad 类方案在应用内捕获 minidump 上传后符号化（接入前对上游文档核验细节）。
+**Q3: native 崩溃日志只有 `pc 0x… libfoo.so` 时，怎样定位源码行？线上包没有 tombstone 时怎么办？**
 
-**Q3: native 内存随每次 JNI 调用线性上涨，最终被 LMK——典型的 GetStringUTFChars 类泄漏怎么确认与修？**
+符号化需要与崩溃二进制完全匹配、包含调试符号的未 strip `.so`。崩溃回溯给出的库内相对偏移才能映射到函数、文件和行号，不能拿绝对运行地址直接查符号。
 
-`GetStringUTFChars/GetByteArrayElements` 这类 Get 调用可能分配副本，必须与对应的 Release 配对；只 Get 不 Release 在常驻进程或高频回调里累积成 native 泄漏——表现是 `dumpsys meminfo` 的 Native Heap 线性增长而 Java 堆正常。
+1. **准备匹配文件**：从相同构建版本保留未 strip 的库和构建 ID。ndk-build 的未 strip 库位于 `obj/local/<abi>/`。当前 AGP 文档给出的 CMake/ndk-build 工程路径是 `build/intermediates/cxx/<build-type>/<hash>/obj/<abi>`。其他构建任务（例如 merged native libraries）目录随 AGP 版本而变，优先使用 NDK 文档标出的 unstripped 输出。
+2. **符号化整份日志**：实时日志可用 `adb logcat | ndk-stack -sym <未 strip 库目录>`。离线 tombstone 可用 `ndk-stack -sym <未 strip 库目录> -dump <tombstone 文件>`。
+3. **查询单个偏移**：`llvm-symbolizer --obj=<未 strip 库> 0x<库内相对偏移>` 可把单个地址映射到源码位置。输入应是相对偏移，而不是进程中的绝对 PC。
+4. **分析热点**：simpleperf 的 `app_profiler.py` 可按包采样并收集 `binary_cache`，`report_html.py` 可生成关联符号的报告。库文件必须与设备上实际运行的版本匹配。
+5. **线上包取证**：应用不能直接读取系统 `/data/tombstones` 文件，但 Android 12（API 31）起可从 `ApplicationExitInfo.getTraceInputStream()` 读取本应用 native crash 的 tombstone protobuf。它存放在全局循环缓冲区，较新的崩溃可能覆盖旧记录，接口也可能返回 null。对旧系统或无 trace 的退出，可接入 Breakpad、Crashpad 一类方案捕获 minidump 并上传，再用对应版本的符号文件离线符号化。
 
-1. **确认**：meminfo 观察 Native PSS 随操作次数线性增长；`dalvik.vm.checkjni` 打开后跑用例，CheckJNI 会以 `JNI DETECTED ERROR IN APPLICATION` 报出部分误用（ART 调试开关见 06-art-runtime.md Q2）；
-2. **修复纪律**：Get/Release 严格配对；用 RAII 包装（构造 Get、析构 Release）避免早退路径漏放；
-3. **工具链**：heapprofd 等 native 内存工具可定位分配点——监控体系见 [../07-memory/03-app-memory-stability.md](../07-memory/03-app-memory-stability.md) Q10–Q16。
+**Q4: JNI 中反复调用 `GetStringUTFChars` 或 `GetByteArrayElements` 后 Native Heap 线性增长，怎样确认并修复泄漏？**
 
-**Q4: @FastNative 与 @CriticalNative 加速什么？各自的硬约束与版本可用性是什么？**
+`GetStringUTFChars`、`GetByteArrayElements` 等接口可能返回副本，也可能返回 VM 管理的直接访问指针。无论是否复制，调用方都必须用对应的 Release 接口结束访问；遗漏 Release 会让高频或长驻路径持续占用 native 资源。
 
-两者都通过推迟 GC 挂起等待与减少过渡开销加速 JNI 调用——@FastNative 让线程保持 runnable；@CriticalNative 更激进，要求方法必须静态、参数与返回值不得含对象（ABI 中没有 JNIEnv*/jclass），官方 2016 年 angler 设备数据为普通 JNI 约 115ns、@FastNative 约 35ns、@CriticalNative 约 25ns。
+1. **确认增长类型**：用 `dumpsys meminfo` 观察操作次数增加时 Native Heap 或 Native PSS 是否同步增长，并确认 Java Heap 没有相同趋势。单看进程总内存不能证明问题来自 JNI。
+2. **检查 API 配对**：每个 Get 都应在所有返回路径上与对应 Release 配对。不要依赖 `isCopy` 判断是否需要 Release。
+3. **覆盖早退路径**：用 RAII 包装 Get/Release，例如构造时取得字符或数组元素、析构时 Release，避免异常、错误返回和多分支漏释放。
+4. **启用检查**：在可调试设备上按该 Android 版本配置 CheckJNI，再执行稳定复现用例。可在应用 manifest 中启用 `android:debuggable` 以只对该应用启用，或在可用的调试设备上设置 `debug.checkjni=1`。CheckJNI 会检测部分 JNI 契约误用并报告 `JNI DETECTED ERROR IN APPLICATION`，但不能替代内存分析器发现所有泄漏。
+5. **定位分配点**：使用 heapprofd 等 native 内存分析工具关联分配调用栈，并将增长曲线与复现操作次数对照。
 
-可用性（已与官方参考文档核对）：Android 8 起平台内部使用；8–11 必须配合 RegisterNatives 动态注册；12 起支持内建动态 JNI 链接查找；14（API 34）起成为公开 API。Android 7 及以下注解被忽略，强行套用会因 ABI 不匹配导致错误编组；非静态或带对象参数的方法会抛 VerifyError。
+**Q5: Android 的 `@FastNative` 和 `@CriticalNative` 分别减少什么调用开销？它们有哪些限制？**
 
-做法：只用于短小纯计算的高频方法——推迟 GC 挂起意味着临界区内不可做阻塞或回调 Java 的事，否则拖慢整个 GC。
+两种注解都针对短小、高频的 JNI 调用，减少托管代码与 native 之间的转换开销。执行期间 GC 不能为关键工作挂起该线程，因而长时间运行或阻塞会延误 GC。`@FastNative` 保留常规 JNI 参数能力；`@CriticalNative` 更严格，适用的方法不能访问 Java 对象，ABI 中也没有 `JNIEnv*` 和 `jclass` 参数。
 
-**Q5: native 自建线程里 FindClass 应用类为什么失败？attach 的线程还要注意什么？**
+1. **`@FastNative`**：ART 在 native 调用期间延迟挂起检查，因此方法应快速返回。不要在其中执行阻塞 I/O、长时间等待或回调 Java，否则会延迟 GC 和其他线程的挂起。
+2. **`@CriticalNative`**：仅用于静态方法，参数与返回值不能含 Java 对象。调用 ABI 不传 `JNIEnv*` 和 `jclass`，native 函数签名必须与这种约定匹配。
+3. **版本与注册**：Android 8 起平台内部实现这些优化。Android 8–10 的按名称动态查找尚未实现，Android 11 存在已知问题，因此 Android 8–11 必须使用 `RegisterNatives` 显式注册。Android 12 起支持内建动态查找，但性能敏感方法仍建议显式注册。Android 14（API 34）起成为 CTS 测试的公开 API。Android 7 及更早版本会忽略注解，`@CriticalNative` 的 ABI 不匹配可能造成参数编组错误和崩溃。Android 8–13 的兼容保证弱于 Android 14 之后，面向广泛设备兼容时应谨慎使用。
+4. **性能证据**：官方曾在特定设备上报告普通 JNI、FastNative 和 CriticalNative 的微基准时延约为 115 ns、35 ns 和 25 ns。该数字只代表对应设备和测试条件，不能当作应用实际收益保证。
+5. **使用判断**：先测量跨界调用是否为热点，再确认方法满足线程挂起、参数类型和耗时约束。若主要成本在计算、分配或数据复制，换注解不一定解决瓶颈。
 
-FindClass 沿"当前线程关联的类加载器"查找，native 自建线程 attach 后没有应用加载器上下文，回退只落到系统类加载器，所以应用类返回 null；解法是在 JNI_OnLoad 或有 Java 上下文时把 Class 缓存为全局引用并缓存 method/field ID。
+**Q6: native 自建线程调用 `FindClass` 为什么可能找不到应用类？跨线程使用 JNI 引用要遵守什么规则？**
 
-前提：JavaVM 进程级共享、JNIEnv 线程私有。机制：attach 的线程在 detach 前局部引用表持续存活累积，长驻线程要显式 DeleteLocalRef；系统类在任何线程都能找到，失败的只会是应用类。结果：跨线程回调基建（全局引用、ID）统一预建，线程入口只消费缓存。
+native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始 Java 调用栈提供的应用类加载器上下文。该线程上的 `FindClass` 可能退回系统类加载器，因此能找到系统类却找不到应用类。
 
-**Q6: GetStringCritical 返回的指针可以直接保存吗？数组 Elements API 的三种 release 模式怎么选？**
+1. **预缓存应用类**：在 `JNI_OnLoad` 或具有正确应用类加载器上下文的 Java 调用中取得 `Class`，创建全局引用并缓存所需 method/field ID。native 线程随后使用缓存，不要依赖它重新按名称查找应用类。
+2. **区分 VM 与环境指针**：`JavaVM` 在进程内共享，可用于获取当前线程的 JNI 环境。`JNIEnv*` 是线程私有，不能把一个线程的指针传给另一个线程复用。
+3. **附着和分离线程**：native 创建的线程调用 Java 前先 attach。线程退出时若仍由 native 管理，应 detach，避免线程状态和资源遗留。
+4. **管理引用生命周期**：局部引用通常在 native 方法返回时释放；自建线程上的局部引用要到 detach 或显式删除才释放。长循环应及时 `DeleteLocalRef`。全局引用跨调用和线程存活，必须显式 `DeleteGlobalRef`。
 
-不可以——GetStringCritical 可能返回拷贝：compact strings 把字符以 latin-1 压缩存储，叠加移动 GC，VM 可能选择复制而非暴露原指针；数组 `Get<Type>ArrayElements` 同样是 pin-or-copy 二选一，release 模式 0 回写并释放、JNI_ABORT 不回写只释放、JNI_COMMIT 回写不释放。
+统一在有 Java 类加载器上下文的阶段准备全局引用与 ID，线程入口只使用缓存，并在完成时清理引用和线程附着。
 
-前提：Critical 区段禁用 GC，必须短小且成对出现，区内不得调用其他 JNI。做法：不依赖 isCopy 的值写代码——按"可能拷贝"处理；大数组只读检查用 JNI_ABORT 省回写，分批写回用 JNI_COMMIT，常规"改完要生效"用 0。结果：把 Critical 指针存起来跨 GC 使用是悬空崩溃的典型来源。
+**Q7: `GetStringCritical` 返回的指针能否保存到函数调用之外？critical 区域有哪些限制？**
+
+不能把 `GetStringCritical` 返回的指针保存到配对的 `ReleaseStringCritical` 之后，也不能跨越可能改变对象状态的调用继续使用。VM 可能直接暴露内部存储，也可能返回副本，调用方必须按短时借用指针处理。
+
+1. 在使用区间内保持指针有效，并保证每次成功取得都恰好配对调用 `ReleaseStringCritical`。
+2. critical 区域必须短小，不得阻塞、等待锁或调用其他 JNI 函数，因为 VM 可能在此期间延迟 GC 或线程挂起。
+3. 不要根据 `isCopy` 的值决定是否释放，也不要把指针缓存到全局变量或异步任务中。
+
+**Q8: `Get<Type>ArrayElements` 的三种 Release 模式有什么区别，修改后的数组应选哪一种？**
+
+`Get<Type>ArrayElements` 可能返回 pin 住的数组存储，也可能返回副本。Release 时要按是否提交修改和是否结束访问选择模式。
+
+1. **`0`**：提交修改并释放访问资源。常规读写完成后要让结果生效时使用。
+2. **`JNI_ABORT`**：不提交对副本所做的修改并释放访问资源。只读访问适合用它避免不必要的回写；若 VM 给出的是直接数组存储，则修改已发生，不能把它当作撤销修改。
+3. **`JNI_COMMIT`**：提交对副本的修改，但保留访问资源，之后仍须再调用一次 Release 结束访问。适用于需要阶段性提交、但还要继续使用指针的场景。
+4. **配对规则**：每次成功取得的 Elements 指针最终都必须释放。不要跨 Release 保存指针，因为 VM 可能使用临时副本或移动后的存储。

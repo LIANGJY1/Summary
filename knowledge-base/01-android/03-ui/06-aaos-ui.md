@@ -1,6 +1,6 @@
 # AAOS 车机 UI 架构与 CarService
 
-> 学习资料（文章模式沉淀）。主线：车机 UI 的分层与定制点、CarService 与 car-lib 的分工、车机 Launcher 与投影共存、Car App Library 模板应用与 AAOS 原生 Activity 两条路线、CarAppService 注册契约与 Car App API level、车机 SystemUI 的独立实现、应用焦点、occupant zone 的座位-显示-用户映射、多用户模型、CarPowerManager 与 power policy 对屏幕的接管、日夜模式、旋钮与自定义输入、仪表通道、调试与特性开关。CarService 实现与 car-lib API 按本地 AAOS13 源码（Android 13）核对（`packages/services/Car/service/src/com/android/car/`、`car-lib/src/android/car/`、`packages/apps/Car/`），Car App Library 与 Power/Car Occupant Zone 文档结论按官方文档口径（2026-09 检索）。交互安全与驾驶分心见 [07-driving-safety.md](07-driving-safety.md)，配置资源适配见 [03-resources.md](03-resources.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：车机 UI 的分层与定制点、CarService 与 car-lib 的分工、车机 Launcher 与投影共存、Car App Library 模板应用与 AAOS 原生 Activity 两条路线、CarAppService 注册契约与 Car App API level、车机 SystemUI 的独立实现、应用焦点、occupant zone 的座位-显示-用户映射、多用户模型、`CarPowerManager` 与 power policy 对屏幕的接管、日夜模式、旋钮与自定义输入、仪表通道、调试与特性开关。CarService 实现与 car-lib API 按本地 AAOS13 源码（Android 13）核对（`packages/services/Car/service/src/com/android/car/`、`car-lib/src/android/car/`、`packages/apps/Car/`），Car App Library 与 Power/Car Occupant Zone 文档结论按官方文档口径（2026-09 检索）。交互安全与驾驶分心见 [07-driving-safety.md](07-driving-safety.md)，配置资源适配见 [03-resources.md](03-resources.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 收到“车机页面改不动”的需求后，如何判断应改应用、SystemUI、CarService 还是车辆层？**
 
@@ -11,26 +11,34 @@
 3. **系统服务层**：CarService 下的各服务，负责焦点、驾驶状态、UX 限制、投影、电源策略、占用区、输入等，代码在 `packages/services/Car/service/src/com/android/car/`（本地核对）。
 4. **车辆与显示层**：VHAL、显示与电源策略。
 
-改车机界面的落点判断只有一句话：**要改的是"这台机器的通用外观"还是"某个应用的界面"**。前者走系统窗口层加资源定制（注意定制点越少越稳定），后者只改应用，不要为了统一外观去改系统窗口层。
+改动前先分清面向整机的策略和单应用内容，再确认具体拥有者。SystemUI 或 Launcher 的职责不等于所有“车机通用外观”都归 WMS。窗口管理、系统 UI、CarService 与车辆控制是不同改动边界。
 
 **Q2: 应用需要读取车辆状态时，CarService 与 car-lib 分别承担什么角色？**
 
-CarService 是一组运行在 system_server 里的系统服务集合，每个服务各自负责一个领域（音频、电源、occupant zone、UX 限制、投影等），统一入口是 CarServiceImpl 与 ICarImpl（本地 AAOS13 源码核对）。car-lib 则是对外的 API 层：应用通过 android.car.* 下的管理器类拿到服务句柄，car-lib 里既有 Java API 也有跨进程 AIDL（如 CarOccupantZoneManager.aidl、ICar.aidl）。
+CarService 在 AAOS 13 中作为高权限 `com.android.car` 进程运行，由 system_server 中的 CarServiceHelperService 协调启动，不是 system_server 进程内部的一组服务。它通过 CarServiceImpl/ICarImpl 向 Car API 暴露多个领域服务。car-lib 则是应用侧 `android.car.*` 管理器、Java API 与 Binder/AIDL 契约所在层。
 
-car-lib 的 README 把这条边界讲得很清楚：API 定义在 car-lib，服务实现放在 service 目录，VHAL 接口在 `hardware/interfaces/automotive/`，并给出两条调试入口——`dumpsys car_service --services <CLASS_NAME>` 看服务内部状态、`adb shell cmd car_service` 走服务自带的 shell 命令（car-lib README 与本地源码核对）。所以改一个车机功能的标准路径是"先在 car-lib 确认 API，再改 service 实现"。
+1. **客户端入口**：应用从 car-lib 管理器取得 API，并经 Binder 调用 CarService。
+2. **服务实现**：CarService 服务代码位于 `packages/services/Car/service/`，按音频、电源、occupant zone、UX 限制、投影等职责组织。
+3. **车辆接口**：VHAL 接口定义位于 `hardware/interfaces/automotive/`，具体硬件适配由车辆集成方实现。
+4. **调试入口**：`dumpsys car_service --services <CLASS_NAME>` 查看指定服务状态。`adb shell cmd car_service` 调用 CarService shell 命令。
+
+修改前先从 car-lib 确认公开契约，再追到对应 service 实现。如果涉及车辆属性，再向下核对 VHAL 属性与车辆端实现。
 
 **Q3: 车机桌面需要随驾驶状态和多显示变化，为什么 Launcher 不只是普通桌面应用？**
 
-差别不在视觉，而在**它运行在什么约束下**：车机 Launcher 是当前座位区的前台界面，它必须能在车辆行驶时保持自身可用、能在驾驶状态变化时切换自身内容、还要面对"某个应用突然请求全屏"这种情况下的分心限制（行驶时还要按 UX 限制切换到合规的交互形态）。手机 Launcher 只面对单用户、单显示、无驾驶状态。
+车机 Launcher 仍是一个 Activity/应用组件，但通常承担系统 Home 入口职责，并要与车辆用户、目标 Display、驾驶 UX 限制和电源状态协同。不能因为它是 Launcher 就把它等同于 WMS 或 SystemUI。
 
-因此车机 Launcher 不是一个"桌面应用"，而是系统窗口层的一部分：它与占用区绑定显示、与 UX 限制联动（行驶中被拦截的形态见后文交互安全部分）、与电源策略联动（屏幕开关由策略决定）。评估车机 Launcher 的定制改动时，要按"系统窗口改动"而不是"应用改动"评估影响面。
+1. **启动与显示**：Launcher 是系统为 Home 任务选择的入口，AAOS 可在不同用户或 Display 上运行相应的 Home 内容。
+2. **驾驶约束**：行驶状态可能改变应用可用交互或前后台行为，应用是否能继续显示由 UX 限制、组件声明及系统策略共同决定。
+3. **电源约束**：屏幕电源由车辆电源管理与显示策略协调，Launcher 不应自行假定显示永远开启。
+4. **改动边界**：只改 Launcher 页面通常属于应用/系统应用范围。改系统栏、窗口焦点或跨应用策略时才需要进一步追到 SystemUI、WMS 或 CarService。
 
 **Q4: 车载功能用模板应用还是原生 Activity 实现，怎样按功能和合规成本选路线？**
 
-1. **Car App Library 模板应用**：androidx.car.app 提供的一组模板（列表、网格、分栏、消息、搜索、登录、标签、导航等），应用只提供数据与动作，由车机宿主渲染界面。好处是天生符合车机 HMI 规范与分心限制、可同时跑在 Android Auto 与 AAOS 上；代价是界面自由度低，只能用模板给定的组件。
-2. **AAOS 原生应用**：普通 Activity，自己控制界面与导航。好处是自由度高、可复用手机端代码；代价是要自己处理分心限制、多显示与多用户、以及车机 HMI 规范。
+1. **Car App Library 模板应用**：androidx.car.app 提供列表、网格、消息、搜索、导航等模板，应用提交数据与动作，由兼容宿主渲染。宿主据模板契约控制呈现与部分交互规则，跨 Android Auto/AAOS 的复用取决于宿主支持和发行配置，代价是界面定制自由度较低。
+2. **AAOS 原生应用**：普通 Activity 自行控制布局与导航，自由度较高，也可复用部分手机代码。应用与系统仍需共同满足驾驶 UX、显示/用户和车机质量要求。
 
-选型规则：能模板化的功能优先模板化（导航、POI、天气、通讯这类），需要自定义复杂界面的功能走原生路线但必须显式声明自己是"分心优化"应用（distractionOptimized），否则行驶中会被 UX 限制拦截。两者的作用类型不是互斥的，一个应用可以同时提供一个原生界面和一个模板入口。
+选型时看功能类别是否受 Car App Library 支持，以及需要的界面是否能用模板表达。原生 Activity 若需在行驶时显示，必须满足目标系统对 distractionOptimized 元数据和 UX 限制的要求。单靠开发者声明不保证绕过系统限制。一个应用可同时提供原生入口与模板服务，但两者仍分别遵循宿主与系统契约。
 
 **Q5: Car App 应用已安装却没出现在宿主列表，CarAppService 清单还缺哪些声明？**
 
@@ -45,70 +53,92 @@ CarAppService 是宿主连接应用的入口，它是一个 Service，必须在�
 </service>
 ```
 
-只声明动作不声明类别，宿主无法判断该把它放进哪类应用列表；exported 不为 true 则外部宿主根本绑不上。在 AAOS 上还需要额外的入口组件：清单里放一个 androidx.car.app.activity.CarAppActivity 作为入口（`launchMode="singleTask"`），并声明 distractionOptimized 的 meta-data，以及在 `res/xml/automotive_app_desc.xml` 里声明 `<automotiveApp><uses name="template"/></automotiveApp>`（官方文档口径）。Android Auto 侧还需要 com.google.android.gms.car.application 指向同一描述文件，AAOS 侧则不需要那个 GMS 引用。
+Service 需要可被宿主发现并分类。AAOS 还要声明 CarAppActivity 和 Automotive 能力描述文件，Android Auto 与 AAOS 使用不同的 application 元数据键。
+
+1. **Service 组件**：`android:name` 指向 CarAppService 子类。`android:exported="true"` 允许车机宿主跨进程绑定。targetSdk 31 起有 intent-filter 的组件必须显式设置 `android:exported`，省略会导致合并/构建失败。较旧目标版本的默认值可能按是否有过滤器推导，不应依赖该默认值。
+2. **发现动作**：androidx.car.app.CarAppService 是宿主用于发现服务的 action。省略或拼错后，宿主不能用 Car App Library 服务契约找到它。
+3. **应用类别**：本例的 androidx.car.app.category.POI 表示兴趣点应用，必须与应用真实支持的 Car App 类别一致。宿主按类别筛选可展示的应用。能提供多个受支持类别时，可在同一过滤器中声明多个 category。
+4. **最低 Car API**：在 application 中用 androidx.car.app.minCarApiLevel 声明最低宿主 Car API。基线应用可显式设 `android:value="1"`。使用更高等级能力时声明其最低等级，并对更低宿主准备降级路径。不要省略后依赖未核实的宿主默认值。
+5. **AAOS 入口 Activity**：AAOS 需要唯一的 androidx.car.app.activity.CarAppActivity，设 `android:exported="true"`、`android:launchMode="singleTask"`、`android:theme="@android:style/Theme.DeviceDefault.NoActionBar"`，并配置 MAIN/LAUNCHER 过滤器。缺少导出入口或 Launcher 过滤器时，外部 Launcher 无法按预期启动它。singleTask 让 Launcher 能回到已有入口实例。必须设置 meta-data `android:name="distractionOptimized"`、`android:value="true"` 才能按该入口声明驾驶优化。其他 Activity 不应随意照抄该标记。
+6. **模板能力文件**：`res/xml/automotive_app_desc.xml` 中的 `<uses name="template"/>` 声明应用使用模板宿主。AAOS 用 `android:name="com.android.automotive"`、`android:resource="@xml/automotive_app_desc"` 引用该文件。Android Auto 使用 `android:name="com.google.android.gms.car.application"` 元数据，引用键不同。两边的引用不可互相替代，AAOS 包不应仅复制 Android Auto 的 GMS 元数据。
+7. **平台特性**：模板宿主目标的 AAOS 模块应声明 `android.hardware.type.automotive` 与 `android.software.car.templates_host` 两个 uses-feature。`android:required="true"` 表示缺少对应能力的设备不能安装该模块。uses-feature 省略 required 时默认 true。若应用有非模板宿主的回退实现，可显式设 false 允许安装，但运行时必须检查模板宿主是否存在，不能在无宿主设备上调用模板 API。
+8. **其它准入条件**：清单正确仍不保证宿主列出应用。还要确认目标宿主支持所声明类别/API，并检查 CarAppService.createHostValidator() 是否接受该宿主。
 
 **Q6: 同一 Android 版本的车辆支持能力不同，Car App API level 为什么不能用 SDK 版本替代？**
 
-Car App Library 有自己的 API 版本体系（car API level），与 Android API level 独立：宿主声明它支持的 car API level，应用用 androidx.car.app.minCarAppApiLevel 声明自己的最低要求，运行时可查询宿主支持的最高等级，较新的 API 用 @RequiresCarApi 标注（官方文档口径）。
+Car App Library 有自己的 API 版本体系（Car App API level），与 Android API level 独立：应用声明最低 Car App API，运行时查询宿主支持的等级，并对高版本模型/方法使用 @RequiresCarApi 标注。该标注提供兼容性元数据，IDE/lint 可据此检查调用。它不会自动在运行时拦截调用，应用仍须主动比较宿主 API 并选择回退实现。
 
-存在的原因是模板宿主的能力由车厂决定而不是由系统版本决定：同一台 Android 版本的车，宿主可能只实现到 car API 4。只按 Android 版本判断"这个特性能不能用"会在老宿主上直接崩，正确写法是用 @RequiresCarApi 让编译器把不兼容路径标出来，并对不支持的场景准备降级实现。
+宿主能力由车厂实现和更新节奏决定，而不只由 Android 版本决定。同一 Android 版本的车可能运行不同 Car App API level 的宿主。只按 Android API 判断功能支持会误用宿主没有实现的模板/字段，需结合 API 等级检查和明确的降级路径。
 
 **Q7: 模板应用传入 Action 后按钮没显示，宿主渲染与 Template 契约怎样约束结果？**
 
 界面由宿主（车机 Launcher 或模板宿主应用）渲染，应用只提供模板类型与其中的数据、动作。这一层间接带来两条约束：
 
 1. **动作类型受模板约束**：标准动作有固定集合（返回、应用图标等），应用可自定义动作类型（Action.TYPE_CUSTOM 一类的自定义类型），但某个动作能否出现在某模板里、能否带标题与图标，由模板定义（官方文档口径）。
-2. **能力受 car API level 约束**：带 car API 7 标注的新动作（如部分地图与消息类动作）在老宿主上不可用。
+2. **能力受 Car App API level 约束**：Action.COMPOSE_MESSAGE 从 Car App API 7 起支持。更低等级宿主无法按该标准动作呈现，应用应提供受支持的替代交互。
 
 工程含义：调试模板应用时"界面不对"往往是数据或动作与模板契约不匹配，而不是渲染 bug——所以先核对宿主支持的 car API level 与该模板允许的动作集合。
 
 **Q8: 副驾屏上的应用拿不到座位信息，occupant zone 如何关联座位、显示和用户？**
 
-CarOccupantZoneManager 提供按座位区查询信息的能力，返回的 OccupantZoneInfo 里包含 zoneId、occupantType（驾驶员、前排乘员、后排乘员）、座位与显示类型（本地 AAOS13 源码 `car-lib/src/android/car/CarOccupantZoneManager.java` 与官方文档核对）。服务实现 CarOccupantZoneService 从 config_occupant_zones 这个 RRO 配置读取声明；配置为空时会**自动为驾驶员创建一个占用区**作为唯一兜底（本地源码核对）。
+Occupant zone 是车辆座位/乘员区域的逻辑对象，可把座位、主显示及附加显示、输入设备和登录用户关联起来。应用通过 CarOccupantZoneManager 查询系统配置。未配置时的兜底行为与版本和车辆资源配置相关，不能将单屏上的默认驾驶员区推断成多屏映射已配置。
 
-兜底意味着"只配置一个区"和"没配置"在单屏车机上表现一致，但一旦加装第二块屏却忘了配置，行为就是"新屏幕没有对应占用区"，应用侧表现为该屏上的界面拿不到座位上下文。版本差异要知道：官方文档明确从 Android 14（UPSIDE_DOWN_CAKE_0）起允许没有驾驶员区的系统、且当前用户不再是默认驾驶员，并且要求每个占用区与显示类型至少声明一种输入类型。
+1. **查询结果**：AAOS 13 的 OccupantZoneInfo 提供 zoneId、occupantType、座位及显示类型等信息，具体字段以目标 SDK 为准。
+2. **系统配置**：CarOccupantZoneService 从系统资源/overlay 配置读取占用区与设备映射。AAOS 13 的 config_occupant_zones 未配置时会建立默认驾驶员区作为单区兜底。
+3. **多屏影响**：兜底只解决默认驾驶员区，不会自动为后排或副驾新增屏幕建立完整座位映射。扩展硬件后必须检查 zone、Display 与输入设备配置。
+4. **Android 14 边界**：从 Upside Down Cake 起，系统支持不配置驾驶员 occupant zone，且当前用户不再必然是默认驾驶员。`config_occupant_display_mapping` 中每个有关联的 occupant zone/display type 都必须定义至少一种输入类型。没有输入设备的显示应显式使用 `INPUT_TYPE_NONE`。不能把 Android 13 的兜底推断外推到 Android 14。
 
 **Q9: 后排操作影响了驾驶员的数据，车机多用户下哪些状态必须隔离？**
 
-车机上存在三类用户：当前用户（通常是驾驶员）、后台或无显示的用户（headless）、以及各乘员区的用户。CarUserManager 提供这套模型的操作能力（本地源码核对），系统里还有 `packages/services/Car/service/src/com/android/car/user/` 下的用户管理服务。车机上还存在一个不属于任何座位区的系统用户，承担与驾驶员无关的工作。
+多用户 AAOS 中，Android 当前前台用户、headless system user、以及分配给 occupant zone 的可见用户是不同概念。座位区不是 Android User 本身，只有系统将用户登录/分配到该区后才形成映射。
 
-写代码时三条纪律：不要假设"只有一个前台用户"（UserHandle 相关的全局状态可能是 headless 用户的）；跨用户数据不共享，持久化要按用户隔离；"当前用户是谁"与"当前驾驶者是谁"是两个概念——夜间有人坐进后排、副驾在后排屏幕上操作，都可能让当前用户与驾驶者不同。
+1. **用户类型**：CarUserManager 管理 Android 用户和车辆用户切换。系统用户可在 headless system user 模式下无显示运行，不能把它当作驾驶员用户。
+2. **区域映射**：每个配置好的 occupant zone 可关联登录用户与一组 Display。zone 表示一组显示的抽象，不保证一人一个 zone。是否为每个座位创建独立用户取决于系统配置和并发多用户能力。
+3. **数据隔离**：应用按 Android 用户存储的数据由平台用户隔离规则决定。不要自行把不同用户的私有数据放进共享文件或静态进程状态。
+4. **驾驶身份**：当前登录/前台用户不必然等于驾驶员身份。判断驾驶相关行为应结合车辆/占用区信息，而不是仅检查当前 UserHandle。
 
 **Q10: 调用 DisplayManager 关闭车机屏幕后状态不一致，屏幕实际由什么电源策略控制？**
 
-因为车机屏幕的开关由车辆电源策略决定，而不是 Android 的显示开关。官方文档描述的结构是：CarPowerManagementService 协调状态机并把电源策略下发给 CarPowerPolicyDaemon 与 VMCU，策略里声明哪些硬件与软件组件（显示、音频、语音交互）应开或关；AAOS 有一个状态机（等待 VHAL、上电、关机准备、等待 VHAL 完成等状态），并在允许的状态下应用新策略（官方文档口径）。
+AAOS 屏幕电源由车辆电源状态和 power policy 管理，普通 DisplayManager 的屏幕开关调用不能代表车辆电源策略。新版本架构中 CarPowerManagementService 协调电源状态并与 VHAL 通信，CarPowerPolicyDaemon 管理策略并通知订阅方。AAOS 13 的具体服务分工应按该版本源码核对。
 
-对 UI 的直接影响有两条：屏幕由策略关闭时，应用不会收到普通意义上的"屏幕关闭"广播来判断该不该停渲染，而应监听电源状态/策略变化；应用在关机准备阶段还能收到提前通知，可以用来做提前释放与落盘（本地源码可见 CarPowerManager 的 STATE_PRE_SHUTDOWN_PREPARE 一类状态与 isCompletionAllowed 判定，核对）。
+1. **状态路径**：VHAL 参与 Wait for VHAL、On、Shutdown Prepare、Wait for VHAL Finish 等电源状态转换。
+2. **策略路径**：策略列出 Display、Audio、Input、Voice Interaction 等组件的预期电源状态。当前架构由 CarPowerPolicyDaemon 维护策略，CarPowerManagementService 协调状态机。VHAL 或系统组件可在规定状态请求应用策略。
+3. **屏幕行为**：On 状态下 Display 仍由 power policy 控制，不应依赖手机形态的普通 DisplayManager 开关或屏幕广播来决定车机显示是否上电。
+4. **应用回调**：`CarPowerManager` 可向有权限的系统客户端提供电源状态/策略通知。普通应用可用哪些接口取决于目标版本和权限，不能假定任意应用都可订阅策略。
+5. **关机准备**：应用收到允许的预关机/关机准备通知时，应在时间限制内完成保存状态和释放资源。具体状态常量（如 `STATE_PRE_SHUTDOWN_PREPARE`）及 `isCompletionAllowed` 语义要按 AAOS 13 car-lib 核对。
 
 **Q11: 车机夜间模式跟车辆灯光变化不同步，日夜状态由谁提供给应用？**
 
-车机有独立的服务：`packages/services/Car/service/src/com/android/car/CarNightService.java`（本地 AAOS13 源码核对），它管理车机自己的日夜状态。对比手机有两处差异：一是触发源不同——车机可由车辆信号或电源状态驱动，而不只是用户设置与系统时间；二是取值粒度不同——车机可能按显示（不同座位区屏幕）处于不同日夜状态。
+CarNightService 位于 `packages/services/Car/service/src/com/android/car/CarNightService.java`，在 AAOS 13 中管理车机日夜模式。切换输入可来自车辆灯光信号或系统策略，不应默认等同于用户设置或当地时间。
 
-应用侧的正确做法是监听配置变化与 Configuration.uiMode 判断，而不是自己算时间（日夜状态可能由车辆信号驱动，应用应读取系统提供的 Configuration），因为重复实现昼夜逻辑会与车辆信号脱节。
+1. **读取方式**：应用监听 Configuration 变化并读取 `Configuration.uiMode` 的 night 位，使用系统当前选择的日夜资源。
+2. **按显示差异**：车辆可按显示配置不同日夜状态，应用必须从当前 Activity/Display 的 Configuration 读取，不要用进程全局缓存覆盖显示差异。
+3. **不要重复计算**：应用不要自行根据时钟推断车机昼夜，否则会与车辆信号和系统策略脱节。
 
 **Q12: 应用收不到旋钮或自定义按键事件，车机输入事件经什么系统通道分发？**
 
-车机输入通过 CarInputManager 注册回调获取，输入事件分多种类型，其中既有触摸也有自定义输入事件；旋钮事件与自定义事件各有独立的数据结构（RotaryEvent、CustomInputEvent，本地 AAOS13 源码核对）。系统侧由 CarInputService 与输入采集控制器把 VHAL 事件转成应用可注册的回调。
+车机专用旋钮和自定义输入不是普通触屏 MotionEvent。系统通过 CarInputManager 的权限控制 API 选择输入类型并回调相应事件对象。触屏仍走常规 Android 输入分发。
 
-AOSP 自带一个旋钮控制器应用（`packages/apps/Car/RotaryController`，本地源码核对），它的存在说明旋钮事件需要系统级仲裁——同一个旋钮在不同界面可能被映射成"滚动列表""切换标签""调节音量"，仲裁规则集中实现比每个应用各写一套更可靠。
-
-应用侧纪律：旋钮只能做离散、有明确边界的操作（选中、翻页、调音量），不能替代连续手势；自定义输入事件要先向系统申请再使用，没有申请时事件不会送达。
+1. **数据与服务**：AAOS 13 的 RotaryEvent、CustomInputEvent 等结构表达不同车机输入。CarInputService 和输入采集路径把系统认可的事件交给有权限的客户端。
+2. **输入仲裁**：AOSP 的 `packages/apps/Car/RotaryController` 展示系统级焦点与旋钮导航如何配合。同一旋钮可按焦点和系统策略驱动焦点移动、列表滚动或其他动作，应用不能假定自行独占旋钮。
+3. **权限与注册**：应用需按目标版本所需的 Car 权限和受支持输入类型注册。未获权限或系统未将该类型路由给应用时，不会收到对应回调。
+4. **交互设计**：旋钮适合有焦点、有离散边界的导航与选择，不应伪装成连续触摸手势。自定义输入需由系统配置/授权后才能使用。
 
 **Q13: 导航地图无法显示到仪表屏，cluster 服务与普通 Activity 有何区别？**
 
-仪表屏与中控屏是不同显示、不同座位区、有更严格的驾驶限制，Android 为此提供独立的系统服务：ClusterHomeService（仪表主屏）、ClusterNavigationService（导航通道）、InstrumentClusterService（顶层注册），都在 CarService 下（本地 AAOS13 源码核对）。
+AAOS 13 的仪表集群服务提供独立于普通 Home/Activity 启动的导航/主界面注册与内容通道。中控屏 Activity 不会因为目标显示是仪表就自动成为合法的集群内容。
 
-导航应用要往仪表上画图，走的是这套服务通道而不是"在仪表上起一个 Activity"。这个设计的收益是仪表内容与驾驶限制、用户权限、以及仪表自身的渲染能力统一收口；代价是导航应用要为仪表实现一套受限的内容接口，与中控屏的渲染完全是两套代码路径。
+1. **服务职责**：ClusterHomeService 管理仪表 Home 入口，ClusterNavigationService 提供导航内容通道，InstrumentClusterService 负责集群能力注册与访问。
+2. **内容提交**：导航应用按集群接口提供受限内容或渲染数据，由车厂仪表端按硬件能力显示。不能假定可在仪表 Display 任意启动 Activity。
+3. **边界与代价**：集群输出需遵守驾驶安全、权限和仪表渲染契约。它与中控 Activity 是不同接口路径，需分别维护并验证。
 
 **Q14: Android Auto 投影启动后原生应用不可见或失焦，二者如何共存？**
 
-投影由 CarProjectionService 管理，应用侧 API 是 CarProjectionManager，投影状态用独立的数据类型表示（本地 AAOS13 源码核对）。共存关系是"投影占一层，原生应用占另一层"，而不是互相替换。
+AAOS 13 中 CarProjectionService/CarProjectionManager 管理投影相关状态和客户端通知。投影如何呈现、原生任务是否可见或有焦点，由具体 SystemUI、WMS、显示与产品策略共同决定，不能概括成固定的“两层窗口”。
 
-投影接入会带来三项工程影响：
-
-1. 投影态下原生应用可能不可见或不可交互，应用需要正确响应可见性与焦点变化。
-2. 投影 UI 契约由投影方定义（多为模板化），原生应用不能自行修改。
-3. 投影与原生应用同时存在时，音视频焦点与分心限制都要生效；音频焦点机制见 [AAOS 车机音频](../09-audio/03-aaos-audio.md)。
+1. **可见性与焦点**：投影进入/退出可能改变原生任务可见性或焦点，应用应正确响应生命周期与窗口焦点变化。
+2. **投影 UI 契约**：投影界面由投影栈及系统集成控制，原生应用不能任意修改投影 UI。
+3. **并行策略**：同时存在时仍须遵守音频焦点、驾驶 UX 限制和显示策略。音频焦点影响参见 [AAOS 车机音频](../09-audio/03-aaos-audio.md)。
 
 **Q15: 车机调试时 UX 限制被放开，如何用服务状态与特性开关确认测试环境？**
 
@@ -116,19 +146,36 @@ AOSP 自带一个旋钮控制器应用（`packages/apps/Car/RotaryController`，
 
 1. **服务状态**：`dumpsys car_service --services <CLASS_NAME>` 查看某个 CarService 的内部状态，`adb shell cmd car_service` 调用服务自带的 shell 命令（car-lib README 与本地源码核对）。
 2. **调试模式开关**：本地源码里有专用的调试限制控制器应用（`packages/apps/Car/DebuggingRestrictionController`，核对），用于在调试期间调整限制类行为——这类开关必须确认量产关闭，否则会形成安全缺口。
-3. **特性开关**：CarService 有特性控制器与实验特性控制器（CarFeatureController、CarExperimentalFeatureServiceController，本地核对），负责按车型/配置裁剪服务与能力；它们与平台层的特性开关体系是两套东西，车机侧由 CarService 自己管。
+3. **特性开关**：CarService 有特性控制器与实验特性控制器（CarFeatureController、CarExperimentalFeatureServiceController，本地核对），负责按车型/配置裁剪服务与能力。它们与平台层的特性开关体系是两套东西，车机侧由 CarService 自己管。
 
 排查顺序是"先用 dumpsys 确认服务状态，再用开关排除干扰项，最后才改代码"——顺序反了会在一个被人为放开限制的环境里调试出"看起来正常"的结果。
 
 **Q16: 地图 Surface 的生命周期怎么管理？帧预算与可见区域有哪些约束？**
 
-导航、POI 与天气类模板要声明相应模板权限及 androidx.car.app.ACCESS_SURFACE，经 AppManager.setSurfaceCallback() 接收 SurfaceContainer。生命周期规则：每次 onSurfaceAvailable() 都以回调给出的宽、高、DPI 与 Surface 为准，尺寸或 DPI 变化时即使底层 Surface 尚未销毁也可能再次回调；每个收到的 Surface 实例都必须调用 release()，onSurfaceDestroyed() 到达后停止提交帧，并释放自己创建的 VirtualDisplay、Presentation、EGL 关联表面、图形缓冲区与地图引擎引用。投射断开、host 重建、昼夜模式或配置变化都可能触发重建。
+导航、POI 和天气模板如需自绘 Surface，必须按 Car App API 权限契约注册 SurfaceCallback，并把 Surface、可见区域和帧调度视为宿主提供的临时资源。
 
-可见区域分两层：onVisibleAreaChanged() 给出当前保证无遮挡的 visible area，当前必须可见的重要内容放这里；onStableAreaChanged() 给出考虑动态遮挡后长期稳定的最小区域，不希望随 host 控件显隐移动的持续内容放这里——固定安全边距会在超宽屏、远端屏和不同旋转输入布局上出错。帧预算按设备报告与 trace 为准、不能固定 60 Hz：路线计算、瓦片解码与图标生成不进渲染线程，快速拖动时取消已离开视野的请求、合并重复瓦片、限制解码并发；热压力或 GPU 余量不足时减少非导航覆盖物、阴影与预取，但路线、下一转向与安全提示保持可读。分别记录平均帧率、jank、帧呈现时间与功耗。
+1. **模板权限**：NavigationTemplate 需声明 `androidx.car.app.NAVIGATION_TEMPLATES`。MapWithContentTemplate 可按类别声明 NAVIGATION_TEMPLATES 或 MAP_TEMPLATES。旧 MapTemplate、PlaceListNavigationTemplate 和 RoutePreviewNavigationTemplate 使用 NAVIGATION_TEMPLATES。缺少权限时宿主不会授予模板能力。
+2. **Surface 权限与获取**：调用 `setSurfaceCallback()` 前声明 `androidx.car.app.ACCESS_SURFACE`，缺少时调用会抛 `SecurityException`。通过 `AppManager.setSurfaceCallback()` 接收 `SurfaceContainer`。每次 `onSurfaceAvailable()` 都读取本次提供的 Surface、宽、高和 DPI。尺寸或 DPI 变化时可能再次回调。
+3. **释放 Surface**：Surface 生命周期结束或替换时停止提交帧并调用 release() 释放应用收到的 Surface。同步释放应用自己创建的 VirtualDisplay、Presentation、EGL surface、图形缓冲和地图引擎关联，不能只清理 Java Surface 引用。
+4. **重建来源**：投影断开、host 重建、昼夜模式或 Configuration 变化都可能重新触发生命周期回调。渲染器需可销毁后按新尺寸重建。
+5. **可见区域**：`onVisibleAreaChanged()` 表示宿主保证当前不会被其他界面遮挡的可见区域，必须持续显示的关键内容应放在该范围。`onStableAreaChanged()` 表示按当前模板遮挡规则计算、始终可见的最小稳定区域，适合位置不应随控件显隐频繁移动的内容。不要写死安全边距，因为超宽屏、远端屏和旋转布局会改变可用区。
+6. **帧预算**：按设备报告和 trace 决定目标，不固定假设 60 Hz。路线计算、瓦片解码和图标生成不要占渲染线程。拖动时取消离开视野的请求、合并重复瓦片并限制解码并发。
+7. **退化与度量**：温度或 GPU 余量不足时优先减少非导航覆盖物、阴影和预取，同时保持路线、下一转向和安全提示可读。分别记录平均帧率、jank、帧呈现时间和功耗。
 
-**Q17: SystemUI 崩溃重启后车机面板空白、rotary 旋钮失效——CarSystemUI 有哪些值得对照的官方修复与结构要点？**
+**Q17: CarSystemUI 或 TaskPanel 重启后界面空白、焦点或 rotary 失效，应检查哪些恢复与输入边界？**
 
-1. **崩溃后面板空白**：崩溃重启后不会再有 user unlock 事件驱动恢复——官方修复在 rootTask 创建时主动检查用户已解锁并重置 TaskPanel（Bug 394411179）；同族还有 day/night 切换崩溃、车未连接时配置变更 NPE 等修复；
-2. **ScalableUI 焦点**：car-scalable-ui 新窗口管理下 TaskPanel 需要独立焦点逻辑（flag `scalable_ui_task_focus` 灰度），否则内嵌应用无法被按键/rotary 操作（Bug 422571603）；
-3. **rotary 失效**：keyguard 上"允许 rotary focus"后视图处于 paused 态，必须 resume 才能重新获焦（Bug 263440452）——rotary 问题按 keyguard → HUN → 列表分层排查；
-4. **Dagger 替换结构**：CarSystemUI 把 platform SystemUI 编进同一 APK，用 `CarSysUIComponent extends SysUIComponent` 子组件替换依赖图，OEM 只能追加 Binder/Module、不能私造平行 component；仓库自带 daggervis 脚本可导出组件图——MissingBinding 或注入错单例先看新绑定挂在哪个 module（RRO 只改资源、不改绑定）。
+这类问题通常来自服务重启后的状态恢复或焦点链路，不是单一的旋钮驱动故障。应分别检查 TaskPanel 创建、用户解锁、Keyguard、HUN 与列表焦点。
+
+1. **面板空白**：SystemUI 崩溃重启后不一定再次收到 user unlock 事件，因此 TaskPanel/rootTask 创建时要检查当前用户是否已解锁，并在满足条件时重置面板。AOSP 修复线索包括 Bug 394411179。同类还包括 day/night 切换崩溃和车辆未连接时 Configuration 变化导致的空指针。
+2. **ScalableUI 焦点**：新窗口管理下 TaskPanel 需独立焦点处理。AOSP `scalable_ui_task_focus` flag（Bug 422571603）用于灰度验证。缺失时嵌入任务可能无法接收按键或 rotary 焦点。
+3. **Keyguard 与 rotary**：Keyguard 放开 rotary focus 后，若目标 View 仍处于 paused 状态，需先恢复 View 状态再请求焦点。Bug 263440452 是对应修复线索。
+4. **排查顺序**：先确认目标窗口/TaskPanel 是否已创建，再确认用户解锁和窗口焦点，随后检查 Keyguard、HUN 与列表的焦点迁移，最后检查 CarInputManager/RotaryController 是否把输入路由到当前焦点。
+
+**Q18: CarSystemUI 将依赖注入接到 platform SystemUI 时，CarSysUIComponent 与 OEM Module 的扩展边界是什么？**
+
+AAOS CarSystemUI 在其实现中扩展 platform SystemUI 的依赖图。新增绑定应沿既有子组件和 Module 接入，避免创建互不兼容的并行组件树。
+
+1. **组件关系**：AAOS 13 的 CarSystemUI 使用 `CarSysUIComponent extends SysUIComponent` 将车辆专属绑定接到 platform SystemUI 组件层。
+2. **OEM 扩展**：OEM 按项目扩展点添加 Binder 或 Dagger Module，并遵守现有依赖图生命周期。不要假定任何任意自建 component 都能替代宿主依赖图。
+3. **排查绑定**：遇到 MissingBinding 或单例作用域错误，沿构造注入关系检查 binding 所属 Module、子组件安装位置和 scope。
+4. **图形化工具**：仓库自带 daggervis 脚本可导出组件图，适合检查绑定关系。RRO 只能替换允许覆盖的资源，不能改变 Dagger 绑定。

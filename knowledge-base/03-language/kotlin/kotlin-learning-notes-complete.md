@@ -1,3 +1,5 @@
+# Kotlin 学习笔记（完整版）
+
 **Q1: Java 的优势？**
 
 - **多平台与强大的社区支持**：无论是 Web 开发还是移动设备，Java 都是主流编程语言。
@@ -92,7 +94,7 @@
   2. **非表达式定义的函数（代码块函数体）**：除了返回 `Unit`（类似 Java 的 `void`，表示无有意义的返回值），其他情况必须显式声明返回类型。否则编译器会默认当成返回 `Unit`，若你实际在代码块中 `return` 了一个具体值（如 `Int`），就会产生冲突并报错：
      ```kotlin
      // 错误写法：大括号包围，未声明返回类型，默认期望返回 Unit，但你却 return 了 Int，编译报错
-     fun sum(x: Int, y: Int) { return x + y } 
+     fun sum(x: Int, y: Int) { return x + y }
 
      // 正确写法 1（显式声明返回类型为 Int）：
      fun sum(x: Int, y: Int): Int { return x + y }
@@ -138,7 +140,7 @@
   而高阶函数允许将**行为（一段业务逻辑过滤过程）**抽象为一个参数（函数引用）传递进去。这使得数据处理骨架与具体的业务条件彻底解耦。
   ```kotlin
   data class Country(val name: String, val continent: String, val population: Int)
-  
+
   // 1. 高阶函数设计：将具体的“过滤条件判断”抽象为参数 test，类型为 (Country) -> Boolean
   fun filterCountries(countries: List<Country>, test: (Country) -> Boolean): List<Country> {
       val res = mutableListOf<Country>()
@@ -147,12 +149,12 @@
       }
       return res
   }
-  
+
   // 2. 外部定义一段具体的行为（判断是否为人口大于1亿的欧洲大国）
   fun isBigEuropeanCountry(country: Country): Boolean {
       return country.continent == "EU" && country.population > 10000
   }
-  
+
   // 3. 将行为（方法引用）作为参数传递，彻底解耦
   // filterCountries(countries, ::isBigEuropeanCountry)
   ```
@@ -180,8 +182,8 @@
   fun curryingLike(content: String, block: (String) -> Unit) { block(content) }
 
   // Lambda 移到括号外部，既实现了类似柯里化的优雅链式表达，又避免了过度抽象
-  curryingLike("looks like currying style") { content -> 
-      println(content) 
+  curryingLike("looks like currying style") { content ->
+      println(content)
   }
   ```
 
@@ -217,7 +219,7 @@
 - **Unit 单例的优雅**：`Unit` 是一种真正的类型，且在全局只有一个实例 `()`。它完美兼容了泛型系统，让高阶函数的 API 设计更加统一，不再需要为无返回值的场景单独开辟后门。
   ```kotlin
   // Kotlin 中，Unit 是一个正常的类型
-  val printFunc: (String) -> Unit = { arg -> println(arg) } 
+  val printFunc: (String) -> Unit = { arg -> println(arg) }
   ```
 
 **Q17: Kotlin 在流程控制、运算符和字符串上还有哪些惊艳的改良？**
@@ -1083,6 +1085,137 @@
 
 
 
+**Q51: 什么是伴生对象 companion object？它如何替代 Java 的 static？（工厂方法模式）**
+
+- **Java 中 static 的缺陷**：一个类中既有静态变量/静态方法，也有普通变量/普通方法。虽然静态内容属于类、普通内容属于对象，但它们在代码结构上**混杂在一起，职能区分得不够清晰**：
+  ```java
+  public class Prize {
+      private String name;
+      private int count;
+      private int type;
+      static int TYPE_REDPACK = 0;
+      static int TYPE_COUPON = 1;
+      static boolean isRedpack(Prize prize) {
+          return prize.type == TYPE_REDPACK;
+      }
+      // 普通方法与静态成员混在一起
+  }
+  ```
+- **伴生对象的概念**："伴生"是相较于一个类而言的，意为**伴随某个类的对象**。它属于这个类所有，全局只有一个单例，需要声明在类内部，在**类被装载时**被初始化。语义上更清晰，用花括号把所有静态属性和方法包裹起来，与类的普通方法和属性清晰区分：
+  ```kotlin
+  class Prize(val name: String, val count: Int, val type: Int) {
+      companion object {
+          val TYPE_REDPACK = 0
+          val TYPE_COUPON = 1
+          fun isRedpack(prize: Prize): Boolean {
+              return prize.type == TYPE_REDPACK
+          }
+      }
+  }
+  fun main(args: Array<String>) {
+      val prize = Prize("红包", 10, Prize.TYPE_REDPACK)
+      print(Prize.isRedpack(prize))
+  }
+  ```
+- **实现工厂方法模式**：伴生对象的另一个作用是实现工厂方法模式。相比从构造方法实现工厂方式，它有两大优势：从构造方法方案**语义不够明确**（只能靠参数区分）且**每次获取对象都要重新创建对象**；而伴生对象可以改进这两个问题：
+  ```kotlin
+  class Prize private constructor(val name: String, val count: Int, val type: Int) {
+      companion object {
+          val TYPE_COMMON = 1
+          val TYPE_REDPACK = 2
+          val TYPE_COUPON = 3
+          val defaultCommonPrize = Prize("普通奖品", 10, Prize.TYPE_COMMON)
+          fun newRedpackPrize(name: String, count: Int) = Prize(name, count, Prize.TYPE_REDPACK)
+          fun newCouponPrize(name: String, count: Int) = Prize(name, count, Prize.TYPE_COUPON)
+          fun defaultCommonPrize() = defaultCommonPrize // 无须构造新对象
+      }
+  }
+  ```
+- **总结**：任何在 Java 类内部用 `static` 定义的内容都可以用伴生对象实现；一个类的伴生对象与静态类一样，全局只能有一个。
+
+**Q52: 如何用 object 创建"天生的单例"？与 Java 单例模式有何对比？**
+
+- **Java 单例模式的痛点**：单例模式最大的特点是系统中只能存在一个实例对象，所以 Java 必须通过**构造方法私有化** + 提供**静态方法创建实例**的方式来实现：
+  ```java
+  public class DatabaseConfig {
+      private static DatabaseConfig databaseConfig = null;
+      // 私有构造方法 + 静态 getter
+      private DatabaseConfig(String host, int port, String username, String password) { ... }
+      static DatabaseConfig getDatabaseConfig() {
+          if (databaseConfig != null) {
+              return databaseConfig;
+          } else {
+              return new DatabaseConfig(DEFAULT_HOST, DEFAULT_PORT, DEFAULT_USERNAME, DEFAULT_PASSWORD);
+          }
+      }
+  }
+  ```
+  它依赖 `static` 关键字，还不得不把构造方法私有化，逻辑繁琐。
+- **object 天生的单例**：由于 `object` 全局声明的对象只有一个，它不需要语法上的初始化，甚至不需要构造方法：
+  ```kotlin
+  object DatabaseConfig {
+      var host: String = "127.0.0.1"
+      var port: Int = 3306
+      var username: String = "root"
+      var password: String = ""
+  }
+  ```
+  可以直接修改它的属性：
+  ```kotlin
+  DatabaseConfig.host = "localhost"
+  ```
+- **object 的性质**：单例对象与普通类一样可以实现接口和继承类，可以看作一种不需要主动初始化的类，也可以拥有扩展方法。它会在**系统加载时**初始化，全局只有一个。
+- **object 不能有构造参数**：`object` 声明**不允许定义主构造函数（带参数）和次构造函数**，下面这种写法是非法的：
+  ```kotlin
+  object DatabaseConfig(host: String, port: Int) { // ❌ 编译错误
+      ...
+  }
+  ```
+  **为什么这么设计？**
+  - **没有调用方传入参数**：单例由系统在类加载时自动创建，并不存在一个"由用户主动调用 `XXX()` 创建实例"的入口。既然没有调用方，自然就没有地方传参。
+  - **初始化时机太早**：`object` 类似 Java 的 `static`，在首次访问时由 JVM/类加载器初始化。此时应用上下文、配置文件等可能还没准备好，强行要求传参反而会制造时序耦合。
+  - **保证"天生单例"的纯粹性**：单例的核心是"全局唯一且无需用户管理生命周期"。一旦允许构造参数，使用者就得协调"谁来传、什么时候传、传错了怎么办"，这就退化成了需要人工编排的 Java 单例模式，违背了 `object` 的设计初衷。
+  - **`init` 块可以存在**：虽然没有构造参数，但 `object` 仍然可以有 `init { }` 初始化块，用于执行一次性初始化逻辑。
+- **需要"带参数单例"怎么办？** 如果确实需要运行时传入参数再构造单例，推荐用**普通类 + 私有构造 + 伴生对象工厂方法**，把"参数校验 + 唯一性保证"放在工厂方法里：
+  ```kotlin
+  class DatabaseConfig private constructor(
+      var host: String,
+      var port: Int,
+      var username: String,
+      var password: String
+  ) {
+      companion object {
+          @Volatile private var instance: DatabaseConfig? = null
+          fun create(host: String, port: Int, username: String, password: String): DatabaseConfig =
+              instance ?: synchronized(this) {
+                  instance ?: DatabaseConfig(host, port, username, password).also { instance = it }
+              }
+      }
+  }
+  ```
+  这样既保留了单例语义，又能在首次创建时传入参数，并且通过 `synchronized` 保证线程安全。
+- **FAQ：为什么 `instance` 要加 `@Volatile`？** DCL（双重检查锁）的第一次读 `instance` 是**无锁读**（在 `synchronized` 外面），这一步存在两个隐患：
+  - **指令重排序**：JVM 执行 `new DatabaseConfig(...)` 时，实际指令是「1)分配内存 → 2)调用构造函数初始化 → 3)把引用赋给 `instance`」。JVM 可能将步骤 2、3 重排为「1 → 3 → 2」，此时 `instance` 已非 null 但对象还没初始化完。另一线程在第一次无锁读时可能拿到这个**半初始化对象**，直接使用会崩。
+  - **可见性**：普通 `var` 的写入不保证立即对其他线程可见。A 线程创建好实例后，B 线程的第一次读可能仍然看到旧值 `null`，导致重复加锁。
+
+  `@Volatile` 同时解决这两个问题：它建立 **happens-before** 关系，禁止上述重排序，并保证一个线程的写入对其他线程立即可见。**DCL 中 `@Volatile` 不能省，否则单例可能被破坏或返回残缺对象。**
+- **FAQ：`create` 方法需要加 `@JvmStatic` 吗？** 取决于调用方：
+  - **仅 Kotlin 调用 → 不需要**。Kotlin 编译器已经支持 `DatabaseConfig.create(...)` 这种语法糖，本质调用的是伴生对象实例上的方法，写法和静态调用一致。
+  - **会被 Java 调用 → 建议加**。不加 `@JvmStatic` 时，Java 端必须写 `DatabaseConfig.Companion.create(...)`（因为伴生对象在字节码里是一个叫 `Companion` 的内部类实例），啰嗦且不符合 Java 习惯。加上 `@JvmStatic` 后，编译器会额外生成一个真正的 `static` 桥接方法，Java 端就能直接 `DatabaseConfig.create(...)`。
+
+  **注意**：`@JvmStatic` 只是多生成一个 static 转发方法，实际逻辑仍在 `Companion` 实例上执行，**不影响单例语义**，也不影响 `synchronized(this)` 中的 `this`（这里 `this` 仍是 `Companion` 实例）。本例如果会被 Java 调用，推荐写法：
+  ```kotlin
+  companion object {
+      @Volatile private var instance: DatabaseConfig? = null
+      @JvmStatic
+      fun create(host: String, port: Int, username: String, password: String): DatabaseConfig =
+          instance ?: synchronized(this) {
+              instance ?: DatabaseConfig(host, port, username, password).also { instance = it }
+          }
+  }
+  ```
+- **总结**：object 创造的是天生的单例，我们并不需要在 Kotlin 中去构建类似 Java 的单例模式。但它的"天生"也意味着**不支持构造参数**——这是为了保持单例"由系统管理、全局唯一"的纯粹性。如果场景需要运行时参数，应该退回到"类 + 工厂方法"的写法；其中 DCL 实现的 `@Volatile` 不可省，`@JvmStatic` 视 Java 调用需求而定。
+
 **Q53: 什么是 object 表达式？它与匿名内部类、Lambda 表达式该如何选择？**
 
 - **Java 匿名内部类的痛点**：有时明明只有一个方法，却要用一个匿名内部类去实现。方法内掺杂类声明不仅让方法看起来复杂，也不易阅读理解：
@@ -1818,6 +1951,29 @@
   ```
 
 
+**Q79: Kotlin 如何处理可空值？（安全调用 ?.、Elvis 操作符 ?:、非空断言 !!）**
+
+- **安全调用 ?.**：当 student 存在时，才会调用其下的 `glasses`，链式调用自动短路，避免了 Java 中层层嵌套的 if 判空：
+  ```kotlin
+  println("该位置上学⽣眼镜度数：${s.student?.glasses?.degreeOfMyopia}")
+  ```
+- **Elvis 操作符 ?:**（又称合并运算符）：是 Java 三元运算符的类型安全版本，左侧为 null 时返回右侧默认值。假设座位上没戴眼镜时度数为 -1：
+  ```java
+  double result = student.glasses != null ? student.glasses.degreeOfMyopia : -1;
+  ```
+  ```kotlin
+  val result = student.glasses?.degreeOfMyopia ?: -1
+  ```
+- **非空断言 !!.**：当确定某个值不为空时，用它强制取值；若实际上为 null，程序就会抛出 NPE 异常。类似于 Java 测试时常用的 Assert，用于测试或兜底场景：
+  ```kotlin
+  val result = student!!.glasses
+  ```
+  此外还有 `!is`、`as?` 等运算符。
+- **组合使用**：需要让程序抛出异常时，可结合 Elvis 操作符与 throw，将可空值转为显式的异常流程：
+  ```kotlin
+  seat?.student?.glasses?.degreeOfMyopia ?: throw NullPointerException("some message")
+  ```
+
 **Q80: Kotlin 是如何在 JVM 上实现类型的可空性的？（反编译真相）**
 
 - **反编译结果**：用 IDEA 的反编译工具查看 Kotlin 对应的 Java 代码，以 `getDegreeOfMyopiaKt(seat: Seat?)` 为例：
@@ -2474,6 +2630,47 @@
   }
   ```
 
+
+**Q106: with 和 apply 是什么？它们是如何简化代码的？**
+
+- **共同作用**：这两个方法最大的作用就是——在写 Lambda 的时候，省略需要多次书写的对象名，默认用 `this` 关键字来指向它。
+- **with 的使用场景**：比如在 Android 开发中给视图控件绑定属性时，利用 `with` 可以让代码可读性更好：
+  ```kotlin
+  fun bindData(bean: ContentBean) {
+      val titleTV = findViewById<TextView>(R.id.iv_title)
+      val contentTV = findViewById<TextView>(R.id.iv_content)
+      with(bean) {
+          titleTV.text = this.title          // this 可以省略
+          titleTV.textSize = this.titleFontSize
+          contentTV.text = this.content
+          contentTV.text = this.contentFontSize
+      }
+  }
+  ```
+  如果不使用 `with`，就需要写好多遍 `bean`。
+- **with 的源码**：
+  ```kotlin
+  inline fun <T, R> with(receiver: T, block: T.() -> R): R
+  ```
+  第 1 个参数为接收者类型，第 2 个参数通过 `T.() -> R` 创建这个类型的 block 方法。因此在 Lambda 中可以直接用 `this` 代表该接收者对象。
+- **apply 与 with 的区别**：`apply` 被声明为类型 `T` 的**扩展方法**，且 block 返回 `Unit`；而 `with` 的 block 可以返回任意类型 `R`：
+  ```kotlin
+  inline fun <T> T.apply(block: T.() -> Unit): T
+  ```
+- **二者的替代关系**：在很多情况下二者可以互相替代，上面的代码可以翻译成 apply 版本：
+  ```kotlin
+  fun bindData(bean: ContentBean) {
+      val titleTV = findViewById<TextView>(R.id.iv_title)
+      val contentTV = findViewById<TextView>(R.id.iv_content)
+      bean.apply {
+          titleTV.text = this.title          // this 可以省略
+          titleTV.textSize = this.titleFontSize
+          contentTV.text = this.content
+          contentTV.text = this.contentFontSize
+      }
+  }
+  ```
+- **本质区别（用什么时候选谁）**：`with` 是"以对象为参数、返回 Lambda 结果"的顶层函数；`apply` 是"扩展方法、返回接收者自身（T）"——这决定了 apply 天然适合链式配置对象（返回的还是该对象），而 with 适合"围绕对象做一段计算并取回结果"的场景。
 
 **Q107: map 是什么？为什么说它"以简驭繁"？**
 
@@ -3411,6 +3608,36 @@
   }
   ```
 - **语义**：由于 `let` 函数返回的是闭包的最后一行，当 `student` 不为 null 的时候才会打印并返回它的年龄。与 `run` 一样，它同样限制了变量的作用域；并且配合安全调用 `?.`，天然地规避了空指针问题。
+
+**Q140: `also` 扩展函数是什么？与 `apply`、`let` 相比有何特点？（7.2.4）**
+
+- **定义**：`also` 是 Kotlin 1.1 版本中加入的内容，它像是 `let` 和 `apply` 函数的"加强版"：
+  ```kotlin
+  public inline fun <T> T.also(block: (T) -> Unit): T {
+      block(this)
+      return this
+  }
+  ```
+- **与 `apply` 一致的点**：与 `apply` 一致，它的返回值是该函数的接收者。
+- **与 `apply` 不同的点（参数 vs 接收者）**：`also` 的 block 接收 `T` 作为普通参数（Lambda 里用 `it` 或自定义名字访问），而 `apply` 的 block 是 `T.() -> Unit`，接收者是 `this`。
+- **典型示例（为什么用 also 而不是 apply）**：
+  ```kotlin
+  class Kot {
+      val student: Student? = getStu()
+      var age = 0
+
+      fun dealStu() {
+          val result = student?.also { stu ->
+              this.age += stu.age
+              println(this.age)
+              println(stu.age)
+              this.age
+          }
+      }
+  }
+  ```
+  将隐式参数指定为 `stu`，假设 `student` 不为空，会发现返回了 `student`，并且总年龄 `age` 增加了。
+- **关键差异（外部 this 可达性）**：如果使用 `apply`，由于它内部是一个扩展函数，`this` 将指向 `stu` 而不是 `Kot` 类，此处将无法调用到 `Kot` 下的 `age`。这正是 `also` 存在的意义——当需要在 Lambda 中同时访问"外部对象"和"被操作对象"时，`also` 用命名参数避免了 `this` 的歧义。
 
 **Q141: `takeIf` / `takeUnless` 扩展函数是什么？与 `filter` 有何异同？（7.2.4）**
 

@@ -4,63 +4,87 @@
 
 **Q1: 车速刚超过零就锁死所有界面，为什么应用不能自行硬编码驾驶限制？**
 
-因为约束不是技术选择，而是法规与市场差异的映射。不同市场的分心法规不同（例如对视频、复杂交互的容忍度不同），同一套 Android 版本在不同地区、同一地区不同车型可能适用不同要求。官方文档因此要求"应用监听 UX 限制，而不是监听驾驶状态"，正是为了让平台把市场差异收在一个地方，应用只消费结果（source.android.com 文档口径）。
+应用不能按车速自行决定界面限制，因为驾驶分心规则由车型与市场策略配置，应用应消费平台提供的 UX Restrictions。
 
-自己按车速硬编码会同时错两次：一是把合规责任从平台转移到每个应用，二是市场要求变化时应用侧无处可改。正确纪律是：驾驶状态只用于判断"要不要进入受限体验"这种展示性提示，行为裁剪一律听 UX 限制。
+应用与平台的职责边界如下：
+
+1. **车辆状态**：CarDrivingStateManager 根据车辆信号计算 Parked、Idling、Moving 等驾驶状态。
+2. **限制策略**：CarUxRestrictionsManagerService 将驾驶状态和当前 restriction mode 映射为 UX 限制。
+3. **应用行为**：应用监听 UX 限制并调整交互，不自行复制车速阈值或法规规则。
+4. **驾驶状态用途**：只有确实与界面限制无关的功能才直接消费驾驶状态。界面是否要裁剪交互由 UX Restrictions 决定。
 
 **Q2: 车辆从驻车进入行驶后 UI 未切换，驾驶状态是怎样从车辆信号推导出来的？**
 
-由车辆属性（主要是车速等信号）按配置推导。官方文档描述的链路是：CarDrivingStateManager 按速度区间推出当前驾驶状态，服务把规则保存在内存里，再把驾驶状态映射为 UX 限制并广播给全系统（source.android.com 文档口径）。本地源码对应 `packages/services/Car/service/src/com/android/car/CarDrivingStateService.java`（核对）。
+驾驶状态由车辆属性推导，再映射为 UX Restrictions。不能把车速阈值直接写入各应用。
 
-配置里最常见的三档状态是驻车、怠速、行驶，示例配置中行驶态从给定最低速度起生效（官方示例口径）。这意味着"低速但未驻车"的中间态存在，UI 状态机必须把"未知/过渡态"也当作受限态处理，否则会出现"刚松刹车的一瞬间弹出可交互界面"的事故窗口。
+1. **输入属性**：系统结合车速、挡位和驻车制动等车辆属性计算驾驶状态。
+2. **状态分类**：AAOS 将车辆归为 Parked、Idling 或 Moving。挡位不在 Park 且速度为零时属于 Idling，不是 Parked。
+3. **限制映射**：UX Restrictions 服务按当前驾驶状态和配置的映射规则生成限制并通知客户端。
+4. **启动边界**：系统收到首次有效驾驶状态前不会执行 UX 限制，并按 Parked 处理。车型集成必须验证车辆信号的可用时机，不能把未知状态描述为平台自动全限制。
 
 **Q3: 同一车机在不同车型限制不同，UX Restrictions 映射表如何表达差异？**
 
-UX 限制（UX Restrictions）是一组声明式约束，表达"在当前驾驶状态下允许多少交互"。官方以 car_ux_restrictions_map.xml 描述：按驾驶状态给出 requiresDistractionOptimization 与 uxr 两个属性，官方示例中驻车态为不要求分心优化、限制为 baseline，怠速态要求分心优化且限制为 no_video|no_config，行驶态为 fully_restricted（source.android.com 文档口径）。
+不同车型可用不同 UX Restrictions 配置，把驾驶状态映射到各自的限制集合。应用消费映射结果，不在应用内推测市场规则。
 
-另有多显示的配置方式：用 RestrictionMapping 指定物理端口，为该显示单独给一套限制（默认附加显示不施加限制）。这条规则决定了"后排屏幕能不能看视频"是配置问题而不是代码问题——需要产品与法规一起定，而不是让开发猜。
+1. **状态规则**：`car_ux_restrictions_map.xml` 可为 Parked、Idling、Moving 分别配置 `requiresDistractionOptimization` 与 `uxr`。Android 文档的默认示例为 Parked 使用 baseline、Idling 禁止视频和设置、Moving 使用 fully_restricted。
+2. **显示规则**：可用 `RestrictionMapping` 按物理显示端口配置不同限制。官方默认行为是不对附加显示施加限制，因此产品若要限制副驾或后排屏，必须显式配置并验证。
+3. **产品决策**：后排屏能否播放视频取决于法规、车型策略和显示映射配置，不能让应用开发者通过车速判断自行决定。
 
 **Q4: 配置设了 no_video 却仍要求分心优化，uxr 与 baseline 的关系是什么？**
 
-因为除 baseline 外的每一档限制都意味着"某些内容必须受限"，而"分心优化"正是声明"我的界面已按受限形态设计"的标记；两者语义不一致时，配置本身无效。官方在映射表文件里直接写明了这条自动提升规则（source.android.com 文档口径）。
+AAOS 13 的限制配置中，只要 `uxr` 不是 `baseline`，系统就要求 `requiresDistractionOptimization` 为 true。设置成 false 也会自动提升。
 
-工程含义：配置里写 `uxr="no_video"` 却漏写 `requiresDistractionOptimization="true"`，实际生效的是"true"而不是你以为的 false。反过来若想要"不要求分心优化"，只能用 baseline——这也是为什么 baseline 是唯一"无限制"档。
+1. **字段含义**：`uxr` 表示当前限制集合，`requiresDistractionOptimization` 表示前台 Activity 是否必须声明已按受限驾驶体验设计。
+2. **一致性规则**：`baseline` 表示没有具体限制位。任一非 baseline 限制都要求 Activity 满足分心优化声明。
+3. **配置结果**：需要 false 的状态必须配置 baseline。否则系统自动要求分心优化，避免配置标记与实际限制冲突。
 
 **Q5: 车型切换后限制配置未生效，restriction mode 为什么需要独立于驾驶状态？**
 
-因为"限制的模式"和"限制的具体内容"要分开：同一驾驶状态下，不同模式可以对应不同的限制集合，切换模式时不重启即可换一套限制。官方 API 提供 setRestrictionMode/getRestrictionMode，默认值是 UX_RESTRICTION_MODE_BASELINE，配置可持久化给下一次启动使用，且需要权限（Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION）（官方文档与本地 CarUxRestrictionsManagerService 的 mRestrictionMode、saveUxRestrictionsConfigurationForNextBoot 核对）。
+Restriction mode 选择同一驾驶状态下要使用的规则集合，DrivingState 则表示车辆的 Parked、Idling 或 Moving 状态。两者是独立维度。
 
-典型用途是"乘客模式"这类场景：车辆静止时用一套限制，行驶时用另一套。把模式做成可运行时切换的而不是重启生效，是为了避免切换伴随重启这类体验断点。
+1. **运行时模式**：`CarUxRestrictionsManager.setRestrictionMode()` 选择当前配置中具名的 restriction mode，例如 passenger mode，使同一驾驶状态可使用另一套限制。
+2. **规则配置更新**：`saveUxRestrictionsConfigurationForNextBoot()` 持久化新的配置，不会立即替换正在使用的规则。更新后的配置要等 Car Service 重启且车辆处于 Parked 后加载。
+3. **权限与验收**：保存配置需要 `Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION`。分别验证模式切换结果与持久化规则的加载时机，不要把两类 API 当成同一操作。
 
 **Q6: 页面只在 onCreate 读取 UX 限制，行驶后仍可操作，应用应监听什么？**
 
-标准做法是向 CarUxRestrictionsManager 注册 OnUxRestrictionsChangedListener，在回调与 getCurrentUxRestrictions() 里判断两件事：当前是否要求分心优化（isRequiresDistractionOptimization()），以及当前有哪些具体限制（官方文档口径）。官方文档明确建议应用把驾驶状态留给"与界面体验无关"的判断，把与界面相关的判断全部交给 UX 限制。
+应用只在 `onCreate()` 读取一次限制会漏掉之后的驾驶状态变化。应注册 `OnUxRestrictionsChangedListener` 并在界面相关事件中更新内容。
 
-只读一次限制是最常见的实现错误，表现为"从驻车驶出后界面没有降级"或"熄火后界面还锁着"，因为限制变化是持续广播的、且与窗口可见性无关限制会持续变化，应用需要在回调中更新界面，而不能只在页面创建时读取一次。
+1. **订阅更新**：使用 `CarUxRestrictionsManager.registerListener()` 监听新限制，并在初始化时调用 `getCurrentCarUxRestrictions()` 获取当前值。
+2. **解释结果**：检查 `isRequiresDistractionOptimization()` 判断 Activity 是否需要分心优化，再检查 `getActiveRestrictions()` 判断应裁剪哪些具体功能。
+3. **更新时机**：限制变化时立即更新可见界面，不以 Activity 是否刚创建或是否收到窗口可见性回调作为唯一触发条件。
 
 **Q7: Car App 在行驶中无法启动，清单里的 distractionOptimized 声明有什么作用？**
 
-会被限制。官方文档明确写出：承载这类界面的 Activity 必须按分心优化要求标记，否则会被阻止运行（source.android.com 文档口径）。清单里对应的标记就是 distractionOptimized 的 meta-data（AAOS 模板应用文档口径）。
+`distractionOptimized` 元数据让平台知道某个 Activity 声明自己可在受限驾驶状态运行。它不是运行时合规证明，也不代表该 Activity 自动获准启动。
 
-这意味着"应用在行驶中打不开"有时不是崩溃也不是权限问题，而是声明缺失或类别不符。排查顺序是：先看清单声明、再看应用类别与宿主支持，最后才看日志。
+1. **声明位置**：将 `<meta-data android:name="distractionOptimized" android:value="true"/>` 放在对应的 `<activity>` 中。省略时平台按未声明处理，该 Activity 在 UX 限制要求分心优化时可能被阻止。
+2. **声明范围**：应用可只将符合要求的 Activity 标为 distraction optimized。其他 Activity 可在驻车等不受限状态提供不同体验。
+3. **阻断排查**：先核对目标 Activity 的包名、清单合并结果和元数据位置，再检查当前 UX 限制及系统阻断策略。平台只检查声明，实际界面是否符合要求由应用审查和发行流程负责。
 
 **Q8: 升级后车机进入全限制状态，配置读取失败时系统为何采用安全兜底？**
 
-官方文档说明：读取已保存配置失败时（例如读取设置项失败），服务回落到硬编码的、全部限制的默认配置（source.android.com 文档口径）。这是安全优先的设计——不确定时按最严处理，避免"配置丢失 = 保护失效"。
+保存的 UX Restrictions 配置读取失败时，服务会回退到硬编码的 fully restricted 配置。这是读取失败的安全兜底，不是所有全限制状态都代表故障。
 
-对升级与发布的含义有两条：升级后必须验证限制配置是否被正确迁移，否则车机可能整段时间都处于"行驶中什么都看不了"的状态；反过来，"全限制"作为一个故障现象就足以证明配置读取链路出了问题，不必再往应用侧找原因。
+1. **触发条件**：配置项读取失败（例如出现 `SettingNotFoundException`）时，服务无法安全恢复车型规则。
+2. **兜底行为**：服务使用硬编码配置，将 Idling/Moving 置为 fully restricted，避免错误配置放开交互。
+3. **排查方向**：升级后验证已保存配置能否迁移和读取。出现全限制时检查配置读取、当前驾驶状态、restriction mode 和显示映射。车型也可能有意配置全限制，因此单凭结果不能断定配置故障。
 
 **Q9: 行驶中需要开放语音设置入口，哪些界面可以通过配置豁免 UX 限制？**
 
-官方做法是配置一份"行驶态可进入的设置路径"：把允许在行驶中打开的深层设置加入 config_ignore_ux_restrictions（source.android.com 文档口径，例如示例中为语音合成输出设置放行）。这样只有被列出的路径豁免，其余仍然受限。
+行驶时要开放设置入口，应按 Car Settings 的 UX 豁免配置逐级放行所需 preference，而不是关闭全局驾驶限制。
 
-纪律是这份名单要短且可审计——每加一条都要有产品与法规依据，因为豁免路径本身就是事故面；名单应随发布走评审而不是随开发便利增长。
+1. **配置对象**：`config_ignore_ux_restrictions` 中列出允许行驶时操作的 preference key。每个 key 必须对应实际设置项。
+2. **省略行为**：未列入 `config_ignore_ux_restrictions` 的 preference 仍按 Car Settings 默认 UX 限制处理。仅放行深层 preference 本身不一定能到达该页面，进入路径上的父 preference 也要按需要列入配置。
+3. **变更审查**：名单应保持最小且可审计，每项都要有产品和合规依据，并在发布配置中验证实际导航路径。
 
 **Q10: 副驾触屏被锁或后排屏输入异常，显示触控设置与输入类型声明如何配合？**
 
-锁定通过系统设置按显示生效：CarSettings 里的显示触控锁定项保存的是一串显示唯一标识，命中即锁定该显示的触控输入（官方文档与本地源码核对）。另外从 Android 14 起，官方要求 config_occupant_display_mapping 中关联的每个占用区与显示类型都必须至少声明一种输入类型（可用触摸、自定义输入事件或无输入；本地 CarOccupantZoneManager 注释核对）。
+触控锁定配置按显示标识作用于目标屏幕。从 Android 14 起，occupant zone 与显示类型的输入映射还必须显式声明其输入类型。
 
-这条新要求解决的是一类实际漏洞：不声明输入类型的屏幕，系统无法区分"这块屏不支持触摸"与"忘了配"，默认行为容易让不可控的触摸入口存在。声明为"无输入"的屏幕由系统按配置锁定，代价是它上的应用必须走旋钮或语音交互。
+1. **显示锁定**：CarSettings 保存显示唯一标识，匹配后限制该显示的触摸输入。必须验证标识指向目标屏幕，不能只按座位名称推断。
+2. **Android 14 输入映射**：`config_occupant_display_mapping` 中每个关联的 occupant zone/display type 都必须指定至少一种输入类型。无输入设备时使用 `INPUT_TYPE_NONE`。
+3. **无输入含义**：`INPUT_TYPE_NONE` 表示该映射不关联输入设备，不等于系统自动锁定显示。产品应为该显示明确设计并验证可用的其他交互通道。
 
 **Q11: 车辆行驶状态变化后页面仍保留旧控件，应用应怎样处理限制更新？**
 
@@ -75,7 +99,7 @@ UX 限制（UX Restrictions）是一组声明式约束，表达"在当前驾驶�
 
 1. 只在 onCreate 读取限制，导致行驶状态变化后页面不更新。
 2. 只在 Activity 可见时更新，漏掉后台期间的限制变化。
-3. 把"要求分心优化"误解为"完全不可交互"；该标记表示界面已经按受限形态设计。
+3. 把"要求分心优化"误解为"完全不可交互"。该标记表示界面已经按受限形态设计。
 4. 限制变化时直接调用 finish()，导致用户在行驶中反复退出页面。
 
 **Q12: 驾驶时视频、长文本或复杂交互被禁用，限制依据是什么、界面应如何降级？**
@@ -88,7 +112,7 @@ UX 限制（UX Restrictions）是一组声明式约束，表达"在当前驾驶�
 
 因为驾驶场景下"手离开方向盘"与"视线离开路面"两类风险都要控制，语音是无需分心的输入通道，旋钮与按键则是不依赖视觉定位的操作面。本地 AOSP 自带旋钮控制器应用做仲裁，也说明这类输入是系统级基础设施而非应用私有功能。
 
-设计含义：高频与安全相关的操作（音量、空调、导航目的地）必须有不依赖触控的路径；只做触控的实现即使功能正确，在行驶场景下也不合格。
+设计含义：高频与安全相关的操作（音量、空调、导航目的地）必须有不依赖触控的路径。只做触控的实现即使功能正确，在行驶场景下也不合格。
 
 **Q14: UX 限制功能通过了驻车测试却在路测失效，怎样按配置到交互构造验证？**
 
@@ -105,7 +129,7 @@ UX 限制（UX Restrictions）是一组声明式约束，表达"在当前驾驶�
 
 设计阶段应纳入三类常见约束：
 
-1. **覆盖型安全界面**：倒车影像、驻车辅助通常需要临时获得全屏与更高显示优先级；它们与分心限制并行，安全界面应优先呈现。
+1. **覆盖型安全界面**：倒车影像、驻车辅助可能需要临时获得全屏与更高显示优先级。它们与 UX 限制并行，最终优先级由系统产品策略确定。
 2. **车速相关的显示限制**：车辆信号达到阈值时隐藏特定信息或提示。
 3. **音量与提示音约束**：音量上限会影响 UI 提示音设计，音量焦点与 duck/mute 机制见 [AAOS 车机音频](../09-audio/03-aaos-audio.md)。
 
@@ -113,24 +137,26 @@ UX 限制（UX Restrictions）是一组声明式约束，表达"在当前驾驶�
 
 **Q16: 驾驶分心限制（UXR）到底能禁什么？FULLY_RESTRICTED 的位标志清单是什么？**
 
-应用按 `isRequiresDistractionOptimization()` 加各限制位裁剪 UI，而不是按车速自行判断；`FULLY_RESTRICTED` 是九个限制位的按位或——键盘、视频、拨号盘、设置、长文本全部被禁。
+应用读取 `CarUxRestrictions` 并按 `isRequiresDistractionOptimization()` 与有效限制位调整 UI。`FULLY_RESTRICTED` 表示九个限制位同时生效，不是平台替应用关闭所有界面。
 
-1. **限制位清单**：NO_DIALPAD、NO_FILTERING、NO_KEYBOARD、NO_VIDEO（大于 1fps 的动画即算视频）、NO_SETUP、NO_TEXT_MESSAGE、NO_VOICE_TRANSCRIPTION、LIMIT_STRING_LENGTH（默认 120 字符）、LIMIT_CONTENT（单任务默认 21 条、层级默认 3）；
-2. **取配额**：长文本用 `getMaxRestrictedStringLength()` 拿实际允许长度，不要硬编码 120；
-3. **执行层**：UXR 框架是分心治理的最终执行层（检测链见 Q18）。
+1. **限制位清单**：`NO_DIALPAD` 禁止拨号盘，`NO_FILTERING` 禁止字符过滤，`NO_KEYBOARD` 禁止手动文本输入，`NO_VIDEO` 禁止视频及每秒超过一帧的动画，`NO_SETUP` 禁止设置，`NO_TEXT_MESSAGE` 禁止显示消息，`NO_VOICE_TRANSCRIPTION` 禁止显示语音转录，`LIMIT_STRING_LENGTH` 限制通用字符串长度，`LIMIT_CONTENT` 限制任务中可浏览的内容数与层级。
+2. **读取限制参数**：使用 `getMaxRestrictedStringLength()`、`getMaxCumulativeContentItems()` 和 `getMaxContentDepth()` 读取实际限制值，不要假定默认数值。AAOS 13 可配置这些限制，默认值可能被车型配置覆盖。
+3. **执行边界**：UX Restrictions 提供应用侧应遵守的限制值。平台还能按 Activity 的 distractionOptimized 声明阻止受限状态下启动界面，但不能检查应用实际界面是否遵守限制。
 
 **Q17: OEM 怎么定制分心限制规则？为什么改了 car_ux_restrictions_map.xml 没立即生效？**
 
-OEM 用 RRO overlay 覆盖 `car_ux_restrictions_map.xml`；服务端配置有三级加载优先级——已保存的生产配置 > R.xml 资源 > 硬编码默认，且保存的配置要等合适的驾驶状态才晋升替换，所以改动常常"下次启动才生效"。
+OEM 可通过 RRO 覆盖 `car_ux_restrictions_map.xml` 的资源配置。若保存了 production 配置，新配置不会立即替换当前规则，而是在 Car Service 重启且车辆处于 Parked 后晋升生效。因此只改资源后观察当前运行态，可能看不到结果。
 
-1. **映射结构**：按 DrivingState（parked/idling/moving 加速度分段）映射限制集；可加 `mode` 定义多套限制集（副驾屏解锁视频的正规路径）；显示定位支持 physicalPort 或 occupantZoneId+displayType，都不填默认主驾屏；
-2. **兜底语义（高危）**：配置缺失或畸形时按"完全限制"兜底——requiresDistractionOptimization 默认 true、uxr 默认 fully_restricted；只要 uxr 不等于 baseline，即使声明 false 也会被提升为 true——写坏 xml 的表现就是全车 UI 被锁死；
-3. **诊断**：`dumpsys car_service --services CarUxRestrictionsManagerService` 看 transition log（驾驶状态/速度/mode）；`cmd overlay list` 确认 RRO 生效；上线前覆盖全部驾驶状态分段并实车验证。
+1. **状态与模式**：`state` 选择 Parked、Idling 或 Moving，`mode` 选择规则组。AAOS 13 省略 `mode` 时使用 `baseline`，可显式写 `passenger` 等模式名。
+2. **显示范围**：`physicalPort` 指定物理显示端口，或用 `occupantZoneId` 与 `displayType` 指定乘员区显示。AAOS 13 省略显示标识时映射到默认显示，不能据此推断附加显示规则。
+3. **限制声明**：`requiresDistractionOptimization` 控制是否要求前台 Activity 声明分心优化，省略时默认为 `true`。`uxr` 指定限制集合，省略时默认为 `fully_restricted`。非 `baseline` 的 `uxr` 会将分心优化要求提升为 `true`。
+4. **速度范围**：Moving 状态可按 `minSpeed`、`maxSpeed` 配置速度区间。两者都省略表示该规则覆盖完整速度范围，不能当成零速或空区间。
+5. **配置失败与诊断**：AAOS 13 读取保存配置失败时回退到硬编码 fully restricted 配置。先运行 `dumpsys car_service --services CarUxRestrictionsManagerService` 查看实际状态与限制，再运行 `cmd overlay list` 确认 RRO。覆盖所有驾驶状态、速度范围、restriction mode 和目标显示后再交付。
 
 **Q18: 行驶中打开应用被全屏遮罩挡住——系统怎么判定和阻断？"IDENTIFY_DISTRACTION 权限"是真的吗？**
 
 行驶中非 DO（distraction optimized）应用会被 ActivityBlockingActivity 顶住——其宿主就是 CarSystemUI，判定依据是应用是否声明了 `distractionOptimized` meta-data。重要勘误：公开代码里不存在 `IDENTIFY_DISTRACTION` 权限（frameworks 的 AndroidManifest 全文无此词），Android 14/15 的驾驶员分心检测走的是 VHAL 属性链。
 
-1. **阻断判定**：CarPackageManagerService 按 `isActivityDistractionOptimized` 判定，阻断 UI 的组件串在 config 里可被 OEM 整体替换；应用侧合规声明是 `<meta-data android:name="distractionOptimized" android:value="true"/>`——被阻断先核对包名与 activity 是否匹配声明；
-2. **分心检测的真实机制**：VHAL 属性链 `DRIVER_DISTRACTION_SYSTEM_ENABLED/STATE/WARNING_ENABLED/WARNING`，car-lib 侧对应 DriverDistractionState/DriverDistractionWarning（FlaggedApi）与 experimental 的 CarDriverDistractionManager；UXR 框架仍是最终执行层；
-3. **边界**：凡资料里出现 "IDENTIFY_DISTRACTION" 一律按讹传处理；实车核验用 dumpsys 看 VHAL 属性订阅。
+1. **阻断判定**：CarPackageManagerService 按 `isActivityDistractionOptimized` 判定 Activity 是否已声明分心优化，阻断 UI 组件可由 OEM 配置替换。应用侧合规声明是 `<meta-data android:name="distractionOptimized" android:value="true"/>`。被阻断先核对包名与 Activity 是否匹配声明。
+2. **分心检测的真实机制**：VHAL 属性链 `DRIVER_DISTRACTION_SYSTEM_ENABLED/STATE/WARNING_ENABLED/WARNING`，car-lib 侧对应 DriverDistractionState/DriverDistractionWarning（FlaggedApi）与 experimental 的 CarDriverDistractionManager。UXR 框架仍是最终执行层。
+3. **边界**：不要把不存在于该版本公开 API 的 `IDENTIFY_DISTRACTION` 权限当作应用接入方式。UX Restrictions 将限制传给应用，CarPackageManagerService 则按 Activity 的声明阻止不符合条件的界面启动。平台不能代替应用检查 UI 内容。实车核验时分别查看 VHAL 属性和 CarService 状态。

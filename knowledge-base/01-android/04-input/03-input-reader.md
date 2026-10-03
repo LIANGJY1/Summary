@@ -1,6 +1,6 @@
 # 设备接入与 InputReader：内核 input 事件、设备分类与触摸适配
 
-> 学习资料（文章模式沉淀）。主线：内核 input 子系统与 evdev、`input_event` 的事件语义、多点触控协议 Type A/B、EventHub 的设备发现与热插拔、能力位推断设备分类、mapper 族分派、触摸屏与显示器的绑定、触摸坐标的校准与旋转变换、虚拟按键、旋钮编码器接入、内核重复与 Android 重复的关系、SYN_DROPPED 缓冲溢出、鬼触摸与断触的成因对策、触控 IC 调试入口与热力图管道。机制按本地 AAOS13 源码（Android 13，`frameworks/native/services/inputflinger/reader/`、`bionic/libc/kernel/uapi/linux/`）核对；多点触控协议与内核驱动（gpio-keys、rotary-encoder、adc-keys）为 kernel.org 官方文档口径（2026-09 检索，本地树未含内核源码）；触控 IC 实战一节为厂商驱动与社区资料结论，证据等级低于其余条目。按键映射文件见 [04-key-mapping.md](04-key-mapping.md)；分发链路总览见 [01-input-system.md](01-input-system.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：内核 input 子系统与 evdev、`input_event` 的事件语义、多点触控协议 Type A/B、EventHub 的设备发现与热插拔、能力位推断设备分类、mapper 族分派、触摸屏与显示器的绑定、触摸坐标的校准与旋转变换、虚拟按键、旋钮编码器接入、内核重复与 Android 重复的关系、SYN_DROPPED 缓冲溢出、鬼触摸与断触的成因对策、触控 IC 调试入口与热力图管道。机制按本地 AAOS13 源码（Android 13，`frameworks/native/services/inputflinger/reader/`、`bionic/libc/kernel/uapi/linux/`）核对；多点触控协议与内核驱动（gpio-keys、rotary-encoder、adc-keys）为 kernel.org 官方文档口径（2026-09 检索，本地树未含内核源码）；触控 IC 实战一节为厂商驱动与社区资料结论，证据等级低于其余条目。2026-10-04 复核：重申 Type A/Type B 的内核协议边界，统一有序支持点格式。按键映射文件见 [04-key-mapping.md](04-key-mapping.md)；分发链路总览见 [01-input-system.md](01-input-system.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 一个触摸/按键事件从硬件到 InputReader 经过内核哪些环节？**
 
@@ -38,10 +38,10 @@ EventHub 用一路 epoll 同时监听三类文件描述符：全部已打开的 
 
 全部靠能力位推断，不依赖驱动自报类型（按 AAOS13 源码核对，`EventHub.cpp` 用 `EVIOCGBIT` 系列读事件能力位、`EVIOCGPROP` 读设备属性位）。主要判定规则：
 
-- **键盘类**：按键位命中 0 至 `BTN_MISC` 或 `BTN_WHEEL` 至 `KEY_MAX` 区间视为键盘；`BTN_MISC..BTN_MOUSE`、`BTN_JOYSTICK..BTN_DIGI` 归为手柄/鼠标键；
-- **触摸屏三岔**：有 `ABS_MT_POSITION_X/Y` 且带 `BTN_TOUCH`（或无游戏手柄键）判为多点触摸屏；只有 `BTN_TOUCH + ABS_X + ABS_Y` 判为旧式单点触摸屏；只有压力/`BTN_TOUCH` 而无坐标判为外部触笔，且会从该设备上摘掉键盘分类（按键位留给触笔融合用）；
-- **旋钮类**：事件位判断不了，唯一的依据是 `.idc` 里 `device.type = rotaryEncoder`；
-- **其他**：有力反馈位判为振动器，有开关位判为 Switch 设备，带加速度计属性位判为传感器；加载了虚拟按键定义的触摸屏会被追加键盘类（虚拟键要以按键事件交付）。
+1. **键盘类**：按键位命中 0 至 `BTN_MISC` 或 `BTN_WHEEL` 至 `KEY_MAX` 区间视为键盘；`BTN_MISC..BTN_MOUSE`、`BTN_JOYSTICK..BTN_DIGI` 归为手柄/鼠标键；
+2. **触摸屏三岔**：有 `ABS_MT_POSITION_X/Y` 且带 `BTN_TOUCH`（或无游戏手柄键）判为多点触摸屏；只有 `BTN_TOUCH + ABS_X + ABS_Y` 判为旧式单点触摸屏；只有压力/`BTN_TOUCH` 而无坐标判为外部触笔，且会从该设备上摘掉键盘分类（按键位留给触笔融合用）；
+3. **旋钮类**：事件位判断不了，唯一的依据是 `.idc` 里 `device.type = rotaryEncoder`；
+4. **其他**：有力反馈位判为振动器，有开关位判为 Switch 设备，带加速度计属性位判为传感器；加载了虚拟按键定义的触摸屏会被追加键盘类（虚拟键要以按键事件交付）。
 
 分类错了后续全错：旋钮没配 `.idc` 就不会产生旋钮事件；触控固件升级后能力位变化可能导致设备被重新分类。排查设备识别问题的入口就是 `dumpsys input` 的 `Events`/`Input props` 段——它打印的就是这套能力位。
 
@@ -119,7 +119,7 @@ Android 有意关掉了内核重复：EventHub 打开键盘类设备时下发 `E
 
 **Q15: 触控 IC 与驱动联调有哪些标准入口？**
 
-以主流方案为例（厂商驱动资料口径，本地树未含驱动源码）：读版本与身份——Goodix GT9xx 系列上电后从固定寄存器读 product id，FocalTech FT 系列有对应的固件版本寄存器，驱动 probe 日志（dmesg 里的 probe 成功/失败、product id、fw version）是第一证据；改配置——GT9xx 的配置是一段 186 字节的寄存器数组（灵敏度、跳频、噪声阈值等都在其中），一个常见坑是配置尾部的版本号必须大于 IC 内已存版本否则新配置不生效（"改了参数没效果"先查版本号递增）；调试节点——vendor 驱动普遍暴露 sysfs/proc 节点（fw_version、glove、charger、gesture 等模式开关），量产前这些节点要按安全要求收敛。
+以主流方案为例（厂商驱动资料口径，本地树未含驱动源码）：读版本与身份——Goodix 部分 GT9xx 型号上电后从对应寄存器读 product id，FocalTech FT 系列有对应的固件版本寄存器，驱动 probe 日志（dmesg 里的 probe 成功/失败、product id、fw version）是第一证据；改配置——该项目所用 GT9xx 型号的配置是一段 186 字节的寄存器数组（灵敏度、跳频、噪声阈值等都在其中），一个常见坑是配置尾部的版本号必须大于 IC 内已存版本否则新配置不生效（"改了参数没效果"先查版本号递增）；调试节点——vendor 驱动普遍暴露 sysfs/proc 节点（fw_version、glove、charger、gesture 等模式开关），量产前这些节点要按安全要求收敛。
 
 通用流程性入口与厂商无关：dmesg 的 input core 注册行（`input: xxx as /devices/.../input/inputN`）确认驱动注册成功；`/proc/bus/input/devices` 的位图与 `getevent -p` 等价；I2C 通信失败（probe 阶段 NACK）先查上电时序与从地址（GT9xx 的中断脚电平还兼从地址选择）。
 
@@ -139,4 +139,4 @@ Android 有意关掉了内核重复：EventHub 打开键盘类设备时下发 `E
 
 消费分推、拉两路：推路是 `notifySwitch` 回调，`PhoneWindowManager` 用它维护翻盖状态并按配置联动休眠（合盖睡眠是策略决定，不是驱动行为）；拉路是 `getSwitchState()` 查询，`WiredAccessoryManager` 初始化时就用 `getSwitchState(-1, SOURCE_ANY, SW_HEADPHONE_INSERT)` 拉一次耳机状态再靠回调增量更新。调试入口与设备链一致：`getevent -S` 列出全部开关当前值、`-s <位>` 查单个开关，`dumpsys input` 可见 Switch 设备与状态。
 
-车机边界要划清：门锁、挡位、ACC 这类整车信号的正确通道是 VHAL 属性（见 06 册），不要接成 `EV_SW`——Switch 通道没有显示路由、没有捕获仲裁、也没有车载语义（长按、多屏目标），接进去后框架侧没有任何一层能按屏分发或按用户拦截；反过来，真实的物理开关（手套箱灯、翻盖支架）走 Switch 通道则是标准做法，框架的休眠联动与状态查询都是现成的。
+车机边界要划清：门锁、挡位、ACC 等整车状态应建模为 VHAL 属性，再由 CarService/车辆应用按车辆语义消费；不要把它们伪装成 `EV_SW`。Switch 通道是 Linux 输入状态通知，没有显示路由、焦点捕获或车载信号语义；真实物理开关（如翻盖状态）则适合走 Switch 通道，系统已有状态查询与策略联动路径。

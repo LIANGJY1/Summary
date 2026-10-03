@@ -1,34 +1,51 @@
 # 广播队列与投递
 
-> 学习资料（文章模式沉淀）。边界：本文回答"BroadcastQueue 的队列模型、超时契约、缓存态延后与投递语义"；ANR 诊断归 15-performance/03，应用侧广播用法归 02-app-framework/01。源文档：android-internals-wiki §1.14（Android 17 语境），缓存态延后已与官方资料核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"BroadcastQueue 的队列模型、超时契约、缓存态延后与投递语义"。ANR 诊断归 15-performance/03，应用侧广播用法归 02-app-framework/01。源文档：android-internals-wiki §1.14。实现细节对照 frameworks/base android17-release 中的 BroadcastQueueImpl、BroadcastProcessQueue 和 BroadcastConstants，公开行为对照 Android Developers 广播文档。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 17 还有前台/后台两条广播队列吗？`FLAG_RECEIVER_FOREGROUND` 到底影响什么？**
 
-没有。API 37 的 `ActivityManagerService` 只持有一个 `mBroadcastQueue`（实现类 `BroadcastQueueImpl`），前台与后台是传给同一实例的两套 `BroadcastConstants`——前台 10 秒、后台 60 秒基础超时（乘 `HW_TIMEOUT_MULTIPLIER`，可用 Settings.Global 的 `bcast_timeout` 覆盖）。`FLAG_RECEIVER_FOREGROUND` 仍然有效，但它影响紧急程度、接收进程调度组与超时基线，不会把广播放进另一条全局队列。
+Android 17（API 37）不再用前台队列和后台队列各自维护全局待投递记录：AMS 持有一个 `mBroadcastQueue`，实际实现为 `BroadcastQueueImpl`，该实例接收前台与后台两套 `BroadcastConstants`。`FLAG_RECEIVER_FOREGROUND` 把广播标记为前台优先级，影响调度优先级和接收超时基线，但不会创建第二条全局队列。
 
-- Android 17 源码中不存在 `mFgBroadcastQueue`/`mBgBroadcastQueue`，也没有 `BroadcastQueueModernImpl`；内部类名在历史分支变过，应用应依赖公开广播语义而非类名。
-- 广播超时基准随标志变化：带 `FLAG_RECEIVER_FOREGROUND` 用 10 秒，普通用 60 秒。普通应用不应为抢占调度滥用该标志——它会让接收者以更高调度优先级运行，并把超时窗口缩短到 10 秒。
+1. **单个全局队列：**Android 17 的 `ActivityManagerService` 使用一个 `BroadcastQueueImpl` 实例。前台/后台两套常量对象分别提供策略参数，不代表有两条全局队列。历史版本实现类名和队列结构会变，应用代码应依赖公开广播 API，而不是内部类名。
+2. **超时基线：**前台优先级广播使用前台 `TIMEOUT`，普通广播使用后台 `TIMEOUT`。Android 17 AOSP 默认均以 10 秒为基数乘 `Build.HW_TIMEOUT_MULTIPLIER`，并可由 `bcast_timeout` 配置覆盖。因此常见设备上经常看到 10 秒与 60 秒的说法，具体值仍应检查设备构建和生效配置。
+3. **标志边界：**普通应用不应仅为抢占调度而滥用 `FLAG_RECEIVER_FOREGROUND`。它改变系统优先级和超时策略，不表示目标进程一定有前台 Activity，也不会保证应用级跨进程投递顺序。
 
 **Q2: 广播按什么粒度排队？系统最多同时向几个进程投递？**
 
-`BroadcastQueueImpl` 以目标进程为粒度排队：按 `processName + uid` 找到该进程的 `BroadcastProcessQueue`，把"记录 + 接收者下标"入队；每个进程队列内部有 `mPendingUrgent`、`mPending`、`mPendingOffload` 三条待处理队列，按 urgent → normal → offload 取项，并用"连续 3 个 urgent 后考虑更早入队的低优先级项、连续 10 个 normal 后考虑 offload 项"防饥饿。并行度由固定大小的 running 数组控制：普通设备 4 个进程槽（低内存设备 2 个），urgent 广播可额外占 1 槽，同一时刻只允许 1 个广播冷启动。
+`BroadcastQueueImpl` 会为目标 `processName + uid` 建立 `BroadcastProcessQueue`，再把广播记录和目标接收器下标排入该进程的队列。这是逐进程调度，不是整台设备共享一条 FIFO。进程间先后顺序因此不构成通用保证。
 
-- `runnableAt` 决定进程队列何时可运行：urgent/foreground/instrumented 偏移 −120 秒（排序前移而非提前执行），ordered/alarm/manifest 为 0，普通广播 +500ms 调度余量，cached 且不能无限延后 +120 秒，cached 且全部 `deferUntilActive` 为 `Long.MAX_VALUE`。
-- 队列积压达到 `MAX_PENDING_BROADCASTS`（普通设备 256、低内存设备 128）时会绕过已施加的延迟帮助排空。
-- 清单接收者可能触发进程冷启动；同一进程的多条广播共用一个进程队列，但源码仍对每个接收者分别调用 `scheduleRegisteredReceiver()`/`scheduleReceiver()`，不会合并成一次 Binder 调用。
+队列分层、并发槽和防饥饿规则共同决定广播何时被调度：
+
+1. **待处理队列：**每个进程队列含 `mPendingUrgent`、`mPending` 和 `mPendingOffload`。系统优先取 urgent，再取普通项，最后取 offload 项。连续调度 3 个 urgent 后会让更低优先级且等待更久的队列有机会，连续调度 10 个普通项后会考虑 offload，避免低优先级广播一直饥饿。
+2. **并行槽：**Android 17 AOSP 默认普通设备允许 4 个暖进程队列并行，低内存设备允许 2 个。urgent 广播可在普通并行上限之外额外占 1 个槽。额外槽只为 urgent 留出推进机会，不代表所有场景都固定并行 5 个。常量可由 `activity_manager_native_boot` 命名空间的 DeviceConfig 调整。
+3. **冷启动限制：**清单接收器可以使目标应用冷启动，但系统同一时刻只发起一个广播引起的冷启动，以控制启动资源竞争。冷启动完成、应用线程就绪后，系统才调度接收器执行。
+4. **`runnableAt`：**这是进程队列进入可运行队列的排序时间，不是提前执行时间。Android 17 AOSP 的默认偏移包括：
+
+    1. urgent、带前台标记或目标处于前台/测试插桩状态的队列可按 −120 秒偏移排序。
+    2. 普通队列通常加 500 毫秒，缓存进程队列通常加 120 秒。
+    3. 当缓存进程的全部待投递项都允许 `deferUntilActive` 时，队列时间为 `Long.MAX_VALUE`，即当前不可运行。
+    4. ordered、闹钟、manifest 等特殊项会改变阻塞或排序判断，不能一律归为“时间偏移为 0”。
+    5. 这些常量可能被设备配置覆盖。
+
+5. **积压保护：**待处理数量达到 `MAX_PENDING_BROADCASTS` 时，系统会绕过队列延迟以帮助排空。Android 17 AOSP 默认普通设备上限为 256、低内存设备为 128。设备可通过同一 DeviceConfig 命名空间调整，不能把默认阈值当成所有 ROM 的固定值。
+6. **接收器调用：**同一进程的多条广播共用进程队列。系统仍针对每个接收器分别调度 `scheduleRegisteredReceiver()` 或 `scheduleReceiver()`。“按进程排队”不等于把多个接收器回调合并成一次应用线程调用。
 
 **Q3: 哪些广播"发出即算投递成功"？缓存态应用的广播会怎样处理？**
 
-对无序、没有完成回调的运行时注册接收者，`BroadcastRecord.isAssumedDelivered()` 为 true：system_server 成功发出 `scheduleRegisteredReceiver()` 后立即标记已投递，不等待应用回报，也不为它启动广播 ANR 定时器。Android 14 起，应用处于缓存态时系统可延后发给运行时注册接收者的广播，等应用回到 active 再投递（重复广播可能合并）；清单注册接收者不走这套无限延迟路径，重要清单广播会让应用离开缓存态再投递。
+对无序、没有结果回调的运行时注册接收者，系统发出调度调用后会按 assumed-delivered 处理：AMS 不等待应用回报这次回调完成，也不为该接收者启动广播完成 ANR 计时。Android 14 起，缓存态进程的运行时接收器广播可能被延后，待进程回到 active 后再投递。清单接收器不适用这条“等应用变 active”的运行时接收器路径。
 
-- 仍要等待 `finishReceiver()` 并受超时跟踪的投递：清单接收者、有序广播接收者、带完成回调的动态接收者。assumed-delivered 不代表无序动态接收者可以长期占用主线程——它仍会阻塞该应用自己的 UI 与后续消息，可能触发输入等其他类型 ANR。
-- API 34 的 `BroadcastOptions` 提供两个正交能力：`setDeferralPolicy(DEFERRAL_POLICY_UNTIL_ACTIVE)` 控制何时投递（不适用于有序、闹钟、交互型与清单接收者）；`setDeliveryGroupPolicy(DELIVERY_GROUP_POLICY_MOST_RECENT)` 让同一投递组只保留最近一条、旧的待投递项被跳过。延后策略与 delivery group 解决的是"何时投"与"是否都要投"两个维度。
-- Android 16 起，接收者 `priority` 只保证同一应用进程内的顺序，跨进程全序不再保证，不能把优先级设计成跨应用协议顺序。
+仍需等待 `finishReceiver()` 的情况包括清单接收器、有序广播接收器和带完成回调的动态接收器。assumed-delivered 只表示广播队列不等待这个无序回调完成，不表示应用主线程不会被回调阻塞。长时间占用主线程仍会影响 UI 和后续消息，并可能触发输入等其他 ANR。
+
+可通过 `BroadcastOptions` 分别控制缓存态延后和待投递项合并：
+
+1. **延后策略：**API 34 加入 `setDeferralPolicy(DEFERRAL_POLICY_UNTIL_ACTIVE)`，要求运行时注册接收器通常等目标进程变为 active 后再执行，因此可能无限期延后。该策略不适用于有序、闹钟、交互型广播和清单接收器。
+2. **投递分组：**API 34 加入 `setDeliveryGroupPolicy(DELIVERY_GROUP_POLICY_MOST_RECENT)`，同一投递组只保留最新广播，较旧待投递项可被丢弃。它决定“是否每条都要投”，延后策略决定“何时投”，二者处理不同问题。
+3. **跨进程顺序：**Android 16 起，接收者 `priority` 不再保证不同进程之间的广播顺序，只在同一应用进程内生效。不能用它建立跨应用的协议顺序或同步关系。
 
 **Q4: 广播 ANR 的计时从哪里开始？`goAsync()` 能把窗口延长多少？**
 
-定时器在 `BroadcastQueueImpl.dispatchReceivers()` 调用 `scheduleRegisteredReceiver()`/`scheduleReceiver()` 之前启动，由 `finishReceiverLocked()` 取消；队列等待和广播触发的冷启动发生在定时器启动之前，所以"广播端到端等了很久"不等于"接收者执行超时"，排障要区分调度延迟与完成延迟。`goAsync()` 只把完成回执从 `onReceive()` 返回点延后到 `PendingResult.finish()`，不会暂停 ANR 计时、也不提供额外时间——需要等待完成的投递仍受 10/60 秒基准约束。
+对于需要等待接收器完成的广播，Android 17 `BroadcastQueueImpl.dispatchReceivers()` 在调度回调前启动 ANR 定时器，`finishReceiverLocked()` 在完成回执到达后取消它。排队等待和拉起冷进程发生在回调调度前，不计入这个接收器完成窗口。因此端到端广播耗时长，不能单凭这一点断定发生了接收器超时。无序且无结果回调的动态接收器属于 assumed-delivered，不走此完成等待计时。
 
-- 超时把该接收者标为 `DELIVERY_TIMEOUT` 并进入 `appNotResponding()`；`TimeoutRecord` 描述包含 Intent 与接收包名/类名。
-- `goAsync()` 的正确用法：先定义提交点（任务已持久化入队、有序结果已写完），并在 `finally` 中调用 `finish()`；下载、迁移、大扫描等长任务交给 `JobScheduler`/WorkManager，而不是占用广播窗口。
-- 逐接收者状态用 `delivery[]` 表达（PENDING/SCHEDULED/DEFERRED/DELIVERED/SKIPPED/TIMEOUT/FAILURE）；`APP_RECEIVE` 等是整条记录的执行状态，两者不能互相替代。
+1. **超时结果：**接收器超过对应的 `TIMEOUT` 后，其投递状态记为超时并进入应用无响应处理。超时记录可包含 Intent 与接收包名、类名。调查时应区分进程队列等待、冷启动、回调运行和完成回执等待。
+2. **`goAsync()` 契约：**它只把完成时点从 `onReceive()` 返回延后到 `PendingResult.finish()`，不会暂停计时或增加超时额度。应在 `finally` 中调用 `finish()`，并把任务提交点定义为工作已可靠移交，例如已持久化入队。下载、迁移和大规模扫描应交给 `JobScheduler` 或 WorkManager。
+3. **状态维度：**`delivery[]` 记录每个接收器的 PENDING、SCHEDULED、DEFERRED、DELIVERED、SKIPPED、TIMEOUT 或 FAILURE。`APP_RECEIVE` 等状态描述整条广播记录的执行阶段。逐接收器投递结果和整条记录状态回答不同问题，不能互相替代。

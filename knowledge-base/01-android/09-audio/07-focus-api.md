@@ -15,7 +15,7 @@ AudioManager 是应用申请/放弃焦点的公开入口，AudioAttributes 表�
 
 **Q2: 如何写一个与播放器解耦、能用于短时音效的焦点控制器？**
 
-下面的 Java 类只负责焦点。宿主把实际开始和停止播放接到两个回调，并在音效真正结束时调用 `finish()`。这样代码不假装 SoundPool 提供了播放完成回调。SoundPool 只有加载完成回调，具体音效结束需要宿主按播放器能力管理。该实现不接受延迟焦点，失败时返回 false。
+`AudioFocusRequest` 与本例用到的 Builder API 自 API 26 起可用，因此下面的 Java 类要求运行在 API 26 及以上。类只负责焦点：宿主把实际开始和停止播放接到两个回调，并在音效真正结束时调用 `finish()`。这样代码不假装 SoundPool 提供了播放完成回调；SoundPool 只有加载完成回调，具体音效结束需要宿主按播放器能力管理。该实现不接受延迟焦点，失败时返回 false。
 
 ```java
 import android.content.Context;

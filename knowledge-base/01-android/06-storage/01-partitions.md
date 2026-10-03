@@ -1,37 +1,42 @@
 # 运行时分区与挂载
 
-> 学习资料（文章模式沉淀）。边界：本文回答"设备上有哪些分区、各放什么、动态分区与虚拟 A/B 在运行时如何挂载与生效"；镜像如何构建、打包与刷写归 [../13-build-system/04-android-system-images.md](../13-build-system/04-android-system-images.md)；启动期 fstab/first-stage 挂载时序归 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。分区名与布局随设备/版本有差异，权威以设备 fstab 与构建配置为准。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答设备分区的职责、动态分区与 `super` 的容量关系、Virtual A/B 的 OTA 数据路径，以及启动时逻辑分区和 `/data` 的挂载职责。镜像如何构建、打包与刷写归 [../13-build-system/04-android-system-images.md](../13-build-system/04-android-system-images.md)。具体分区名与布局随设备、启动模式和 Android 版本变化，最终以设备 fstab、分区表与构建配置为准。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: Android 设备上常见分区有哪些？各放什么？**
+**Q1: Android 设备常见分区分别保存什么？哪些属于系统、引导、动态容器和用户数据？**
 
-按"只读系统、引导、可写数据"三类记最不容易乱：
+按分区职责可归为六组，但并非每台设备都具有每个分区。Treble 将通用 Android 系统与硬件厂商实现分层，通过稳定接口降低两侧必须同步更新的范围。设备厂商仍会按产品选择具体镜像与引导布局。
 
-1. **只读系统侧**：`system`/`system_ext`/`product` 是平台与产品定制的镜像主体；`vendor`/`odm` 是芯片与设备厂商的下层实现（HAL、配套 rc 与固件、板级配置）——system 与 vendor 的 Treble 边界见架构册 HAL 篇（05-hal.md）；
-2. **引导侧**：`boot` 装内核；`vendor_boot` 装 vendor 内核模块与 vendor ramdisk（GKI 机制见启动册 Q9）；`init_boot`（GKI 2.0 起）承接通用 ramdisk，boot 只留内核；`dtbo` 是设备树 overlay；`vbmeta` 是 AVB 校验链的元数据根（见启动册 Q3）；
-3. **动态容器**：`super` 装着 system/vendor/product/odm 等**逻辑分区**（见 Q2）；
-4. **可写侧**：`userdata`（挂载为 /data，FBE 加密的应用与用户数据）、`metadata`（保护加密密钥的启动早期小分区，见 06-storage 册）；
-5. **辅助**：`misc` 是 bootloader 通信小区（如 recovery 启动指令 BCB）；A/B 设备的 recovery 功能并入 boot，不再有独立 recovery 分区。
+1. **系统与厂商实现：**`system` 保存 Android 系统镜像，`system_ext` 放置扩展公共系统镜像的资源和专有模块，`product` 承载产品侧系统内容。`vendor` 与 `odm` 承载芯片和设备实现，包括 HAL、配套 init rc、固件与板级配置。Treble 的边界要求跨层依赖遵守平台接口契约，不能据分区名推断两边代码可以任意互调。
+2. **内核和 ramdisk：**`boot` 保存启动内核，在使用 GKI 的设备上该内核为 GKI。Android 12 及更早版本的 GKI 布局中，`boot` 也包含 generic ramdisk。设备若随 Android 13 发布，generic ramdisk 位于 `init_boot`，`boot` 主要保存 GKI 内核。升级设备可能继续把 generic ramdisk 放在 `boot`。`vendor_boot` 保存 vendor ramdisk 与厂商内核模块等内容，实际组成受 GKI 和 recovery 布局影响。
+3. **设备树与验证链：**`dtbo` 保存设备树 overlay。`vbmeta` 保存 AVB 验证链的元数据与签名信息，作为验证启动镜像和分区的信任链入口。
+4. **逻辑分区容器：**`super` 是物理容器，内部元数据描述 `system`、`vendor`、`product`、`odm` 等逻辑分区。设备采用动态分区时，这些系统镜像不各自占用固定物理分区。
+5. **用户和加密数据：**`userdata` 通常挂载为 `/data`，保存应用和用户数据，并可使用文件级加密。`metadata` 是启动早期可访问的小型分区，可保存 metadata encryption 所需的密钥材料或相关元数据，具体用途以设备实现为准。
+6. **启动控制与恢复：**`misc` 是 bootloader 与 Android 交换少量启动状态的分区，例如 recovery 启动用的 BCB 指令。A/B 设备常把 recovery 能力放进 boot 相关镜像或 ramdisk，因此可能没有独立 recovery 分区。非 A/B 或特定设备仍可能具有独立 recovery。
 
-**Q2: 动态分区（dynamic partitions）与 super 分区怎么理解？**
+**Q2: Android 动态分区怎样把 `system`、`vendor` 等逻辑分区放进 `super`？它解决了什么容量问题？**
 
-Android 10 起把 system/vendor/product/odm 等只读分区从物理分区改为 `super` 分区内的**逻辑分区**：OTA 时各分区大小可按需伸缩，不再受出厂物理分区表的硬限制。
+Android 10 引入动态分区后，设备可将 `system`、`vendor`、`product`、`odm` 等分区实现为 `super` 内的逻辑分区。OTA 可调整逻辑分区容量，而无需为每个只读分区在出厂物理分区表中永久预留增长空间。
 
-1. **机制**：逻辑分区的元数据存在 super 内；init 第一阶段按 fstab 的 `logical`/`first_stage_logical` 标志从 super 映射并挂载（fstab 语境见启动册 Q10）；
-2. **为什么**：旧世界每个只读分区都要为未来版本预留增长空间，几个大版本后就撞分区表上限；动态分区把"分区大小"变成 OTA 可以调整的数据；
-3. **与 OTA 的配合**：升级期间新增内容走虚拟 A/B 快照落在 /data（见 Q3）；
-4. **排查入口**：`adb shell lpdump` 查看 super 内的逻辑分区布局。
+1. **物理与逻辑关系：**`super` 本身是物理分区。逻辑分区由 `super` 中的 extents 和分区组元数据描述，设备映射出 block device 后再挂载文件系统。逻辑分区不是一块独立的物理闪存区域。
+2. **容量调整：**旧式固定布局需要给每个分区单独预留空间，某个分区增长时，即使别处有空余也可能受分区边界限制。动态布局在 `super` 的可用空间范围内调整分区大小，设备仍必须满足总容量、分区组和 OTA 峰值空间约束。
+3. **OTA 配合：**OTA 可更新分区组元数据并重设逻辑分区大小。采用 Virtual A/B 的设备还会在 `/data` 保存写时复制快照，快照空间需求和 `super` 的逻辑分区容量是两项不同的约束。
+4. **查看布局：**设备上可用 `adb shell lpdump` 读取 `super` 元数据，检查逻辑分区、分区组和容量分配。它展示设备当前的分区元数据，不代替构建配置或 OTA 包内容分析。
 
-**Q3: 虚拟 A/B（Virtual A/B）与分区是什么关系？OTA 期间数据写到哪里？**
+**Q3: Virtual A/B 与双份静态 A/B 分区有什么区别？OTA 快照写在哪里，何时回滚或合并？**
 
-A/B 无缝升级需要两套可启动的系统；虚拟 A/B 的取舍是：关键启动分区仍走 slot 切换，动态分区的"另一份"不再完整复制成第二个 super，而是在 /data 上建写时复制（CoW）快照——升级期间设备照常可用。
+Virtual A/B 保留 A/B 更新的 slot 切换能力，但不在 `super` 内完整复制一套动态系统分区。OTA 将新数据写入 `/data` 上的写时复制快照，设备重启后通过快照映射读取新旧数据，确认新系统启动成功后再把快照合并回基础分区。
 
-1. **机制**：OTA 把新系统内容以快照形式写入 /data；重启到新 slot 后由 snapuserd 在读取旧分区内容时动态合成快照（启动期"读策略必须先于杀 snapuserd"的时序契约见启动册 Q11）；
-2. **失败回退**：快照在元数据中登记，升级失败可放弃合并回滚旧系统，不需要 recovery 手动重刷；
-3. **空间权衡**：/data 需为 OTA 预留空间，空间不足时 update_engine 会要求清理或走降级路径；下载、写快照与 slot 切换由 `update_engine` 编排；
-4. **版本边界**：虚拟 A/B 自 Android 10 起推荐、Android 11 起为新发布设备强制；存量机型仍有传统 A/B（双份静态分区）与非 A/B（recovery 刷写）形态。
+1. **存储布局：**bootloader 直接读取的关键物理分区仍按 A/B slot 更新。动态系统分区通过 `/data` 上的 COW snapshot 提供新版本块，不为每个动态分区在 `super` 中再保留完整 B 副本，因此比双份静态 A/B 少占常驻空间。
+2. **安装与运行：**`update_engine` 编排下载、写入快照和 slot 切换。安装过程中快照写入 `/data`，设备仍可运行旧系统。重启后 device-mapper、`dm-user` 与 `snapuserd` 等组件按 Android 版本提供快照读取与合并路径。
+3. **确认与回退：**新 slot 启动成功并标记为成功后，系统把快照合并回基础动态分区。若新系统启动失败，boot control 与更新状态可让设备回退到旧 slot 并放弃未完成的新版本更新。合并过程可跨重启继续，不能把普通启动失败与快照已合并完成混为一谈。
+4. **版本和空间：**Virtual A/B 自 Android 11 起是 GMS 新发布设备要求。Android 12 支持压缩快照。Android 13 起，新发布设备的压缩快照与 userspace merge 默认使用 `snapuserd` 流程。存量设备升级时还受原有分区布局和配置约束。`/data` 必须容纳 OTA 的临时快照。空间不足会阻止更新或要求释放空间。
 
-**Q4: Dynamic Partition 下 system/vendor 是怎么挂载出来的，bootloader 负责挂载 /data 吗？**
+**Q4: Android 启动时谁把 `super` 里的逻辑分区映射并挂载？bootloader 会挂载 `super` 或 `/data` 吗？**
 
-Android 10 起设备把 system、vendor、product、odm 等适合动态化的只读分区放入 super 物理分区，内核启动后进入 ramdisk 的 first-stage init：它解析 super metadata、创建 dm-linear 逻辑设备，并挂载这些 first_stage_mount 分区；boot、dtbo、vbmeta 等 bootloader 需要直接读取的分区仍是物理分区，不能说所有分区都进入了 super。bootloader 不负责挂载 super 或 `/data`：到 early-fs 阶段系统先启动 vold 做 metadata encryption 准备，late-fs 阶段 init 先执行 `wait_for_keymaster`，再通过 `mount_all` 挂载 `/data`。
+bootloader 负责加载启动所需的物理镜像并启动内核，不负责解析 Android 的 `super` 元数据或挂载 `/data`。启动后由 first-stage init 根据 ramdisk 中的 fstab、动态分区元数据和设备功能创建逻辑 block device 并挂载指定系统分区。`/data` 则在后续 init 阶段完成密钥准备后挂载。
 
-动态分区解决了固定分区表的问题——OTA 升级可以动态调整各逻辑分区大小，不再受出厂容量约束。只读动态分区通常叠加 dm-verity 做完整性校验，`/data` 可叠加 dm-default-key 做 metadata encryption；system 分区在 Android 9 起的 system-as-root 模型下由内核直接挂载为根（Android 10 起改为带 ramdisk、由 first-stage init 挂载）。
+1. **bootloader 阶段：**bootloader 根据设备启动配置读取 boot chain 所需物理分区，例如 boot、vendor_boot、init_boot、dtbo 和 vbmeta，并将内核与 ramdisk 交给内核启动。具体组合取决于 Android 发布版本、GKI、A/B 与 recovery 布局。
+2. **first-stage init：**init 从 ramdisk 启动并读取设备 fstab。对标记为 first-stage mount 的条目，它解析 `super` 元数据、创建逻辑分区映射设备，再挂载 system、vendor 等早期所需分区。fstab 中的分区类型和 first-stage 标记决定实际挂载集合，不能假设所有动态分区都会在同一时刻挂载。
+3. **Virtual A/B 特例：**启用压缩快照的设备可能需要 first-stage init 在挂载系统分区前启动 ramdisk 中的 `snapuserd`，让逻辑设备读取经过 snapshot 映射的数据。切换到系统分区并加载 SELinux policy 时，init 还需按版本定义的时序重新启动或切换 snapuserd 上下文，避免 snapshot I/O 中断。
+4. **`/data` 阶段：**init 在挂载 `/data` 前要按设备配置完成 metadata encryption 的密钥准备。常见 fstab/init 流程会在 late-fs 阶段等待 KeyMint/Keymaster 等依赖，再通过 `mount_all` 处理 `/data` 条目。阶段名称、等待服务和 fstab 标记随设备实现变化，因此具体顺序要检查产品 init rc 与 fstab。
+5. **文件系统安全层：**只读系统分区通常可在 block device 上叠加 dm-verity 校验。`/data` 可配置 dm-default-key 等 metadata encryption 机制。Android 9 的 system-as-root 布局把 root 文件系统并入 `system.img`，由内核将 `system` 挂载为根文件系统。Android 10 起，逻辑 `system` 分区不能再由内核直接挂载，系统分区映射和早期挂载由 ramdisk 中的 first-stage init 处理。升级设备会保留其原有启动布局，不能只按运行的 Android 版本推断分区形态。

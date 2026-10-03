@@ -8,10 +8,10 @@
 
 各层职责不同：
 
-- **Activity**：入口与兜底，持有 Window；不参与命中测试。
-- **PhoneWindow/DecorView**：把 View 树接进窗口；`DecorView.dispatchTouchEvent` 先转发给 `Window.Callback`（即 Activity），Activity 经 `superDispatchTouchEvent` 交回后，才进入 DecorView 作为 ViewGroup 的分发实现。
-- **ViewGroup**：命中测试与递归分发——判断事件坐标落在哪个孩子上、维护 TouchTarget 链、执行拦截（`onInterceptTouchEvent`）、按需把多点拆分给不同孩子。
-- **View**：消费决策——按 `onTouchListener`、`onTouchEvent` 的顺序询问自己是否处理。
+1. **Activity**：入口与兜底，持有 Window；不参与命中测试。
+2. **PhoneWindow/DecorView**：把 View 树接进窗口；`DecorView.dispatchTouchEvent` 先转发给 `Window.Callback`（即 Activity），Activity 经 `superDispatchTouchEvent` 交回后，才进入 DecorView 作为 ViewGroup 的分发实现。
+3. **ViewGroup**：命中测试与递归分发——判断事件坐标落在哪个孩子上、维护 TouchTarget 链、执行拦截（`onInterceptTouchEvent`）、按需把多点拆分给不同孩子。
+4. **View**：消费决策——按 `onTouchListener`、`onTouchEvent` 的顺序询问自己是否处理。
 
 排查"事件没到自定义 View"时，按这条链从上往下打日志即可定位断在哪一层：Activity 收到了而 ViewGroup 没递归到，通常是命中测试或拦截问题；ViewGroup 收到了而叶子没收到，通常是孩子不可点击、`dispatchTouchEvent` 返回 false 或坐标不在孩子边界内。
 
@@ -53,8 +53,8 @@ disable 后收不到 `onTouch` 是因为 enabled 是监听器短路条件的一�
 
 一次都不会被调用的情况有两种：
 
-- **无目标且非 DOWN**：手势进行中原目标消失后，容器直接按"拦截"处理、自己消化这条事件，绕过询问；
-- **disallow 置位期间**：子 View 调用 `parent.requestDisallowInterceptTouchEvent(true)` 后，直到手势结束或新 `DOWN` 重置标志前，容器失去拦截机会。
+1. **无目标且非 DOWN**：手势进行中原目标消失后，容器直接按"拦截"处理、自己消化这条事件，绕过询问；
+2. **disallow 置位期间**：子 View 调用 `parent.requestDisallowInterceptTouchEvent(true)` 后，直到手势结束或新 `DOWN` 重置标志前，容器失去拦截机会。
 
 由此得出实践结论：拦截判断必须做到"每条事件都能快速给出相同答案"，因为 `MOVE` 阶段它会被反复调用；想在拦截里做耗时计算（如 ML 手势分类）要先在容器侧缓存资格判定。`onInterceptTouchEvent` 的默认实现直接返回 false，所以不重写它时容器从不拦截，这也是普通布局不干扰孩子手势的原因。
 
@@ -104,8 +104,8 @@ pointer index 是指针在当前 `MotionEvent` 指针数组里的位置，会随
 
 两种拦截策略的做法：
 
-- **外部拦截**：父容器重写 `onInterceptTouchEvent()`，从 `DOWN` 起累计位移，超过 TouchSlop 后按方向（比较 `|dx|` 与 `|dy|`，或结合业务规则）决定是否返回 true；返回 true 后子 View 收 `CANCEL`、事件归父容器。实现集中在一处，是默认首选；代价是父容器要理解子容器的意图，同向嵌套时还需按"内容是否到边界"判断。
-- **内部拦截**：父容器声明"除 `DOWN` 外默认不拦截"（`DOWN` 时必须返回 false，且不能用 `DOWN` 做拦截），子 View 在 `dispatchTouchEvent` 里按自己的逻辑调 `parent.requestDisallowInterceptTouchEvent(true)` 申请独占。申请时机必须在 `MOVE` 处理里——`DOWN` 分发前置会把手势状态连同 disallow 标志一起重置，`DOWN` 时的申请活不到下一条事件。适合子控件更懂自身语义的场景（如轮播图要求"横向位移归我"），代价是父子双方都要按约定实现，`DOWN` 处理出错会整个失效。
+1. **外部拦截**：父容器重写 `onInterceptTouchEvent()`，从 `DOWN` 起累计位移，超过 TouchSlop 后按方向（比较 `|dx|` 与 `|dy|`，或结合业务规则）决定是否返回 true；返回 true 后子 View 收 `CANCEL`、事件归父容器。实现集中在一处，是默认首选；代价是父容器要理解子容器的意图，同向嵌套时还需按"内容是否到边界"判断。
+2. **内部拦截**：父容器声明"除 `DOWN` 外默认不拦截"（`DOWN` 时必须返回 false，且不能用 `DOWN` 做拦截），子 View 在 `dispatchTouchEvent` 里按自己的逻辑调 `parent.requestDisallowInterceptTouchEvent(true)` 申请独占。申请时机必须在 `MOVE` 处理里——`DOWN` 分发前置会把手势状态连同 disallow 标志一起重置，`DOWN` 时的申请活不到下一条事件。适合子控件更懂自身语义的场景（如轮播图要求"横向位移归我"），代价是父子双方都要按约定实现，`DOWN` 处理出错会整个失效。
 
 同向嵌套的现代解法是嵌套滚动协议（`NestedScrollingParent/Child`，`NestedScrollView`/RecyclerView 已内置）：子视图先自己消费、把未消费部分通过 `dispatchNestedScroll` 上交给父级，双方不再抢事件而按消费量协作。能用嵌套滚动表达的层级，优先用它，比手写拦截策略健壮。
 
@@ -121,10 +121,10 @@ pointer index 是指针在当前 `MotionEvent` 指针数组里的位置，会随
 
 `CANCEL` 表示"这条手势到此为止，不会再来 `UP`"，义务是把整条手势的中间状态恢复到 `DOWN` 之前，否则轻则按压态卡住、重则下次手势错乱。清理清单按来源列：
 
-- **View 自身的交互态**：按压态（`setPressed(false)`，否则 selector 停在 pressed）、长按与点击的延迟回调（框架在默认实现里处理，自绘控件要自己做）；
-- **手势数据结构**：`VelocityTracker` 的 `recycle()`、自己维护的触摸点表、双击检测状态；
-- **动效与视觉**：正在跟随手指的动画/位移回弹到位、嵌套滚动的 `stopNestedScroll()`；
-- **业务状态**：拖拽中的临时标记、"等待抬起才提交"的操作按取消处理（如长按录制、滑动解锁）；
+1. **View 自身的交互态**：按压态（`setPressed(false)`，否则 selector 停在 pressed）、长按与点击的延迟回调（框架在默认实现里处理，自绘控件要自己做）；
+2. **手势数据结构**：`VelocityTracker` 的 `recycle()`、自己维护的触摸点表、双击检测状态；
+3. **动效与视觉**：正在跟随手指的动画/位移回弹到位、嵌套滚动的 `stopNestedScroll()`；
+4. **业务状态**：拖拽中的临时标记、"等待抬起才提交"的操作按取消处理（如长按录制、滑动解锁）；
 
 框架默认 `onTouchEvent` 已覆盖第一类，其余三类都是应用自建状态，重写 `dispatchTouchEvent`/自定义容器的人最容易漏。诊断"卡按压态/幽灵滚动"类问题时，先确认每个维持状态的地方都处理了 `CANCEL`——`CANCEL` 不仅来自父容器拦截，系统手势接管、窗口失焦、触摸过期都会产生，不能假设"用户总会正常抬手"。
 
@@ -150,7 +150,12 @@ Activity 层有同名入口兜底：View 树没人消费时 `Activity.dispatchGe
 
 完整链路是：焦点 View 首次获得可编辑焦点时，系统把它设为"服务目标"并建立 `InputConnection`（`EditText` 经 `onCreateInputConnection(outAttrs)` 提供，`EditorInfo` 在此填写输入类型、`imeOptions` 与初始文本）；IME 侧持有连接代理，软键盘的每次编辑都远程调用它；组合输入（拼音预编辑）用 `setComposingText` 维护下划线区段，提交时 `finishComposingText` 固化。因此拦截文本输入要在 `InputConnection` 层做（包装 `InputConnection`、重写 `commitText`），监听 `onKeyDown` 对软键盘输入无效。
 
-验证方式：`adb shell input text` 注入的文本同样走 `InputConnection` 路径；而 `adb shell input keyevent` 产生真实 `KeyEvent`。两者效果不同，测试用例选择注入方式时要区分"测文本逻辑"还是"测按键逻辑"。
+两种命令都不等价于软键盘的文本提交，但构造事件的方式不同：
+
+1. `adb shell input text`：Android 13 使用虚拟键盘的 `KeyCharacterMap` 将可映射字符转换为 `KeyEvent` 序列，不经过 IME 的 `InputConnection`；因此不能覆盖拼音组合、候选选择等 IME 编辑行为。
+2. `adb shell input keyevent`：直接注入指定键码，适合测试按键分发。
+
+要验证 IME 编辑行为，应使用真实 IME 或直接测试 `InputConnection`。
 
 **Q18: 物理返回键在 Activity 层的默认行为是什么？重写 `onKeyDown` 拦截 BACK 要注意什么？**
 
@@ -176,14 +181,18 @@ Activity 层有同名入口兜底：View 树没人消费时 `Activity.dispatchGe
 
 用触摸委托（`TouchDelegate`）：父容器把一块更大的矩形映射给目标 View——调用 `setTouchDelegate(new TouchDelegate(bounds, targetView))` 后，落在 `bounds` 内的事件在父容器的事件处理里被转交给委托对象，内部先做坐标反变换（把父容器坐标换成目标 View 坐标系）再喂给目标 View，目标 View 由此"以为"手指点在自己身上（按 AAOS13 源码核对，`View` 持有 `mTouchDelegate` 并在事件处理入口优先询问委托）。
 
-三个使用条件决定成败：一是**受托 View 必须 clickable**——不可点击的 View 收到事件也不消费，委托形同虚设；二是**委托方要有机会处理事件**——通常挂在覆盖该区域的直接父容器上，实践中常配合让父容器对委托区域内的事件返回 true；三是**矩形要在布局后设置**——`bounds` 是父容器坐标系里的矩形，View 尺寸位置变化（动画、多语言重排、深色模式切换）后要重新设置，否则热区停留在旧位置。
+三个使用条件决定成败：
+
+1. **受托 View 可消费：**目标 View 必须 clickable，否则收到事件也可能不消费。
+2. **委托方能收到事件：**通常把委托设置在覆盖该区域的直接父容器上；扩大区域必须仍在父容器的可分发边界内。
+3. **矩形坐标有效：**`bounds` 使用父容器坐标，布局完成后再计算；View 尺寸或位置变化后重新设置，避免热区留在旧位置。
 
 典型场景是列表项里的勾选框、删除按钮这类小控件：无障碍规范建议可点击目标不小于 48 dp，`TouchDelegate` 是不改视觉尺寸达标的标准手段，且委托信息会进入 `AccessibilityNodeInfo`，对无障碍服务同样生效。排查"委托后还是点不中"按三个条件倒查，最常见是第三条——布局完成后没有重设矩形。
 
 **Q21: "点击浮窗外部关闭浮窗"是什么机制？为什么拿不到外部点按的位置？**
 
-靠 `ACTION_OUTSIDE`：窗口以 `FLAG_NOT_FOCUSABLE`（不抢焦点）加 `FLAG_WATCH_OUTSIDE_TOUCH`（监听窗外触摸）创建后，用户点到窗口外时系统给该窗口补发一条 action 为 `ACTION_OUTSIDE` 的事件——PopupWindow、Dialog 的"点外部消失"、下拉面板外点收起都是这个机制。外部触摸本身仍由下面的窗口正常处理，浮窗只是被"通知"了一声。
+窗口同时设置 `FLAG_NOT_FOCUSABLE` 与 `FLAG_WATCH_OUTSIDE_TOUCH` 后，可在窗外首个按下时收到 `ACTION_OUTSIDE`。前者表示窗口不获取输入焦点，后者请求系统通知窗外触摸；省略 `FLAG_WATCH_OUTSIDE_TOUCH` 时没有此通知。PopupWindow、Dialog 的点外关闭常用这一机制，外部触摸仍由下层窗口正常处理。
 
-安全设计决定它只给一条：每个手势只投一次 `ACTION_OUTSIDE`（对应外部窗口的 `DOWN`），没有后续 `MOVE`/`UP`，且坐标恒为 (0,0)——外部内容的位置与轨迹对浮窗不可见，防止浮窗借"监听外部"窥探用户在其他界面的操作轨迹。所以基于它的逻辑只能是"外部发生了一次按下"的布尔判断，做不了轨迹分析。
+系统只投递一条 `ACTION_OUTSIDE` 通知，不转发后续 `MOVE`/`UP`，坐标为 `(0, 0)`；外部内容的位置与轨迹对浮窗不可见，从而限制其窥探其他界面操作的能力。所以基于它的逻辑只能是"外部发生了一次按下"的布尔判断，做不了轨迹分析。
 
 需要"区分点在外部哪里"的需求（只点空白处关闭、点到悬浮球不关）靠它做不到：要么把"外部"做进自己的 View 树，要么用系统级监视通道（属系统应用能力）。浮窗"点外关闭又立刻弹回"的拉锯，通常是 `ACTION_OUTSIDE` 触发关闭的同时外部点击又触发了浮窗的显示逻辑，加时间窗去抖即可。

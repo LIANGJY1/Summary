@@ -1,45 +1,66 @@
 # aconfig 运行时：存储与 aflags
 
-> 学习资料（文章模式沉淀，证据等级：二手）。边界：本文回答"标志值运行期从哪读、aconfigd 如何初始化存储、aflags 怎么查看与修改"；声明与构建期代码生成归 [../13-build-system/07-aconfig.md](../13-build-system/07-aconfig.md)。源文档：Android 官方 feature-flagging 文档与 AOSP 源码口径，版本差异已标注。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀，证据等级：官方文档与 AOSP 源码）。边界：本文回答 aconfig 标志的运行期值来源、设备端存储初始化与 `aflags` 操作。声明、元数据字段和构建期代码生成归 [../13-build-system/07-aconfig.md](../13-build-system/07-aconfig.md)。涉及 Android 17 的行为均按对应源码版本说明。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: `purpose` 与 `storage` 两个 metadata 字段各自影响什么？**
+**Q1: aconfig 标志运行时从哪里读取值，`purpose` 与 `storage` 分别代表什么？**
 
-`purpose` 区分"用开关门控新功能"与"用开关门控正确性修复"，这决定了开关被关闭时代码的期望行为；`storage` 选择运行期的值来源后端，共两种。
+运行时读取路径取决于标志生成时选定的存储后端。`purpose` 描述标志的用途，不负责选择后端，也不直接改变运行时的开关逻辑。
 
-两种后端：新的基于 `ACONFIGD` 的内存映射存储，以及遗留的 `DEVICE_CONFIG`（Settings 存储）。新存储是为了解决 DeviceConfig 方案的性能与开机时延问题而引入的。旧路径每次调用都单独 `DeviceConfig.getBoolean()` 读、无缓存；更早还有一版按 namespace 批量 `getProperties()` 读的模板，在 Android 17 被移除。`purpose` 字段的存在意义是让"关掉这个开关是否安全"变成可判定问题——门控新功能时关闭是安全的（回到旧行为），门控正确性修复时关闭可能让已知缺陷重新暴露。判断规则：给一个已有 bug 的修复加开关时要谨慎——用 `purpose` 标记为 bugfix 的开关一旦被误关，缺陷立即复现；这类开关应当额外考虑设 `is_fixed_read_only` 以确保它不会在生产设备上被关掉。
+1. `storage`：标识值来源。AOSP 存在基于 aconfig 存储文件的路径和遗留的 `DeviceConfig` 路径。前者通过生成代码和运行时读取库访问存储文件。后者由生成代码读取 `DeviceConfig` 中对应 namespace 的值。具体采用哪条路径由构建配置、生成代码和 Android 版本共同决定，不能只凭 flag 声明推断。
+2. aconfig 存储：生成的代码读取构建产物中的标志存储文件，并由运行时组件提供对应访问能力。新存储设计避免把每次 flag 查询都变成一次 Settings/`DeviceConfig` 查询。旧实现是否有缓存，取决于具体版本和生成代码，不能概括成所有旧路径都逐次发起无缓存查询。
+3. `purpose`：元数据中的用途分类，例如功能开关或 bug 修复开关。它帮助评审者判断关闭开关的风险，并可供策略或测试流程使用。它本身不保证 bug 修复 flag 不会被关闭。`is_fixed_read_only` 等独立属性才表达相应的只读约束，具体声明规则见构建期文档。
 
-**Q2: 运行期存储由谁提供，Android 17 上有什么变化？**
+排查读值与预期不一致时，先确认实际生成的 flag 后端和默认值，再检查设备侧覆盖值及存储是否已初始化。不要把 `purpose` 当成值来源，也不要把声明中的默认值直接等同于设备当前值。
 
-由 `aconfigd-system` 服务在开机阶段初始化存储。存储文件在构建期由 `aconfig create-storage` 生成，共四种二进制文件类型。Android 17 的显著变化是 `aconfigd-system` 成为纯 Rust 二进制（`system/server_configurable_flags/aconfigd/Android.bp` 里的 `rust_binary` Soong 模块），此前用于灰度迁移的 `enable_full_rust_system_aconfigd` 迁移标志已被移除。
+**Q2: 设备端 aconfig 存储由谁初始化，Android 17 的文件格式有什么变化？**
 
-值以内存映射文件形式落在 `/metadata/aconfig/` 下。Android 17 的版本 4 格式给 `StoredFlagType` 枚举增加了三个整数对应项——`ReadWriteInt64`、`ReadOnlyInt64`、`FixedReadOnlyInt64`，并新增 `FlagValueType` 枚举（`Boolean`、`Int64`）来分类值的存储方式；这些变体仅在启用 v4 解析器时使用。判断规则：开机阶段读到的标志值不对，先确认存储文件是否已生成且 `/metadata/aconfig/` 是否可读——`aconfigd` 尚未初始化完时读到的是默认值，这与"标志被关掉"的表现完全一致，但根因完全不同。
+设备启动时，`aconfigd` 相关服务负责装载和维护运行时存储。Android 17 引入的 system 版本以 Rust 实现。构建系统先生成存储文件，启动阶段再将相应存储接入设备运行时。
 
-**Q3: 整数标志是什么，为什么说它目前还是 groundwork？**
+1. 构建产物：`aconfig create-storage` 按容器生成存储数据。Android 17 AOSP 的文件集合包括 `package.map`、`flag.map`、`flag.val` 和 `flag.info`，分别承载包索引、标志索引、标志值及额外标志信息。不要将这组构建产物与设备上运行时使用的映射文件或配置描述文件混为一谈。
+2. 初始化：`aconfigd` 读取设备配置并装载对应存储。Android 17 源码中存在 system 侧的 `aconfigd-system` Rust 服务。不同分支可能仍保留旧实现或迁移开关，因此“服务已纯 Rust”只适用于已切换到该版本的分支，不能推广到所有 Android 设备。
+3. 文件版本：Android 17 的存储格式版本 4 扩展了 flag 类型信息，以支持整数值相关的类型枚举。只有生产者和读取端都支持相应格式时，才能使用这些新增字段。文件版本不匹配时，不能仅凭枚举已出现就断定设备运行时能够读取整数 flag。
+4. 初始化时序：读值发生在服务完成装载之前时，读者可能只看到默认值或读失败，具体表现由访问 API 与版本决定。排查时应同时核对启动阶段、生成文件是否随镜像安装、容器是否匹配及读取端是否支持文件版本，避免把初始化问题误判为 flag 被关闭。
 
-Android 17 在声明 schema 里新增了标志类型维度（`FLAG_TYPE_BOOLEAN` 与 `FLAG_TYPE_INTEGER`），使标志能携带整数负载而不只是开关状态。整数值的传递链路已经铺好——值由 `flag_value` 的 `value_int` 字段（field 5）与 `parsed_flag`（field 14）承载，而不是布尔型的 `state`。
+Android 17 的具体服务模块、文件路径和格式以目标分支源码为准。`/metadata/aconfig/` 是某些设备存储布局的一部分，不应被写成所有设备共用的固定路径。
 
-但完整链路尚未打通：声明整数标志受构建标志 `RELEASE_ACONFIG_ENABLE_INT_FLAG` 门控，且**整数标志的访问器代码生成尚未接线**。官方文档也说明"此为奠基工作"。判断规则：现阶段不要依赖整数标志做生产功能——底层存储与解析虽已就绪，但访问器缺失意味着 C++/Java 侧拿不到值；要用只能走 `aflags` 命令行或等待版本推进。这与布尔标志"声明即可用"的成熟度有本质差距。
+**Q3: Android 17 的整数型 aconfig flag 处于什么阶段，应用代码能否直接读取？**
 
-**Q4: `aflags` 是什么，怎么在设备上查看和修改标志值？**
+整数 flag 的存储和解析基础已经开始建设，但不能据此认为普通应用已能像读取布尔 flag 一样通过生成访问器直接读取整数值。
 
-`aflags` 是设备端的标志查看与操作工具。设备上的 `aflags` 是一层薄壳，把实际子命令逻辑委托给 ConfigInfrastructure APEX 中可更新的 `aflags_updatable` 二进制。
+1. 类型描述：相关 schema 加入了布尔与整数类型区分，存储格式也预留了整数值类型及对应状态。这解决的是协议、解析和存储表达问题。
+2. 构建门控：AOSP 源码中出现 `RELEASE_ACONFIG_ENABLE_INT_FLAG` 这一构建门控。该门控是否存在、默认值是什么以及作用范围如何，要以目标分支的 build 配置为准。不能把实验性门控当成所有产品都开启的能力。
+3. 代码访问：截至本文依据的 Android 17 AOSP 源码，整数 flag 的普通代码生成访问器链路尚未完整接通。因此，即使声明、解析或存储层支持整数，也不代表 Java/C++ 调用方已有受支持的直接读取接口。
+4. 使用判断：产品代码应只依赖目标分支实际生成并受支持的 API。`aflags` 是设备端查看和覆盖工具，不是应用代码访问整数值的替代 API。调试命令能显示某类数据，也不等于运行时业务代码可读取它。
+
+**Q4: `aflags` 是什么，如何在设备上查看或修改标志值？**
+
+`aflags` 是 Android 设备端用于列举 aconfig flag 并管理可写覆盖值的命令行工具。Android 17 的 AOSP 实现由系统侧入口转交给 ConfigInfrastructure APEX 中可更新的实现。产品分支和功能开关可能改变实际调用路径。
 
 ```bash
-# 源码位置
-build/make/tools/aconfig/aflags/src/main.rs            ← 设备端薄壳
-packages/modules/ConfigInfrastructure/aflags/src/main.rs ← 实际子命令逻辑
-
-# 基本操作
-aflags list
-aflags enable <package>.<name>
-aflags disable <package>.<name>
-aflags unset <package>.<name>
+adb shell aflags list
+adb shell aflags enable <package>.<flag_name>
+adb shell aflags disable <package>.<flag_name>
+adb shell aflags unset <package>.<flag_name>
 ```
 
-`enable`、`disable`、`unset` 三个子命令都接受 `-i`/`--immediate` 参数。Android 17 新增两项列举能力：`aflags list --format proto` 输出 Base64 编码的 `ProtoFlagList`（受 `android.provider.flags.aflags_list_proto` 标志门控）；当 `aflags_list_mainline_beta` 标志置位时，`aflags list` 还会合并从 `device_config` 存储读取的 Mainline Beta 标志。判断规则：现场调试时优先用 `aflags list` 确认标志当前实际值，而不是看代码里的默认值或构建配置——尤其是走 DeviceConfig 后端的标志，它的值可能已被其他组件改动过。
+上述命令的参数含义和效果如下：
 
-**Q5: 在自建镜像上维护这样一套开关，主要的维护负担是什么？**
+1. `adb shell`：通过 ADB 在设备 shell 中执行命令。省略这层时，命令会在主机环境查找，不是设备端调用。
+2. `aflags list`：列出设备端可见的 flag 及其状态。它反映设备当前读取到的信息，不等于只显示源码默认值。具体列和状态格式依工具版本而异。
+3. `enable <package>.<flag_name>`：将完整限定名对应的可写 flag 覆盖为启用。占位符要替换成实际 package 与 flag 名。尖括号不是要输入的字符。只读 flag 不能通过此命令任意改写。
+4. `disable <package>.<flag_name>`：将对应的可写 flag 覆盖为禁用。它与 `enable` 一样作用于设备侧覆盖，不会修改源代码中的默认值或构建产物。
+5. `unset <package>.<flag_name>`：清除该 flag 的本地覆盖，使其回到由设备存储和配置决定的有效值。这不等同于强制设为启用或禁用。
+6. `-i` 或 `--immediate`：在支持此选项的版本中，要求立即应用覆盖值，而非按默认的暂存/重启生效路径处理。选项只适用于支持它的写入子命令。省略时遵循该版本的默认应用策略。设备实现、flag 类型或服务状态可能限制立即生效，使用前应查看设备上 `aflags <command> --help` 的说明。
 
-主要负担是"开关的清理"和"运行期可调带来的现场不确定性"，这两项都不是技术问题而是流程问题。
+Android 17 源码还增加了特定版本中的列表扩展能力，例如以 proto 格式输出以及合并某些 Mainline Beta flag。它们受相应构建能力或 flag 控制，不是所有设备 `aflags list` 都保证提供的通用参数。现场排查应记录设备版本、命令完整输出及是否存在本地覆盖，再与构建默认值对照。
 
-清理负担来自两处：其一，`bug` 字段指向的跟踪项在自建镜像上用自己的编号，不会因为上游关闭而失效，所以过期开关不会自动暴露；其二，`READ_WRITE` 标志可以在生产设备上被改值，于是"代码里写了默认值"不再等于"设备上就是这个值"，现场问题复现时必须先记录当时的 `aflags list` 输出。代价还有一条：`setClickFastWithRebound` 这类带副作用的标志在 `thunk_staging` 上可被反复开关，等于把"代码在开关两侧都正确"变成了硬性要求。判断规则：给自建镜像定一条规矩——每个 `READ_WRITE` 标志都要有明确的清理责任人与触发条件（通常是上游合入或目标特性全量后），并把它挂进需求闭环清单；否则开关数量只会单调增长，维护成本持续上升而收益递减。
+**Q5: 自建 Android 镜像维护 aconfig flag 时，哪些运行期风险需要纳入流程？**
+
+维护重点是及时清理临时 flag，并在排查记录中区分构建默认值与设备运行期覆盖。`READ_WRITE` flag 的可变性会让同一镜像在不同设备或不同时间呈现不同路径。
+
+1. 清理责任：flag 关联的 bug 或需求跟踪项可能沿用上游编号。自建项目需要把它映射到本地需求，并设置明确的删除条件和责任人。上游任务关闭不会自动清除产品分支中的声明。
+2. 运行状态：设备上的可写覆盖可能与代码默认值不同。复现问题时应采集设备版本、flag 完整名称、`aflags list` 输出和最近一次覆盖操作，不能只记录源码默认值。
+3. 双路径正确性：功能 flag 在启用和关闭状态都必须满足各自预期。若 flag 切换会改变共享状态或触发副作用，反复切换还要验证状态收敛、重复执行和回滚行为。例如项目中的 `setClickFastWithRebound` 在 `thunk_staging` 上可被反复开关时，必须确认两侧逻辑及切换副作用都安全。这是该项目的维护案例，不是 AOSP 对 flag 的通用保证。
+4. 生命周期治理：每个临时可写 flag 都应记录用途、默认值、目标分支、运行期修改方式、清理责任人与移除条件。特性全量或上游合入后，要确认是否应转为只读、删除 flag，或继续保留并说明理由。
+
+这些流程约束解决的是自建镜像的配置漂移与遗留开关问题，不属于 aconfig 运行时协议本身。源码声明及构建配置细节仍由配套的构建期文档说明。

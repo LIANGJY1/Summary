@@ -42,7 +42,7 @@ adb shell dumpsys media.audio_flinger
 1. **`adb shell`**：在设备上执行只读服务查询。省略它则命令在本机运行，通常看不到目标车状态。`adb` 默认选择唯一已连接设备，多设备时应加 `-s <serial>` 精确指定。该 serial 是设备标识，采集报告中要脱敏。
 2. **`dumpsys car_service --services CarAudioService`**：请求 CarService 的音频服务 dump，重点看 zone、context、持焦者、延迟请求、组和 duck。省略服务过滤可能输出整个 CarService，内容过多且容易漏看关键段。
 3. **`dumpsys audio`**：看 AudioService/MediaFocusControl 通道、焦点请求与 AudioManager 状态。省略服务名会 dump 全系统，无法高效定位。外部车机策略启用时不能仅按手机焦点栈解释其结果。
-4. **`dumpsys media.audio_policy`**：看策略服务的输出设备、AudioMix 与路由。服务名在不同设备上可能不可用，应先用 `adb shell dumpsys -l` 核对实际服务。不能仅凭焦点已授予推断 bus 已正确选中。
+4. **`dumpsys media.audio_policy`**：看策略服务的输出设备、AudioMix 与路由。服务名在不同设备上可能不可用，应先用 `adb shell dumpsys -l` 核对实际服务；`-l` 列出设备注册的 dump service 名称。不能仅凭焦点已授予推断 bus 已正确选中。
 5. **`dumpsys media.audio_flinger`**：看活动 track、输出线程、采样与混音状态。它可证明 Android 内部流是否进入输出线程，但无法单独证明车载功放真的发声。
 
 来源：[AOSP 音频架构与调试入口](https://source.android.com/docs/core/audio)、[AAOS 13 CarAudioFocus dump 实现](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。
@@ -70,7 +70,7 @@ adb shell dumpsys media.audio_flinger
 
 1. **Android 13 焦点**：默认静态 CarAudioContext/FocusInteraction 矩阵，具体策略以设备 CarService 修改为准。
 2. **Android 14+ OEM 插件**：可覆盖焦点/duck 等决策，配置 version 3 支持新的 context/zone 机制。AAOS 13 上不能假定已有。
-3. **Android 15+ 应用限制**：面向 Android 15 及以上的应用焦点申请还有顶层应用或前台服务限制，不应倒套到 Android 13。
+3. **Android 15+ 应用限制**：以 Android 15（API 35）或更高版本为 target 的应用，只有处于顶层或运行前台服务时才能申请焦点，否则返回 `AUDIOFOCUS_REQUEST_FAILED`。这是 target SDK 条件，不能倒套到 AAOS 13。
 4. **车型 HAL**：同一 Android 大版本也可因 HIDL 1.0、2.0 或 AIDL 实现不同而表现不同，duck/mute 和外部声音集成需逐车核验。
 
 来源：[AAOS OEM car audio 插件](https://source.android.com/docs/automotive/audio/car-audio-plugin)、[车机音频配置版本](https://source.android.com/docs/automotive/audio/audio-policy-configuration)、[Android 音频焦点版本变化](https://developer.android.com/media/optimize/audio-focus)、[AudioControl HAL](https://source.android.com/docs/automotive/audio/audio-control-hal)。

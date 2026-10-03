@@ -1,96 +1,93 @@
-# 车机链路场景地图
+# Android 车机九类端到端链路、通信边界与排查方法
 
-> 学习资料（文章模式沉淀）。边界：本文回答"车机九类链路（输入/显示/摄像头/音频/车辆信号/互联/网络/定位/电源）的端到端组成与取证维度"；各链路机制细节归对应领域目录。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文建立车机输入、显示、摄像头、音频、车辆信号、互联、网络、定位和电源九类链路的场景地图，并说明怎样用通信方式和层次边界定位取证点。具体子系统内部机制归对应主题文档。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: Android 车机中都有哪些链路场景？**
+**Q1: Android 车机九类端到端链路分别包含哪些典型场景？**
 
-车机的链路按数据流向分九类：输入、显示渲染、摄像头影像、音频、车辆信号、互联投屏、网络与升级、定位导航、系统与电源；每条链路都是"物理源 → 总线/驱动 → 框架服务 → 应用呈现或执行"的端到端通路。
+车机链路可按数据来源和最终作用分为九类。下面列出常见端到端路径，具体节点取决于车型、硬件和厂商实现，不能把每条示例当作所有车机都必须采用的唯一实现。
 
-**输入链路**
+1. **输入：**
+    1. 触摸屏：触摸 IC 经 I2C/SPI 接入内核触摸驱动，再由 EventHub、InputReader 和 InputDispatcher 将事件送到应用窗口。
+    2. 物理按键与旋钮：GPIO/ADC 和内核按键驱动产生 input 事件，系统据此执行返回、音量或空调旋钮等操作。
+    3. 方向盘方控按键：按键状态经车身网络和 VHAL 上报，CarService 或厂商服务再转换为按键/车辆事件，媒体、语音或仪表据此响应。具体 CAN 解码及事件映射由车型实现决定。
+    4. 语音：麦克风阵列采集声音，经 codec 和音频 HAL 到唤醒、识别引擎，再执行语义动作。播报方向由 TTS 进入音频播放链路，经音频服务、HAL 和扬声器输出。多音区实现还要处理主驾、副驾和后排拾音及回声消除。
+2. **显示渲染：**
+    1. 应用上屏：应用绘制与 RenderThread/GPU 生成缓冲区，经 BufferQueue 交给 SurfaceFlinger 合成，再由 Composer HAL、显示控制器和 LVDS/eDP 等链路送到屏幕。
+    2. 多屏输出：主屏、副驾屏和后排屏可作为不同 display 管理，DisplayManager/SurfaceControl 等接口参与显示分配和合成，实际策略由系统配置决定。
+    3. 仪表与 HUD：仪表或 HUD 可能走 AAOS ClusterService 支持的集群显示路径，也可能由独立仪表系统渲染，不能假设它们都由普通应用窗口直接输出。
+3. **摄像头影像：**
+    1. 倒车影像（RVC）：R 挡状态通常由车辆信号链路通知系统，某些 AAOS 实现由可选 CarEVSService 协调 EVS 应用和 EVS HAL。摄像头可经 SerDes、CSI 等输入，帧缓冲再交给显示路径。EVS 示例可使用共享图形缓冲区，是否绕过标准 Camera 框架以及实际延迟由实现决定。
+    2. 360 环视（AVM）：多路鱼眼相机帧交给 ISP 或厂商算法做校正、去畸变和拼接，再把鸟瞰结果送往显示链路。
+    3. 行车记录（DVR）：相机图像经编码器压缩，再按存储策略循环写入文件。
+    4. 驾驶员/乘员监测（DMS/OMS）：红外或 RGB 相机图像交给监测算法，结果可触发提示或整车联动。
+    5. 拍照与录像应用：Camera2/CameraX 等应用 API 进入 CameraService 和相机 HAL，再由 ISP、sensor 等硬件完成采集。具体支持能力取决于设备实现。
+4. **音频：**
+    1. 本地媒体播放：应用通过 AudioTrack 提交音频，AudioFlinger 执行混音，音频 HAL、codec/DSP、功放再驱动扬声器。焦点由音频策略服务管理，在 AAOS 中还涉及 CarAudioService。
+    2. U 盘媒体：USB 存储挂载后由媒体索引服务扫描文件，播放器读取并解码播放。
+    3. 收音机：tuner 芯片经 I2C/SDIO 等接口连接平台，再由厂商 radio 服务或广播接口供应用使用。
+    4. 蓝牙音乐（A2DP）：手机经蓝牙连接传输媒体流，车机蓝牙协议栈接收后交给音频播放路径。
+    5. 蓝牙电话（HFP）：手机通话音频经 HFP/SCO 等蓝牙链路进入车机的麦克风与扬声器通路。
+    6. 蜂窝电话：拨号请求经 Telecomm 等电话框架到 RIL/modem，通话状态和音频路由由平台及厂商实现协同处理。
+    7. eCall 紧急呼叫：碰撞信号或人工触发可通知 TBOX 发起蜂窝呼叫并上报车辆数据，具体法规与整车实现决定其协议和链路。
+    8. 提示音与多音区混音：导航播报、雷达提示音、chime 与媒体流按 CarAudioService 等策略进行焦点仲裁、音区路由和混音。
+5. **车辆信号与控制：**
+    1. 车况信号：车辆总线报文由收发器、MCU 或厂商通信栈接收，经 VHAL 和 CarPropertyService/CarService 提供车速、挡位、胎压、里程等属性。
+    2. 空调控制（HVAC）：应用通过 CarHVACManager 等 API 修改属性，命令经车辆服务、VHAL 和车载网络到空调控制器，状态再沿反向路径回报。
+    3. 倒车雷达：超声波探头和 MCU 产生距离数据，经车辆网络、VHAL 到显示逻辑。提示音同时进入音频策略和播放链路。
+6. **互联与投屏：**
+    1. 手机互联（CarPlay、CarLife、ICCOA、HiCar）：USB 或 Wi-Fi 建立连接，互联服务解码视频并合成上屏，同时处理音频路由和触摸事件回传。协议、链路和认证方式因生态而异。
+    2. 蓝牙连接：配对后，电话簿访问（PBAP）、音乐和电话等 profile 可分别建立服务，不应把一次配对等同于所有 profile 都已连接。
+7. **网络与升级：**
+    1. 蜂窝数据：SIM 和 modem 建立蜂窝承载，RIL 与网络服务协作，再由 netd、ConnectivityService 等提供应用网络能力。
+    2. Wi-Fi 与热点：无线芯片通过驱动、厂商 HAL/服务及 supplicant 或 hostapd 等组件接入平台网络管理。具体组件边界随 Android 版本和厂商实现变化。
+    3. TBOX 远控：手机应用请求经云平台到 TBOX，再由 TBOX 经车载网络向车辆控制器下发远程空调、寻车或解锁等命令，并接收状态反馈。
+    4. OTA 升级：设备接收升级任务并下载、校验包，更新组件按设备分区方案安装。采用 A/B 的设备可由 update_engine 等组件写入非活动槽并在重启后切槽，其他设备布局和流程可能不同。
+8. **定位与导航：**
+    1. 卫星定位：GNSS 模组经串口或其他总线连接 GNSS HAL，定位结果进入 LocationManager 和导航引擎，再用于地图渲染与语音播报。隧道等卫星信号较弱场景可融合惯性或车辆传感器推算位置。
+9. **系统启动与电源：**
+    1. 开机启动：BootROM、bootloader、kernel、init、Zygote、system_server、CarService 和 Launcher 依赖顺序逐步启动。不同阶段由各自组件完成，CarService 并非 Android 每台设备都必有的通用启动节点。
+    2. 休眠与唤醒：系统根据电源状态和唤醒源进入 suspend 或厂商定义的低功耗状态，ACC 等事件可触发恢复。是否快速恢复现场取决于电源架构和整车配置。
+    3. 电源状态联动：ACC、挡位、大灯等信号可进入电源管理或车辆服务，再影响应用生命周期和资源调度，例如倒车时降低媒体内容的视觉/声音干扰。
 
-1. **触摸屏**：触摸 IC → I2C/SPI → 内核触摸驱动 → EventHub/InputReader → InputDispatcher → 应用窗口；
-2. **物理按键与旋钮**：GPIO/ADC → 内核按键驱动 → input 事件 → 系统响应（返回、音量、空调旋钮）；
-3. **方向盘方控按键**：按键 → 车身 CAN → VHAL → CarService 转成按键事件 → 媒体/语音/仪表响应；
-4. **语音**：麦克风阵列 → 音频 codec → 音频 HAL → 唤醒与识别引擎 → 语义执行；反向播报走 TTS → AudioFlinger → 扬声器，多音区要区分主驾/副驾/后排拾音与回声消除。
+**Q2: 怎样区分车机链路中的通信方式与系统层次边界？**
 
-**显示渲染链路**
+先把一条端到端链路切成相邻组件间的段，再分别标记每段使用的通信机制和跨越的系统层次。通信方式回答“数据怎样过去”，层次边界回答“哪两类组件在交互”，两者不能混为一套固定的一对一映射。
 
-5. **应用上屏**：App 绘制 → RenderThread/GPU → BufferQueue → SurfaceFlinger 合成 → Composer HAL → 显示控制器 → 屏幕（LVDS/eDP）；
-6. **多屏输出**：主屏、副驾屏、后排娱乐屏各自作为 display，由 DisplayManager/SurfaceControl 分发渲染；
-7. **仪表与 HUD**：集群屏或 HUD 的独立渲染链路（AAOS ClusterService 或独立仪表系统）。
+按通信方式观察时，常见段可归为以下六类：
 
-**摄像头影像链路**
+1. **进程内调用与 JNI：**只在同一进程的组件间调用，例如应用内部渲染工作、识别引擎内部处理或蓝牙协议栈内部处理。RenderThread、GPU 驱动等实际边界仍需按具体进程和驱动确认。
+2. **Binder、AIDL 与存量 HIDL：**跨进程服务调用可通过 Binder。应用到系统服务、Stable AIDL HAL，以及 Android 13 及以后新增/迁移的 HAL 接口通常采用 AIDL。存量 HIDL HAL 仍可能运行于 hwbinder，Android 13 起 HIDL 已弃用但并非立即消失。VHAL 从 Android 13 起要求采用 AIDL，旧版本及迁移实现可能仍见 HIDL。
+3. **FMQ：**特定 HAL 接口可用 Fast Message Queue 在共享内存队列中传递高频数据。它不是通用 Binder 替代品，也不是所有图像或 PCM 数据都必经的机制，需查该 HAL 的接口定义。
+4. **共享缓冲区：**图像帧、图形缓冲区等大块数据常通过共享缓冲区传递句柄，并通过 fence 等同步机制协调读写。EVS/SurfaceFlinger 等链路的缓冲形式由其接口和实现定义。不能把相机帧一概归为 FMQ。
+5. **系统调用与内核接口：**进程可能通过设备节点、ioctl、mmap、文件、socket 或 sysfs 与内核交互，例如 input 设备读取、串口、ALSA、V4L2、DRM/KMS、块设备和网络。具体路径以设备驱动与系统实现为准。
+6. **专用总线与外设接口：**物理段可能使用 CAN、I2C/SPI、GPIO/ADC、UART、USB、CSI/SerDes、I2S/DAI 或 LVDS/eDP。VHAL 到车辆网络的底层传输属于厂商实现边界，并不统一等于 CAN socket 或某个标准设备节点。
 
-8. **倒车影像（RVC）**：R 挡信号 CAN → VHAL → CarEvsService → EVS HAL → 相机（SerDes → CSI）→ 视频帧直送上屏，绕过标准相机框架以压低延迟；
-9. **360 环视（AVM）**：四路鱼眼相机 → ISP 去畸变与拼接 → 鸟瞰图 → 显示；
-10. **行车记录（DVR）**：相机 → 硬件编码器 → 文件循环写入；
-11. **DMS/OMS**：红外/RGB 相机 → 疲劳与乘员监测算法 → 提示或整车联动；
-12. **拍照与录像应用**：Camera2/CameraX → CameraService → 相机 HAL → ISP → sensor。
+按系统层次观察时，端到端路径常跨越以下五类边界：
 
-**音频链路**
+1. **应用与应用框架：**应用通过 SDK/API 调用系统服务，例如 Camera、CarService/CarPropertyService、AudioTrack、LocationManager、Telecomm、ConnectivityService 或 DisplayManager。
+2. **框架与原生组件：**框架代码通过 JNI、原生库或进程内接口进入原生实现。InputReader、InputDispatcher、AudioFlinger、SurfaceFlinger 和蓝牙协议栈各有自身职责，也可能分布在不同进程，不能因都属于系统组件便认定它们是同一进程。
+3. **框架/原生服务与 HAL：**服务与 HAL 之间根据平台版本和接口采用 AIDL 或存量 HIDL。FMQ 或共享缓冲区可承载数据面，但它们与控制接口的关系要按接口定义判断。
+4. **HAL/原生组件与内核：**组件经驱动接口、设备节点、ioctl、mmap 或 socket 等使用内核能力，例如音频 ALSA、相机 V4L2、显示 DRM/KMS、GNSS 串口和 input 节点。CAN 的传输与设备抽象通常由厂商实现。
+5. **内核与硬件：**内核驱动控制 CAN、I2C/SPI、GPIO/ADC、UART、USB、CSI/SerDes、I2S/DAI 或显示链路等硬件接口。
 
-13. **本地媒体播放**：App → AudioTrack → AudioFlinger（焦点与混音）→ 音频 HAL → codec/DSP → 功放 → 扬声器；
-14. **U 盘媒体**：U 盘 → USB 存储挂载 → MediaProvider 扫描 → 播放；
-15. **收音机**：tuner 芯片 → I2C/SDIO → 广播 radio 服务 → 应用；
-16. **蓝牙音乐（A2DP）**：手机 → 蓝牙控制器 → 协议栈 A2DP Sink → AudioFlinger → 扬声器；
-17. **蓝牙电话（HFP）**：手机蜂窝通话音频经蓝牙 SCO 通路落到车机麦克风与扬声器；
-18. **蜂窝电话**：拨号 → Telecomm → RIL/modem → 通话音频通路；
-19. **eCall 紧急呼叫**：碰撞信号或手动触发 → TBOX → 蜂窝呼叫与车辆数据上报；
-20. **提示音与多音区混音**：导航播报、雷达提示、chime 与媒体按 CarAudioService 的焦点和多音区策略混音输出。
+三个例子展示两种分类维度如何叠加：
 
-**车辆信号链路**
+1. **本地媒体播放：**应用调用 AudioTrack 属于应用/框架边界，音频服务完成混音后经音频 HAL、ALSA 和 codec/功放输出。应用到服务及服务到 HAL 的控制路径可能跨 Binder，音频样本则按实现通过共享缓冲或其他数据面传输。
+2. **车况信号：**硬件总线报文先由驱动或 MCU/厂商通信栈接收，再由 VHAL 经版本对应的 AIDL/HIDL 接口向车辆服务提供属性，最后经 CarPropertyService 等到应用。不能把 VHAL 到内核的某种传输方式假定为全平台统一标准。
+3. **触摸屏：**触摸控制器经 I2C 等硬件总线产生事件，内核驱动将其暴露为 evdev 输入设备。Android 的典型处理路径是 EventHub 读取事件、InputReader 解释和映射、InputDispatcher 将事件分发给窗口，跨组件段可能包含进程内调用或 input channel 通信。
 
-21. **车况信号**：CAN 报文 → 收发器/MCU → VHAL → CarPropertyService/CarService → 应用（车速、挡位、胎压、里程）；
-22. **空调控制（HVAC）**：UI → CarHVACManager → VHAL → CAN → 空调控制器，状态反向回显；
-23. **倒车雷达**：超声波探头 → MCU → CAN → VHAL → 距离显示与提示音。
+**Q3: 车机链路故障时，怎样用场景图确定取证位置？**
 
-**互联投屏链路**
+先从用户可见现象反推所属链路，再沿链路逐段确定责任组件，并用通信方式选择对应证据。单看应用日志无法覆盖车辆总线、HAL、驱动或共享缓冲区上的故障。
 
-24. **手机互联**（CarPlay/CarLife/ICCOA/HiCar）：USB/Wi-Fi 连接 → 互联服务 → 视频流解码合成上屏 + 音频路由 + 触摸事件回传手机；
-25. **蓝牙连接**：配对 → BT 协议栈并行起电话簿（PBAP）、音乐、电话多服务。
+1. **锁定场景：**把“触摸无响应、倒车影像黑屏、媒体无声、车速不更新、OTA 卡住”等现象映射到 Q1 的来源、处理节点和最终输出，确认故障发生在采集、转换、传输、策略还是呈现阶段。
+2. **标出层次边界：**逐段写出相邻进程/组件，例如应用、系统服务、HAL、内核驱动和外设。同时注明该段是进程内调用还是跨进程，避免把跨进程问题归因到错误进程。
+3. **选择取证手段：**不同通信段对应不同证据：
+    1. Binder/HIDL 段检查服务注册、事务、线程池和死亡通知。
+    2. 共享缓冲段检查 buffer 所有权、队列积压和 fence。
+    3. 网络与 socket 段采集连接状态和包。
+    4. 车辆总线段抓取报文并对照 VHAL 属性。
+    5. 驱动/设备节点段检查内核日志、节点权限和 ioctl 错误。
+4. **验证配置前提：**按车型配置确认链路是否存在，例如无 HUD、DMS 或某种互联能力的车型不应出现对应节点。同一功能也可能由独立 ECU 或厂商服务实现，因此先核对拓扑和接口版本再判定缺失组件。
 
-**网络与升级链路**
-
-26. **蜂窝数据**：SIM → modem（RIL）→ netd/ConnectivityService → 应用；
-27. **Wi-Fi 与热点**：wpa_supplicant/HostAPd → Wi-Fi HAL → ConnectivityService；
-28. **TBOX 远控**：手机 App → 云平台 → TBOX（4G/5G）→ CAN → 整车执行（远程空调、寻车、解锁）；
-29. **OTA 升级**：云端推送 → 下载校验 → A/B 双分区后台安装（updater_engine）→ 重启切槽。
-
-**定位导航链路**
-
-30. **卫星定位**：GNSS 模组 → 串口 → GNSS HAL → LocationManager → 导航引擎 → 地图渲染与语音播报；隧道内靠惯导航位推算续接。
-
-**系统与电源链路**
-
-31. **开机启动**：BootROM → bootloader → kernel → init → Zygote → `system_server` → CarService → Launcher；
-32. **休眠与唤醒**：下电休眠（suspend 与唤醒源管理）→ ACC ON 快速唤醒恢复现场；
-33. **电源状态联动**：ACC/挡位/大灯等信号 → 电源管理服务 → 应用生命周期与资源调度（如倒车时媒体让路）。
-
-**按通信方式归类**
-
-同一条链路的不同段使用不同通信方式；上列 33 条链路的每一段都归属以下六类之一：
-
-1. **进程内调用与 JNI**：不跨进程的段——应用上屏的 App → RenderThread/GPU、语音链路里识别引擎的内部处理、蓝牙协议栈内部的协议处理；
-2. **Binder / AIDL**：应用与框架服务、框架服务与 Stable AIDL HAL 之间的段——方控按键与车况信号（VHAL → CarService → 应用）、HVAC、倒车雷达、拍照录像（App → CameraService → 相机 HAL）、蜂窝电话（Telecomm → RIL）、GNSS 上报、Wi-Fi 与蜂窝数据的服务段、OTA 的 updater_engine、多音区混音策略（CarAudioService）；
-3. **HIDL / hwbinder**：存量服务化 HAL 的段——旧平台的音频、相机、收音机 radio HAL，迁移完成后由 Stable AIDL 取代；
-4. **FMQ / 共享缓冲（大数据面）**：倒车影像与 360 环视的视频帧、拍照录像与 DMS/OMS 的图像流、媒体与语音的 PCM、手机互联的视频流、上屏链路的 graphic buffer；
-5. **系统调用 / ioctl / mmap**：触摸与按键的 input 设备节点读取、GNSS 串口读取、U 盘挂载后的文件读取、DVR 的编码与文件写入、OTA 的块设备写入、进程启动的 fork/exec、全部网络 socket、休眠唤醒的 sysfs 节点、显示控制器的 DRM/KMS 调用；
-6. **专用总线与外设接口（物理段）**：CAN（方控、车况、HVAC、倒车雷达、R 挡信号、TBOX 下发）、I2C/SPI（触摸 IC、tuner、功放）、GPIO/ADC（物理按键）、UART（GNSS、部分蓝牙控制器）、USB（U 盘、手机互联）、CSI/SerDes（相机）、I2S/DAI（音频 codec）、LVDS/eDP（屏幕）。
-
-**按五层间边界归类**
-
-每条链路都能拆成若干"层间段"，33 条链路用到的层间边界共五类：
-
-1. **应用 ↔ 应用框架**：SDK 调用与系统服务 Binder——CameraService、CarService/CarPropertyService/CarHVACManager、AudioTrack/AudioRecord、LocationManager、Telecomm、ConnectivityService、DisplayManager，几乎每条链路的应用侧都是这一段；
-2. **应用框架 ↔ 原生库与 ART**：JNI 与框架服务内部的原生处理——AudioFlinger 混音、SurfaceFlinger 合成、蓝牙协议栈、ISP/环视拼接算法、InputReader 与 InputDispatcher；
-3. **原生库/框架 ↔ HAL**：Stable AIDL、存量 HIDL 与 FMQ 数据面——Composer、EVS、相机、音频、radio、GNSS、RIL、VHAL 的调用与大数据传输；
-4. **HAL/原生 ↔ 内核**：对内核的设备节点与 ioctl/mmap——VHAL 的 CAN 套接字、音频 ALSA、相机 v4l2/CSI、GNSS 串口、显示 DRM/KMS、触摸与按键的 input 节点、OTA 块设备、网络 socket；
-5. **内核 ↔ 硬件**：物理总线段——CAN、I2C/SPI、GPIO/ADC、UART、USB、CSI/SerDes、I2S/DAI、LVDS/eDP。
-
-三个典型链路的分段拆解：
-
-1. **本地媒体播放**：应用↔框架（AudioTrack）→ 框架↔原生（AudioFlinger 混音）→ 原生↔HAL（音频 HAL）→ HAL↔内核（ALSA）→ 内核↔硬件（I2S 到 codec 与功放）；
-2. **车况信号**：内核↔硬件（CAN）→ HAL/原生↔内核（VHAL 设备节点）→ 原生↔HAL（VHAL AIDL）→ 应用↔框架（CarPropertyService）；
-3. **触摸屏**：内核↔硬件（I2C）→ HAL/原生↔内核（input 设备节点）→ 框架服务内部（InputReader → InputDispatcher，原生实现）→ 应用↔框架（input 通道送达窗口）。
-
-排查时先按现象对号入座找到所属链路，再叠用两个分类维度取证：层间边界指出段发生在哪两层之间、该到哪个进程取证；通信方式指出该用什么手段取证——跨进程段查 Binder/HIDL 的事务与线程状态，大数据段查共享缓冲与同步栅栏，物理总线段抓总线报文与驱动日志。链路随车型配置增减（无 HUD、无 DMS 的车型对应链路不存在），本清单按全配置车型列出。
+排查结论应落到“哪一段、哪种边界、哪项证据不符合预期”，再决定修复组件。该地图用于缩小范围，具体协议、时序和正确值仍需以对应 HAL 接口、车型配置和设备日志为准。

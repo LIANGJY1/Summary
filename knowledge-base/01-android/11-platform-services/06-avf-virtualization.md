@@ -1,47 +1,52 @@
 # AVF 虚拟化
 
-> 学习资料（文章模式沉淀）。边界：本文回答"AVF 组件拓扑、Microdroid 能力边界、pKVM 隔离与 pVM 性能结构"。源文档：android-internals-wiki §1.26（Android 17/ACK 6.18 语境），AVF 架构与 pKVM 安全模型已与 source.android.com 核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答 AVF 组件拓扑、Microdroid 的客户机能力、pKVM 的隔离承诺，以及 pVM 的性能观察方式。依据 Android 官方 AVF 架构、安全模型、Microdroid 文档和 Android 17 AOSP。具体组件和能力须以设备产品配置及对应源码分支为准。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: Android 17 的 AVF 实现里，VirtualizationService、virtmgr、crosvm、pKVM、pvmfw、Microdroid 分别运行在哪里、负责什么？**
+**Q1: Android 17 的 AVF 中，framework-virtualization、virtmgr、VirtualizationServiceInternal、crosvm、pKVM、pvmfw 和 Microdroid 分别负责什么？**
 
-它们分属不同进程与特权级：API 37 的宿主侧由多个独立进程组成，`VirtualizationService` 相关逻辑并不在 `system_server` 里。
+AVF 将应用 API、宿主服务、虚拟机监控器、内核隔离和客户机启动拆分到不同边界。不能把所有逻辑都归入 `system_server`。
 
-1. **framework-virtualization（应用进程）**：`VirtualMachineManager`/`VirtualMachine` 等 `@SystemApi` 入口，经 Unix 域套接字上的 RpcBinder 与 virtmgr 通信；
-2. **virtmgr（Rust 子进程）**：管理 AIDL 生命周期、镜像与文件描述符准备、启动并监控 crosvm；一个 virtmgr 可以管理多台 crosvm 子进程；
-3. **VirtualizationServiceInternal（全局 Rust lazy Binder 服务）**：负责虚拟机上下文 ID（CID）、全局资源与统计，按需启动，与 virtmgr 不同进程、也不在 system_server；
-4. **crosvm（每个运行中的 VM 一个进程）**：虚拟机监控器（VMM），通过 `/dev/kvm` 的 ioctl 创建并运行 VM，管理 vCPU 线程、virtio 设备和 VM 内存布局；
-5. **pKVM（内核 EL2，来自 ACK 的 KVM）**：管理宿主与客户机的 Stage-2 地址转换权限、页面所有权、vCPU 切换和 pVM 保护；
-6. **pvmfw（pVM 首段固件）**：验证初始镜像、维护实例身份、派生每台 VM 的机密；
-7. **Microdroid（客户机 OS）**：验证启动、SELinux、Bionic、原生 payload 与基于 vsock 的 Binder RPC。
+1. `framework-virtualization`：宿主应用侧的框架 API，例如 `VirtualMachineManager` 与 `VirtualMachine`。它为有权限的应用提供管理虚拟机的入口，并与宿主服务通信。
+2. `virtmgr`：Android 17 实现中的 Rust 管理进程，处理虚拟机生命周期、镜像和文件描述符准备，并启动、监控 VMM。一个管理进程可负责多台虚拟机。进程数量和通信细节以目标分支实现为准。
+3. `VirtualizationService`：宿主 Android 中负责管理 pVM 生命周期的服务。它建立宿主与客户机的通信能力，并向获准的客户端提供受控接口。其 API 和具体内部进程拓扑会随版本实现变化。
+4. `VirtualizationServiceInternal`：Android 17 AOSP 中供宿主内部组件使用的全局服务实现，负责上下文 ID（CID）、全局资源与统计等内部虚拟机管理职责。不要把它与面向应用的 `VirtualizationService` 接口或 `virtmgr` 进程混为同一个组件。
+5. `crosvm`：以 Rust 编写的虚拟机监控器（VMM），分配虚拟机内存、创建 vCPU 线程并实现虚拟设备后端。它使用 KVM 接口运行客户机，并处理需要宿主用户空间参与的虚拟设备事件。
+6. pKVM：运行在 Arm EL2 的 KVM hypervisor 扩展，限制宿主及其他虚拟机对受保护客户机内存的访问，并执行内存所有权管理。它不是另一个 Android 用户空间服务。
+7. `pvmfw`：pVM 首先执行的固件，验证启动镜像并派生 pVM 实例专属秘密。AVF 支持的客户机并不限于 Microdroid，但其他客户机必须符合对应启动和签名要求。
+8. Microdroid：可运行于 pVM 的轻量客户机操作系统，负责验证启动并为客户机 payload 提供精简运行环境。它不是宿主 Android 的一个进程或普通应用容器。
 
-排查 AVF 问题时先确认组件落点：framework API 报错看应用与 virtmgr，VM 启动失败看 crosvm 与 pvmfw，内存隔离问题才到 pKVM 与内核层。
+排查时先按故障边界定位：框架 API 与权限问题看客户端和宿主服务，虚拟设备或 vCPU 运行问题看 VMM 与宿主内核，启动镜像验证看 `pvmfw` 和客户机启动链，隔离问题再检查 pKVM、平台硬件与 DMA/IOMMU 支持。
 
-**Q2: Microdroid 是"小号完整 Android"吗？protected VM 里的 Microdroid 能直接用 GPU/NPU 加速通用 AI 推理吗？**
+**Q2: Microdroid 提供什么运行能力，protected VM 能否直接使用 GPU 或 NPU 做通用推理？**
 
-都不是。Microdroid 为原生 payload 提供的是基础设施：Bionic C 库、验证启动、SELinux、APEX 系统组件、日志与崩溃调试，以及基于 vsock 的 Binder RPC；它明确不提供 `system_server` 和 Zygote、图形 UI、HAL，也不提供 `android.*` Java framework API。启用 ART APEX 后能使用 `java.*` 核心 API，但不等于拥有常规 Android 应用运行环境。
+Microdroid 是为 pVM payload 提供的精简 Android 用户空间，不等同于具备完整框架和设备服务的 Android 系统。AVF 文档列明它支持的能力包括：
 
-推论：以下说法在 API 37 都没有依据——Microdroid 默认含完整 ART、SystemServer 和 Service Manager 服务集；protected 模式的 Microdroid 可以直接使用 virtio-gpu 或 NPU HAL 加速通用 AI 推理；它能承载完整工作资料、Launcher 或 SystemUI。payload 通常是 APK 内嵌的原生共享库，由 Microdroid payload launcher 执行。需要 UI、GPU 或设备直通时，应按具体客户机、crosvm 构建选项和产品安全策略单独评估自定义 VM，不能套用 Microdroid 的能力表。
+1. 原生运行环境：提供 Bionic 和一部分 NDK API，可加载并执行 APK 中携带的原生二进制及共享库。
+2. 安全启动与隔离：提供验证启动链和 SELinux 等客户机侧保护。
+3. 开发诊断：提供文档列出的调试能力，例如 ADB、`logcat`、tombstone 和 GDB。具体可用项取决于镜像构建。
+4. 组件扩展：支持加载 APEX。激活 ART APEX 后可以使用 `java.*` 核心 Java API，但这不代表提供 `android.*` Java framework API。
+5. 客户机通信：支持基于 vsock 的 Binder RPC，也支持经受完整性检查的文件交换。
 
-**Q3: pKVM 靠什么阻止宿主 Android 读取 protected VM 的私有内存？这种保护覆盖什么、不承诺什么？**
+它不提供常规 Android 应用框架所依赖的完整系统服务、Zygote、图形 UI 或 Android Java framework。AVF 的标准 Microdroid 能力列表也没有承诺可直接访问 GPU、NPU 或对应设备 HAL，因此不能由存在虚拟化推断出 protected VM 已能加速通用 AI 推理。若需求依赖 UI、GPU、NPU 或设备直通，必须针对具体客户机、VMM 配置、驱动和产品安全策略验证。需要时可评估其他受支持的客户机系统。Microdroid payload 通常是 APK 中嵌入的原生代码，由客户机 payload launcher 执行。
 
-pKVM 在宿主上下文中也启用 Stage-2 地址转换：宿主 Stage-2 使用恒等映射，EL2 维护每个物理页的所有者；创建 pVM 时宿主把页面 donate（捐赠）给客户机，这些页随即从宿主 Stage-2 的可访问映射中撤销——即使 crosvm 仍保留着建立 KVM memslot 的虚拟地址区间，宿主 CPU 和受宿主控制的设备也不能再读到这些页。
+**Q3: pKVM 如何保护 protected VM 的私有内存？它保证什么，又不保证什么？**
 
-官方安全模型确认的覆盖范围：
+pKVM 跟踪物理页所有权，并在 hypervisor 控制的 Stage-2 页表中限制哪些执行环境可以映射各页。客户机页只有在所有者显式共享后，其他获准实体才可访问。
 
-1. **机密性**：pKVM 跟踪页面所有权，页面只有所有者显式 share 后才能被其他 pVM 映射，规则同样约束 CPU 与 DMA 访问；
-2. **完整性**：pVM 之间不能未经同意修改对方内存、不能影响对方 CPU 状态；页面归还宿主前会被清理（撤销客户机映射并清写内容）；
-3. **通信靠显式共享**：受保护客户机为 virtqueue 预留固定共享内存窗口，客户机在私有页与共享窗口之间做中转复制（bounce copy）——这也是 pVM I/O 额外延迟与尾延迟的来源。
+1. 保密性：宿主或其他 pVM 未获页所有者授权时，不能映射其私有页。该规则也覆盖代表虚拟机访问内存的 DMA 设备。实际保证依赖满足 pKVM 要求的平台硬件和 IOMMU 支持。
+2. 完整性：pVM 未经同意不能修改彼此的内存，也不能影响彼此的 CPU 状态。宿主无法借由保留一个旧的虚拟地址映射绕过 hypervisor 执行的物理页所有权检查。
+3. 显式共享：客户机需要与宿主交换数据时，必须通过受支持的共享机制。受保护客户机的 virtio 通信可以使用共享内存区域。客户机私有数据移入共享区域时可能需要复制和相应缓存维护，这会增加 I/O 成本。
+4. 页面回收：pVM 可通过 `relinquish` 等机制主动把不再需要的页面交还宿主。销毁 pVM 并将页面交还宿主前，页面内容会被清理。pVM 私有页不能被宿主当作普通可换出的匿名页随意换出或合并。
+5. 不保证可用性：宿主仍能影响客户机何时获得 CPU 和资源，也能扣留虚拟设备、抢占或终止客户机。因此 pKVM 的核心承诺是保密性与完整性，而不是保证 pVM 持续运行或服务必定可用。
 
-不承诺的是可用性：KVM 有意把调度委托给宿主内核，恶意宿主可以选择永不调度客户机 vCPU，VMM 也能扣留内存和虚拟设备，宿主始终可以终止 crosvm 让整台 VM 停止。已 donate 的页不能被宿主换出或 KSM 合并，回收要靠客户机经 `relinquish` 或 balloon 主动归还。安全设计不能把"数据不被读取"写成"服务不会被中断"。
+还要区分内存隔离与所有客户机数据的完整性。虚拟磁盘、持久化状态和外部输入可能需要 dm-verity、AuthFS、加密或其他机制保护，不能仅凭 pKVM 推断所有存储内容都防篡改。
 
-**Q4: pVM 内的任务变慢，为什么只看客户机内的 Perfetto 不够？vCPU 与 VM exit 的成本结构是什么？**
+**Q4: 为什么只看 pVM 内 Perfetto 不足以解释性能问题，vCPU 与 VM exit 的成本来自哪里？**
 
-因为每个 vCPU 只是 crosvm 里的一个 POSIX 线程，客户机看到的慢可能来自三层，而后两层在客户机内完全不可见：客户机内线程没有被客户机调度器选中；对应 vCPU 线程在宿主上处于 runnable 却没获得 CPU；vCPU 因 MMIO、virtio 或中断等事件退出后在 crosvm 或宿主内核等待。
+客户机内 Perfetto 只能观察客户机获得 CPU 后的执行过程，无法独自解释宿主没有调度对应 vCPU 线程，或 VMM 正在宿主侧处理虚拟设备的时间。一次客户机内的慢操作可能涉及客户机、宿主调度器和 VMM 三层。
 
-成本结构：
-
-1. vCPU 线程调用 `KVM_RUN` 进入客户机，需要 VMM 处理时返回宿主用户空间；宿主调度器可以抢占它，也能用 CPU affinity、cpuset、uclamp 等常规 QoS 机制控制——客户机不能绕过宿主调度器拿到物理 CPU；
-2. 一次 I/O 不等于一次完整 VM exit：virtio 控制面走 MMIO，数据面主要走共享 virtqueue，eventfd/epoll 通知、中断合并和队列深度都会改变退出与唤醒次数；
-3. protected VM 的数据面还要叠加共享窗口 bounce copy 与缓存维护，影响吞吐与尾延迟。
-
-做法：把客户机时间线与宿主 crosvm/vCPU 线程调度对齐，统计每单位业务数据的退出与唤醒次数。没有设备型号、频点、负载和分布数据时，"VM exit 5–10 μs"或"比 syscall 慢 3–10 倍"不是平台结论。
+1. vCPU 调度：每个 vCPU 由 VMM 对应的宿主线程承载。线程进入客户机执行后，宿主调度器仍可抢占它。客户机调度器无法保证该线程获得物理 CPU。宿主侧 affinity、cpuset 或 uclamp 等配置也会影响实际运行时间。
+2. VM exit 与处理：vCPU 因需要宿主处理而退出客户机后，可能返回 VMM 用户空间或宿主内核。MMIO 仿真、虚拟设备请求和中断处理都可能参与这条路径。不同事件不必然对应同样的退出次数或处理耗时。
+3. virtio 通信：virtio 通常用共享 virtqueue 传递数据，通知和控制路径还可能涉及 MMIO、eventfd/epoll、中断及中断合并。实际唤醒和退出频率受设备实现、批处理策略和队列深度影响，不能把“一次 I/O”直接等同于“一次完整 VM exit”。
+4. protected VM 数据路径：私有页与共享缓冲区之间的数据搬运及缓存维护会增加额外工作，可能影响吞吐和尾延迟。影响大小必须在目标设备和负载下测量。
+5. 联合观察：将客户机时间线与宿主 crosvm/vCPU 线程调度、VMM 事件和虚拟设备处理时间对齐，并统计单位业务数据对应的退出、通知和唤醒次数。没有设备型号、频点、负载和延迟分布数据时，不应把固定的“VM exit 微秒数”或相对 syscall 的倍数写成平台结论。

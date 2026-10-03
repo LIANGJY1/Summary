@@ -104,7 +104,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     /**
      * 当前同源题目文档。选择持久化到 settings：重启恢复上次选择（2026-09-24 用户反馈：
-     * 每次进题库都默认打开 01-语法基础.md）；换库或文档失效时由 reloadKnowledgeFiles 回退。
+     * 每次进题库都默认打开 01-syntax-basics.md）；换库或文档失效时由 reloadKnowledgeFiles 回退。
      */
     var selectedSourcePath: String
         get() = selectedSourcePathState.value

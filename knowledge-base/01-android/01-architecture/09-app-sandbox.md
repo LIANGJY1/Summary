@@ -4,19 +4,15 @@
 
 **Q1: Android 中的 Sandbox 怎么理解？**
 
-每个 Android 应用默认独占一个 Linux UID 和一个进程——这条进程边界就是沙箱，跨边界的一切访问都必须走显式 IPC 和权限检查。沙箱不是系统里某个独立的组件，而是三层内核机制叠加在边界上的总效果。
+Android 沙箱不是单独的组件，而是系统在应用进程边界上组合多种内核安全机制形成的隔离效果。应用通常以独立 UID 运行；同一应用也可有多个同 UID 进程，因此进程数不等于沙箱数。
 
-三层各管一件事：
+整体上，UID/DAC 区分文件属主和进程凭据，SELinux/MAC 按安全域和对象类型限制能力，seccomp-BPF 收窄进程可调用的系统调用集合。各机制的判据和拒绝方式由后续机制题展开。
 
-1. **UID（DAC）**：管身份与文件归属——数据目录、进程凭据按 UID 判定，应用之间默认互不可见；
-2. **SELinux（MAC）**：管能力边界——能访问的对象必须由策略显式允许，未允许即拒绝；
-3. **seccomp-BPF**：管内核入口——收窄进程可发起的系统调用集合。
+沙箱的边界可从三个方面判断：
 
-按三个常见误解来理解它的边界：
-
-1. **沙箱不是应用内部的东西**：它由 Zygote fork 降权、init 挂载命名空间、SELinux 策略等系统机制在进程创建时施加，应用只能在其内运行，不能关闭或修改；
-2. **沙箱不是绝对安全屏障**：它防的是应用之间与应用对系统的默认越权，不承诺防住内核漏洞——内核提权漏洞可以让应用逃逸沙箱，SELinux 与 seccomp 是纵深防御而非保证；
-3. **边界形态可以被配置改变**：应用自开多进程让同一 UID 内多个进程共享沙箱；`android:sharedUserId` 让两个应用合并 UID 等于合并沙箱，它已从 API 29 起废弃；`exported` 组件与权限声明则是边界上的受控开口。
+1. **施加者**：沙箱由 Zygote fork 时设置进程凭据、init 配置命名空间和 SELinux 策略等系统机制共同施加。应用不能自行关闭这些系统边界。
+2. **安全承诺**：这些机制限制应用间默认越权，但不能保证抵御所有内核漏洞。内核提权漏洞可能造成沙箱逃逸，SELinux 与 seccomp 是纵深防御而不是漏洞免疫保证。
+3. **边界配置**：同 UID 的应用多进程共享 DAC 身份，但仍受其他策略限制。`android:sharedUserId` 可让符合条件的应用共享 UID，该机制自 API 29 起废弃。`exported` 组件和权限声明则构成受控的跨边界入口。
 
 **Q2: 应用沙箱依靠哪些机制实现？DAC、MAC、seccomp-BPF 分别是什么？**
 
@@ -64,7 +60,7 @@ UID 在应用安装时由系统分配：PackageManagerService 驱动 installd �
 
 多用户隔离建立在 UID 体系上：`uid = userId × 100000 + appId`（`UserHandle` 的组合规则），同一 appId 在不同用户下是**不同的 Linux UID**——u0_a123 与 u10_a123 互为陌生应用，隔离由 UID 加 SELinux 双重实施。
 
-1. **编号规则**：appId 从 10000 起（`AID_APP_START`）才是三方应用；work profile 通常占 userId=10；每用户有独立数据目录 `/data/user/<userId>/`，`/data/data` 只是 user 0 的符号链接；
+1. **编号规则**：普通第三方应用 appId 从 10000 起（`AID_APP_START`）。userId 由系统分配，工作资料常见示例可能是 user 10，但不能把 10 当作固定编号。每个用户有独立数据目录 `/data/user/<userId>/`，`/data/data` 对应 user 0 的数据目录；
 2. **跨用户访问是特权**：`startActivityAsUser`、`queryIntentActivitiesAsUser`、`createPackageContextAsUser` 都是 hidden/SystemApi，需要 `INTERACT_ACROSS_USERS(_FULL)`（signature|privileged 级）——普通应用拿不到；
 3. **普通应用的合法路径**：拥有 launcher 角色可用 `LauncherApps.getActivityList(null, userHandle)` 列出各 profile 的活动，`UserManager.getUserProfiles()` 拿关联用户列表；Android 11+ 还叠加 package visibility 白名单限制；
 4. **排查入口**："为什么看不到工作资料里的应用"按序查——是否具备 launcher 角色、是否声明了跨用户查询场景、package visibility 配置；`ps -A | grep u10_` 可快速确认双实例存在。
@@ -73,7 +69,7 @@ UID 在应用安装时由系统分配：PackageManagerService 驱动 installd �
 
 seccomp 拦截不抛 Java 异常：被拒的系统调用直接以 SIGSYS（信号 31）杀死进程，logcat 表现为 `Fatal signal 31 (SIGSYS), code 1 (SYS_SECCOMP)`，tombstone 的信号信息带被拒的 syscall 编号。常见两类来源：应用升级 targetSdk 后，Zygote 按目标 SDK 安装更严格的白名单过滤器，老 native 库里被淘汰的调用被拒；或第三方 ROM/裁剪内核删掉了白名单允许的调用。
 
-1. **机制**：Android 8.0 起 Zygote 在 fork 应用进程时安装 seccomp 过滤器，白名单随 targetSdk 收紧——这是沙箱三层（Q1）中最"沉默"的一层：崩溃即全部信息，没有 avc 那样的审计日志可查；
+1. **机制**：Android 8.0 起 Zygote 在 fork 应用进程时安装 seccomp 过滤器，允许的系统调用集合可随 targetSdk 收紧。被拦截的调用可能以 SIGSYS 结束进程；seccomp 不会像 SELinux AVC 那样为每次拒绝提供常规审计记录；
 2. **确认**：signal 31 + `SYS_SECCOMP` code；按 tombstone 里的 syscall 编号对照目标架构的 syscall 表，定位是哪个调用、来自哪个 `.so`（backtrace 给出偏移）；
 3. **解决**：升级/重编 native 库，用现行 API 替换被淘汰的调用；若是 ROM 内核裁剪导致，属设备兼容问题——换规避实现或向厂商反馈；
 4. **排查提示**：同类崩溃集中在"刚升 targetSdk 的版本 + 特定 native SDK"时优先怀疑 seccomp，而不是先查业务代码。
@@ -131,11 +127,9 @@ drwxrws--x u0_a199 u0_a199_cache … files
 
 **Q11: isolatedProcess 的沙箱为什么更小？UID 在其中是怎么变的？**
 
-声明 `android:isolatedProcess="true"` 的服务进程，系统给它随机分配一个 99000–99999 区间的临时 UID（每次启动都不同）、不加入任何用户组，SELinux 域也从 untrusted_app 换成能力更小的 isolated_app——无网络、无大部分系统服务、没有应用数据目录。它的用途是承载处理不可信数据的组件（渲染器、解码器）。
+声明 `android:isolatedProcess="true"` 的 Service 会由系统分配临时隔离 UID，并运行在 `isolated_app` 等隔离策略域中。该 UID 不继承宿主应用的普通权限和文件属主身份，因此不能像宿主进程一样访问应用私有数据；隔离进程可用的系统服务和资源仍取决于对应 Android 版本的 SELinux 策略及服务授权，不能一概说成完全不可访问。
 
-这条链恰好证明 UID 是沙箱能力的索引：UID 段位变 → seapp_contexts 匹配到的域变 → 能力面收窄。普通应用进程能做的事，隔离进程几乎都不行；临时 UID 使它无法与任何既有身份建立 DAC 关系。
-
-边界：隔离进程退出 UID 即回收；它与宿主的通信只能走宿主主动建立的 Binder/管道通道——"处理不可信数据 + 最小能力"是这类进程的设计契约。
+UID 区间、临时身份和 SELinux 域共同收窄能力面。退出后系统可回收隔离 UID。宿主应通过受控的 Binder 或管道接口提供所需输入，适合把处理不可信数据的组件与应用主体分开。
 
 **Q12: SDK 沙箱（Android 13）是什么？它的 UID 是怎么映射的？**
 
@@ -149,13 +143,13 @@ SDK 沙箱是 Android 13 引入的 SDK Runtime：把第三方广告/分析 SDK �
 
 **Q13: 为什么框架的权限检查都用 getCallingUid 而不是 PID？**
 
-因为 UID 是沙箱身份（稳定、跨进程成立、不可伪造），PID 只是瞬时的进程编号（随生死变化、应用无法预测）。Binder 驱动在每次事务里都记录发送方的 uid/pid，Binder.getCallingUid() 返回的是内核认证过的对端 UID——调用方伪造不了，所以权限检查（"只有 system UID 能调这个接口"）全部锚定 UID。
+因为 UID 是操作系统分配的安全身份，而 PID 是会随进程退出而变化的进程编号。Binder 驱动在事务中传递内核记录的发送方 uid/pid，正在处理远程 Binder 事务时，`Binder.getCallingUid()` 返回该事务的调用方 UID，调用方不能靠修改参数伪造它。因此跨进程权限检查通常基于 UID，而不是客户端自报的进程号。
 
 细节与边界：
 
-1. 进程在进程内转发 Binder 调用（如 system_server 代应用再调别处）时，调用者身份会被换成本进程，需要 clearCallingIdentity()/restoreCallingIdentity() 成对保护；
-2. 多用户场景要配合 getCallingUserHandle()——UID 已编码物理用户号，同一判据可区分用户；
-3. PID 的用途是进程级管理（kill、进程状态）与调试归因，不承载安全语义。
+1. **身份转发**：进程代调用方继续调用受保护服务时，Binder 调用身份仍可能代表原始调用方。只有明确要改用服务自身权限执行时，才成对调用 `clearCallingIdentity()` 与 `restoreCallingIdentity()`，并保证恢复发生在异常路径之后。
+2. **多用户判定**：按调用者用户隔离时还要使用 `getCallingUserHandle()` 或从 UID 取得 userId；同一 appId 在不同用户下是不同 UID。
+3. **PID 的用途**：PID 适合进程管理（如 kill、进程状态）和调试归因，不是稳定的权限身份。对于同进程本地调用，不能把 `getCallingUid()` 误读为一个独立远程应用的凭据。
 
 收束：沙箱的单位是 UID，所以安全判据也是 UID——这条对齐贯穿框架的每一处权限检查。
 

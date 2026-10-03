@@ -1,6 +1,6 @@
 # ART
 
-> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../07-memory/01-memory-management.md](../07-memory/01-memory-management.md)；类加载与 JNI 链接见 [06-art-runtime.md](06-art-runtime.md)；2026-09-25 增补实用调试题（Q2–Q5，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../07-memory/01-memory-management.md](../07-memory/01-memory-management.md)；类加载与 JNI 链接由本册对应主题覆盖；2026-09-25 增补实用调试题（Q2–Q5，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 中的 ART 如何理解？**
 
@@ -16,21 +16,28 @@ ART（Android Runtime）是 Android 的应用运行时：负责 dex 字节码的
 
 **Q2: 常用的 dalvik.vm.* 调试属性有哪些？为什么改了不重启就不生效？**
 
-这些属性在 Zygote 启动创建 VM 时由 AndroidRuntime 逐个翻译成 -X 选项——启动期读取，改完必须重启 zygote（`stop; start`）才生效。常用映射（按近版 AOSP 源码核对）：
+ART 运行时属性由 Zygote 创建新虚拟机时读取。AndroidRuntime 会把部分属性转换为 ART 运行选项，其他属性则作为特定运行时策略输入；修改属性不会追溯改变已创建的 ART 实例，因此要让新值生效，必须重启读取它的进程，通常需要按设备策略重启 Zygote 或重启设备。
 
-1. `dalvik.vm.checkjni` → `-Xcheck:jni`：全局开 CheckJNI，JNI 误用会直接 abort 并给出 `JNI DETECTED ERROR IN APPLICATION` 文案；
-2. `dalvik.vm.heapstartsize/heapsize/heapgrowthlimit` → 堆初始大小/最大/应用增长上限；
-3. `dalvik.vm.usejit/jitthreshold` 等 → JIT 开关与编译热度阈值；
-4. `dalvik.vm.profilebootclasspath`、`dalvik.vm.hot-startup-method-samples` → 启动期 profile 采集（boot classpath 开关与采样数）；
-5. `dalvik.vm.execution-mode` 可强制解释执行——排查 JIT/编译器可疑问题时的对照手段；
-6. `getprop | grep dalvik.vm` 查看当前配置。
+常用属性及其值如何影响运行时：
+
+1. **`dalvik.vm.checkjni`**：值为 true/1 时为新建运行时启用 CheckJNI，值为 false/0 时关闭该属性控制的检查。启用后 JNI 误用可能导致进程 abort，并输出 `JNI DETECTED ERROR IN APPLICATION`。默认值受构建类型和产品配置影响，先读设备实际值，不要假定量产与 userdebug 相同。
+2. **堆大小属性**：`dalvik.vm.heapstartsize` 控制初始堆大小，`dalvik.vm.heapsize` 控制堆上限，`dalvik.vm.heapgrowthlimit` 控制普通应用堆增长上限。它们的值是设备构建配置的大小值；未设置时 ART 使用目标版本与设备配置对应的默认值，不存在适用于所有设备的单一数值。增大值可能提高单进程可用堆空间，也会影响整机内存压力。
+3. **JIT 属性**：在 ART JIT 可用的版本中，`dalvik.vm.usejit` 控制 JIT 是否启用，`dalvik.vm.jitthreshold` 指定方法热度计数触发 JIT 编译的阈值。阈值越低通常越早尝试编译，但增加编译工作；未设置时使用对应运行时版本的默认值。Android 14 起 profile 始终启用，Android 13 及以前的 `dalvik.vm.usejitprofiles` 才能控制 JIT profile 是否使用。
+4. **Profile 属性**：`dalvik.vm.profilebootclasspath` 控制是否采集 boot classpath profile；`dalvik.vm.hot-startup-method-samples` 设置启动热点方法采样数量。前者取布尔类值，后者取数值；省略值时走对应分支默认配置，需从设备属性和 AndroidRuntime 实现确认。
+5. **执行模式**：`dalvik.vm.execution-mode` 可在目标分支支持的模式中选择执行方式，常用于对照解释执行与编译行为。合法取值和默认值会随版本变化，修改前应查设备分支解析逻辑，不能把未核实的值写入设备。
+6. **读取当前值**：`getprop | grep dalvik.vm` 中 `getprop` 输出系统属性，管道把结果交给 `grep`，后者筛选名字含 `dalvik.vm` 的行。该命令显示当前属性值，不证明每个值已被现存进程读取，也不会列出未设置的属性及其隐含默认值。
+
+属性定义与版本边界见 AOSP《Configure ART》及目标分支的 frameworks/base/core/jni/AndroidRuntime.cpp。常见属性按启动时读取的机制修改后要重启相应运行时进程；不应在关键系统服务运行期间随意 stop/start Zygote。
 
 **Q3: 怎么在设备上验证/触发 AOT 编译？"装了 baseline profile"如何确认真的生效？**
 
-编译命令加 dumpsys 验证形成闭环：`cmd package compile -m speed-profile -f <包名>` 手动按 speed-profile 编译；`dumpsys package dexopt` 逐包逐 ABI 输出 compilerFilter 与 compilationReason——filter 为 speed-profile/speed 且 reason 是 install-dm/baseline 类即生效。
+编译请求、编译结果与运行时行为要分别验证。对目标应用发起编译后，再查看 dexopt 记录，确认系统实际采用的 compiler filter 和 reason；若要确认单个方法有无机器码，还需查 OAT 内容。
 
-1. **常用命令**：`cmd package bg-dexopt-job` 触发后台 dexopt 全流程；`cmd package dump-profiles <包名>` 导出 profile；Android 14+ 另有 ART 服务命令 `cmd art dexopt-packages/dump/clear-app-profiles` 等；
-2. **边界**：filter 是意图，方法级是否真编了要用 oatdump（见 Q4）或性能对比确认。
+1. **手动编译**：`cmd package compile -m speed-profile -f <包名>` 中 `cmd package` 调用 Package Manager shell 命令，`-m` 指定 `speed-profile` 过滤器，`-f` 要求强制重新编译，`<包名>` 替换成设备上真实安装的包名。省略 `-m` 会采用该命令/版本默认过滤器，省略 `-f` 时是否跳过已有满足目标的产物由编译器判定。
+2. **查看记录**：`dumpsys package dexopt` 输出 Package Manager 记录的 dexopt 信息，可按包、ABI 查看 compilerFilter 与 compilationReason。filter 表示目标编译策略，不保证每个方法都生成了机器码；reason 需要结合设备版本解释。
+3. **后台任务**：`cmd package bg-dexopt-job` 请求执行后台 dexopt job，结果受设备 idle、充电和系统调度条件影响。Android 14 起 ART Service 接管设备端应用 dexopt 的多数场景，但安装期编译仍由 Package Manager 发起调用。
+4. **profile 文件**：`cmd package dump-profiles <包名>` 导出指定包的 profile。Android 14 及以上还可用对应 ART Service 提供的 `cmd art` 子命令查看或清理 profile；实际支持的子命令按设备版本查询。
+5. **验证边界**：`speed-profile` 或 `speed` 只说明编译过滤器。要确认单个方法有无 AOT 机器码，应在 oatdump 输出中检查该方法，或用运行时/性能证据验证。
 
 **Q4: oatdump 和 dexlist 是干什么的？**
 
@@ -41,7 +48,7 @@ ART（Android Runtime）是 Android 的应用运行时：负责 dex 字节码的
 ART 侧 fatal 统一走 Runtime::Abort，tombstone 呈 `Abort message: 'Check failed: …'`；高频类别：CheckJNI 误用（`JNI DETECTED ERROR IN APPLICATION`，如使用已删除的全局引用）、boot 镜像/oat 版本不匹配的 CHECK（换 boot-image 或 APEX 升级残留时）、编译器/JIT 缺陷形态的 `SIGSEGV in art::…`。
 
 1. **Perfetto 判读**：`HeapTaskDaemon` 线程上每个 slice 是一次 GC 任务，slice 密集 = 频繁 GC/内存抖动；`Jit thread pool` 空闲时长期睡在任务队列是正常态，长 slice 才是在编译热点方法；
-2. **因果纪律**：判"GC 导致掉帧"要看 GC slice 与主线程 SuspendAll/慢帧是否重叠——时间相近不等于因果（与内存册 Q12 的结论一致）。
+2. **因果纪律**：判“GC 导致掉帧”要看 GC slice 与主线程 SuspendAll/慢帧是否重叠。时间相近本身不能证明因果。
 
 **Q6: 类加载的 define、verify、initialize 三步各做什么？loadClass 与 Class.forName 的差别落在哪一步？**
 
@@ -59,7 +66,7 @@ API 37 上 ART 的 `FindClassInBaseDexClassLoader` 对"已知形状"的加载器
 
 先按类描述符在 TypeLookupTable 里哈希定位 class_def，未命中再从 type_id 起顺序扫描（不是二分查找）。Startup Profile 是 Baseline Profile 的子集，构建期按它重排 DEX 类布局、把启动路径聚拢，官方口径比只用 Baseline Profile 启动再快 15%–30%；DEX 布局优化从 AGP 8.1 起可用（dexLayoutOptimization）、8.3 起默认开启（已与 developer.android.com 核对）。
 
-机制：类查找成本与目标类在 DEX 中的位置强相关，顺序扫描尤其受布局影响；Startup Profile 只能由启动测试生成、库无法贡献，启动代码控制在首个 classes.dex 内收益最大。结果：Baseline Profile 解决"提前 AOT"，Startup Profile 解决"布局聚集"，两者互补（编译侧见 Q11）。
+DEX 查找成本受目标类在文件中的位置影响，顺序扫描尤其受布局影响。Startup Profile 只能由启动测试生成，库不能直接贡献；启动代码集中在首个 `classes.dex` 时，布局优化更容易影响启动期读取。Baseline Profile 提供 AOT 编译输入，Startup Profile 调整构建期 DEX 布局，两者解决不同问题，可以同时使用。
 
 **Q9: Boot Image 的 .art/.oat/.vdex 各存什么？进程间怎么共享、怎么判断共享是否被打破？**
 
@@ -81,9 +88,19 @@ ART Service（Android 14 起管理应用 dexopt）只对应用暴露 verify、sp
 
 **Q12: pm.dexopt.* 各场景的默认过滤器是什么？"安装后第一次启动慢"的完整链路怎么解释？**
 
-默认值为 first-boot=verify、boot-after-ota=verify、boot-after-mainline-update=verify、bg-dexopt=speed-profile、inactive=verify、cmdline=verify、shared=speed（已与 ART Service 文档核对）；于是安装或 OTA 后首启只有验证过的码可跑、热点靠 JIT 现编，慢是设计使然，后台空闲充电时 bg-dexopt 以 speed-profile 补齐 AOT。
+Android 14 及以上的 ART Service 按 dexopt reason 选择默认 compiler filter。标准默认值如下，产品可以按设备策略覆盖：
 
-机制：dexopt 生命周期是"安装期验证 → 运行期 JIT 采热 → 后台 speed-profile"；A/B OTA 还支持重启前 dexopt，让更新后首启直接可用。结果：优化首启不要等后台 dexopt——用 Baseline Profile 让安装期就有 profile，speed-profile 才能生效；判断后台优化是否完成看 bg-dexopt 的执行记录。
+1. **`pm.dexopt.first-boot=verify`**：首次启动后的 dexopt 只验证 DEX，不生成常规 AOT 机器码。
+2. **`pm.dexopt.boot-after-ota=verify`**：整机 OTA 后按 verify 处理应用代码。
+3. **`pm.dexopt.boot-after-mainline-update=verify`**：Mainline 模块更新后按 verify 处理应用代码。
+4. **`pm.dexopt.bg-dexopt=speed-profile`**：后台 dexopt 根据可用 profile 编译热点方法；profile 不可用时回退 verify。
+5. **`pm.dexopt.inactive=verify`**：对不活跃应用执行降级时采用 verify。
+6. **`pm.dexopt.cmdline=verify`**：命令行请求未显式指定其他 filter 时采用 verify。
+7. **`pm.dexopt.shared=speed`**：为被其他应用共享使用、通常不能使用本地 profile 的应用提供回退 filter。
+
+安装后首次启动偏慢的一条常见链路是：安装期按 verify 验证，运行时 JIT 采集热点，之后后台任务才按可用 profile 做 speed-profile 编译。A/B OTA 设备还可在重启前对新系统中的应用执行编译，让结果在切换系统槽位后可用；这取决于设备是否启用相应后台 OTA dexopt 流程。
+
+因此首启优化不能只等待后台 dexopt。要让安装期有热点编译输入，需要在安装时提供 Baseline Profile，并确认设备实际编译记录；后台优化是否完成则查该 job 的执行结果和 dexopt 记录。以上默认值见 AOSP《ART Service configuration》，ART Service 自 Android 14 起可用，Android 13 及以前应查 Package Manager 对应版本的配置。
 
 **Q13: AOT 编译产物何时失效？vdex 记录的验证信息怎么被复用？**
 
@@ -101,21 +118,38 @@ ART Service（Android 14 起管理应用 dexopt）只对应用暴露 verify、sp
 
 不等。Cloud Profile 是 Google Play 向设备分发的聚合使用 profile，指导的是设备端 dexopt，编译产物并不在云端生成；演进主线是 Android 4.4 ART 预览 → 5.0 安装期全量 AOT → 7.0 JIT 与 profile 驱动的混合 → 12 起 ART 模块化。
 
-前提：全量 AOT 安装慢、占空间大，纯 JIT 首启慢，混合模型用"安装只验证、运行 JIT 采热、后台按 profile AOT"折中。机制：profile 来源可以是本机使用，也可以是 Play 下发的 Cloud Profile，后台 dexopt 按它决定编译哪些方法。结果：看到"Google 云编译 odex 下发"的说法应纠正——Play 分发的是 profile 数据而非编译产物；profile 缺失时 speed-profile 会回退 verify（机制见 [06-art-runtime.md](06-art-runtime.md)）。
+全量 AOT 会增加安装耗时和存储占用，纯 JIT 则可能让首次运行承担更多编译成本。混合策略在安装时验证，在运行时用 JIT 采集热点，再按 profile 在后台 AOT 编译。profile 可以来自本机使用，也可以由 Google Play 分发 Cloud Profile；Play 分发的是 profile 数据，不是云端生成的 odex。若没有可用 profile，speed-profile 会退回 verify，因此要核对编译时 profile 是否已安装。
 
 **Q16: Android 17 ART 的分代 Concurrent Mark-Compact 与 userfaultfd 是什么关系？启用条件是什么，为什么不能承诺所有应用都降低暂停时间？**
 
-两者处在不同维度：userfaultfd 是让用户态参与处理缺页事件的 Linux 接口，是 CMC 的实现路径之一；分代是按对象代际选择回收范围的策略。Android 10 起的并发复制（CC）回收器已有分代，Android 17 新增的是 Concurrent Mark-Compact（CMC）的分代能力——"Android 17 才有分代 GC"混淆了回收器与策略。
+userfaultfd 与分代回收属于不同层面。userfaultfd 是 Linux 提供的用户态缺页处理接口，可作为 ART Concurrent Mark-Compact（CMC）的一种实现路径；分代则是按对象年龄缩小常规回收范围的策略。Android 10 起，并发复制（CC）回收器已有分代能力；Android 17 增加的是 CMC 的分代能力，并非 Android 17 才首次出现分代 GC。
 
-模型上（材料按 android-17.0.0_r1 的 mark_compact.cc 核对）：上次 GC 后的新分配为 young，存活一次进入 mid，下一次 young GC 同时标记 young 与 mid、经 card table 处理 old 到年轻区域的引用，存活的 mid 压缩后晋升 old；full GC 覆盖全堆并重置分代边界——young GC 并非完全忽略 old，跨代引用仍靠 card table 保证可达性。启用是三项 AND：兼容的 read barrier 或 userfaultfd 路径、运行时 GC 选项 generational_gc、以及 ShouldUseGenerationalGC()；device-config 属性默认为 true，所以 device_config get 返回空值不能判定功能关闭。这项改进还能经 Google Play 系统更新下发到 Android 12 及以上设备，"系统不是 Android 17"也不能证明它不存在。
+Android 17 `mark_compact.cc` 中的对象代际大致按以下过程推进：
 
-收益边界：官方只承诺更频繁、更低成本的年轻代回收可减轻 GC 干扰并改善最大 RSS；对象存活率高、跨代引用多或堆压力大时收益会变化。验证以目标进程的 GC 事件为准，对比 young/full collection 次数、暂停分布、GC CPU 时间与峰值 RSS，而不是只查一个属性或数总 GC 次数。
+1. 上次 GC 后新分配的对象进入 young 区。
+2. young 对象存活后进入 mid 区。
+3. 下一次 young GC 同时处理 young 与 mid，并通过 card table 追踪 old 对象指向年轻代的引用。young GC 因而仍能正确处理跨代可达性。
+4. 存活的 mid 对象压缩后晋升到 old 区。full GC 覆盖整个堆并重置代际边界。
+
+功能是否启用需同时核实实现路径、运行时选项和设备策略：
+
+1. ART 必须走兼容的 read barrier 或 userfaultfd 实现路径。
+2. 运行时 GC 选项必须启用 `generational_gc`。
+3. `ShouldUseGenerationalGC()` 必须判定当前设备可使用该策略。
+4. 相关 device-config 属性的默认值在对应实现中为 true。查询结果为空只表示未显式设置，不能据此判断功能关闭。
+
+该改进可通过 Google Play 系统更新提供给 Android 12 及以上设备，因此不能仅凭系统版本低于 Android 17 就断定功能不存在。其收益也不是所有应用都相同：年轻代对象回收更频繁、单次成本可能更低，但对象存活率高、跨代引用多或堆压力大时效果会变化。验证时观察目标进程 GC 事件，对比 young/full collection 次数、暂停分布、GC CPU 时间和峰值 RSS，不要只检查属性或总 GC 次数。
 
 **Q17: Profile、DM、SDM、SDC 四类文件分别解决什么问题？各自的版本边界是什么？**
 
-四类文件分工：Profile（Baseline/Startup/Cloud）是 ART 或构建工具选择热点的输入；.dm（Dex Metadata，ZIP 格式，与 APK 同基名如 base.apk 对应 base.dm）携带 primary.prof（供 speed-profile 的 AOT 输入）与可选 primary.vdex（验证数据）；.sdm（Secure Dex Metadata）携带面向特定 ISA 的云端 AOT 产物（至少含 primary.odex），文件名带 ISA 段（如 base.arm64.sdm），必须用与 APK 相同的 signer 做 v3 签名；.sdc 由设备端 artd 生成，记录 SDM 时间戳与设备 ART APEX 版本，解决文件代际与设备环境匹配——它不是签名文件，签名验证在安装阶段完成。
+四类文件分别承载 profile 输入、Dex Metadata、Secure Dex Metadata 和设备侧匹配信息：
 
-版本边界：SDM/SDC 是 Android 16 引入（ArtManagedInstallFileHelper 源码注释标记）、Android 17 延续；按 AAOS13 源码核对，本地树没有 ArtManagedInstallFileHelper，SDM 在 Android 13 不存在。DM 则早已有之但行为有版本差异：AAOS13 的 frameworks/base/core/java/android/content/pm/dex/DexMetadataHelper.java 会用 ZIP 内 manifest.json 校验包名与版本号，并提供 pm.dexopt.dm.require_manifest 属性；Android 17 的实现已移除 manifest 读取与相关属性——不能用 A17 口径判断 A13 的 DM 状态，反之亦然。
+1. **Profile**：Baseline、Startup 和 Cloud Profile 为构建或 ART 提供热点选择信息，三者生成方和生效阶段不同。
+2. **`.dm`**：Dex Metadata 是 ZIP 文件，与 APK 同基名，例如 `base.apk` 对应 `base.dm`。它可携带供 speed-profile AOT 使用的 `primary.prof`，也可携带可选的 `primary.vdex` 验证数据。
+3. **`.sdm`**：Secure Dex Metadata 携带面向特定 ISA 的云端 AOT 产物，至少含 `primary.odex`。文件名带 ISA 段，例如 `base.arm64.sdm`。SDM 使用与 APK 相同 signer 的 v3 签名；安装阶段验证该签名。
+4. **`.sdc`**：设备端 artd 生成的 Secure Dex Metadata Cache，记录 SDM 时间戳和设备 ART APEX 版本等匹配信息。它不是签名文件，不能替代安装阶段对 SDM 的验证。
+
+版本边界：SDM/SDC 在 Android 16 引入，Android 17 延续；AAOS 13 源码中没有 ArtManagedInstallFileHelper，因此 Android 13 不具备这一 SDM 路径。DM 更早就存在，但行为会变化：AAOS 13 的 DexMetadataHelper 会用 ZIP 内 `manifest.json` 校验包名和版本号，并提供 `pm.dexopt.dm.require_manifest` 属性；Android 17 实现已移除 manifest 读取和相关属性。不能把一版行为直接套用到另一版。
 
 范围边界：SDM 只覆盖随 APK 打包的 primary dex，运行时动态生成或自定义 ClassLoader 加载的 secondary dex 不在支持范围；同一 APK 覆盖两种 ISA 需要两个 SDM，arm64 产物不能供 arm 进程使用。三类 Profile 也职责不同：Baseline Profile 面向 Day-0、随 APK 发布；Startup Profile 只影响构建期 DEX 布局（安装后的文件系统里没有 startup.prof 可查）；Cloud Profile 由分发侧生成，设备仍可能要跑 dex2oat。
 
@@ -137,8 +171,18 @@ ART Service（Android 14 起管理应用 dexopt）只对应用暴露 verify、sp
 
 **Q20: SDM 能省掉安装期的哪些工作？为什么不能照搬"安装时间减少 40%–60%"这类百分比？**
 
-能省的是：当 SDM/DM/SDC 与当前 APK、ISA、boot classpath 和编译目标兼容且满足安装目标时，设备无需为同一目标再跑 dex2oat，从而减少编译器 wall time、dex2oat 的 CPU 时间与临时内存峰值、生成 ODEX/VDEX 的写放大，以及安装期编译带来的热量与功耗。不能省的是：三个文件的下载与会话写盘、APK 与 SDM 的 v3 签名解析与 signer 比较、包扫描与权限更新、原生库提取或映射、fsync 与 SELinux 操作、SDC 创建与兼容性检查，以及未被 AOT 覆盖方法的解释/JIT 和应用自身初始化——"携带 SDM 后安装近似零成本"不成立；安装总耗时若主要花在下载或包扫描，dex2oat 的减少对总值影响有限。
+只有 SDM/DM/SDC 与当前 APK、ISA、boot classpath 和编译目标兼容，并且满足安装目标时，系统才可能省掉本地 dex2oat。它省下的是编译工作，不是整段安装流程。
 
-百分比不可照搬：AOSP 源码没有定义能推出这些数字的基准；收益随 dex 规模、目标 filter、CPU、存储、温控与产品安装策略变化，安装策略原本用 verify 的设备能省的本机编译本来就少。冷启动还可能出现方向不同的变化：SDM 的映射、ZIP 访问与页缺失特征可能与本地产物不同，应把安装 wall time、首次启动与后续启动分开测。
+1. **可省的工作**：dex2oat wall time 和 CPU 时间、编译临时内存峰值、生成 ODEX/VDEX 的写入量，以及安装期编译消耗的热量与功耗。
+2. **仍要执行的工作**：下载和安装会话写盘、APK/SDM v3 签名解析与 signer 比较、包扫描和权限更新、原生库提取或映射、fsync、SELinux 操作、SDC 创建与兼容性检查仍会发生。
+3. **运行时未省的工作**：未被 AOT 覆盖的方法仍需解释或 JIT，应用本身的初始化也照常执行。因此“携带 SDM 后安装近似零成本”不成立；若安装总耗时主要在下载或包扫描，减少 dex2oat 对总时间影响有限。
 
-可信验证是 A/B/C 三组实验：同一 APK 分别以 APK、APK+DM、APK+DM+对应 ISA 的 SDM 冷安装，固定设备构建、ART APEX 版本、温度与存储余量，每组多轮并报告 P50/P90 与失败回退次数；用 pm art dump、ART_DEX2OAT_REPORTED 统计与 trace 把"SDM 被接收"和"SDM 被运行时采用"当成两个检查点分别确认。
+不能照搬“安装时间减少 40%–60%”一类百分比。AOSP 没有定义能推出这些数字的统一基准，收益受 DEX 规模、目标 filter、CPU、存储、温控和产品安装策略影响；原本使用 verify 的设备本地编译较少，可节省的工作自然有限。冷启动变化还可能与安装耗时方向不同，因为 SDM 映射、ZIP 访问和页缺失特征可能不同于本地产物。因此要分开测量安装 wall time、首次启动和后续启动。
+
+可用三组冷安装比较实际收益：
+
+1. 仅安装 APK。
+2. 安装 APK 与 DM。
+3. 安装 APK、DM，以及 ISA 匹配的 SDM。
+
+固定设备构建、ART APEX 版本、温度和存储余量，每组多轮并报告 P50/P90 与失败回退次数。用 `pm art dump`、`ART_DEX2OAT_REPORTED` 统计和 trace 分别确认“SDM 被接收”与“SDM 被运行时采用”，这两个检查点不能混为一谈。

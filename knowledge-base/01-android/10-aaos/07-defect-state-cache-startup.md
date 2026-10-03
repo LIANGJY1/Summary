@@ -1,6 +1,6 @@
 # 状态缓存与启动时序：从卡开机到缓存失步的因果链
 
-> 学习资料（文章模式沉淀）。主线：该项目 761 条缺陷修复中状态管理与缓存占 77 条，叠加异步时序后的高危形态集中在启动时序（类加载路径执行 IO 导致卡开机）、状态机提前 return 盲区、暂存数据覆盖写、退出路径未复位、缓存与真实源失步五类，本文沿因果链提炼各形态的可迁移规则与排查入口。源文档：`Summary/project/yadi/git提交与缺陷分析` 00_主报告 §4.2 A 级清单、§5 模式四、Setting.md 等分册及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码块均节选自真实 diff）。主线程 Binder 分流、迟到回调失效、广播事务归属等异步范式由 [01-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md) 承载，本文不重复展开。偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](../15-performance/10-app-crash-patterns.md)，组合状态跨端同步见 [07-kanzi-state-sync.md](09-kanzi-state-sync.md)，开机存储准备的平台背景见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。 2026-09-26 二次修订：消除跨题引用改为题内自足；段落并列项拆为列表；新增 02-system-boot Q7（同入口连点的跳转锁 + launchMode 双保险）；新增 Q4（privapp-permissions 白名单未同步导致开机异常）、Q22（派生状态刷新时机链）、Q23（列表渲染空值兜底）。
+> 学习资料（文章模式沉淀）。主线：该项目 761 条缺陷修复中状态管理与缓存占 77 条，叠加异步时序后的高危形态集中在启动时序（类加载路径执行 IO 导致卡开机）、状态机提前 return 盲区、暂存数据覆盖写、退出路径未复位、缓存与真实源失步五类，本文沿因果链提炼各形态的可迁移规则与排查入口。源文档：`Summary/project/yadi/git提交与缺陷分析` 00_主报告 §4.2 A 级清单、§5 模式四、Setting.md 等分册及逐 commit 详析深案例（缺陷单号 SIR-xxxx 为溯源锚点，代码块均节选自真实 diff）。主线程 Binder 分流、迟到回调失效、广播事务归属等异步范式由 [01-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md) 承载，本文不重复展开。偶现问题的排查方法与崩溃形态见 [03-crash-protection.md](../15-performance/10-app-crash-patterns.md)，组合状态跨端同步见 [07-kanzi-state-sync.md](09-kanzi-state-sync.md)，开机存储准备的平台背景见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。2026-09-26 修订：补代码级讲解与深案例覆盖。Q 序列即结构，供 atlas 同源直读。2026-09-26 二次修订：消除跨题引用，改为题内自足；段落并列项拆为列表；新增 02-system-boot Q7（同入口连点的跳转锁 + launchMode 双保险）；新增 Q4（privapp-permissions 白名单未同步导致开机异常）、Q22（派生状态刷新时机链）、Q23（列表渲染空值兜底）。2026-10-04：将 pending 回显条件、Lifecycle-bound LiveData 重放与状态消费边界拆为 Q27，承接提交治理册迁出的 Android 技术细节。
 
 **Q1: 单例 object 的 init 块在应用启动极早期执行 mkdirs 落盘，为什么会卡住整个开机？（SIR-8227）**
 
@@ -512,3 +512,28 @@ SIR-8227 的门控设计按读写区分各分支：
 ```
 
 两类混淆分开治：其一，`return` 与 `return@forEach` 一字之差退出范围天壤之别，循环内提前返回必须显式确认想退出的是循环还是函数；其二，"存在于集合"不等于"初始化完成"，存在性检查与状态完备性检查要分开判断。另有一层防御要补：role 的缺省渲染值本身就是坑（缺省值隐含了"后排"业务含义），缺省态应有显式的"未分配"展示或立即分配兜底。判断规则：review 看到 forEach 内的裸 `return` 就问一句"想退出的范围是什么"；设备属性的缺省渲染值禁止隐含业务语义。
+
+**Q27: Android 页面用 pending 状态校验异步回显时，怎样避免条件反转与生命周期重放造成误判？**
+
+把期望值与实际回显分别建模，明确规定“相等表示成功、不等表示失败”，并让 pending 只对应当前一次请求；否则条件写反或旧请求状态残留，会把成功判成失败，或把旧回显套到新操作上。某车机项目 DrivingFragment 的“暂存目标状态 + LiveData 回显比较”实现曾先后暴露这两种缺陷。
+
+第一笔提交 `e2ee6731` 将失败提示放在 `isStateMatched` 为真时，造成匹配成功反而弹失败提示、不匹配却不提示。下一笔 `11d164b8` 将条件改为不匹配才进入失败分支：
+
+```kotlin
+if (!isStateMatched) {
+    showToast(R.string.slip_mode_switch_open_fail_tip)
+}
+```
+
+这个判断成立的前提是 `isStateMatched` 已按“实际回显与本次 pending 目标相等”计算；若变量语义相反，单改取反符号仍会错。验收应覆盖相等与不相等两种输入，并确认只有失败路径提示。
+
+第二个缺陷出现在页面重新变为活跃时：Lifecycle-bound LiveData observer 可在重新活跃后再次收到其当前版本尚未消费的最新值；若此时旧 pending 仍在，旧值可能被当成本轮操作回显。页面可见不等于必然重建，是否重放取决于 observer 的生命周期状态及版本消费情况，因此不能把“回到页面就一定收到旧值”当成固定时序。该案例在 `onStart()` 清空 `drivingModeStateTemp`、`slipModePendingState` 和 `extremeRangePendingState`，让新一轮回显比较不沿用已结束操作的待确认值。
+
+对这类待确认状态，可按以下顺序设计与验证：
+
+1. **建立请求上下文**：发起操作时记录目标值；如可能并发或连续发起请求，增加 requestId 或明确只允许单个 pending。
+2. **消费匹配回显**：收到状态后只与当前请求比较，成功、失败、pending 为空及超时都要形成互斥且完整的结果分支；每个请求的 pending 只能消费一次，结束后立即使其失效，避免旧值再次命中。
+3. **处理生命周期边界**：界面停止、重新活跃、销毁和重建时，确认 pending 是应保留、取消还是恢复；不要无条件清空后丢掉仍有效请求的回执。
+4. **覆盖真值与时序**：至少测试匹配、不匹配、pending 为空、请求结束后重复回调，以及页面离开后返回时的回调。
+
+清空 pending 是一种策略而非通用修复：它可以防止过期请求污染新会话，但也会放弃清空之后到达的有效回显。若请求必须跨页面状态持续等待，应使用请求标识或独立请求状态管理来关联回执，并明确超时和取消语义。

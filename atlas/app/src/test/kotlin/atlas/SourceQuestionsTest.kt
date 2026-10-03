@@ -30,7 +30,7 @@ class SourceQuestionsTest {
             两个 Int 相除仍然是 Int。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-语法基础.md", text)
+        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
 
         assertEquals(2, questions.size)
         assertEquals(1, questions[0].number)
@@ -45,9 +45,9 @@ class SourceQuestionsTest {
     fun `只识别目标文件并兼容中文冒号`() {
         val text = "**Q1：中文冒号问题？**\n\n答案。"
 
-        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/03-language/kotlin/01-语法基础.md"))
+        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/03-language/kotlin/01-syntax-basics.md"))
         assertTrue(!SourceQuestions.isSupportedPath("language/kotlin/02-对象与类型设计.md"))
-        val question = SourceQuestions.parse("language/kotlin/01-语法基础.md", text).single()
+        val question = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text).single()
         assertEquals("中文冒号问题？", question.question)
     }
 
@@ -64,7 +64,7 @@ class SourceQuestionsTest {
 
             第二题答案。
         """.trimIndent()
-        val original = SourceQuestions.parse("language/kotlin/01-语法基础.md", text)
+        val original = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
 
         val updated = SourceQuestions.replace(original[0], "新问题？", "新答案。\n\n- 保留 Markdown")
 
@@ -90,8 +90,8 @@ class SourceQuestionsTest {
             第二题答案。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-语法基础.md", text)
-        val sections = SourceQuestions.parseSections("language/kotlin/01-语法基础.md", text)
+        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
+        val sections = SourceQuestions.parseSections("language/kotlin/01-syntax-basics.md", text)
 
         assertEquals("第一题答案。", questions[0].answer)
         assertEquals("函数与集合", sections.single().title)
@@ -100,7 +100,7 @@ class SourceQuestionsTest {
 
     @Test
     fun `Markdown 标题形式的章标题同样切断答案`() {
-        // 01-语法基础.md 的实际写法是 "## 第 2 章 函数与集合"：不识别时章标题会被
+        // 01-syntax-basics.md 的实际写法是 "## 第 2 章 函数与集合"：不识别时章标题会被
         // 上一题答案吞掉（答案一直延伸到下一题标记）
         val text = """
             **Q3: 上一题？**
@@ -114,8 +114,8 @@ class SourceQuestionsTest {
             下一题答案。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-语法基础.md", text)
-        val sections = SourceQuestions.parseSections("language/kotlin/01-语法基础.md", text)
+        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
+        val sections = SourceQuestions.parseSections("language/kotlin/01-syntax-basics.md", text)
 
         assertEquals("上一题答案。", questions[0].answer, "章标题不得混入上一题答案")
         assertFalse(questions[0].answer.contains("函数与集合"))
@@ -129,7 +129,7 @@ class SourceQuestionsTest {
 
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/language/java/01-基础.md", configured))
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/docs/面试.md", configured))
-        assertTrue(!SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-语法基础.md", configured))
+        assertTrue(!SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-syntax-basics.md", configured))
     }
 
     @Test
@@ -137,7 +137,7 @@ class SourceQuestionsTest {
         val documents = listOf(
             "knowledge-base/language/java/01-基础.md",
             "knowledge-base/language/java/02-集合.md",
-            "knowledge-base/language/kotlin/01-语法基础.md",
+            "knowledge-base/language/kotlin/01-syntax-basics.md",
             "knowledge-base/docs/面试.md",
         )
         val configured = listOf("knowledge-base/language/java/", "knowledge-base/docs/面试.md")
