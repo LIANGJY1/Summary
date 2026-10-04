@@ -1277,11 +1277,63 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         scope.launch {
             val result = computeSourceQuestionGitDiffs() ?: return@launch
             if (gitDiffGeneration.get() != generation) return@launch
+            if (markChangedSourceQuestionsLearning(allSourceQuestions.toList(), result)) {
+                // 自动学习态已经写回 Q 行。重新解析后再发布 diff，避免 UI 短暂显示旧状态。
+                reloadKnowledgeFiles()
+                return@launch
+            }
+            if (gitDiffGeneration.get() != generation) return@launch
             androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
                 sourceQuestionGitDiffs.clear()
                 sourceQuestionGitDiffs.putAll(result)
             }
         }
+    }
+
+    /** 内容相对 HEAD 有变化的题目自动持久化为 learning；状态元数据本身不参与内容 diff。 */
+    private fun markChangedSourceQuestionsLearning(
+        entries: List<SourceQuestions.Entry>,
+        diffs: Map<String, SourceQuestionGitDiff>,
+    ): Boolean {
+        var wroteAny = false
+        entries.groupBy { it.sourcePath }.forEach { (path, documentEntries) ->
+            val targets = documentEntries.filter { entry ->
+                entry.status != QuestionStatus.LEARNING && diffs[sourceQuestionGitKey(entry)]?.changed == true
+            }
+            if (targets.isEmpty()) return@forEach
+
+            val file = sourceDocumentFile(path)
+            val expectedDocument = documentEntries.first().document
+            val currentDocument = runCatching { if (file.isFile) file.readText(Charsets.UTF_8) else "" }
+                .getOrElse { error ->
+                    Log.w("自动设置 learning 读取源文档失败 path=$path", error)
+                    return@forEach
+                }
+            if (currentDocument != expectedDocument) {
+                Log.i("自动设置 learning 跳过并发修改 path=$path；保留当前文档内容")
+                return@forEach
+            }
+
+            val updatedDocument = runCatching {
+                var updated = currentDocument
+                targets.sortedByDescending { it.startOffset }.forEach { entry ->
+                    updated = SourceQuestions.updateStatus(entry.copy(document = updated), QuestionStatus.LEARNING)
+                }
+                updated
+            }.getOrElse { error ->
+                Log.w("自动设置 learning 生成文档失败 path=$path", error)
+                return@forEach
+            }
+            if (updatedDocument == currentDocument) return@forEach
+            runCatching {
+                MdStores.atomicWrite(file, updatedDocument)
+                wroteAny = true
+                Log.i("题目内容有改动，自动设置 learning path=$path count=${targets.size}")
+            }.onFailure { error ->
+                Log.e("自动设置 learning 写回失败 path=$path", error)
+            }
+        }
+        return wroteAny
     }
 
     private fun gitShowHeadContent(file: File): String? = runCatching {

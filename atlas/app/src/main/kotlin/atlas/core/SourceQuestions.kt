@@ -386,4 +386,42 @@ object SourceQuestions {
         return entry.document.substring(0, entry.startOffset) + rendered + suffix +
             entry.document.substring(entry.endOffset)
     }
+
+    /** 只更新 Q 行上的状态元数据，保留答案正文、空行及 Q 行原有 Markdown 包装格式。 */
+    fun updateStatus(entry: Entry, status: QuestionStatus): String {
+        val header = entry.document.substring(entry.startOffset, entry.answerStartOffset)
+        val match = listOf(boldPattern, headingPattern, plainPattern)
+            .firstNotNullOfOrNull { it.matchEntire(header) }
+            ?: return entry.document
+        val contentRange = match.groups[2]?.range ?: return entry.document
+
+        var content = match.groupValues[2]
+        var hasStatus = false
+        var hasTags = false
+        var tagsPrefix: String? = null
+        repeat(2) {
+            val statusMatch = if (!hasStatus) statusPrefixPattern.find(content) else null
+            val parsedStatus = statusMatch?.let { QuestionStatus.fromKey(it.groupValues[1]) }
+            if (parsedStatus != null) {
+                hasStatus = true
+                content = content.removeRange(statusMatch.range)
+            } else {
+                val tagsMatch = if (!hasTags) tagsPrefixPattern.find(content) else null
+                if (tagsMatch != null) {
+                    hasTags = true
+                    tagsPrefix = tagsMatch.value.trim()
+                    content = content.removeRange(tagsMatch.range)
+                }
+            }
+        }
+
+        val updatedContent = buildString {
+            append(status.markerPrefix())
+            if (tagsPrefix != null) append(tagsPrefix).append(' ')
+            append(content)
+        }
+        val updatedHeader = header.replaceRange(contentRange, updatedContent)
+        return entry.document.substring(0, entry.startOffset) + updatedHeader +
+            entry.document.substring(entry.answerStartOffset)
+    }
 }

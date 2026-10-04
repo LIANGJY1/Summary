@@ -960,9 +960,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 val isBatchSelected = entryKey in selectedQuestionKeys
                 val isDragging = draggingKey == entryKey
                 val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
-                // 内容相对 git HEAD 有未提交改动：橙色题号/边框 + 行内着色（比对异步完成，加载中不标色）
+                // 内容相对 git HEAD 的字符/行差异只用于行内定位；改动态由 learning 状态统一表达。
                 val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
-                val gitDirty = gitDiff?.changed == true
                 val cardElevation by animateDpAsState(
                     targetValue = if (isDragging) 12.dp else 0.dp,
                     animationSpec = tween(180),
@@ -1026,9 +1025,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             if (isDragging) Theme.Accent
                             else if (isBatchSelected) Theme.Accent.copy(alpha = 0.78f)
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
-                            else if (isExpanded) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
-                            else if (gitDirty) Theme.WarnOrange.copy(alpha = 0.36f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isExpanded) 0.42f else 0.24f),
                             MaterialTheme.shapes.small,
                         )
                         // 内容列从 12dp 顶部内边距之后才开始；让这段卡片留白也能展开题目。
@@ -1103,7 +1100,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     Text(
                                         "Q${entry.number}",
                                         fontSize = 11.sp,
-                                        color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
+                                        color = Theme.Muted,
                                     )
                                     if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
                                     entry.tags.take(3).forEach { tag ->
@@ -1265,8 +1262,23 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
                                 Text(
-                                    "复制 Q&A",
+                                    "移动",
+                                    Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
+                                    fontSize = 13.sp,
+                                    // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
+                                    color = Theme.Muted,
+                                )
+                                Text(
+                                    "删除",
+                                    Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
+                                    fontSize = 13.sp,
+                                    color = Theme.BadRed,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "复制",
                                     Modifier.clickable {
                                         val content = "Q${entry.number}: ${entry.question}\n\nA:\n${entry.answer}"
                                         runCatching {
@@ -1281,20 +1293,6 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     },
                                     fontSize = 13.sp,
                                     color = Theme.Accent,
-                                )
-                                Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
-                                Text(
-                                    "移动",
-                                    Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
-                                    fontSize = 13.sp,
-                                    // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
-                                    color = Theme.Muted,
-                                )
-                                Text(
-                                    "删除",
-                                    Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
-                                    fontSize = 13.sp,
-                                    color = Theme.BadRed,
                                 )
                             }
                         }
@@ -1520,7 +1518,7 @@ private fun annotatedQuestionDiff(text: String, diff: SourceQuestionGitDiff?): A
         val start = range.first.coerceIn(0, text.length)
         val end = (range.last + 1).coerceIn(start, text.length)
         if (end > start) {
-            addStyle(SpanStyle(color = Theme.WarnOrange.copy(alpha = 0.72f)), start, end)
+            addStyle(SpanStyle(color = Theme.WarnOrange.copy(alpha = 0.56f)), start, end)
         }
     }
 }
