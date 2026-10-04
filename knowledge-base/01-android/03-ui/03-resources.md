@@ -20,13 +20,17 @@
 
 目录顺序写错会令构建工具拒绝该资源目录。例如 drawable-night-hdpi 有效，drawable-hdpi-night 顺序错误。系统先排除与当前配置不匹配的变体，再按限定符优先级逐项比较，因此“匹配限定符数量最多”不是选择规则。所有候选都不匹配时才使用同类型的默认资源。排查未命中时，先核对目录拼写与顺序，再核对设备 Configuration。
 
-**Q2: Drawable 的 intrinsic width 和 intrinsic height 表示什么？**
+**Q2: Android Drawable 表示什么，为什么它不等同于位图？**
+
+Drawable 是可由 Android 绘制到屏幕上的图形资源抽象，可以来自位图文件，也可以由颜色、形状、图层或状态规则构成。View 背景、图标和按钮外观都可使用 Drawable，因此“一个 Drawable 就是一张图片”并不成立。
+
+**Q3: Drawable 的 intrinsic width 和 intrinsic height 表示什么？**
 
 Drawable 的 intrinsic 尺寸是该 Drawable 自身报告的推荐固有尺寸，不是其当前实际绘制边界，也不保证每种 Drawable 都有正值。容器尺寸、布局参数、缩放规则和 Drawable 的实现都会影响最终显示大小。
 
 不能把 intrinsic 尺寸直接当成 View 的测量结果。需要固定界面尺寸时，应由布局或调用方明确设置尺寸与缩放策略。
 
-**Q3: 常见 Drawable 类型各适合表达什么？**
+**Q4: 常见 Drawable 类型各适合表达什么？**
 
 不同 Drawable 把绘制内容或组合规则封装成可复用资源：
 
@@ -41,10 +45,6 @@ Drawable 的 intrinsic 尺寸是该 Drawable 自身报告的推荐固有尺寸�
 可用位图文件或 XML Drawable 资源声明这些图形，也可在代码中组合或实现自定义 Drawable。自定义实现需按 Drawable 契约响应 bounds、状态和 Canvas 绘制。
 
 选择时依据需要表达的是图像内容、可拉伸区域、简单形状还是多层组合。复杂照片仍适合位图资源。
-
-**Q4: Android Drawable 表示什么，为什么它不等同于位图？**
-
-Drawable 是可由 Android 绘制到屏幕上的图形资源抽象，可以来自位图文件，也可以由颜色、形状、图层或状态规则构成。View 背景、图标和按钮外观都可使用 Drawable，因此“一个 Drawable 就是一张图片”并不成立。
 
 **Q5: 切回默认语言时因资源缺失崩溃，限定符变体应该怎样提供兜底？**
 
@@ -131,7 +131,13 @@ Drawable 是可由 Android 绘制到屏幕上的图形资源抽象，可以来�
 
 只翻译一部分的后果不是"显示英文"，而是某些配置下找不到默认版本、界面直接抛 Resources.NotFoundException。只翻译一半且恰好有默认版本，则会出现"有的页面中文、有的页面回落到英文或直接缺字符串"的混合体验，验收时必须按"每种语言下每个界面都跑一遍"来覆盖。
 
-**Q16: 某个 ViewBinding 字段在大屏变体上为空，layout 资源之间必须满足什么契约？**
+**Q16: ViewBinding 解决了什么问题，Fragment 中的 Binding 应在什么生命周期边界释放？**
+
+ViewBinding 为每个 XML 布局生成类型化绑定类，提供对布局内 View 的直接引用，减少手写 `findViewById()` 和错误强转。开启模块级配置后，按布局文件名生成对应的 Binding 类型。Activity 的 Binding 通常与 Activity 内容视图同寿命。Fragment 的 View 可以先于 Fragment 实例销毁，因此 Binding 字段必须在 `onDestroyView()` 置空，不能一直保留旧视图树。
+
+若多个资源变体使用同一个布局名，各变体的 View 集合可能不同。只出现在部分变体的字段会成为可空字段，访问前要按实际布局处理。
+
+**Q17: 某个 ViewBinding 字段在大屏变体上为空，layout 资源之间必须满足什么契约？**
 
 ViewBinding 按"所有变体的字段并集"生成绑定类：某个控件只在部分变体里出现时，它在生成类中对应字段就是可空类型。运行时选中的变体不含该控件，字段就为 null。直接访问会空指针。
 
@@ -140,7 +146,7 @@ ViewBinding 按"所有变体的字段并集"生成绑定类：某个控件只在
 1. **保持相同控件骨架**：各变体都提供相同控件，把差异放在约束和资源中。
 2. **允许控件缺席**：访问绑定字段前显式判空，并提供合理的替代行为。
 
-**Q17: 横竖屏或夜间模式切换后页面状态异常，何时让系统重建、何时自行处理 Configuration？**
+**Q18: 横竖屏或夜间模式切换后页面状态异常，何时让系统重建、何时自行处理 Configuration？**
 
 原则是优先让系统重建并重选资源。只有重建代价明确不可接受且状态保存恢复方案完整时，才由应用接管特定 Configuration 变化。
 
@@ -148,7 +154,7 @@ ViewBinding 按"所有变体的字段并集"生成绑定类：某个控件只在
 2. **回调责任**：接管后，应用要依据新 Configuration 刷新受影响 UI。只调用父类 onConfigurationChanged 不会自动刷新自定义缓存或手工计算的布局数据。
 3. **主动改配置**：不要用已弃用的 Resources.updateConfiguration 模拟设备配置。它不能替代系统配置分发，也不能正确模拟窗口几何变化。测试变体应通过设备配置或仅影响应用预览逻辑的显式测试入口完成。
 
-**Q18: 运行时配置看似正确但仍拿到错误图片，如何确认实际命中的资源变体？**
+**Q19: 运行时配置看似正确但仍拿到错误图片，如何确认实际命中的资源变体？**
 
 按配置、资源取值、构建产物三层实测：
 
@@ -157,12 +163,6 @@ ViewBinding 按"所有变体的字段并集"生成绑定类：某个控件只在
 3. **产物层**：用 Android Studio 的 APK Analyzer 或构建产物检查工具确认资源 ID、打包变体与 overlay 映射。getResourceName 返回的是资源名称，不是设备上实际文件路径。运行时也没有稳定的公开 API 可把任意资源 ID 还原为原始源文件路径。
 
 若设备启用了厂商 overlay，还要结合资源配置与 overlay 状态确认最终取值来源。这样可区分输入配置不对、资源解析结果不对、构建产物或运行时 overlay 改写了资源这几类原因。
-
-**Q19: ViewBinding 解决了什么问题，Fragment 中的 Binding 应在什么生命周期边界释放？**
-
-ViewBinding 为每个 XML 布局生成类型化绑定类，提供对布局内 View 的直接引用，减少手写 `findViewById()` 和错误强转。开启模块级配置后，按布局文件名生成对应的 Binding 类型。Activity 的 Binding 通常与 Activity 内容视图同寿命。Fragment 的 View 可以先于 Fragment 实例销毁，因此 Binding 字段必须在 `onDestroyView()` 置空，不能一直保留旧视图树。
-
-若多个资源变体使用同一个布局名，各变体的 View 集合可能不同。只出现在部分变体的字段会成为可空字段，访问前要按实际布局处理。
 
 **Q20: Resources、ResourcesImpl、AssetManager 三层各持有什么？"旋转一次就新建一个 ResourcesImpl"为什么不成立？**
 

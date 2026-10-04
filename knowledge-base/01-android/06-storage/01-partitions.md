@@ -1,6 +1,6 @@
 # 运行时分区与挂载
 
-> 学习资料（文章模式沉淀）。边界：本文回答设备分区的职责、动态分区与 `super` 的容量关系、Virtual A/B 的 OTA 数据路径，以及启动时逻辑分区和 `/data` 的挂载职责。镜像如何构建、打包与刷写归 [../13-build-system/04-android-system-images.md](../13-build-system/04-android-system-images.md)。具体分区名与布局随设备、启动模式和 Android 版本变化，最终以设备 fstab、分区表与构建配置为准。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答设备分区的职责、动态分区与 `super` 的容量关系、Virtual A/B 的 OTA 数据路径，以及启动时逻辑分区和 `/data` 的挂载职责。镜像如何构建、打包与刷写归 [../12-build-system/04-android-system-images.md](../12-build-system/04-android-system-images.md)。具体分区名与布局随设备、启动模式和 Android 版本变化，最终以设备 fstab、分区表与构建配置为准。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 设备常见分区分别保存什么？哪些属于系统、引导、动态容器和用户数据？**
 

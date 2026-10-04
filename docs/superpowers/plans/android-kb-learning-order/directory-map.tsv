@@ -1,0 +1,16 @@
+old_directory	new_directory
+01-architecture	01-architecture
+02-app-framework	02-app-framework
+03-ui	03-ui
+04-input	04-input
+05-rendering	05-rendering
+06-storage	06-storage
+07-memory	07-memory
+08-network	08-network
+09-audio	09-audio
+10-aaos	13-aaos
+11-platform-services	10-platform-services
+12-platform-native	11-platform-native
+13-build-system	12-build-system
+14-cpu-power	14-cpu-power
+15-performance	15-performance

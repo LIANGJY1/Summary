@@ -1,6 +1,6 @@
 # APM 专项原理与架构
 
-> 学习资料（文章模式沉淀）。主线：APM 专项工具链的原理与工程边界——实验室测试与设备 Benchmark 的口径纪律，网络、崩溃与 ANR、耗电与发热、混合栈四条捕获链路的能力上限，以及千万级 DAU 下的端侧采集架构。源文档：android-internals-wiki §17.7《实验室测试工具与设备 Benchmark》、§17.8《网络 APM 底层捕获原理》、§17.9《崩溃与 ANR 捕获机制》、§17.10《耗电与发热监控 (Battery & Thermal)》、§17.11《混合栈与跨平台 APM (WebView / Flutter)》、§17.12《千万级 DAU 的 APM 端侧架构》；可本地核对的平台侧机制按 AAOS13 源码（Android 13）核对并标注版本差异（Recoverable GWP-ASan、ApplicationExitInfo.getAnrInfo、Thermal headroom 阈值 API、thermal HAL 的 AIDL 优先连接等均为 Android 14–17 能力，AAOS13 树中不存在或实现不同），第三方 SDK 与工具（PerfDog、SoloPi、OkHttp、Cronet、Flutter 等）与架构实践按材料口径转写、不确定处已弱化；GWP-ASan 默认参数、WakeLock 与 BatteryManager 语义、WebView 渲染进程回调、/data/anr 目录权限等已按 AAOS13 源码核对，官方文档级数值沿用材料注明的官方核对结果、本文未重复上网核对。ANR 超时契约与 trace 诊断见 [../15-performance/03-anr.md](03-anr.md)，BatteryStats 归因管线与功耗优化见 [../15-performance/05-power.md](05-power.md)；APM 平台选型与采集 SDK 见 [07-apm-platform.md](18-apm-platform.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：APM 专项工具链的原理与工程边界——实验室测试与设备 Benchmark 的口径纪律，网络、崩溃与 ANR、耗电与发热、混合栈四条捕获链路的能力上限，以及千万级 DAU 下的端侧采集架构。源文档：android-internals-wiki §17.7《实验室测试工具与设备 Benchmark》、§17.8《网络 APM 底层捕获原理》、§17.9《崩溃与 ANR 捕获机制》、§17.10《耗电与发热监控 (Battery & Thermal)》、§17.11《混合栈与跨平台 APM (WebView / Flutter)》、§17.12《千万级 DAU 的 APM 端侧架构》；可本地核对的平台侧机制按 AAOS13 源码（Android 13）核对并标注版本差异（Recoverable GWP-ASan、ApplicationExitInfo.getAnrInfo、Thermal headroom 阈值 API、thermal HAL 的 AIDL 优先连接等均为 Android 14–17 能力，AAOS13 树中不存在或实现不同），第三方 SDK 与工具（PerfDog、SoloPi、OkHttp、Cronet、Flutter 等）与架构实践按材料口径转写、不确定处已弱化；GWP-ASan 默认参数、WakeLock 与 BatteryManager 语义、WebView 渲染进程回调、/data/anr 目录权限等已按 AAOS13 源码核对，官方文档级数值沿用材料注明的官方核对结果、本文未重复上网核对。ANR 超时契约与 trace 诊断见 [../15-performance/08-anr.md](08-anr.md)，BatteryStats 归因管线与功耗优化见 [../15-performance/10-power.md](10-power.md)；APM 平台选型与采集 SDK 见 [18-apm-platform.md](18-apm-platform.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: PerfDog 不要求被测 App 接入 SDK 也不要求设备 root，为什么仍不能用它代替线上 APM 和系统 trace 做根因定位？**
 
@@ -100,7 +100,7 @@ Android 的默认终止链由 `RuntimeInit.commonInit()` 安装的两层处理�
 
 系统 ANR 的取证入口全部在系统侧。`/data/anr` 目录由 init 以 `0775 system system` 创建（AAOS13 `system/core/rootdir/init.rc` 已核对），内部文件还受 SELinux 强制访问控制、文件属主与系统服务检查共同限制，三方生产应用读不到，轮询、inotify 或反射调用系统服务都不是稳定方案。系统收集 Java 线程 dump 时发出的 `SIGQUIT` 先在所有线程的 signal mask 中被屏蔽，再由 ART 的 `SignalCatcher` 线程通过 `sigwait()` 同步接收（AAOS13 `art/runtime/signal_catcher.cc` 已核对），因此应用再注册的 `sigaction` handler 根本不会被调用——这就是"ANR 取证用 SIGQUIT，应用却收不到"的原因。所谓 Signal Catcher Hook 要改信号掩码、拦截 ART 内部符号或修改 libsigchain，与 Android 版本和 ART 实现强耦合，只适合厂商 ROM、root/userdebug 诊断或可回滚实验。
 
-三方应用能做的只有应用端 main-looper watchdog：定时检查主线程消息循环是否还能响应，在卡顿期间多次采主线程栈，提前发现耗时消息、锁等待和 Binder 阻塞。它没有 system_server 掌握的输入分发、广播、Service、ContentProvider 等超时上下文，所以只能标记 `suspected_anr`；系统 ANR 结论以后续 `ApplicationExitInfo`、Vitals 或系统 trace 为准。ANR 各类超时契约与 trace 解读的机制层见 [../15-performance/03-anr.md](03-anr.md)。
+三方应用能做的只有应用端 main-looper watchdog：定时检查主线程消息循环是否还能响应，在卡顿期间多次采主线程栈，提前发现耗时消息、锁等待和 Binder 阻塞。它没有 system_server 掌握的输入分发、广播、Service、ContentProvider 等超时上下文，所以只能标记 `suspected_anr`；系统 ANR 结论以后续 `ApplicationExitInfo`、Vitals 或系统 trace 为准。ANR 各类超时契约与 trace 解读的机制层见 [../15-performance/08-anr.md](08-anr.md)。
 
 **Q14: 用 ApplicationExitInfo 补采集崩溃与 ANR 证据时有哪些字段语义陷阱？Android 13 与 Android 17 的能力差在哪里？**
 
@@ -138,7 +138,7 @@ GWP-ASan 是 Native 堆内存错误的抽样检测器：随机抽取少量 alloc
 
 证据分三层，字段名应明确区分：业务请求（`acquire()`、`setExact()`、`requestLocationUpdates()`）只说明应用表达了需求；应用可见结果（回调到达、扫描成功、网络字节）说明该次调用成功，但不等于整个硬件活跃窗口；系统或实验室统计（batterystats、Perfetto、Power Profiler、Macrobenchmark `PowerMetric`）才有 UID 与硬件状态口径——普通应用进程拿不到 `BatteryStats` 的同等完整数据，开发期可用 `dumpsys batterystats` 与系统 trace 核对。
 
-由此推出几条"API 窗口不等于硬件窗口"的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描；`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做"蜂窝耗电风险"级别的风险判断；任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [../15-performance/05-power.md](05-power.md)。
+由此推出几条"API 窗口不等于硬件窗口"的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描；`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做"蜂窝耗电风险"级别的风险判断；任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [../15-performance/10-power.md](10-power.md)。
 
 **Q18: 线上监控 WakeLock 时为什么要区分"申请过、当前持有、最终释放"？Android 13 的 WakeLock 对象有哪些必须写进模型的语义？**
 

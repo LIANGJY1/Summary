@@ -1,6 +1,6 @@
 # GPU 与专项工具
 
-> 学习资料（文章模式沉淀）。主线：GPU、Camera、窗口与布局、构建产物和内核观测各有独立的证据通道——先按问题选证据形态（帧捕获、GPU counter、Camera trace、窗口状态、BPF 记账、keep 规则报告），再按 Android 版本核对平台侧实现与工具边界。源文档：android-internals-wiki §15.10《三方性能库、Hook 与可观测性基础设施》、§15.11《GPU 调试与 AGI 单帧分析》、§15.12《GPU Counter、内存与 GpuService 可观测性》、§15.13《Android Performance Analyzer 与 GAPS：性能追踪与目标可达性》、§15.14《Camera 性能分析工具：Perfetto、SQL 与 GFXReconstruct》、§15.15《Winscope、Layout Inspector 与 UI 状态调试》、§15.16《Android eBPF 架构与性能观测》、§15.17《R8 Configuration Analyzer 与 keep 规则体积归因》；材料按 Android 17（API 37）撰写，系统侧机制按本地 AAOS13 源码（Android 13）核对并标注版本差异，AGI、GFXReconstruct、APA、GAPS、Layout Inspector、R8 等外部工具不在本地树、按材料口径转写，GPU counter 协议细节按材料标注的 AOSP `external/perfetto` 口径转写，无法支撑的断言已弱化。Perfetto 采集、轨道与 SQL 基础见 [04-perfetto-sql.md](../15-performance/16-perfetto-analysis.md)；Profiler、Simpleperf、dumpsys、statsd 等通用工具见 [03-performance-tools.md](../15-performance/15-performance-tools.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：GPU、Camera、窗口与布局、构建产物和内核观测各有独立的证据通道——先按问题选证据形态（帧捕获、GPU counter、Camera trace、窗口状态、BPF 记账、keep 规则报告），再按 Android 版本核对平台侧实现与工具边界。源文档：android-internals-wiki §15.10《三方性能库、Hook 与可观测性基础设施》、§15.11《GPU 调试与 AGI 单帧分析》、§15.12《GPU Counter、内存与 GpuService 可观测性》、§15.13《Android Performance Analyzer 与 GAPS：性能追踪与目标可达性》、§15.14《Camera 性能分析工具：Perfetto、SQL 与 GFXReconstruct》、§15.15《Winscope、Layout Inspector 与 UI 状态调试》、§15.16《Android eBPF 架构与性能观测》、§15.17《R8 Configuration Analyzer 与 keep 规则体积归因》；材料按 Android 17（API 37）撰写，系统侧机制按本地 AAOS13 源码（Android 13）核对并标注版本差异，AGI、GFXReconstruct、APA、GAPS、Layout Inspector、R8 等外部工具不在本地树、按材料口径转写，GPU counter 协议细节按材料标注的 AOSP `external/perfetto` 口径转写，无法支撑的断言已弱化。Perfetto 采集、轨道与 SQL 基础见 [04-perfetto-analysis.md](../15-performance/04-perfetto-analysis.md)；Profiler、Simpleperf、dumpsys、statsd 等通用工具见 [03-performance-tools.md](../15-performance/03-performance-tools.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 想统计自有应用进程内 `libc.so` 的 `malloc` 被谁调用，PLT/GOT Hook 改写的是什么位置？为什么它注定覆盖不了所有 `malloc` 调用？**
 
@@ -50,7 +50,13 @@ draw API 返回只说明 CPU 执行到提交点，这一帧此后还要走 GPU �
 
 两个常见误判要避开：RenderThread 很短不等于 GPU 慢——RenderThread 可能只负责异步提交，GPU 是否受限要靠 GPU stage、completion fence 与单变量实验共同指向；FrameTimeline 的 `GPU Composition` 标记只说明 SurfaceFlinger 本轮用了 GPU 合成，不说明应用内容是否 GPU 渲染——游戏 Surface 由应用 GPU 绘制后仍可被 HWC 直接扫描输出。另注意队列中可能有多帧 in-flight，抓到的 API 帧很重不代表它就是用户看到的那一帧，要用 frame id、latch 与 present 建立对应。
 
-**Q6: AGI Frame Profiler 是怎么把 GraphicsSpy 注入目标进程的？平台侧的注入条件是什么？**
+**Q6: `profileable` 和 `debuggable` 有什么区别？帧捕获工具为什么通常要求 debuggable，性能基线又该怎么取？**
+
+`profileable` 是 API 29 引入的 manifest 元素，允许 shell 侧 profiling 工具分析 release 构建并只暴露平台允许的有限数据，对运行时序的扰动通常更小；`debuggable` 则允许调试器和图形 layer 注入。帧捕获工具（AGI、RenderDoc、Sokatoa，材料口径）通常要求 debuggable 或 root，因为它们要把 Vulkan layer 加载进目标进程记录命令、资源和内存，这是 debuggable 才开放的通道。
+
+由此得到基线取法：用 profileable/release 包录低扰动基线，回答"正常跑多快、改动有没有收益"；用 debuggable 包做短窗口详细诊断，回答"这一帧里哪个 pass、哪条命令、哪个资源有问题"。debuggable 会改变运行时优化与安全检查，捕获 layer 本身也记录命令，两类构建的绝对帧时间不能直接比较。`profileable` 也不保证 GPU 数据源出现——`gpu.counters`、`gpu.renderstages` 或厂商内核事件由系统 producer、驱动与设备配置决定，profileable 包得到空 GPU 轨道时应先查 data-source descriptor 与厂商支持，而不是推断"GPU 没工作"。报告至少记录：工具与版本、设备 build 与 GPU driver、包类型与 Graphics API、分辨率与刷新率、温度与持续运行时间、是否注入 layer 或替换 backend；性能数字来自未注入 layer 的低扰动运行，帧 capture 只用来解释慢帧结构，不当帧率基准。另外 GPU counter 没有跨厂商通用阈值（如"ALU 超 80% 即瓶颈"），counter 名称、分母与采样窗口由厂商定义，结论要绑定同一设备、同画质、相近热状态下的 A/B 对照。
+
+**Q7: AGI Frame Profiler 是怎么把 GraphicsSpy 注入目标进程的？平台侧的注入条件是什么？**
 
 AGI 在设备上安装与目标 ABI 匹配的 gapid APK，然后写一组 global settings（`enable_gpu_debug_layers`、`gpu_debug_app`、`gpu_debug_layer_app`、`gpu_debug_layers`）让 Vulkan loader 把 GraphicsSpy layer 加载进目标进程，目标进程内的 gapii 捕获 Vulkan 调用后经 adb forward 送回主机；Android 用 settings 而不是桌面 loader 的 `VK_LAYER_PATH` 环境变量。
 
@@ -58,17 +64,11 @@ AGI 在设备上安装与目标 ABI 匹配的 gapid APK，然后写一组 global
 
 AGI 工具侧（材料口径，AGI 是独立版本化的仓库，不在 AOSP 平台 tag 内）：gapid APK 同时打包 `libVkLayer_GraphicsSpy.so` 与 `libgapii.so`，前者是被 loader 发现的 wrapper，后者是真正拦截实现；游戏有多进程时 AGI 用私有属性 `debug.agi.procname` 过滤进程名，名字不匹配的进程不建立抓帧连接。排障按链路查：目标 App 是否 debuggable、四个 settings 是否写对且 `gpu_debug_layer_app` 的 ABI 匹配、`debug.agi.procname` 是否为完整进程名、adb forward 与 socket 是否建立。AGI 异常退出后要手动删掉这些 global settings 并清空该属性——settings 跨重启保留，残留会让同包进程继续加载 layer。
 
-**Q7: AGI 能直接捕获 OpenGL ES 应用吗？选 OpenGL on ANGLE 模式抓到的内容应该怎么理解？**
+**Q8: AGI 能直接捕获 OpenGL ES 应用吗？选 OpenGL on ANGLE 模式抓到的内容应该怎么理解？**
 
 不能直接抓原生 GLES 调用。AGI Frame Profiler 的 GLES 路径是 OpenGL on ANGLE：用 AGI 提供的 custom ANGLE 把 GLES 命令翻译成 Vulkan，再捕获翻译后的 Vulkan 命令，所以 trace 描述的是 ANGLE 生成的 Vulkan workload，不是设备原生 GLES driver 的调用序列。
 
 这个语义带来三个必须记住的边界：其一，看到的是转换后的 render pass、pipeline、shader 与 GPU 成本，ANGLE 自身的 API 转换、shader translation 和状态管理开销也进入了被测路径；其二，如果问题只在原生 GLES driver 上出现，这份 capture 已经更换了 backend，必须同时保留原生路径的 Perfetto、日志和厂商数据才能对照；其三，Android 15+ 提供按包测试 ANGLE 的入口，更新的版本还允许游戏在 manifest 里表达"优先使用 ANGLE"的请求（材料口径），但那是请求信号，系统是否选择 ANGLE 仍由设备配置与策略决定，不能认定 GLES 应用默认跑在 ANGLE 上。对照实验可用官方设置项把目标包指定到 `angle` 或 native driver，重启进程后核对 EGL vendor/renderer 与进程实际加载的库，测试结束删除这些 global 设置，避免污染后续基线。排查"选了 Vulkan 模式但 GLES 应用抓帧为空"时，先确认 API 模式选错是第一嫌疑。
-
-**Q8: `profileable` 和 `debuggable` 有什么区别？帧捕获工具为什么通常要求 debuggable，性能基线又该怎么取？**
-
-`profileable` 是 API 29 引入的 manifest 元素，允许 shell 侧 profiling 工具分析 release 构建并只暴露平台允许的有限数据，对运行时序的扰动通常更小；`debuggable` 则允许调试器和图形 layer 注入。帧捕获工具（AGI、RenderDoc、Sokatoa，材料口径）通常要求 debuggable 或 root，因为它们要把 Vulkan layer 加载进目标进程记录命令、资源和内存，这是 debuggable 才开放的通道。
-
-由此得到基线取法：用 profileable/release 包录低扰动基线，回答"正常跑多快、改动有没有收益"；用 debuggable 包做短窗口详细诊断，回答"这一帧里哪个 pass、哪条命令、哪个资源有问题"。debuggable 会改变运行时优化与安全检查，捕获 layer 本身也记录命令，两类构建的绝对帧时间不能直接比较。`profileable` 也不保证 GPU 数据源出现——`gpu.counters`、`gpu.renderstages` 或厂商内核事件由系统 producer、驱动与设备配置决定，profileable 包得到空 GPU 轨道时应先查 data-source descriptor 与厂商支持，而不是推断"GPU 没工作"。报告至少记录：工具与版本、设备 build 与 GPU driver、包类型与 Graphics API、分辨率与刷新率、温度与持续运行时间、是否注入 layer 或替换 backend；性能数字来自未注入 layer 的低扰动运行，帧 capture 只用来解释慢帧结构，不当帧率基准。另外 GPU counter 没有跨厂商通用阈值（如"ALU 超 80% 即瓶颈"），counter 名称、分母与采样窗口由厂商定义，结论要绑定同一设备、同画质、相近热状态下的 A/B 对照。
 
 **Q9: `dumpsys gpu --gpumem` 显示的每个进程 GPU 内存从哪里来？AAOS13 上这条链路的实现是什么样的？**
 

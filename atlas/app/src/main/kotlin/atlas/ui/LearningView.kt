@@ -1046,7 +1046,20 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 ) {
                     // 卡片内侧宽度最多 992dp；题面与下方答案都从同一内边距起排。
                     // 不能仅将题面收至 880dp，否则展开答案会比题面左移。
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().clickable(
+                            interactionSource = cardInteraction,
+                            indication = null,
+                            enabled = !reorderMode,
+                        ) {
+                            if (batchTagMode) {
+                                toggleBatchSelection(entryKey)
+                            } else {
+                                locateSource(entry.sourcePath)
+                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                            }
+                        },
+                    ) {
                         val statusGutterWidth = ((maxWidth - SourceQuestionContentWidth + 28.dp) / 2).coerceAtLeast(28.dp)
                         Row(
                             Modifier.fillMaxWidth()
@@ -1089,14 +1102,6 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     }
                                     Text(
                                         "Q${entry.number}",
-                                        modifier = if (reorderMode) Modifier else Modifier.singleClickWithoutConsumingSelection {
-                                            if (batchTagMode) {
-                                                toggleBatchSelection(entryKey)
-                                            } else {
-                                                locateSource(entry.sourcePath)
-                                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                            }
-                                        },
                                         fontSize = 11.sp,
                                         color = if (gitDirty) Theme.WarnOrange else Theme.Muted,
                                     )
@@ -1116,16 +1121,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                             visible = cardHovered || isExpanded,
                                         ) { if (!batchTagMode) editingEntry = entry }
                                     }
-                                    Spacer(
-                                        Modifier.weight(1f).height(18.dp).clickable(
-                                            interactionSource = cardInteraction,
-                                            indication = null,
-                                            enabled = !reorderMode && !batchTagMode,
-                                        ) {
-                                            locateSource(entry.sourcePath)
-                                            expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                        },
-                                    )
+                                    Spacer(Modifier.weight(1f).height(18.dp))
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
@@ -1144,16 +1140,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     )
                                 } else {
                                     key(entryKey, entry.question) {
-                                        SelectionContainer(
-                                            modifier = Modifier.singleClickWithoutConsumingSelection {
-                                                if (batchTagMode) {
-                                                    toggleBatchSelection(entryKey)
-                                                } else {
-                                                    locateSource(entry.sourcePath)
-                                                    expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                                }
-                                            },
-                                        ) {
+                                        SelectionContainer {
                                             Text(
                                                 displayQuestion,
                                                 // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
@@ -1278,6 +1265,23 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                Text(
+                                    "复制 Q&A",
+                                    Modifier.clickable {
+                                        val content = "Q${entry.number}: ${entry.question}\n\nA:\n${entry.answer}"
+                                        runCatching {
+                                            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(content), null)
+                                        }.onSuccess {
+                                            Log.i("题目与答案已复制 Q${entry.number}")
+                                            store.showToast("已复制 Q${entry.number} 和答案")
+                                        }.onFailure { error ->
+                                            Log.w("复制题目与答案失败 Q${entry.number}: ${error.message}")
+                                            store.showToast("复制失败，请重试")
+                                        }
+                                    },
+                                    fontSize = 13.sp,
+                                    color = Theme.Accent,
+                                )
                                 Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
                                 Text(
                                     "移动",
@@ -2095,7 +2099,12 @@ private fun SourceQuestionTag(
         modifier = Modifier
             .widthIn(max = 144.dp)
             .graphicsLayer { alpha = if (visible) 1f else 0f }
-            .then(if (editable) Modifier.singleClickWithoutConsumingSelection(onClick = onClick) else Modifier)
+            .clickable(
+                enabled = editable,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = 2.dp, vertical = 2.dp),
         fontSize = fontSizeSp.sp,
         color = if (isPlaceholder) Theme.Muted.copy(alpha = 0.62f) else Theme.Tag,

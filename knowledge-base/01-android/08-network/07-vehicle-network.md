@@ -1,6 +1,6 @@
 # 车载网络架构与设计
 
-> 学习资料（文章模式沉淀）。主线：整车 E/E 架构中的网络域划分与 Android 座舱职责、车载以太网骨干（单对线/交换机/TSN/gPTP/VLAN）、时间同步三层、域融合演进、跨域隔离、服务发现、流量统计与计费、多路径传输、长连接推送、远程运维通道。车载以太网与 TSN 为外部资料口径（2026-09 检索，车载交换机协议栈分析等）；Android 侧 NTP 服务、MultipathPolicyTracker 按本地 AAOS13 源码核对。多 APN 拓扑见 [06-multi-apn-veth.md](06-multi-apn-veth.md)，VPN 见 [05-vpn.md](05-vpn.md)；SOME/IP 与车联网协议总纲见知识库 `网络/` 目录。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：整车 E/E 架构中的网络域划分与 Android 座舱职责、车载以太网骨干（单对线/交换机/TSN/gPTP/VLAN）、时间同步三层、域融合演进、跨域隔离、服务发现、流量统计与计费、多路径传输、长连接推送、远程运维通道。车载以太网与 TSN 为外部资料口径（2026-09 检索，车载交换机协议栈分析等）；Android 侧 NTP 服务、MultipathPolicyTracker 按本地 AAOS13 源码核对。多 APN 拓扑见 [05-multi-apn-veth.md](05-multi-apn-veth.md)，VPN 见 [06-vpn.md](06-vpn.md)；SOME/IP 与车联网协议总纲见知识库 `网络/` 目录。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 整车 E/E 架构里有哪些网络域？Android 座舱在其中管什么、不管什么？**
 

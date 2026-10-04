@@ -1,6 +1,6 @@
 # 图形栈预加载与驱动选择
 
-> 学习资料（文章模式沉淀）。边界：本文回答 Zygote 预加载覆盖图形栈的哪一段、GPU 驱动/ANGLE 由谁选择，以及首帧开销中预加载帮不上的部分。Zygote 与启动链见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)，应用侧首帧优化见 [应用启动优化](../15-performance/11-app-startup-optimization.md)。源文档：android-internals-wiki §1.3（Android 17 语境），官方资料已核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答 Zygote 预加载覆盖图形栈的哪一段、GPU 驱动/ANGLE 由谁选择，以及首帧开销中预加载帮不上的部分。Zygote 与启动链见 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)，应用侧首帧优化见 [应用启动优化](../15-performance/07-app-startup-optimization.md)。源文档：android-internals-wiki §1.3（Android 17 语境），官方资料已核对。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Zygote 预加载碰了图形栈的哪些部分？nativePreloadAppProcessHALs 预加载的是缓冲区分配器吗？**
 

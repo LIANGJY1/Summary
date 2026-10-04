@@ -6,53 +6,53 @@
 
 普通 View 与 Compose 内容统一画在 ViewRootImpl 的宿主 Surface 上，由 RenderThread 一次 DrawFrameTask 提交；TextureView 的外部内容（如解码器输出）写入 SurfaceTexture 的 BufferQueue，再被 HWUI 当作纹理在宿主 Surface 上采样合成；SurfaceView 则拥有独立 Surface 与独立 Layer，内容完全不经宿主 Surface。前提是 ViewRootImpl 在 attach 时向 WindowManager 申请宿主 Surface 并绑定 ThreadedRenderer。机制上，普通 View 的 RenderNode 全部挂在 RootRenderNode 下，随帧统一绘制；TextureView 因此跟随 View 变换（圆角、缩放、动画都生效），但付出一次纹理采样成本；SurfaceView 的 Z 序由 SurfaceControl 打洞控制，视频解码与游戏的 EGL/Vulkan 可直接渲染到该 Surface，省掉宿主合成路径。结果与做法：全屏视频用 SurfaceView 最省电省合成；需要与 UI 同步做变换动效（位移、圆角遮罩）用 TextureView；普通列表走默认宿主 Surface 即可，不要为局部内容滥用 TextureView。
 
-**Q2: 一次标准硬件加速窗口从 VSync 到上屏经过哪些环节？"syncAndDrawFrame() 已返回"能证明 GPU 画完了吗？**
+**Q2: 说「VSync」时到底指哪个：VBlank、TE、HWC 回调，还是 App 收到的 VSync？**
+
+这是四个不同层的概念：VBlank 是扫描消隐期的物理时窗，TE 是面板向 SoC 发出的 tearing effect 信号，HWC VSync 是 HAL 层向 SF 上报的回调事件，App/SF 的 VSync 是 EventThread 基于预测模型派发的软件唤醒时刻。机制上，物理层的 VBlank 与 TE 提供真实节拍来源，硬件 VSync 回调（HWC onVsync）把真实节拍送给 SF 用于校准预测模型，预测器再为 app 与 sf 两条 EventThread 各自派发相位可配置的软件 VSync；App 在 frameTimeNanos 里拿到的是预测值而非硬件中断时间。边界：混用这四个词会让延迟分析差出半个周期甚至整周期；判断对齐关系时「硬件回调是真值、App 时间戳是预测值」。做法：分析抖动先把 HWC VSync 回调时间线作为基准，再看 App 帧时间戳相对它的偏差，而不是直接拿 frameTimeNanos 自比。
+
+**Q3: 一次标准硬件加速窗口从 VSync 到上屏经过哪些环节？"syncAndDrawFrame() 已返回"能证明 GPU 画完了吗？**
 
 主线是 VSync 调度 → Choreographer → ViewRootImpl/HWUI → RenderThread/GPU → BLAST → SurfaceFlinger → HWC → 显示屏。Choreographer 在主线程按 INPUT → ANIMATION → INSETS_ANIMATION → TRAVERSAL → COMMIT 的回调顺序组织一帧（AAOS13 源码核对，回调类型常量 0–4 即此顺序）；硬件加速路径中 View.draw 主要更新 RenderNode/DisplayList 绘制指令，真正的像素工作在 RenderThread 与 GPU 完成。`syncAndDrawFrame()` 返回只表示主线程与 RenderThread 的同步阶段完成，GPU 可能仍在执行。由此得到三个不能互换的时间点：queueBuffer（生产者交回 buffer，GPU 写入可能未完成）、latch（SurfaceFlinger 采纳该 layer 的新 buffer）、present（提交到显示设备）——把它们合并成一个"渲染完成时间"会直接误导排查方向。
 
-**Q3: 一帧没有显示出来，如何用证据链区分是 App 没画、SurfaceFlinger 没合成，还是显示没翻转？**
+**Q4: 一帧没有显示出来，如何用证据链区分是 App 没画、SurfaceFlinger 没合成，还是显示没翻转？**
 
 渲染责任分三个调度域：App 域（Choreographer 唤醒到 RenderThread 出 buffer）、SF 域（收 Transaction、latch、合成、提交 HWC）、显示域（DRM 翻转与扫描输出），每个域有各自的可观测证据，卡在哪一段就看哪一段的证据缺失或超时。机制上，App 域的证据是 Choreographer#doFrame 与 RenderThread 的 DrawFrame 任务，结束标志是 BLAST 提交 Transaction，SF 侧 trace 中的 `BufferTX - <layer>` 表示 SF 已收到 pending buffer transaction；SF 域的证据是 onMessageInvalidate/onMessageRefresh 对应的 flushTransactionQueues、latchBuffers 与合成提交；显示域的证据是 HWC present 与 DRM atomic commit。三段之间由 fence 传递：acquire fence 证明 App 是否写完 buffer，release fence 证明 SF/HWC 是否已用完 buffer，present fence 证明显示是否采纳了这一帧。做法：把「谁在等谁的 fence」对上号，App 域看 FrameTimeline 的 jank 分类与 FrameInfo 五阶段，SF 域看 SurfaceFlinger 轨道与 BufferTX 时序，显示域看 present fence 信号时间，即可把掉帧归因到具体域，而不是笼统结论「卡了」。
 
-**Q4: 从 Android 3.0 到 Android 17，哪些版本节点真正改变了渲染性能模型？**
+**Q5: 从 Android 3.0 到 Android 17，哪些版本节点真正改变了渲染性能模型？**
 
 关键节点是 3.0 硬件加速与 DisplayList、4.1 Project Butter 与 Choreographer、5.0 RenderThread 分离、11 BLAST 与 MRR、15 ARR，其余节点属于能力补充。机制逐条看：3.0 把绘制指令录制为 DisplayList，硬件加速成为默认，绘制从「立即执行」变为「录制后回放」；4.1 引入 Choreographer，让 UI 统一由 VSync 驱动，消灭了无节制的 invalidate；5.0 把 RenderThread 独立出来，UI 线程只构建 RenderNode 树，绘制执行移出 UI 线程；6.0 增加 COMMIT 回调标记帧提交边界；7.0 提供 FrameMetrics 与 Vulkan NDK；9.0 起 SkiaGL 成为默认后端；11 引入 BLAST 原子提交、MRR 多刷新率与 Surface.setFrameRate；12 引入 FrameTimeline；13 公开 FrameData 与 AGSL；15 引入 ARR 与 ANGLE 可选；16 增加 Display.hasArrSupport 等 ARR 公共 API；17 语境下 WebGPU 仍以 Jetpack alpha 形态存在而非框架 API，另有 getFrameRateVelocityMapping 等速度类 API。边界：以上均为版本敏感结论，引用时需标注对应 API 级别，尤其 BLAST 全面替代旧提交路径、ARR 依赖 Composer3 标准接口这两点与设备实际版本强相关。
 
-**Q5: 同一台设备上 HWUI 何时走 SkiaGL、何时走 SkiaVulkan，由什么决定，怎么复现对比？**
+**Q6: 同一台设备上 HWUI 何时走 SkiaGL、何时走 SkiaVulkan，由什么决定，怎么复现对比？**
 
 由 HWUI 启动时的 `Properties::peekRenderPipelineType()` 决定：默认 SkiaGL，`debug.hwui.renderer` 设为 skiavulkan（或设备预配置/ANGLE 偏好介入）时走 SkiaVulkan。前提是两条管线共享同一 RenderNode/DisplayList 前端，差异只在后端提交与 fence 处理。机制上，HWUI 读取系统属性与开发者选项选择管线，实例化 SkiaOpenGLPipeline 或 SkiaVulkanPipeline；Android 9 起 skiagl 是默认值，Vulkan 后端长期受驱动兼容性限制未全面默认，Android 15 引入的 ANGLE 是 OpenGL 之上的可选翻译层（prefer_angle 控制），Android 17 语境仍非强制。边界：切换后端不改变上层 Canvas 语义，但会改变 shader 编译时机与 fence 行为，部分 GPU 专属问题只在一个后端出现。做法：复现渲染疑难时可用 `setprop debug.hwui.renderer skiavulkan`（进程重启生效）做两个后端的 A/B 对比，把「框架逻辑问题」与「驱动/后端问题」分开。
 
-**Q6: 引入 BLAST 之后，BufferQueue 及其 slot 状态机还存在吗，三缓冲是固定的吗？**
+**Q7: 引入 BLAST 之后，BufferQueue 及其 slot 状态机还存在吗，三缓冲是固定的吗？**
 
 存在。BLAST 改变的只是「谁替 App 把 buffer 交给 SF」：App 侧的 BLAST 消费者把渲染完成的 GraphicBuffer 包进 SurfaceControl.Transaction 调 setBuffer() 提交，底层 BufferQueue 的 FREE/DEQUEUED/QUEUED/ACQUIRED 状态机与动态深度管理照旧工作。机制上，传统路径 queueBuffer 会直接触发 SF 侧取用，buffer 与窗口几何属性的提交时序可能错开导致不同步；BLAST 路径把两者合并为原子 Transaction，SF 在 `BufferTX - <layer>` 记录 pending buffer transaction，等下一个合成周期统一 latch。结果是把问题域从「buffer 与属性不同步」转为「Transaction 提交时序与合并策略」。边界：buffer 数量不是固定 3 个，由 `min_undequeued_buffers + 2` 计算得出（典型为 3，随生产者约束可变）；slot 状态迁移仍是分析 buffer 阻塞的基本模型。
 
-**Q7: FPS 达到 60 就等于流畅吗，FPS、刷新率、present 间隔、输入延迟各度量什么？**
+**Q8: FPS 达到 60 就等于流畅吗，FPS、刷新率、present 间隔、输入延迟各度量什么？**
 
 不等于。FPS 是吞吐量（单位时间提交的帧数），显示刷新率是面板物理扫描频率，present-to-present 间隔是相邻两帧实际上屏的时间差（度量平滑度），input-to-present 是输入事件到其生效帧上屏的延迟（度量跟手度），四者不一致时高 FPS 依然会卡。机制上，FPS 高但 present 间隔忽长忽短就是抖动，FrameTimeline 用 present 间隔偏离预期帧时长的程度判定 jank；刷新率限制 FPS 上限，但 MRR/ARR 下两者可解耦，60fps 内容在 120Hz 面板上按 2 倍间隔均匀呈现照样平滑；input-to-present 必须把输入时间戳与目标帧的 vsyncId 对齐才能算准，只看 FPS 完全测不出跟手性。边界与做法：以 present 间隔方差和 FrameTimeline 的 jank 分类作为流畅度主指标，FPS 只做吞吐概览；Perfetto 的 FrameTimeline 轨道可同时观察这四个量。
 
-**Q8: MRR、ARR、VRR、LTPO 四个词分别指什么，最容易混淆的点在哪？**
+**Q9: MRR、ARR、VRR、LTPO 四个词分别指什么，最容易混淆的点在哪？**
 
 MRR 是 Android 11 引入的离散显示模式切换（在多个固定 DisplayMode 之间按约束切换）；ARR 是 Android 15 起引入的自适应刷新率（同一配置内按面板 TE/VSync 的整数分频连续步进）；VRR 是可变刷新率的统称（ARR 实现细节在 AOSP 中也以 vrr 命名）；LTPO 是面板硬件技术，是前两者能低功耗运行长刷新的物理基础。机制上，MRR 在 Composer 的 mode 集合间切换，跨模式切换可能非无缝，需要 seamlessness 约束保护；ARR 通过 vsyncPeriod 与 minFrameIntervalNs 表达「在 minFrameIntervalNs 之后按 VSync 整数倍呈现」，把帧放在更细的 VSync 网格上，避免频繁跨 mode 切换的功耗与可见闪烁，由 Composer3（v3）提供标准接口。混淆点常在把 LTPO 当成系统 API、把 ARR 当成厂商私有 VRR，以及以为高刷屏都有 ARR。边界：ARR 要求面板支持 TE 信号与分频步进，不支持时回落 MRR；Android 16 起可用 Display.hasArrSupport() 查询。做法：兼容代码按 hasArrSupport 分支，不要假设所有高刷设备具备 ARR。
 
-**Q9: 视频播放器如何用 Surface.setFrameRate 让系统选对刷新率，参数怎么选？**
+**Q10: 视频播放器如何用 Surface.setFrameRate 让系统选对刷新率，参数怎么选？**
 
 在 Surface 创建或播放开始时调用 `surface.setFrameRate(frameRate, FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, CHANGE_FRAME_RATE_*)`，把内容固有帧率告诉 DisplayModeDirector；非视频 UI 内容用 FRAME_RATE_COMPATIBILITY_DEFAULT。机制上，FIXED_SOURCE 表示内容有固定源帧率（如 23.976/29.97 的视频），允许系统为匹配它而切换刷新率（包括非无缝切换）；DEFAULT 只是提示语义，系统倾向选择不低于该帧率的模式。CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS 是默认策略，只同意无缝切换；CHANGE_FRAME_RATE_ALWAYS 允许可见切换，长视频场景建议用它。边界：该 API 面向 targetSdk 30+（Android 11 起可用）；传值要给精确帧率（29.97f 而非 30f），否则取整可能匹配不到模式；传 0 清除声明（API 34 起另有 clearFrameRate）；它只影响投票，不保证立即切换，最终由 RefreshRateSelector 仲裁。做法：播放器在获知内容帧率时（如 onVideoSizeChanged）立即声明，暂停或销毁时清除。
 
-**Q10: UI 内容的运动速度如何影响刷新率，Android 15 到 17 加了哪些速度类 API？**
+**Q11: UI 内容的运动速度如何影响刷新率，Android 15 到 17 加了哪些速度类 API？**
 
 系统对刷新率的投票分显式与启发式两类：显式来自 setFrameRate/setRequestedFrameRate 类 API，启发式来自 SurfaceFlinger 的 LayerHistory 对每层内容更新频率的采样；Android 15 起新增按「内容速度」投票的 API，让快速滚动拉高刷新率、静止降回低刷新率由框架自动完成。机制上，View.setRequestedFrameRate 支持类别语义（如触摸加速、省电等类别常量），Window 层提供 touch boost 与 power savings 类请求；Android 17 语境补充 setFrameContentVelocity 与 getFrameRateVelocityMapping，把「内容移动速度 → 刷新率档位」的映射交给系统，App 不再手写帧率切换逻辑；setProducerThrottlingEnabled（API 37）可约束生产者提交节奏。边界：这批 API 是 Android 15（setRequestedFrameRate、Transaction.setFrameTimeline）到 17 逐步加入的版本敏感面，低版本设备上调用需降级。做法：滚动与动画场景优先用类别投票表达意图，只有视频这类固定源内容才用精确帧率。
 
-**Q11: 多个图层投票冲突时，SurfaceFlinger 如何裁决最终刷新率？**
+**Q12: 多个图层投票冲突时，SurfaceFlinger 如何裁决最终刷新率？**
 
 由 RefreshRateSelector 汇总所有图层的 LayerVoteType 投票（NoVote、Heuristic、ExplicitDefault、ExplicitExactOrMultiple、ExplicitExact、ImplicitExactOrMultiple、Min、Max、Kernel 等 9 类）与各层帧率，先按距离打分筛掉不满足约束的模式，再在剩余模式中结合 seamlessness 选出 desired mode。机制上，显式投票（ExplicitExact 等）来自 setFrameRate 类 API，Heuristic 来自 LayerHistory 采样，触屏 boost 表现为短时的 Max 投票；打分公式对 min/max 边界投票按 (min/max)² 计分，平方级惩罚意味着精确帧率匹配（Exact）的约束力远强于「不低于」语义，冲突时通常向满足强约束的模式收敛。边界：投票只产生 desired mode，真正生效还要经过 desired→pending→active 状态机与无缝约束检查，被 EX_SEAMLESS_NOT_ALLOWED/EX_NOT_POSSIBLE 拒绝时停留在 desired。做法：调试时在 SF trace 中看 RefreshRateSelection 过程与各层 vote 值，先确认投票分布再查约束。
 
-**Q12: 刷新率从 desired 到 active 要经过哪些状态，上线后用什么计数器验证切换生效？**
+**Q13: 刷新率从 desired 到 active 要经过哪些状态，上线后用什么计数器验证切换生效？**
 
 状态机是 desired mode（DisplayModeDirector 依据投票与约束选出）→ pending mode（SF 确认可切换并排程）→ active mode（Composer/HWC 完成实际切换）；验证用 HasDesiredMode、PendingModeFps、ActiveModeFps、RenderRateFps 四个 trace 计数器。机制上，生效路径有两条：走 `setActiveModeWithConstraints()` 时返回 VsyncPeriodChangeTimeline，按时间线异步生效；Composer3 的 DisplayCommand setDisplayMode 则随提交立即 finalize。切换请求被 EX_SEAMLESS_NOT_ALLOWED 或 EX_NOT_POSSIBLE 拒绝时会停在 desired 不前进。结果判读：HasDesiredMode 长期为 1 说明卡在约束或拒绝；ActiveModeFps 已变但 RenderRateFps 没跟上，说明刷新率切了而 App 提交节拍没跟上；PendingModeFps 有值说明切换在排程中。做法：用 Perfetto 观察四个计数器随时间的变化，与投票 API 调用时刻对齐，区分「没投票」「投了没生效」「生效了没用上」三类问题。
-
-**Q13: 说「VSync」时到底指哪个：VBlank、TE、HWC 回调，还是 App 收到的 VSync？**
-
-这是四个不同层的概念：VBlank 是扫描消隐期的物理时窗，TE 是面板向 SoC 发出的 tearing effect 信号，HWC VSync 是 HAL 层向 SF 上报的回调事件，App/SF 的 VSync 是 EventThread 基于预测模型派发的软件唤醒时刻。机制上，物理层的 VBlank 与 TE 提供真实节拍来源，硬件 VSync 回调（HWC onVsync）把真实节拍送给 SF 用于校准预测模型，预测器再为 app 与 sf 两条 EventThread 各自派发相位可配置的软件 VSync；App 在 frameTimeNanos 里拿到的是预测值而非硬件中断时间。边界：混用这四个词会让延迟分析差出半个周期甚至整周期；判断对齐关系时「硬件回调是真值、App 时间戳是预测值」。做法：分析抖动先把 HWC VSync 回调时间线作为基准，再看 App 帧时间戳相对它的偏差，而不是直接拿 frameTimeNanos 自比。
 
 **Q14: Android 17 的 VSync 预测由哪些组件组成，各组件的边界条件是什么？**
 

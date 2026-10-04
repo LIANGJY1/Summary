@@ -2,6 +2,8 @@
 
 2026-10-03 目录重构：01–05 册文件名改为英文 kebab-case（01-aosp-audio 等），原 11 册「一路 PCM 控制面/数据面」与原 03 册同题，现已合并入 04 册 Q2 答案（设备面表述保留）。学习主线以 AAOS 13 为基线，从“点击音和媒体怎么共存”沿应用、焦点服务、车机策略、路由、混音、HAL 到排障逐级深入。每册 Q 序列即册内学习顺序，适合 atlas 同源读取。06–12 册扩展焦点与播放专题，13 册单列蓝牙缺陷案例；01–05 册保留 AOSP、手机侧焦点、车载音频、延迟和蓝牙基础，不重复搬运正文。
 
+2026-10-04 全库顺序重排复核：本目录仍为 09-audio，01–13 册编号及下列 06–12 连续学习链保持不变。
+
 1. [06-音效与音源决策](06-audio-decisions.md)：先分清普通点击、媒体、导航和安全声音；回答“混声还是抢占”的条件。
 2. [07-应用焦点契约](07-focus-api.md)：AudioManager/AudioAttributes/AudioFocusRequest 的职责、短音申请示例、失焦和延迟处理。
 3. [08-焦点系统调用链](08-focus-flow.md)：应用 → AudioService/MediaFocusControl → 外部 AudioPolicy → CarZonesAudioFocus/CarAudioFocus。

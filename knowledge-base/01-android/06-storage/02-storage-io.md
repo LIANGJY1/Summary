@@ -68,74 +68,73 @@ f2fs 采用日志结构设计围绕闪存负载组织写入：out-of-place updat
 
 这里的"原子"指一批文件页修改在崩溃恢复时要么全部可见、要么全部不可见，不代表写入没有 I/O 等待。设备文件系统（`/data` 是 ext4 还是 f2fs）与运行时 journal mode 都需要单独确认，编译开关存在不能推断每个事务都走 F2FS 原子写。业务层更稳的优化仍是减少事务数量、合并提交与避免主线程等待，而不是依赖某个文件系统特性。（`external/sqlite` 不在本地 AAOS13 树核对范围，转写自源材料。）
 
-**Q12: SharedPreferences.apply() 明明是异步写盘，为什么官方文档仍警告它可能造成 ANR？**
-
-因为框架保证 `apply()` 的在途写盘在组件状态切换（Activity/Service 启停）之前完成，pending 的 `apply()` 会在生命周期切换点阻塞主线程，这是官方文档点名的常见 ANR 来源。机制链条：`apply()` 先 `commitToMemory()` 更新内存并把等待本次落盘的 finisher 登记到 `QueuedWork`，然后把整份 XML 写盘任务排队；Activity 停止、Service 命令处理等收尾点调用 `QueuedWork.waitToFinish()`，主线程可能直接执行尚未开始的写盘（`processPendingWork()` 在调用线程逐个运行），也可能等待已开始的写盘（finisher 内 `await` latch）。
-
-本地 AAOS13 源码核对：`QueuedWork.waitToFinish()`/`processPendingWork()`、前台优先级的 `"queued-work-looper"` HandlerThread、`sFinishers` 队列均存在；`MAX_FSYNC_DURATION_MILLIS = 256` 与 `MAX_WAIT_TIME_MILLIS = 512` 只是输出直方图的观测阈值，不会取消写盘也不会阻止 ANR。另一个容易忽略的点：`commit()` 在有未完成 `apply()` 时也会被阻塞到全部异步提交完成——"commit 只影响自己"不成立。
-
-**Q13: SharedPreferences 首次 getXxx() 为什么可能卡住主线程，Android 13 与 Android 17 的加载线程实现有什么不同？**
-
-SP 对象构造后由后台线程异步解析 XML，但 `getString()`、`getInt()`、`contains()`、`getAll()` 甚至 `edit()` 都先走 `awaitLoadedLocked()`，未加载完成时调用线程在 `mLock.wait()` 等待——即使文件 I/O 发生在另一条线程，主线程仍可能在首次访问处被拉住。等待通常被这些因素放大：XML 文件较大或 key 多、同一进程同时首次打开多份 SP、冷启动阶段 DEX 与资源 I/O 竞争、`/data` 正在回写或 F2FS GC。
-
-版本差异已按本地 AAOS13 源码（`SharedPreferencesImpl.java`）核对：Android 13 的 `startLoadFromDisk()` 每次新建名为 `"SharedPreferencesImpl-load"` 的线程执行加载；材料按 Android 17 核对的实现改为单工作线程执行器（`corePoolSize = 0`、`maximumPoolSize = 1`，线程名 `"SharedPreferences"`），Android 13 尚无该执行器。两个版本共有的边界：`ContextImpl` 按包名与文件路径缓存实例，同一进程重复 `getSharedPreferences()` 不会重复加载；"在 Application 里提前 `getSharedPreferences()`"只能提前创建对象并安排加载，紧接着读取 key 仍可能进入等待。
-
-**Q14: commit() 与 apply() 的差异是什么，一次有效写入在磁盘上做了什么？**
-
-`commit()` 等待对应写盘结束并返回 boolean（结果不带失败原因），`apply()` 立即返回 void 且调用方无法得知序列化、`fsync()` 或重命名是否失败；两者都先更新内存，内存可见性相同。所以写入重要安全状态时不能只凭"内存已经读到新值"判断持久化成功。
-
-一次有效写盘的步骤：检查内存状态版本号与磁盘版本号确认需要写 → 把原文件重命名为 `.bak` → 创建新 XML 并整体序列化当前 map（SP 没有按 key 的增量更新，只改一个布尔值也可能重写整份文件）→ 对文件描述符执行同步刷新 → 更新权限与时间戳记录 → 成功后删除 `.bak` 并释放 latch，失败则删除不完整新文件、保留备份供下次加载恢复。这套备份协议降低写入中途退出留下半份 XML 的风险，但源码没有在每次替换后同步父目录，不能描述成任意掉电条件下的绝对事务。耗时由文件大小、序列化成本、`fsync()` 延迟与前序队列长度共同决定。
-
-**Q15: 哪些组件收尾点会触发 QueuedWork 等待，BroadcastReceiver 的完成回执为什么会被 SP 拖慢？**
-
-本地 AAOS13 源码（`ActivityThread.java`）核对的四类路径：`handleStopActivity()` 无条件调用 `QueuedWork.waitToFinish()`，这是现代 Activity 的主路径；`handlePauseActivity()` 仅在 `isPreHoneycomb()`（targetSdkVersion < API 11）时调用，所以"现代应用在 onPause 等 SP"不成立；`handleServiceArgs()` 与 `handleStopService()` 在 Service 命令处理和销毁清理后等待。
-
-BroadcastReceiver 的 `PendingResult.finish()` 不直接调用 `waitToFinish()`：本地源码核对，发现 `QueuedWork.hasPendingWork()` 时，它把 `sendFinished()` 经 `QueuedWork.queue()` 排到队尾。结果是 `onReceive()` 返回不代表系统已收到完成回执——队列前面的 SP 写盘过慢，AMS 收到回执的时间随之推迟，广播超时风险上升。排查广播类 ANR 时不一定看到主线程停在 `waitToFinish()` 的栈，应检查完成回执被排队推迟的时间线。
-
-**Q16: DataStore 的 edit() 返回意味着什么，它比 SharedPreferences 强在哪、仍然贵在哪？**
-
-`edit()`/`updateData()` 是挂起 API，正常返回表示更新已经走完 DataStore 的串行更新与持久化路径（写入 `<file>.tmp`、`sync()`、原子替换目标文件），失败则异常回到调用方协程；挂起期间不占用线程。默认工厂使用 `Dispatchers.IO + SupervisorJob()`，磁盘 I/O 与更新任务在 I/O 调度器执行并隔离子任务失败——不能把 `edit()` 放进无人管理的协程作用域后立即把业务标记为成功。
-
-它强在非阻塞 API、事务化更新、错误传播与一致性语义；贵在全量序列化：DataStore 不支持字段级磁盘更新，任意字段改变都会把整个对象完整序列化并持久化（Preferences 用 protobuf 编码键值集合，Proto 用应用定义 schema），首次收集还要完成初始化、迁移与首次读盘，所以不适合不断增长的大数据集。硬性约束：同一文件在同一进程只能有一个活跃 DataStore 实例，重复创建会触发 `IllegalStateException`；顶层 `by preferencesDataStore` 委托是方便的单例组织方式，但多个指向同一文件的委托同样是错的。DataStore 行为以应用依赖的 AndroidX 版本为准，平台升级不会自动升级库行为。
-
-**Q17: 多进程共享一个 DataStore 文件需要什么条件，它的跨进程一致性靠什么实现？**
-
-条件：从 DataStore 1.1.0 起，所有共享该文件的进程必须使用 `MultiProcessDataStoreFactory` 并指向规范化后的同一文件路径；单进程与多进程工厂混用同一文件不受支持；每进程仍只保留一个实例，transform 返回的数据对象必须不可变。
-
-AndroidX 1.2.1 的 Android 实现由三类机制协同：`<file>.lock` 用 `FileChannel` 文件锁协调跨进程读写（进程内另有协程 Mutex）；`<file>.version` 是 JNI 映射到多个进程的共享计数器，用原子整数记录版本；`FileObserver` 监听 `MOVED_TO` 事件，在目标文件被临时文件替换时提醒其他进程检查版本并刷新。写入顺序是先递增共享版本、再写临时文件、`sync()` 后原子替换——版本先递增是刻意设计，避免"文件已替换但进程在递增版本前退出"导致其他进程长期认为缓存最新。边界：`FileObserver` 只在目标进程存在活跃 `data` Flow collector 时用于唤醒刷新，collector 归零后观察停止，它不是必达的事件日志；transform 位于跨进程独占锁范围内，应保持短小、确定且无副作用。单靠文件锁不能构成跨进程事务，版本、锁与文件观察器必须一起工作。
-
-**Q18: 共享存储的读写为什么会牵扯 MediaProvider，应用私有目录也一样吗？**
-
-不一样。Android 11 起 MediaProvider 充当用户态 FUSE handler：对 `/storage/emulated` 的请求要经过它执行 scoped storage 权限检查，允许、拒绝或按策略对访问结果脱敏后再向下转发，因此 App 线程的 I/O 等待可能与 MediaProvider 的 FUSE worker 活动对齐；应用私有目录（`/data/user/<user_id>/<package>/`）不在这条 FUSE 挂载路径中，只在 App 内部使用的数据放内部存储最直接。
-
-诊断含义：仅凭 App 的 I/O wait 无法判断请求是否经过 FUSE，要结合 MediaProvider 日志、产品属性、内核 capability 与调用路径；未使用 passthrough 时，trace 可能表现为 App 线程等待并与 MediaProvider 的 FUSE worker 活动对齐。因此"私有数据混进共享存储"不只是权限问题，还会把一条额外的用户态转发与权限检查路径引入 I/O 模型，分析时要与共享媒体访问分开建模。
-
-**Q19: FUSE passthrough 是什么，direct file path 与 MediaStore 应该怎么选？**
-
-FUSE passthrough（Android 12 引入）允许 FUSE driver 在 `open()` 通过权限与脱敏（redaction）检查后，把后续读写直接转发到底层文件系统，绕过用户态数据搬运；能否启用取决于 official kernel、MediaProvider 实现与产品属性——FuseDaemon 会检查 passthrough 属性、内核 capability 以及文件是否需要 redaction/transform，`persist.sys.fuse.passthrough.enable` 类产品属性是前置条件之一。MediaStore API、Android 11 direct file path、FUSE passthrough 与 FUSE BPF 分属四个不同层次，不要混为一谈。
-
-direct file path（Android 11）解决的是 API 兼容：取得相应权限后可用 `File` API 或 `fopen()` 访问共享媒体，兼容大量第三方媒体库与 native 栈。选择依据是访问模式：顺序读取时 direct file path 与 MediaStore 性能接近；随机读写时 direct file path 可能慢到接近 2 倍，重度随机访问更适合继续使用 MediaStore 完成索引与权限判定。它解决兼容问题，不等于天然绕过 FUSE。
-
-**Q20: 共享存储的版本断点有哪些，排查时为什么必须先确认设备首发版本？**
-
-关键断点：Android 10 引入 scoped storage（允许兼容机制暂缓迁移），shared media 访问要区分 MediaProvider API 与当时的 SDCardFS/存储模拟路径；Android 11 起 target API 30 及以上强制遵循 scoped storage，MediaProvider 成为 FUSE handler 并支持 direct file path，首发 Android 11 且内核 5.4+ 的设备不再使用 SDCardFS；Android 12 首发设备配合 official kernel 可启用 FUSE passthrough；从旧版本升级的设备可能在 SDCardFS 上叠加 FUSE，Android 15–17 延续 Android 12+ 的主要模型。
-
-排查"共享媒体访问慢"必须先确认首发版本、MediaProvider 模块版本、设备内核与产品属性，因为同名现象在不同版本上发生在不同层：Android 10 的瓶颈可能在 SDCardFS 与存储模拟，Android 11 可能在 FUSE 权限检查，Android 12+ 则要先确认 passthrough 是否启用再判断瓶颈位置。应用私有目录不受这条版本断点影响，始终不经过 FUSE。
-
-**Q21: FBE 加密会拖慢存储性能吗？**
-
-取决于设备的加密硬件路径：支持 inline encryption 的设备由 UFS/eMMC 主机控制器在数据往返存储器件的路径上执行块加解密，FBE 额外带来的 CPU 成本通常不大；缺少这类硬件能力时，软件 fallback 会让 CPU 承担加解密工作，成本随内核配置（如 `CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK`）与 fstab 决定的运行时路径变化。
-
-排查时不能只问"会不会慢"：要检查 `dm-default-key` 是否启用（metadata encryption 与 FBE 是两层）、vold 与内核日志是否出现解锁重试、块层等待是否与加密阶段重合；inline crypto 也会受 keyslot 编程、host reset、队列与内存带宽影响。最小验证包含 userdata 的 fstab `fileencryption=` 选项、`dmctl table userdata`、内核配置与加密测试，再把 CPU 活动与 block trace 对齐。本组 vold/内核配置细节转写自源材料（vold 与内核不在本地 AAOS13 树核对范围）。
-
-**Q22: Android SharedPreferences 适合保存什么数据，如何读取一个键值？**
+**Q12: Android SharedPreferences 适合保存什么数据，如何读取一个键值？**
 
 SharedPreferences 适合保存少量、简单的键值设置，例如用户偏好和轻量配置；它提供字符串、布尔值、整数、长整数、浮点数和字符串集合等类型读取接口。读取时要使用与写入值匹配的类型，并提供合理默认值；它不适合保存大列表、复杂对象、密钥或需要关系查询的数据。
 
 通过 `Context.getSharedPreferences(name, MODE_PRIVATE)` 获取命名文件对应的实例，再调用 `getString()`、`getBoolean()` 等方法按键读取。缓存与加载行为的线程边界见 [存储与 I/O](02-storage-io.md)；多进程应用不能把多个进程各自缓存的 SP 当成一致性存储。
 
-**Q23: SharedPreferences 如何写入数据并监听键值变化？**
+**Q13: SharedPreferences 如何写入数据并监听键值变化？**
 
 调用 `edit()` 获取 Editor，使用 `putXxx()` 修改键值，再调用 `apply()` 或 `commit()` 提交。`apply()` 立即更新内存并异步安排持久化，不返回磁盘成功状态；`commit()` 等待写盘并返回成功与否，因此不应在主线程对可能耗时的写入使用 `commit()`。
 
 `registerOnSharedPreferenceChangeListener()` 可监听键值变化，使用完应调用对应注销方法。监听器生命周期应由持有它的页面或组件管理，避免长期注册后继续引用已结束对象。
+**Q14: SharedPreferences.apply() 明明是异步写盘，为什么官方文档仍警告它可能造成 ANR？**
+
+因为框架保证 `apply()` 的在途写盘在组件状态切换（Activity/Service 启停）之前完成，pending 的 `apply()` 会在生命周期切换点阻塞主线程，这是官方文档点名的常见 ANR 来源。机制链条：`apply()` 先 `commitToMemory()` 更新内存并把等待本次落盘的 finisher 登记到 `QueuedWork`，然后把整份 XML 写盘任务排队；Activity 停止、Service 命令处理等收尾点调用 `QueuedWork.waitToFinish()`，主线程可能直接执行尚未开始的写盘（`processPendingWork()` 在调用线程逐个运行），也可能等待已开始的写盘（finisher 内 `await` latch）。
+
+本地 AAOS13 源码核对：`QueuedWork.waitToFinish()`/`processPendingWork()`、前台优先级的 `"queued-work-looper"` HandlerThread、`sFinishers` 队列均存在；`MAX_FSYNC_DURATION_MILLIS = 256` 与 `MAX_WAIT_TIME_MILLIS = 512` 只是输出直方图的观测阈值，不会取消写盘也不会阻止 ANR。另一个容易忽略的点：`commit()` 在有未完成 `apply()` 时也会被阻塞到全部异步提交完成——"commit 只影响自己"不成立。
+
+**Q15: SharedPreferences 首次 getXxx() 为什么可能卡住主线程，Android 13 与 Android 17 的加载线程实现有什么不同？**
+
+SP 对象构造后由后台线程异步解析 XML，但 `getString()`、`getInt()`、`contains()`、`getAll()` 甚至 `edit()` 都先走 `awaitLoadedLocked()`，未加载完成时调用线程在 `mLock.wait()` 等待——即使文件 I/O 发生在另一条线程，主线程仍可能在首次访问处被拉住。等待通常被这些因素放大：XML 文件较大或 key 多、同一进程同时首次打开多份 SP、冷启动阶段 DEX 与资源 I/O 竞争、`/data` 正在回写或 F2FS GC。
+
+版本差异已按本地 AAOS13 源码（`SharedPreferencesImpl.java`）核对：Android 13 的 `startLoadFromDisk()` 每次新建名为 `"SharedPreferencesImpl-load"` 的线程执行加载；材料按 Android 17 核对的实现改为单工作线程执行器（`corePoolSize = 0`、`maximumPoolSize = 1`，线程名 `"SharedPreferences"`），Android 13 尚无该执行器。两个版本共有的边界：`ContextImpl` 按包名与文件路径缓存实例，同一进程重复 `getSharedPreferences()` 不会重复加载；"在 Application 里提前 `getSharedPreferences()`"只能提前创建对象并安排加载，紧接着读取 key 仍可能进入等待。
+
+**Q16: commit() 与 apply() 的差异是什么，一次有效写入在磁盘上做了什么？**
+
+`commit()` 等待对应写盘结束并返回 boolean（结果不带失败原因），`apply()` 立即返回 void 且调用方无法得知序列化、`fsync()` 或重命名是否失败；两者都先更新内存，内存可见性相同。所以写入重要安全状态时不能只凭"内存已经读到新值"判断持久化成功。
+
+一次有效写盘的步骤：检查内存状态版本号与磁盘版本号确认需要写 → 把原文件重命名为 `.bak` → 创建新 XML 并整体序列化当前 map（SP 没有按 key 的增量更新，只改一个布尔值也可能重写整份文件）→ 对文件描述符执行同步刷新 → 更新权限与时间戳记录 → 成功后删除 `.bak` 并释放 latch，失败则删除不完整新文件、保留备份供下次加载恢复。这套备份协议降低写入中途退出留下半份 XML 的风险，但源码没有在每次替换后同步父目录，不能描述成任意掉电条件下的绝对事务。耗时由文件大小、序列化成本、`fsync()` 延迟与前序队列长度共同决定。
+
+**Q17: 哪些组件收尾点会触发 QueuedWork 等待，BroadcastReceiver 的完成回执为什么会被 SP 拖慢？**
+
+本地 AAOS13 源码（`ActivityThread.java`）核对的四类路径：`handleStopActivity()` 无条件调用 `QueuedWork.waitToFinish()`，这是现代 Activity 的主路径；`handlePauseActivity()` 仅在 `isPreHoneycomb()`（targetSdkVersion < API 11）时调用，所以"现代应用在 onPause 等 SP"不成立；`handleServiceArgs()` 与 `handleStopService()` 在 Service 命令处理和销毁清理后等待。
+
+BroadcastReceiver 的 `PendingResult.finish()` 不直接调用 `waitToFinish()`：本地源码核对，发现 `QueuedWork.hasPendingWork()` 时，它把 `sendFinished()` 经 `QueuedWork.queue()` 排到队尾。结果是 `onReceive()` 返回不代表系统已收到完成回执——队列前面的 SP 写盘过慢，AMS 收到回执的时间随之推迟，广播超时风险上升。排查广播类 ANR 时不一定看到主线程停在 `waitToFinish()` 的栈，应检查完成回执被排队推迟的时间线。
+
+**Q18: DataStore 的 edit() 返回意味着什么，它比 SharedPreferences 强在哪、仍然贵在哪？**
+
+`edit()`/`updateData()` 是挂起 API，正常返回表示更新已经走完 DataStore 的串行更新与持久化路径（写入 `<file>.tmp`、`sync()`、原子替换目标文件），失败则异常回到调用方协程；挂起期间不占用线程。默认工厂使用 `Dispatchers.IO + SupervisorJob()`，磁盘 I/O 与更新任务在 I/O 调度器执行并隔离子任务失败——不能把 `edit()` 放进无人管理的协程作用域后立即把业务标记为成功。
+
+它强在非阻塞 API、事务化更新、错误传播与一致性语义；贵在全量序列化：DataStore 不支持字段级磁盘更新，任意字段改变都会把整个对象完整序列化并持久化（Preferences 用 protobuf 编码键值集合，Proto 用应用定义 schema），首次收集还要完成初始化、迁移与首次读盘，所以不适合不断增长的大数据集。硬性约束：同一文件在同一进程只能有一个活跃 DataStore 实例，重复创建会触发 `IllegalStateException`；顶层 `by preferencesDataStore` 委托是方便的单例组织方式，但多个指向同一文件的委托同样是错的。DataStore 行为以应用依赖的 AndroidX 版本为准，平台升级不会自动升级库行为。
+
+**Q19: 多进程共享一个 DataStore 文件需要什么条件，它的跨进程一致性靠什么实现？**
+
+条件：从 DataStore 1.1.0 起，所有共享该文件的进程必须使用 `MultiProcessDataStoreFactory` 并指向规范化后的同一文件路径；单进程与多进程工厂混用同一文件不受支持；每进程仍只保留一个实例，transform 返回的数据对象必须不可变。
+
+AndroidX 1.2.1 的 Android 实现由三类机制协同：`<file>.lock` 用 `FileChannel` 文件锁协调跨进程读写（进程内另有协程 Mutex）；`<file>.version` 是 JNI 映射到多个进程的共享计数器，用原子整数记录版本；`FileObserver` 监听 `MOVED_TO` 事件，在目标文件被临时文件替换时提醒其他进程检查版本并刷新。写入顺序是先递增共享版本、再写临时文件、`sync()` 后原子替换——版本先递增是刻意设计，避免"文件已替换但进程在递增版本前退出"导致其他进程长期认为缓存最新。边界：`FileObserver` 只在目标进程存在活跃 `data` Flow collector 时用于唤醒刷新，collector 归零后观察停止，它不是必达的事件日志；transform 位于跨进程独占锁范围内，应保持短小、确定且无副作用。单靠文件锁不能构成跨进程事务，版本、锁与文件观察器必须一起工作。
+
+**Q20: 共享存储的读写为什么会牵扯 MediaProvider，应用私有目录也一样吗？**
+
+不一样。Android 11 起 MediaProvider 充当用户态 FUSE handler：对 `/storage/emulated` 的请求要经过它执行 scoped storage 权限检查，允许、拒绝或按策略对访问结果脱敏后再向下转发，因此 App 线程的 I/O 等待可能与 MediaProvider 的 FUSE worker 活动对齐；应用私有目录（`/data/user/<user_id>/<package>/`）不在这条 FUSE 挂载路径中，只在 App 内部使用的数据放内部存储最直接。
+
+诊断含义：仅凭 App 的 I/O wait 无法判断请求是否经过 FUSE，要结合 MediaProvider 日志、产品属性、内核 capability 与调用路径；未使用 passthrough 时，trace 可能表现为 App 线程等待并与 MediaProvider 的 FUSE worker 活动对齐。因此"私有数据混进共享存储"不只是权限问题，还会把一条额外的用户态转发与权限检查路径引入 I/O 模型，分析时要与共享媒体访问分开建模。
+
+**Q21: FUSE passthrough 是什么，direct file path 与 MediaStore 应该怎么选？**
+
+FUSE passthrough（Android 12 引入）允许 FUSE driver 在 `open()` 通过权限与脱敏（redaction）检查后，把后续读写直接转发到底层文件系统，绕过用户态数据搬运；能否启用取决于 official kernel、MediaProvider 实现与产品属性——FuseDaemon 会检查 passthrough 属性、内核 capability 以及文件是否需要 redaction/transform，`persist.sys.fuse.passthrough.enable` 类产品属性是前置条件之一。MediaStore API、Android 11 direct file path、FUSE passthrough 与 FUSE BPF 分属四个不同层次，不要混为一谈。
+
+direct file path（Android 11）解决的是 API 兼容：取得相应权限后可用 `File` API 或 `fopen()` 访问共享媒体，兼容大量第三方媒体库与 native 栈。选择依据是访问模式：顺序读取时 direct file path 与 MediaStore 性能接近；随机读写时 direct file path 可能慢到接近 2 倍，重度随机访问更适合继续使用 MediaStore 完成索引与权限判定。它解决兼容问题，不等于天然绕过 FUSE。
+
+**Q22: 共享存储的版本断点有哪些，排查时为什么必须先确认设备首发版本？**
+
+关键断点：Android 10 引入 scoped storage（允许兼容机制暂缓迁移），shared media 访问要区分 MediaProvider API 与当时的 SDCardFS/存储模拟路径；Android 11 起 target API 30 及以上强制遵循 scoped storage，MediaProvider 成为 FUSE handler 并支持 direct file path，首发 Android 11 且内核 5.4+ 的设备不再使用 SDCardFS；Android 12 首发设备配合 official kernel 可启用 FUSE passthrough；从旧版本升级的设备可能在 SDCardFS 上叠加 FUSE，Android 15–17 延续 Android 12+ 的主要模型。
+
+排查"共享媒体访问慢"必须先确认首发版本、MediaProvider 模块版本、设备内核与产品属性，因为同名现象在不同版本上发生在不同层：Android 10 的瓶颈可能在 SDCardFS 与存储模拟，Android 11 可能在 FUSE 权限检查，Android 12+ 则要先确认 passthrough 是否启用再判断瓶颈位置。应用私有目录不受这条版本断点影响，始终不经过 FUSE。
+
+**Q23: FBE 加密会拖慢存储性能吗？**
+
+取决于设备的加密硬件路径：支持 inline encryption 的设备由 UFS/eMMC 主机控制器在数据往返存储器件的路径上执行块加解密，FBE 额外带来的 CPU 成本通常不大；缺少这类硬件能力时，软件 fallback 会让 CPU 承担加解密工作，成本随内核配置（如 `CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK`）与 fstab 决定的运行时路径变化。
+
+排查时不能只问"会不会慢"：要检查 `dm-default-key` 是否启用（metadata encryption 与 FBE 是两层）、vold 与内核日志是否出现解锁重试、块层等待是否与加密阶段重合；inline crypto 也会受 keyslot 编程、host reset、队列与内存带宽影响。最小验证包含 userdata 的 fstab `fileencryption=` 选项、`dmctl table userdata`、内核配置与加密测试，再把 CPU 活动与 block trace 对齐。本组 vold/内核配置细节转写自源材料（vold 与内核不在本地 AAOS13 树核对范围）。

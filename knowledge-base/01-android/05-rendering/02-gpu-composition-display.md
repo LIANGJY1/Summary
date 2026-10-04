@@ -26,29 +26,29 @@ ANGLE 把 GLES/EGL 调用翻译到 Vulkan 等 backend，应用仍提交 GLES 状
 
 它返回 `[0, 100]` 的 GPU 容量余量估计（API 36），0 表示系统无法再提供更多 GPU 资源；暂时无数据时返回 `Float.NaN`，设备不支持时抛 `UnsupportedOperationException`。官方文档说明每次有效调用至少包含一次同步 Binder transaction，可能超过 1 ms，首次调用或更换参数还可能因延迟初始化更慢，所以不能在 UI 线程、RenderThread 或关键 render loop 中调用或等待。正确做法是放到后台 executor，并用 `getGpuHeadroomMinIntervalMillis()` 读取设备声明的最小采样间隔，保证相邻查询不短于该值——调用频率高于该间隔时可能返回缓存结果。Headroom 是容量估计，不能区分片元、顶点或带宽瓶颈，也不表示某一帧的 GPU duration，应结合系统 thermal status、帧时间、GPU counter 与业务画质档位使用。
 
-**Q7: BufferQueue 的 slot 状态机里，"FREE"和"可以安全写入"是两个时间点吗？为什么 `releaseBuffer()` 不先等 fence signal？**
+**Q7: acquire、release、present 三类 fence 分别约束什么？同一条 fence 为什么会有不同名字？**
+
+三类是按接口角色命名的同步边界：acquire fence 由 Producer 随新 buffer 提交，约束 Consumer/SF/HWC 何时可以读取；release fence 由 Consumer 释放旧 buffer 时返回，约束 Producer 何时可以复用；present fence 由 HWC present 按显示、按帧返回给 SF，是本轮显示提交的完成边界（物理屏是出现在屏幕上的完成点，虚拟显示是 output buffer 可安全读取）。名字随观察方变化：`queueBuffer()` 携带的生产完成 fence 在 `QueueBufferInput` 里叫 acquireFence，Producer 侧常称 GPU completion fence；`dequeueBuffer()` 返回的上一位 Owner fence 在 EGL/Vulkan 代码里叫 dequeue fence，站在 Producer 即将写入的视角就是 consumer release fence——描述语义时要注明观察方。边界方面：present fence 很接近显示完成但不是面板光学测量值，不能代替输入到显示延迟测试；fence signal 是单向状态变化，已 signal 不会回到 pending；`sync_file_info.status` 小于 0 表示 error，等待结束不代表 GPU 输出内容有效。`Fence::merge()`（内部 `sync_merge()`）适合表达"等待所有前置工作"，但不应为省一个 fd 而合并无关 fence，那会扩大等待范围并掩盖最慢依赖。
+
+**Q8: BufferQueue 的 slot 状态机里，"FREE"和"可以安全写入"是两个时间点吗？为什么 `releaseBuffer()` 不先等 fence signal？**
 
 是两个时间点。Android 17 的 `BufferState` 用 dequeue/queue/acquire 计数器加 shared 标志表达状态，普通单 Producer、单 Consumer 路径呈 FREE → dequeue → DEQUEUED → queue → QUEUED → acquire → ACQUIRED → release → FREE 循环；`releaseBuffer()` 把 slot 放回 FREE 集合并保存 release fence，无需先等 fence 完成。下一次 Producer 可能马上 dequeue 到该 slot，同时取得尚未 signal 的 fence，写入前必须等待它或把它导入 GPU 依赖。这样设计把所有权与异步访问解耦：slot 状态描述"所有权归谁"，fence 描述"旧读何时结束"；不等 fence 先归还，可以让 Consumer 不被阻塞、buffer 更快回到可选集合。诊断时要用 `isFree()`、`isDequeued()`、`isQueued()`、`isAcquired()`、`isShared()` 判断当前源码，不能套用旧版互斥 enum；shared buffer mode 下 `mShared` 与各计数可并存且可大于 1，状态不再总是四选一。
 
-**Q8: "这个 Surface 是三缓冲的"在 Android 17 上为什么不是固定结论？**
+**Q9: "这个 Surface 是三缓冲的"在 Android 17 上为什么不是固定结论？**
 
 buffer 数量由运行时协商决定，"三缓冲"只适合描述常见工作形态。maxBufferCount 约束为 maxAcquiredBufferCount 加 maxDequeuedBufferCount，async 或不可阻塞模式再加 1，最终还受 `mMaxBufferCount` 上限限制；Android 17 的 `BLASTBufferQueue::initialize()` 给 Producer 默认 `setMaxDequeuedBufferCount(2)`，并向 SurfaceComposer 查询最大刷新率下建议的 acquired 数——SurfaceFlinger 按 present latency 与刷新周期计算建议值，其 release 信息还携带当前刷新率对应的 acquired 数。实际可用深度还取决于 DEQUEUED、QUEUED、ACQUIRED 的实时数量、BLAST 暂存的 pending release、buffer 是否需要重分配、release fence 的完成时间。另外 `BufferQueueCore` 默认准备 64 个 slot 索引，分布在 mFreeSlots（未绑定 buffer）、mFreeBuffers（仍绑定旧 buffer）、mUnusedSlots、mActiveBuffers 四类容器——64 是索引容量，不代表已分配 64 块内存；普通 `dequeueBuffer()` 优先复用 mFreeBuffers 里已分配的对象，无可复用对象且允许分配时才在 mFreeSlots 上创建新 `GraphicBuffer`。所以看到三个 buffer 只能说"三缓冲工作形态"，不能反推所有 Surface 都固定三块，也不能把 slot 复用当作 vendor 显存池。
 
-**Q9: 标准 App Window 的 `dequeueBuffer()` 变长时，Android 17 有哪几种不同的等待原因？各返回什么？**
+**Q10: 标准 App Window 的 `dequeueBuffer()` 变长时，Android 17 有哪几种不同的等待原因？各返回什么？**
 
 至少区分三种结果：一是历史标志已入队且 dequeued 数达到上限，直接返回 `INVALID_OPERATION`——这是调用状态不合法，不需要等待 Consumer release；二是没有满足条件的 free slot，async/non-blocking 模式下返回 `WOULD_BLOCK`，其余进入等待，配置超时时可能返回 `TIMED_OUT`；三是真正在等 Consumer 释放。把三者都归为"背压"会得出错误结论——背压专指下游消费不及使上游不能继续生产，需要返回码、Surface 模式、slot 数量与 Consumer 进度共同证明。标准 App Window 还要按 BLAST 专属路径分析：Android 17 的 `BBQBufferQueueProducer::waitForBufferRelease()` 释放 core mutex 后，用 epoll 在 `BufferReleaseChannel` 上同时监听 SF 的 buffer release 消息与本地 interrupt，而不是经典 `mDequeueCondition` 条件变量；release callback 携带 `ReleaseCallbackId`、release fence 与当前刷新率的 acquired 数。因此一条较长的 dequeue slice 不能只按 `mCore->mMutex` 被占用来解释，通用 BufferQueue 与 BLAST 的等待方式要分开分析。
 
-**Q10: `queueBuffer()` 返回之后到画面显示之间还剩哪些步骤？"BufferTX 增加"能证明新内容被显示了吗？**
+**Q11: `queueBuffer()` 返回之后到画面显示之间还剩哪些步骤？"BufferTX 增加"能证明新内容被显示了吗？**
 
 `queueBuffer()` 只完成 Producer 侧提交，其后还可能发生：GPU 继续执行写入命令；App 进程内的 BLAST acquire `BufferItem`，再用 `Transaction::setBuffer()` 把 buffer、acquire fence、frame number 打包进 SurfaceControl transaction；merge 后 `apply()` 到 SurfaceFlinger；本轮 SF latch 没有采用该 buffer；HWC 尚未 present。所以"App 是 Producer、SF 直接消费 BufferQueue"只适用于历史或独立 Surface 模型——Android 17 标准 App Window 的 Consumer 在 App 进程内的 BLAST，SF 接收的是带 buffer 与 fence 的图层事务。`BufferTX - <layerName>` 计数只说明 SF 记录了一笔 pending buffer update；计数在 latch 或 drop（丢弃更新）后都会下降，仅凭下降不能区分两种结果。确认系统采纳本帧要看目标 layer 的 transaction/latch 与关联 DisplayFrame，最终显示要再看 present fence 与 FrameTimeline 的 actual present。
 
-**Q11: 一张 1080×2400 的 RGBA_8888 buffer 能按 1080×2400×4 字节计算占用吗？跨进程传 GraphicBuffer 会复制像素吗？**
+**Q12: 一张 1080×2400 的 RGBA_8888 buffer 能按 1080×2400×4 字节计算占用吗？跨进程传 GraphicBuffer 会复制像素吗？**
 
 两者都不能。width × height × 4 只是线性紧密排列的下界：实际 allocation 还受 stride（相邻两行起点之间的字节跨度）、对齐、layer count、格式、压缩 modifier、metadata、保护属性与 allocator 实现影响；16 KB page 设备上内核 dma-heap 会把最终长度按页向上对齐，但这发生在 Gralloc 决定 stride 与布局之后，不能反推所有 GraphicBuffer 的 stride 都是 16 KB 倍数。跨进程时 `GraphicBuffer` 走 flatten/unflatten：Binder 传递尺寸、格式、usage 等基础整数与 fd 引用，像素 payload 不复制；接收端 unflatten 校验后调用 `GraphicBufferMapper::importBuffer()` 得到本进程可用的 imported handle，fd 传递成功不等于 import 一定成功（vendor metadata 不兼容、资源不足都可能失败）。BufferQueue 两端按 slot 缓存 buffer，稳定阶段每帧只传 slot、fence 与帧元数据，不重传 handle。分配请求由 `BufferDescriptorInfo`（宽高、layer count、format、usage）驱动，应用应先用 `AHardwareBuffer_isSupported()` 验证 format 与 usage 组合，不要依赖未公开的物理布局；同一 dma-buf 被多进程导入时按进程相加会重复统计，应按 fdinfo/sysfs 中的 inode 去重。
-
-**Q12: acquire、release、present 三类 fence 分别约束什么？同一条 fence 为什么会有不同名字？**
-
-三类是按接口角色命名的同步边界：acquire fence 由 Producer 随新 buffer 提交，约束 Consumer/SF/HWC 何时可以读取；release fence 由 Consumer 释放旧 buffer 时返回，约束 Producer 何时可以复用；present fence 由 HWC present 按显示、按帧返回给 SF，是本轮显示提交的完成边界（物理屏是出现在屏幕上的完成点，虚拟显示是 output buffer 可安全读取）。名字随观察方变化：`queueBuffer()` 携带的生产完成 fence 在 `QueueBufferInput` 里叫 acquireFence，Producer 侧常称 GPU completion fence；`dequeueBuffer()` 返回的上一位 Owner fence 在 EGL/Vulkan 代码里叫 dequeue fence，站在 Producer 即将写入的视角就是 consumer release fence——描述语义时要注明观察方。边界方面：present fence 很接近显示完成但不是面板光学测量值，不能代替输入到显示延迟测试；fence signal 是单向状态变化，已 signal 不会回到 pending；`sync_file_info.status` 小于 0 表示 error，等待结束不代表 GPU 输出内容有效。`Fence::merge()`（内部 `sync_merge()`）适合表达"等待所有前置工作"，但不应为省一个 fd 而合并无关 fence，那会扩大等待范围并掩盖最慢依赖。
 
 **Q13: Android 17 的 SurfaceFlinger 主循环为什么读成 commit/composite？"没有 composite slice"能判为丢帧吗？**
 

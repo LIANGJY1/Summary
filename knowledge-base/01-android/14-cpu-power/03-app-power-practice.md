@@ -1,6 +1,6 @@
 # 功耗优化实践：诊断取证与 App 侧治理
 
-> 学习资料（文章模式沉淀）。主线：功耗侧从"诊断与取证"走到"App 侧治理"——先把掉电感受变成可归因场景，再在后台任务评审、前台服务执行边界、WakeLock/Alarm/WorkManager 组合纪律、定位与传感器会话、后台音频治理、Hybrid/WebView 取舍上逐层治理。源文档：android-internals-wiki §25.1《功耗诊断与 OEM 后台限制》、§25.2《后台功耗与前台服务执行边界》、§25.3《WakeLock、Alarm 与 WorkManager 调度》、§25.4《定位与传感器功耗优化》、§25.5《后台音频、AudioTrack 与 Offload 功耗》、§25.6《Hybrid/WebView 功耗与原生化取舍》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异，工程实践按材料口径转写、不确定处已弱化；FGS 晋升计时器与进程档位、AppRestrictionController、Data Saver 公开口径、AAudio 性能模式、AudioFlinger 无硬化逻辑已按本地 AAOS13 源码核对，Android 14 起新增的 FGS 类型与限时规则、Android 17 音频硬化与 RFCOMM/NFC 变更均晚于 Android 13、已标注，WorkManager/JobScheduler/AlarmManager/蓝牙与音频 Java 框架源码不在本地树、按材料 Android 17（android-17.0.0_r1）锚点转写，Android Vitals WakeLock 口径与 FGS 类型契约按源材料对官方文档（developer.android.com，核对至 2026-08）的锚点转写。功耗模型、BatteryStats 归因管线与 WakeLock 机制层见 [../15-performance/05-power.md](../15-performance/05-power.md)，传感器批处理能效见 [../14-cpu-power/02-energy-efficiency.md](02-energy-efficiency.md)，LE Audio 与音频 Offload/延迟专项见 [../09-audio/](../09-audio/)（原 Q22–Q23 已于 2026-09-28 移入 09-audio/04），本文只写 App 侧治理视角。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：功耗侧从"诊断与取证"走到"App 侧治理"——先把掉电感受变成可归因场景，再在后台任务评审、前台服务执行边界、WakeLock/Alarm/WorkManager 组合纪律、定位与传感器会话、后台音频治理、Hybrid/WebView 取舍上逐层治理。源文档：android-internals-wiki §25.1《功耗诊断与 OEM 后台限制》、§25.2《后台功耗与前台服务执行边界》、§25.3《WakeLock、Alarm 与 WorkManager 调度》、§25.4《定位与传感器功耗优化》、§25.5《后台音频、AudioTrack 与 Offload 功耗》、§25.6《Hybrid/WebView 功耗与原生化取舍》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异，工程实践按材料口径转写、不确定处已弱化；FGS 晋升计时器与进程档位、AppRestrictionController、Data Saver 公开口径、AAudio 性能模式、AudioFlinger 无硬化逻辑已按本地 AAOS13 源码核对，Android 14 起新增的 FGS 类型与限时规则、Android 17 音频硬化与 RFCOMM/NFC 变更均晚于 Android 13、已标注，WorkManager/JobScheduler/AlarmManager/蓝牙与音频 Java 框架源码不在本地树、按材料 Android 17（android-17.0.0_r1）锚点转写，Android Vitals WakeLock 口径与 FGS 类型契约按源材料对官方文档（developer.android.com，核对至 2026-08）的锚点转写。功耗模型、BatteryStats 归因管线与 WakeLock 机制层见 [../15-performance/10-power.md](../15-performance/10-power.md)，传感器批处理能效见 [../14-cpu-power/02-energy-efficiency.md](02-energy-efficiency.md)，LE Audio 与音频 Offload/延迟专项见 [../09-audio/](../09-audio/)（原 Q22–Q23 已于 2026-09-28 移入 09-audio/04），本文只写 App 侧治理视角。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 用户反馈"应用掉电快"，第一步要把感受转换成什么？三类功耗证据各能回答什么？**
 
@@ -40,7 +40,7 @@ FGS 提供用户可感知的持续执行形态：持续通知，以及更高的�
 
 **Q10: WakeLock 和 Alarm 分别解决什么问题？为什么说它们都不是保活接口？**
 
-WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休眠"；Alarm 表达"工作尚未开始，系统到达约定时刻后通知应用"。都不是保活接口：WakeLock 不保证进程存活、不提供后台启动资格，应用 Partial WakeLock 还会被电源策略禁用（Doze、Low Power Standby、cached 状态等，机制与禁用条件见 [../15-performance/05-power.md](../15-performance/05-power.md)）；Alarm 的回调只应做短小分发——AlarmManager 投递广播期间持有的 `*alarm*` WakeLock 只覆盖 `BroadcastReceiver.onReceive()`，方法返回后系统即可释放，接收器里启动异步工作应把输入持久化并交给 WorkManager，不能依赖系统锁继续保护后续工作。配置错误的代价：持锁范围过大会阻止系统进入低功耗状态，唤醒型 Alarm 过密增加设备唤醒次数，无资格的精确 Alarm 调用时抛 `SecurityException`。持锁的所有权、超时与释放规范（稳定标签、`try/finally`、引用计数语义）已在 [../15-performance/05-power.md](../15-performance/05-power.md) 覆盖，此处不重复。
+WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休眠"；Alarm 表达"工作尚未开始，系统到达约定时刻后通知应用"。都不是保活接口：WakeLock 不保证进程存活、不提供后台启动资格，应用 Partial WakeLock 还会被电源策略禁用（Doze、Low Power Standby、cached 状态等，机制与禁用条件见 [../15-performance/10-power.md](../15-performance/10-power.md)）；Alarm 的回调只应做短小分发——AlarmManager 投递广播期间持有的 `*alarm*` WakeLock 只覆盖 `BroadcastReceiver.onReceive()`，方法返回后系统即可释放，接收器里启动异步工作应把输入持久化并交给 WorkManager，不能依赖系统锁继续保护后续工作。配置错误的代价：持锁范围过大会阻止系统进入低功耗状态，唤醒型 Alarm 过密增加设备唤醒次数，无资格的精确 Alarm 调用时抛 `SecurityException`。持锁的所有权、超时与释放规范（稳定标签、`try/finally`、引用计数语义）已在 [../15-performance/10-power.md](../15-performance/10-power.md) 覆盖，此处不重复。
 
 **Q11: AlarmManager 的各 API 怎么选？时间基准与 PendingIntent 身份有哪些坑？**
 
@@ -68,7 +68,7 @@ WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休�
 
 **Q17: 一次性定位、地理围栏还是被动定位，怎么按业务选并守住退出条件？**
 
-按新鲜度与触发语义选：页面只需要一次较新位置用 `getCurrentLocation()`（带取消信号，不为一次查询注册长期回调）；`getLastLocation()` 不主动计算、可能为空或过时，判断新鲜度用 `elapsedRealtimeNanos` 与当前单调时间比较而不是墙上时钟；进入或离开区域用 Geofencing（位置服务统一维护围栏，应用不必周期轮询当前位置）；复用其他客户端已产生的位置用 `PRIORITY_PASSIVE`（不为自己计算位置，可能长期无结果，不能承载时限承诺）。Geofencing 的参数纪律：每应用、每设备用户最多同时 100 个围栏，大量门店先维护城市或商圈级再按用户区域替换；官方建议典型围栏 100–150 米半径以容纳 Wi-Fi 定位误差、`setNotificationResponsiveness()` 取 5 分钟或更大更省电（经验建议，按业务误触成本调整，不写成通用常量）；`DWELL` 事件过滤短暂穿越；围栏经 `PendingIntent` 投递，接收器核对错误码与 transition 类型，功能关闭、账号退出或区域集合改变时按 request ID 或原 `PendingIntent` 移除。边界：Android 8.0 起后台围栏按几分钟量级处理、低响应值不构成及时送达保证；被动定位与围栏仍受后台定位权限约束（权限链见 [../15-performance/05-power.md](../15-performance/05-power.md)）。
+按新鲜度与触发语义选：页面只需要一次较新位置用 `getCurrentLocation()`（带取消信号，不为一次查询注册长期回调）；`getLastLocation()` 不主动计算、可能为空或过时，判断新鲜度用 `elapsedRealtimeNanos` 与当前单调时间比较而不是墙上时钟；进入或离开区域用 Geofencing（位置服务统一维护围栏，应用不必周期轮询当前位置）；复用其他客户端已产生的位置用 `PRIORITY_PASSIVE`（不为自己计算位置，可能长期无结果，不能承载时限承诺）。Geofencing 的参数纪律：每应用、每设备用户最多同时 100 个围栏，大量门店先维护城市或商圈级再按用户区域替换；官方建议典型围栏 100–150 米半径以容纳 Wi-Fi 定位误差、`setNotificationResponsiveness()` 取 5 分钟或更大更省电（经验建议，按业务误触成本调整，不写成通用常量）；`DWELL` 事件过滤短暂穿越；围栏经 `PendingIntent` 投递，接收器核对错误码与 transition 类型，功能关闭、账号退出或区域集合改变时按 request ID 或原 `PendingIntent` 移除。边界：Android 8.0 起后台围栏按几分钟量级处理、低响应值不构成及时送达保证；被动定位与围栏仍受后台定位权限约束（权限链见 [../15-performance/10-power.md](../15-performance/10-power.md)）。
 
 **Q18: 传感器采集会话的注册、交付与注销有哪些必须守住的纪律？（批处理机制之外）**
 
@@ -115,7 +115,7 @@ WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休�
 
 Android 14（targetSdk 34）起前台服务必须在 manifest 声明 `android:foregroundServiceType`，官方类型共 13 种（camera、connectedDevice、dataSync、health、location、mediaPlayback、mediaProjection、microphone、phoneCall、remoteMessaging、shortService、specialUse、systemExempted），每种还需对应的 `FOREGROUND_SERVICE_*` 权限（API 34 新增，normal 级）加用例本身的运行时权限；缺声明直接抛 `MissingForegroundServiceTypeException`。
 
-1. **超时语义**（超时归因的详细展开见 [性能册 ANR 篇](../15-performance/03-anr.md) Q6）：shortService 约 3 分钟且不可重入；Android 15 起 targetSdk 35+ 的 dataSync/mediaProcessing 在 24 小时窗口内累计 6 小时，`onTimeout()` 后数秒内必须 stop，否则抛 `ForegroundServiceDidNotStopInTimeException`——常见误传是"Android 14 六小时"，6 小时是 Android 15 行为；
+1. **超时语义**（超时归因的详细展开见 [性能册 ANR 篇](../15-performance/08-anr.md) Q6）：shortService 约 3 分钟且不可重入；Android 15 起 targetSdk 35+ 的 dataSync/mediaProcessing 在 24 小时窗口内累计 6 小时，`onTimeout()` 后数秒内必须 stop，否则抛 `ForegroundServiceDidNotStopInTimeException`——常见误传是"Android 14 六小时"，6 小时是 Android 15 行为；
 2. **BOOT_COMPLETED 豁免清单**：Android 14 仅豁免 mediaPlayback、phoneCall、shortService、systemExempted 四类；Android 15（targetSdk 35）移除了 mediaPlayback——"开机后台起音乐服务"从此不可靠，迁移路径是 WorkManager expedited work 或等用户交互；
 3. **while-in-use**：camera/microphone/location 类型只有应用处于前台（或经通知点击等明确用户操作触发）才能访问对应硬件；
 4. **排查入口**：后台启动被拒抛 `ForegroundServiceStartNotAllowedException`——先对照豁免类型与启动时机，再查 OEM 限制（Q3–Q5）。

@@ -33,7 +33,15 @@ atlas_pids() {
   {
     pgrep -x atlas || true
     pgrep -f '^/opt/atlas/(bin/atlas|lib/app/atlas)( |$)' || true
-  } | sort -nu
+  } | sort -nu | while IFS= read -r pid; do
+    local state
+    state="$(ps -o stat= -p "$pid" 2>/dev/null || true)"
+    state="${state//[[:space:]]/}"
+    # 被结束但尚未由父进程回收的 zombie 已不持有窗口或运行代码，不能阻塞升级。
+    if [[ -n "$state" && "$state" != Z* ]]; then
+      printf '%s\n' "$pid"
+    fi
+  done
 }
 
 stop_running_atlas() {
