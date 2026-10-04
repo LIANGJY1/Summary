@@ -26,6 +26,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +40,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import atlas.AppStore
 import atlas.core.Log
 import atlas.platform.Platform
@@ -49,9 +54,31 @@ import java.io.File
 @Composable
 fun SetupScreen(store: AppStore) {
     val context = LocalContext.current
-    var path by remember { mutableStateOf(store.settings.libraryPath) }
-    var showBrowser by remember { mutableStateOf(false) }
     var hasAllFiles by remember { mutableStateOf(hasAllFilesAccess(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val defaultLibrary = remember { File(Platform.defaultLibraryPath) }
+
+    fun openDefaultLibraryIfReady() {
+        hasAllFiles = hasAllFilesAccess(context)
+        if (!hasAllFiles || !defaultLibrary.isDirectory || store.libraryReady) return
+        runCatching {
+            Log.i("Setup 自动打开默认知识库 path=${defaultLibrary.absolutePath}")
+            store.openLibrary(defaultLibrary.absolutePath, rescanIfNeeded = true)
+        }.onFailure { e ->
+            Log.e("Setup 自动打开默认知识库失败 path=${defaultLibrary.absolutePath}", e)
+            store.showToast("打开默认知识库失败：${e.message}")
+        }
+    }
+
+    // 从系统授权页返回时刷新权限；一旦授权且默认目录存在，直接打开，不再要求选目录。
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) openDefaultLibraryIfReady()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(hasAllFiles) { openDefaultLibraryIfReady() }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -60,7 +87,7 @@ fun SetupScreen(store: AppStore) {
         Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 28.sp)
         Text(
             "把一个 markdown 目录变成：可检索的知识库 + 闪卡复习 + 学习任务队列。\n" +
-                "先把知识库同步到手机（git 客户端 clone、Syncthing 或 adb push 均可），再在这里选中库根目录。",
+                "Atlas 会自动打开手机上的默认 knowledge-base 目录。",
             fontSize = 14.sp, color = Theme.Muted, lineHeight = 22.sp,
         )
         store.bootError?.let {
@@ -86,20 +113,15 @@ fun SetupScreen(store: AppStore) {
                 }
             }) { Text("去授权所有文件访问") }
         }
-        OutlinedTextField(path, { path = it }, Modifier.fillMaxWidth(), label = { Text("知识库目录（选一个 md 文件夹）") }, singleLine = true)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { showBrowser = true }) { Text("选择目录") }
-            OutlinedButton(onClick = {
-                if (!hasAllFilesAccess(context)) { store.showToast("请先授予所有文件访问权限"); return@OutlinedButton }
-                try {
-                    Log.i("Setup 请求打开库 path=$path")
-                    if (File(path).isDirectory) store.openLibrary(path, rescanIfNeeded = true)
-                    else { Log.w("Setup 打开失败：目录不存在 $path"); store.showToast("目录不存在") }
-                } catch (e: Exception) {
-                    Log.e("Setup 打开库异常 path=$path", e)
-                    store.showToast("打开失败：${e.message}")
-                }
-            }) { Text("打开这个库") }
+        Text("默认知识库：${defaultLibrary.absolutePath}", fontSize = 13.sp, color = Theme.Info)
+        if (hasAllFiles && !defaultLibrary.isDirectory) {
+            Text(
+                "默认 knowledge-base 目录尚未同步到手机。请先把知识库放到上述路径，Atlas 会自动打开。",
+                color = Theme.WarnOrange, fontSize = 13.sp, lineHeight = 19.sp,
+            )
+        }
+        if (hasAllFiles && defaultLibrary.isDirectory && !store.libraryReady) {
+            OutlinedButton(onClick = { openDefaultLibraryIfReady() }) { Text("重新打开默认知识库") }
         }
         Text(
             "提示：Atlas 会在库里创建 atlas/ 目录存放卡片与题目（cards.md、questions.md、inbox、outbox），与桌面端共用同一份文件。",
@@ -107,17 +129,6 @@ fun SetupScreen(store: AppStore) {
         )
     }
 
-    if (showBrowser) {
-        DirectoryBrowserDialog(
-            initial = path.ifBlank { Platform.defaultLibraryPath },
-            onDismiss = { showBrowser = false },
-            onPicked = { picked ->
-                path = picked
-                showBrowser = false
-                hasAllFiles = hasAllFilesAccess(context)
-            },
-        )
-    }
 }
 
 /** API 30+ 用「所有文件访问」；API 29 走传统 WRITE_EXTERNAL_STORAGE（manifest 已声明） */

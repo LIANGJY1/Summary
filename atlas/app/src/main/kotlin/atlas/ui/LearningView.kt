@@ -59,6 +59,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +86,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import atlas.AppStore
 import atlas.SourceQuestionGitDiff
@@ -204,6 +206,188 @@ private fun GenerateQuestionSetDialog(
 }
 
 // ---------------- 题库（中心信息源：题目+答案，派生面试/闪卡/复习） ----------------
+
+/** 浏览页与移动题库共用同一套标题、目录入口和间距。 */
+@Composable
+private fun MobileReaderHeader(
+    title: String,
+    count: String,
+    path: String,
+    onSearch: () -> Unit,
+    onTree: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = atlasUiTokens().typography.sectionTitle, color = Theme.MdH1)
+        Spacer(Modifier.width(8.dp))
+        Text(count, style = atlasUiTokens().typography.caption, color = Theme.Muted)
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onSearch) { Text("⌕", fontSize = 27.sp, color = Theme.Accent) }
+        IconButton(onClick = onTree) { Text("☷", fontSize = 24.sp, color = Theme.Accent) }
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onTree).padding(horizontal = 16.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("目录", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Theme.Accent)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            path.removePrefix("knowledge-base/"),
+            Modifier.weight(1f), fontSize = 12.sp, color = Theme.Muted,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+}
+
+/** Android 阅读入口：知识库中的全部 Markdown 文档均可浏览，不要求配置题目映射。 */
+@Composable
+fun MobileKnowledgeReader(store: AppStore) {
+    val documents = store.knowledgeDocuments.toList()
+    val directories = store.knowledgeDirectories.toList()
+    val tree = remember(documents, directories) { KnowledgeTree.build(documents, directories) }
+    var showTree by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
+    var contentHits by remember { mutableStateOf<List<AppStore.KnowledgeDocumentSearchHit>>(emptyList()) }
+    val nameResults = remember(documents, query) {
+        if (query.isBlank()) emptyList() else documents.filter { it.contains(query.trim(), ignoreCase = true) }
+    }
+
+    LaunchedEffect(showSearch, query, documents) {
+        if (!showSearch || query.trim().length < 2) {
+            contentHits = emptyList()
+        } else {
+            kotlinx.coroutines.delay(220)
+            contentHits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                store.searchKnowledgeDocuments(query, documents)
+            }
+        }
+    }
+
+    LaunchedEffect(documents, store.mobileBrowsePath) {
+        if (store.mobileBrowsePath.isBlank()) {
+            store.mobileBrowsePath = store.selectedSourcePath.takeIf { it in documents } ?: documents.firstOrNull().orEmpty()
+        }
+        val browsePath = store.mobileBrowsePath
+        if (browsePath in documents && store.selectedSourcePath != browsePath) store.selectSourceDocument(browsePath)
+        if (browsePath.isNotBlank()) expandedDirs = expandedDirs + KnowledgeTree.ancestorPaths(browsePath)
+    }
+
+    Column(Modifier.fillMaxSize().background(Theme.Panel)) {
+        MobileReaderHeader(
+            title = "知识库",
+            count = "${documents.size} 篇",
+            path = store.selectedSourcePath,
+            onSearch = { query = ""; showSearch = true },
+            onTree = { showTree = true },
+        )
+        if (documents.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("知识库中没有 Markdown 文档", color = Theme.Muted)
+            }
+        } else if (store.selectedDocumentContent.isBlank()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("正在载入文档…", color = Theme.Muted)
+            }
+        } else {
+            LazyMarkdownText(
+                store.selectedDocumentContent,
+                Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp),
+            )
+        }
+    }
+
+    if (showTree) {
+        Dialog(onDismissRequest = { showTree = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.90f),
+                shape = MaterialTheme.shapes.large,
+                color = Theme.Panel,
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("知识库目录", fontWeight = FontWeight.Bold, color = Theme.MdH1)
+                            Text("${documents.size} 篇文档 · ${directories.size} 个子目录", fontSize = 12.sp, color = Theme.Muted)
+                        }
+                        TextButton(onClick = { showTree = false }) { Text("关闭") }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        item(key = "reader-${tree.path}") {
+                            KnowledgeTreeNodeView(
+                                node = tree,
+                                depth = 0,
+                                expandedDirs = expandedDirs,
+                                selectedPath = store.selectedSourcePath,
+                                compact = true,
+                                onToggleDirectory = { path ->
+                                    expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
+                                },
+                                onSelectFile = { path ->
+                                    store.mobileBrowsePath = path
+                                    store.selectSourceDocument(path)
+                                    showTree = false
+                                },
+                                onRename = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showSearch) {
+        Dialog(onDismissRequest = { showSearch = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.78f),
+                shape = MaterialTheme.shapes.large,
+                color = Theme.Panel,
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("搜索文档", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Theme.MdH1)
+                        TextButton(onClick = { showSearch = false }) { Text("关闭") }
+                    }
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("输入文件名或路径") },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val hitByPath = contentHits.associateBy { it.path }
+                    val shown = if (query.isBlank()) documents else (nameResults + contentHits.map { it.path }).distinct()
+                    Text(if (query.isBlank()) "共 ${documents.size} 篇文档" else "匹配 ${shown.size} 篇文档", fontSize = 12.sp, color = Theme.Muted)
+                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        items(shown, key = { it }) { path ->
+                            Column(
+                                Modifier.fillMaxWidth().clickable {
+                                    store.mobileBrowsePath = path
+                                    store.selectSourceDocument(path)
+                                    showSearch = false
+                                }.padding(horizontal = 8.dp, vertical = 10.dp),
+                            ) {
+                                Text(path.substringAfterLast('/'), fontWeight = FontWeight.Medium, color = Theme.MdH1, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(path.removePrefix("knowledge-base/"), fontSize = 11.sp, color = Theme.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                hitByPath[path]?.snippet?.takeIf { it.isNotBlank() }?.let {
+                                    Text(it, fontSize = 11.sp, color = Theme.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /** 遗留题库卡的阅读宽度。 */
 private val QuizContentWidth = 880.dp
@@ -456,6 +640,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var sidebarExpanded by remember { mutableStateOf(true) }
     var sidebarWidth by remember { mutableStateOf(320.dp) }
     var sidebarDragging by remember { mutableStateOf(false) }
+    var showMobileTree by remember { mutableStateOf(false) }
     var reorderMode by remember { mutableStateOf(false) }
     var batchTagMode by remember { mutableStateOf(false) }
     var selectedQuestionKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -559,9 +744,11 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val treeDocuments = remember(mappedDocuments, mappedReadmeDocuments) {
         (mappedDocuments + mappedReadmeDocuments).distinct().sorted()
     }
-    val knowledgeTree = remember(treeDocuments) {
-        KnowledgeTree.build(treeDocuments)
+    val directorySnapshot = store.knowledgeDirectories.toList()
+    val knowledgeTree = remember(treeDocuments, directorySnapshot) {
+        KnowledgeTree.build(treeDocuments, directorySnapshot)
     }
+    val compact = LocalConfiguration.current.screenWidthDp < 600
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
     val canBatchTag = selectedMappedDocument.isNotBlank() && !reorderMode && query.isBlank() &&
         SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)
@@ -569,9 +756,20 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     LaunchedEffect(selectedReadmeDocument) {
         if (selectedReadmeDocument != null) store.questionSearchVisible.value = false
     }
+    LaunchedEffect(compact, mappedDocuments, mappedReadmeDocuments, store.selectedSourcePath, store.mobileQuestionPath) {
+        if (compact && mappedDocuments.isNotEmpty()) {
+            val questionPaths = mappedDocuments + mappedReadmeDocuments
+            val target = store.mobileQuestionPath.takeIf { it in questionPaths }
+                ?: store.selectedSourcePath.takeIf { it in mappedDocuments }
+                ?: mappedDocuments.first()
+            if (store.mobileQuestionPath != target) store.mobileQuestionPath = target
+            if (store.selectedSourcePath != target) store.selectSourceDocument(target)
+        }
+    }
 
     fun locateSource(path: String) {
         expandedDirs = expandedDirs + setOf("knowledge-base") + KnowledgeTree.ancestorPaths(path)
+        if (compact && path in treeDocuments) store.mobileQuestionPath = path
         store.selectSourceDocument(path)
     }
 
@@ -641,6 +839,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 }
             },
     ) {
+        if (!compact) {
         Column(
             Modifier.width(treeWidth).clipToBounds().fillMaxHeight()
                 .background(Theme.Panel)
@@ -648,7 +847,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         ) {
             if (sidebarExpanded) {
                 Text("知识库文档", fontWeight = FontWeight.Bold, color = Theme.MdH1)
-                Text("题目与 README · ${treeDocuments.size} 篇", fontSize = 12.sp, color = Theme.Muted)
+                Text("${treeDocuments.size} 个题目文档 · ${directorySnapshot.size} 个子目录", fontSize = 12.sp, color = Theme.Muted)
                 if (treeDocuments.isEmpty()) {
                     Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
                 }
@@ -719,17 +918,32 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
         }
         Spacer(Modifier.width(10.dp))
+        }
         Box(
             // 侧栏改通栏后页面留白由内容区自担（左侧间距已由手柄+间隔提供）
             // 底部只留 4dp：滚到底的余量由列表 contentPadding（12dp）一层提供，
             // 两层叠加会让最后一张卡片与底边之间出现大段空白（2026-09-29 用户反馈）
-            Modifier.weight(1f).fillMaxHeight()
-                .padding(top = ui.spacing.page, end = ui.spacing.page, bottom = 4.dp),
+                Modifier.weight(1f).fillMaxHeight()
+                .padding(
+                    top = if (compact) 0.dp else ui.spacing.page,
+                    start = if (compact) 12.dp else 0.dp,
+                    end = ui.spacing.page,
+                    bottom = 4.dp,
+                ),
         ) {
             Column(
                 // 页面列和题卡继续共用原有 1040dp 阅读网格；状态槽放在卡片内，正文整体后移。
                 Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
             ) {
+        if (compact) {
+            MobileReaderHeader(
+                title = "题库",
+                count = if (selectedReadmeDocument != null) "文档" else "${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题",
+                path = store.selectedSourcePath,
+                onSearch = { store.questionSearchVisible.value = !store.questionSearchVisible.value },
+                onTree = { showMobileTree = true },
+            )
+        }
         if (selectedReadmeDocument != null) {
             key(selectedReadmeDocument) {
                 ReadmeDocumentView(
@@ -779,6 +993,11 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
         }
         Spacer(Modifier.height(6.dp))
+        if (compact) {
+            if (batchTagMode) {
+                Text("已选 ${selectedQuestionKeys.size} 道", fontSize = 12.sp, color = Theme.Muted)
+            }
+        } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
             Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
@@ -903,6 +1122,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     store.showToast("已复制绝对路径")
                 },
             )
+        }
         }
         Spacer(Modifier.height(6.dp))
         if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
@@ -1164,12 +1384,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                             )
                                             if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
                                             entry.tags.take(3).forEach { tag ->
-                                                SourceQuestionTag(tag, !reorderMode && !batchTagMode, store.settings.questionTagFontSize) { editingEntry = entry }
+                                                SourceQuestionTag(tag, !compact && !reorderMode && !batchTagMode, store.settings.questionTagFontSize) { editingEntry = entry }
                                             }
                                             if (entry.tags.size > 3) {
                                                 Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
                                             }
-                                            if (entry.tags.isEmpty() && !reorderMode && !batchTagMode) {
+                                            if (!compact && entry.tags.isEmpty() && !reorderMode && !batchTagMode) {
                                                 SourceQuestionTag(
                                                     "＋ 标签",
                                                     true,
@@ -1248,7 +1468,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .singleClickWithoutConsumingSelection {
-                                                    if (store.settings.clickAnswerToEdit) editingEntry = entry
+                                                    if (!compact && store.settings.clickAnswerToEdit) editingEntry = entry
                                             },
                                             shape = MaterialTheme.shapes.small,
                                             color = Color.Transparent,
@@ -1290,20 +1510,21 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
-                                        Text(
-                                            "移动",
-                                            Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
-                                            fontSize = 13.sp,
-                                            // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
-                                            color = Theme.Muted,
-                                        )
-                                        Text(
-                                            "删除",
-                                            Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
-                                            fontSize = 13.sp,
-                                            color = Theme.BadRed,
-                                        )
+                                        if (!compact) {
+                                            Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                                            Text(
+                                                "移动",
+                                                Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
+                                                fontSize = 13.sp,
+                                                color = Theme.Muted,
+                                            )
+                                            Text(
+                                                "删除",
+                                                Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
+                                                fontSize = 13.sp,
+                                                color = Theme.BadRed,
+                                            )
+                                        }
                                         Spacer(Modifier.weight(1f))
                                         Text(
                                             "复制",
@@ -1334,6 +1555,54 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     }
         }
         }
+    if (compact && showMobileTree) {
+        Dialog(
+            onDismissRequest = { showMobileTree = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.90f),
+                shape = MaterialTheme.shapes.large,
+                color = Theme.Panel,
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("知识库目录", fontWeight = FontWeight.Bold, color = Theme.MdH1)
+                            Text(
+                                "${treeDocuments.size} 篇题目文档 · ${directorySnapshot.size} 个子目录",
+                                fontSize = 12.sp,
+                                color = Theme.Muted,
+                            )
+                        }
+                        TextButton(onClick = { showMobileTree = false }) { Text("关闭") }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        item(key = "mobile-${knowledgeTree.path}") {
+                            KnowledgeTreeNodeView(
+                                node = knowledgeTree,
+                                depth = 0,
+                                expandedDirs = expandedDirs,
+                                selectedPath = store.selectedSourcePath,
+                                compact = true,
+                                onToggleDirectory = { path ->
+                                    expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
+                                },
+                                onSelectFile = { path ->
+                                    expanded = emptySet()
+                                    query = ""
+                                    locateSource(path)
+                                    showMobileTree = false
+                                },
+                                onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
     renameTarget?.let { node ->
         RenameKnowledgeNodeDialog(store, node) { renameTarget = null }
     }
@@ -1611,6 +1880,7 @@ private fun KnowledgeTreeNodeView(
     depth: Int,
     expandedDirs: Set<String>,
     selectedPath: String,
+    compact: Boolean = false,
     onToggleDirectory: (String) -> Unit,
     onSelectFile: (String) -> Unit,
     onRename: (KnowledgeTreeNode) -> Unit,
@@ -1633,7 +1903,7 @@ private fun KnowledgeTreeNodeView(
     val row: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxWidth()
-                .height(29.dp)
+                .height(if (compact) 48.dp else 29.dp)
                 .bringIntoViewRequester(bringIntoViewRequester)
                 .hoverable(interactionSource)
                 .background(
@@ -1658,7 +1928,7 @@ private fun KnowledgeTreeNodeView(
                         }
                     }
                 }
-                .padding(start = (depth * 12).dp, end = 8.dp),
+                .padding(start = (depth * if (compact) 14 else 12).dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 箭头槽位对目录和文件等宽，保证各级名称左对齐；文件占位不画箭头
@@ -1715,7 +1985,7 @@ private fun KnowledgeTreeNodeView(
     }
     if (node.isDirectory && isExpanded) {
         node.children.forEach { child ->
-            KnowledgeTreeNodeView(child, depth + 1, expandedDirs, selectedPath, onToggleDirectory, onSelectFile, onRename)
+            KnowledgeTreeNodeView(child, depth + 1, expandedDirs, selectedPath, compact, onToggleDirectory, onSelectFile, onRename)
         }
     }
 }

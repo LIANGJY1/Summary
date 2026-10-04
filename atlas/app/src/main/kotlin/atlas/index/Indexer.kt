@@ -11,12 +11,20 @@ import atlas.core.Tier
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.SQLException
 
 /**
  * 索引器（PRD FR-A2/A3/A5/A6）：扫描 → 三档边界 → items 编目 + chunks + FTS5(trigram) + 事件日志。
  * SQLite 连接由调用方管理（应用级单连接）。
  */
 class Indexer(private val conn: Connection) {
+
+    /** Older/vendor SQLite builds may omit FTS5; use the ordinary chunks table for LIKE search then. */
+    private val fts5Available: Boolean = conn.createStatement().use { st ->
+        st.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='fts'").use { rs ->
+            rs.next() && rs.getString(1)?.contains("fts5", ignoreCase = true) == true
+        }
+    }
 
     companion object {
         fun connect(dbFile: File): Connection {
@@ -31,12 +39,35 @@ class Indexer(private val conn: Connection) {
                 st.execute("""CREATE TABLE IF NOT EXISTS chunks(
                     id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT, section TEXT, ord INTEGER, body TEXT)""")
                 st.execute("CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)")
-                st.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
-                    body, path UNINDEXED, section UNINDEXED, tokenize='trigram')""")
                 st.execute("""CREATE TABLE IF NOT EXISTS events(
                     id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, kind TEXT, data TEXT)""")
                 st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
             }
+            val existingFtsSql = c.createStatement().use { st ->
+                st.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='fts'").use { rs ->
+                    if (rs.next()) rs.getString(1) else null
+                }
+            }
+            val hasFts5 = if (existingFtsSql != null) {
+                existingFtsSql.contains("fts5", ignoreCase = true)
+            } else {
+                try {
+                    c.createStatement().use { st ->
+                        st.execute("""CREATE VIRTUAL TABLE fts USING fts5(
+                            body, path UNINDEXED, section UNINDEXED, tokenize='trigram')""")
+                    }
+                    true
+                } catch (e: SQLException) {
+                    if (!e.message.orEmpty().contains("no such module: fts5", ignoreCase = true)) throw e
+                    c.createStatement().use { st ->
+                        st.execute("CREATE TABLE IF NOT EXISTS fts(body TEXT, path TEXT, section TEXT)")
+                        st.execute("CREATE INDEX IF NOT EXISTS idx_fts_path ON fts(path)")
+                    }
+                    Log.w("SQLite 未编译 FTS5，搜索降级为 chunks LIKE")
+                    false
+                }
+            }
+            if (!hasFts5) Log.w("当前索引使用 LIKE 搜索兼容模式")
             Log.i("SQLite 已连接 db=${dbFile.absolutePath} 初始化耗时=${System.currentTimeMillis() - t0}ms")
             return c
         }
@@ -50,7 +81,11 @@ class Indexer(private val conn: Connection) {
         }
     }
 
-    data class ScanStats(var chunks: Int = 0, var changedFiles: Int = 0)
+    data class ScanStats(
+        var chunks: Int = 0,
+        var changedFiles: Int = 0,
+        val directories: MutableList<String> = mutableListOf(),
+    )
 
     /** 增量扫描：以 items.mtime 对比；返回统计。耗时操作，放后台线程调用。 */
     @Synchronized
@@ -65,7 +100,15 @@ class Indexer(private val conn: Connection) {
         }
         Log.i("索引扫描开始 root=${root.absolutePath} full=$full 已知条目=${known.size} 线程=${Thread.currentThread().name}")
         val seen = HashSet<String>()
-        root.walkTopDown().forEach { f ->
+        root.walkTopDown().onEnter { dir ->
+            if (dir == root) return@onEnter true
+            val rel = dir.relativeTo(root).invariantSeparatorsPath
+            val ignored = rules.tierOf("$rel/__directory__") == Tier.IGNORED
+            if (!ignored) {
+                st.directories += if (root.name == "knowledge-base") "knowledge-base/$rel" else rel
+            }
+            !ignored
+        }.forEach { f ->
             if (!f.isFile) return@forEach
             val rel = f.relativeTo(root).invariantSeparatorsPath
             if (rel.startsWith("atlas/")) return@forEach // 应用协作目录
@@ -161,7 +204,8 @@ class Indexer(private val conn: Connection) {
         val t0 = System.currentTimeMillis()
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
-        val out = if (q.length >= 3) {
+        val useFts = q.length >= 3 && fts5Available
+        val out = if (useFts) {
             val safe = q.replace("\"", "\"\"")
             val sql = """SELECT path, section, snippet(fts, 0, '【', '】', ' … ', 14), bm25(fts)
                 FROM fts WHERE fts MATCH ? ORDER BY rank LIMIT ?"""
@@ -194,7 +238,7 @@ class Indexer(private val conn: Connection) {
             }
         }
         val ms = System.currentTimeMillis() - t0
-        val line = "search q=$q 模式=${if (q.length >= 3) "FTS trigram" else "LIKE"} 命中=${out.size} 耗时=${ms}ms 线程=${Thread.currentThread().name}"
+        val line = "search q=$q 模式=${if (useFts) "FTS trigram" else "LIKE${if (q.length >= 3) " fallback" else ""}"} 命中=${out.size} 耗时=${ms}ms 线程=${Thread.currentThread().name}"
         if (ms >= 300) Log.w("SLOW $line（在 UI 线程执行时会卡界面）") else Log.d(line)
         return out
     }
@@ -211,9 +255,13 @@ class Indexer(private val conn: Connection) {
     }
 
     @Synchronized
-    fun itemCount(): Int = conn.createStatement().use { it.executeQuery("SELECT COUNT(*) FROM items").use { r -> r.getInt(1) } }
+    fun itemCount(): Int = conn.createStatement().use {
+        it.executeQuery("SELECT COUNT(*) FROM items").use { r -> if (r.next()) r.getInt(1) else 0 }
+    }
     @Synchronized
-    fun chunkCount(): Int = conn.createStatement().use { it.executeQuery("SELECT COUNT(*) FROM chunks").use { r -> r.getInt(1) } }
+    fun chunkCount(): Int = conn.createStatement().use {
+        it.executeQuery("SELECT COUNT(*) FROM chunks").use { r -> if (r.next()) r.getInt(1) else 0 }
+    }
 
     /** 目录树用：全部条目 */
     @Synchronized

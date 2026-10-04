@@ -42,6 +42,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
@@ -693,6 +694,7 @@ private fun ReaderMarkdownText(
     followingLine: String? = null,
 ) {
     val ui = atlasUiTokens()
+    val compactReading = LocalConfiguration.current.screenWidthDp < 600
     val readingColors = LocalMarkdownReadingColors.current
     // 渐进渲染按块调用时传 [lineOffset]：把原文坐标的脏行集合平移成块内局部坐标
     val answerDirty = remember(dirtyLines, lineOffset) {
@@ -833,17 +835,18 @@ private fun ReaderMarkdownText(
                             Column(Modifier.fillMaxWidth()) {
                                 if (lang.isNotBlank()) CodeLanguageLabel(lang)
                                 Column(
-                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                    Modifier.fillMaxWidth()
+                                        .then(if (compactReading) Modifier else Modifier.horizontalScroll(rememberScrollState()))
                                         .padding(horizontal = 16.dp, vertical = 15.dp),
                                 ) {
                                     buf.forEach { code ->
                                         Text(
                                             code,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = mdSp(13),
+                                            fontSize = mdSp(if (compactReading) 12 else 13),
                                             lineHeight = mdLh(20),
                                             letterSpacing = 0.5.sp,
-                                            softWrap = false,
+                                            softWrap = compactReading,
                                             color = codeTextColor,
                                         )
                                     }

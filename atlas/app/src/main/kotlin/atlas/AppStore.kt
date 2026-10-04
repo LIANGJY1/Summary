@@ -67,6 +67,7 @@ internal fun sourceQuestionGitKey(entry: SourceQuestions.Entry): String =
  * 应用中枢：持有全部状态与动作。UI 只读状态 + 调动作。
  */
 class AppStore(val configDir: File = File(System.getProperty("user.home"), ".local/share/atlas")) {
+    data class KnowledgeDocumentSearchHit(val path: String, val snippet: String)
 
     val scope = CoroutineScope(Dispatchers.IO)
 
@@ -97,8 +98,16 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     val knowledgeDocuments = mutableStateListOf<String>()
     /** 题目源目录中额外纳入题库树的 README 文档。 */
     val sourceReadmeDocuments = mutableStateListOf<String>()
+    /** 知识库中的全部非忽略子目录，供题库目录树展示空目录和无题目文档的目录。 */
+    val knowledgeDirectories = mutableStateListOf<String>()
     /** 当前选中的 README 全文；题目文档选中时为空。 */
     var sourceReadmeContent by mutableStateOf<String?>(null)
+    /** 当前选中的任意知识库 Markdown 全文，供 Android 阅读器使用。 */
+    var selectedDocumentContent by mutableStateOf("")
+    /** Android 浏览页单独记住的文档；切换到题库时不丢失阅读位置。 */
+    var mobileBrowsePath by mutableStateOf("")
+    /** Android 题库页单独记住的同源题目文档。 */
+    var mobileQuestionPath by mutableStateOf("")
 
     private val selectedSourcePathState = mutableStateOf(SourceQuestions.TARGET_PATH)
 
@@ -1054,6 +1063,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         if (selectedSourcePath !in knowledgeDocuments && knowledgeDocuments.isNotEmpty()) {
             Log.i("持久化的题库文档已失效（${selectedSourcePath}），回退到 ${knowledgeDocuments.first()}")
             selectedSourcePath = knowledgeDocuments.first()
+            reloadKnowledgeFiles()
         }
         if (rescanIfNeeded) rescan(full = false)
         startWatching()
@@ -1074,7 +1084,10 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val st = ix.rescan(libraryRoot(), rules(), full)
                 scanMessage.value = "条目 ${ix.itemCount()} · 区块 ${ix.chunkCount()}（本次新增区块 ${st.chunks}）"
                 Log.i("rescan 完成 耗时=${System.currentTimeMillis() - t0}ms 新增区块=${st.chunks} 条目=${ix.itemCount()} 总区块=${ix.chunkCount()}")
-                notes.clear(); notes.addAll(ix.allItems())
+                androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
+                    notes.clear(); notes.addAll(ix.allItems())
+                    knowledgeDirectories.clear(); knowledgeDirectories.addAll(st.directories.distinct().sorted())
+                }
                 Log.d("条目列表已刷新 共 ${notes.size} 条")
             } catch (e: Exception) {
                 Log.e("rescan 失败（耗时 ${System.currentTimeMillis() - t0}ms）", e)
@@ -1117,12 +1130,17 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val newReadmeContent = if (selectedSourcePath in mappedReadmes) {
                     sourceDocumentFile(selectedSourcePath).takeIf { it.isFile }?.readText(Charsets.UTF_8)
                 } else null
+                val newSelectedDocumentContent = runCatching {
+                    sourceDocumentFile(selectedSourcePath).takeIf { it.isFile && it.extension.equals("md", true) }
+                        ?.readText(Charsets.UTF_8).orEmpty()
+                }.getOrDefault("")
                 androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
                     cards.clear(); cards.addAll(newCards)
                     questions.clear(); questions.addAll(newQuestions)
                     knowledgeDocuments.clear(); knowledgeDocuments.addAll(documents)
                     sourceReadmeDocuments.clear(); sourceReadmeDocuments.addAll(mappedReadmes)
                     sourceReadmeContent = newReadmeContent
+                    selectedDocumentContent = newSelectedDocumentContent
                     sourceQuestions.clear(); sourceQuestions.addAll(newSourceQuestions)
                     allSourceQuestions.clear(); allSourceQuestions.addAll(newAllSourceQuestions)
                     sourceSections.clear(); sourceSections.addAll(newSourceSections)
@@ -1345,6 +1363,28 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         selectedSourcePath = path
         Log.i("切换题库源文档 → $path")
         reloadKnowledgeFiles()
+    }
+
+    /** 手机阅读器的全库搜索：按正文匹配全部知识文档，不受索引 tier 限制。后台调用。 */
+    fun searchKnowledgeDocuments(query: String, paths: List<String>): List<KnowledgeDocumentSearchHit> {
+        val needle = query.trim()
+        if (needle.length < 2) return emptyList()
+        return paths.mapNotNull { path ->
+            runCatching {
+                val file = sourceDocumentFile(path)
+                if (!file.isFile) return@runCatching null
+                file.useLines(Charsets.UTF_8) { lines ->
+                    lines.firstNotNullOfOrNull { line ->
+                        val index = line.indexOf(needle, ignoreCase = true)
+                        if (index < 0) null else {
+                            val start = (index - 48).coerceAtLeast(0)
+                            val end = (index + needle.length + 72).coerceAtMost(line.length)
+                            KnowledgeDocumentSearchHit(path, line.substring(start, end).trim())
+                        }
+                    }
+                }
+            }.getOrNull()
+        }.sortedBy { it.path }
     }
 
     /** 将 README 草稿写回原文件；expectedContent 用于阻止覆盖编辑器外部的并发修改。 */

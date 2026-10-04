@@ -40,6 +40,7 @@ import atlas.resolveTheme
 import atlas.ui.AtlasTheme
 import atlas.ui.ColorSettingsPage
 import atlas.ui.LearningView
+import atlas.ui.MobileKnowledgeReader
 import atlas.ui.LocalMarkdownContentStyle
 import atlas.ui.MarkdownContentStyle
 import atlas.ui.PreviewDialog
@@ -59,8 +60,14 @@ fun AtlasRoot(configDir: File) {
         // 与桌面一致：boot() 读取持久化设置之后再迁移主题，避免覆盖成默认值
         migrateThemeSettings(store.settings).takeIf { it != store.settings }?.let { migrated ->
             store.settings = migrated
-            store.saveSettings()
-            Log.i("主题设置已迁移到双模式 V2")
+            if (store.libraryReady) {
+                store.saveSettings()
+                Log.i("主题设置已迁移到双模式 V2")
+            } else {
+                // 首次启动尚未打开知识库时，仓库同步配置目录可能不存在，且 Android
+                // 还未获得共享存储权限。先在内存中迁移；openLibrary() 成功选择库后会保存。
+                Log.i("主题设置已在内存中迁移；打开知识库后再持久化")
+            }
         }
     }
     // 全局字号/内容行距经 CompositionLocal 进 markdown 渲染器，与桌面同机制
@@ -89,7 +96,7 @@ private fun AtlasApp(store: AppStore) {
         return
     }
 
-    var tab by remember { mutableStateOf("工作台") }
+    var tab by remember { mutableStateOf("浏览") }
     var learnSection by remember { mutableStateOf("复习") }
     var settingsSection by remember { mutableStateOf("root") }
     var showPalette by remember { mutableStateOf(false) }
@@ -105,21 +112,21 @@ private fun AtlasApp(store: AppStore) {
         }
     }
 
-    // 系统返回键 = 桌面的鼠标侧键/取消路径：预览/搜索 → 设置子页 → 页签归位 工作台
+    // 系统返回键：预览/搜索 → 设置子页 → 知识库阅读首页
     BackHandler(
         enabled = previewRel != null || showPalette ||
-            (tab == "设置" && settingsSection != "root") || tab != "工作台",
+            (tab == "设置" && settingsSection != "root") || tab != "浏览",
     ) {
         when {
             previewRel != null -> previewRel = null
             showPalette -> showPalette = false
             tab == "设置" && settingsSection != "root" -> settingsSection = "root"
-            tab != "工作台" -> tab = "工作台"
+            tab != "浏览" -> tab = "浏览"
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        // 顶栏：品牌 + 搜索入口（对应桌面 Ctrl+K）
+        // 简洁品牌栏；文档搜索放在阅读页内。
         Row(
             Modifier.fillMaxWidth()
                 .background(Theme.Panel)
@@ -128,17 +135,11 @@ private fun AtlasApp(store: AppStore) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Atlas", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Theme.Accent)
-            Spacer(Modifier.weight(1f))
-            Text(
-                "搜索",
-                Modifier.clickable { Log.i("搜索入口点击"); showPalette = true },
-                fontSize = 13.sp,
-                color = Theme.Muted,
-            )
         }
         // 内容
         Box(Modifier.weight(1f)) {
             when (tab) {
+                "浏览" -> MobileKnowledgeReader(store)
                 "学习" -> LearningView(store, learnSection) { learnSection = it }
                 "题库" -> QuestionSection(store, rootFocus)
                 "设置" -> when (settingsSection) {
@@ -159,30 +160,18 @@ private fun AtlasApp(store: AppStore) {
                 }
             }
         }
-        // 状态栏（与桌面同款语义）
-        Row(
-            Modifier.fillMaxWidth()
-                .background(Theme.Panel)
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text("条目 ${store.notes.size}", fontSize = 11.sp, lineHeight = 13.sp, color = Theme.Muted)
-            Text("待确认 $inbox", fontSize = 11.sp, lineHeight = 13.sp, color = Theme.Muted)
-            Spacer(Modifier.weight(1f))
-            store.toast.value?.let { Text(it, fontSize = 11.sp, lineHeight = 13.sp, color = Theme.OkGreen) }
-        }
-        // 底部导航（触屏拇指热区；设置页签复位到根）
+        // 手机主导航只保留知识库阅读、题目浏览和显示设置。
         Row(
             Modifier.fillMaxWidth()
                 .background(Theme.Panel)
                 .padding(vertical = 4.dp),
         ) {
-            listOf("工作台", "学习", "题库", "设置").forEach { t ->
+            listOf("浏览", "题库", "设置").forEach { t ->
                 val active = tab == t
                 BottomTab(
                     label = t,
                     active = active,
-                    badge = if (t == "工作台" && inbox > 0) "$inbox" else null,
+                    badge = null,
                     onClick = {
                         Log.i("页签切换 → $t")
                         if (t == "设置") settingsSection = "root"
