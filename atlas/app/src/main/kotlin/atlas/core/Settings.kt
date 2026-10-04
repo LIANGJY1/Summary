@@ -1,5 +1,6 @@
 package atlas.core
 
+import atlas.platform.Platform
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -118,7 +119,7 @@ class SettingsStore(private val file: File) {
     fun load(syncedFileFor: ((libraryPath: String) -> File?)?): AppSettings {
         val p = readProperties(file)
         if (syncedFileFor != null) {
-            val libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { DEFAULT_LIBRARY_PATH }
+            val libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { Platform.defaultLibraryPath }
             val synced = syncedFileFor(libraryPath)
             if (synced != null && synced.isFile) {
                 val sp = readProperties(synced)
@@ -129,7 +130,7 @@ class SettingsStore(private val file: File) {
         fun list(k: String) = (p.getProperty(k) ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val s = AppSettings(
             // 旧版本可能已经写入空路径；空路径不应让用户每次重新选择知识库。
-            libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { DEFAULT_LIBRARY_PATH },
+            libraryPath = p.getProperty("libraryPath")?.trim().orEmpty().ifBlank { Platform.defaultLibraryPath },
             sourceQuestionPaths = list("sourceQuestionPaths").ifEmpty { SourceQuestions.DEFAULT_SUPPORTED_PATHS },
             ignoredExtra = list("ignoredExtra"),
             localOnlyExtra = list("localOnlyExtra"),

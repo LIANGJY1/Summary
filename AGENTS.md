@@ -34,7 +34,7 @@
 | `/home/liang/Project/Reachauto/YaDi/yadi_android` `/home/liang/Project/Reachauto/YaDi/yadea_master` | Android/车机实际项目经验源 | 车机求职、项目复盘、源码对照时只读参考 | **严禁修改**源码、配置、构建脚本、生成物和提交历史；产出只写回 Summary 或独立 Demo |
 | `ai/` | AI 工具手册与工作流（OpenCode、部署流程）+ Claude Code/Skills 官方文档摘存（`claude-code/`） | 使用/配置 AI 工具时 | 用户手动维护 |
 | `project/hc` `yadi` `WMS Viewer` `honda27m-appstore-tools` | 项目资料与设计文档、项目工具链 | 做对应项目任务时 | 项目内沉淀 |
-| `atlas/` | AI 成长工作站产品项目（Linux 桌面端知识库+学习闭环应用，代号 atlas，**根目录级**）：单一 `PRD.md` 承载定位/需求/里程碑；`research/` 子目录存放其上游证据调研（ai-era-programmer、linux-desktop-ai-apps）；**MVP 代码在 `app/`**（Kotlin/Compose Desktop，gradle 工程，纳入本仓 git 管理） | 做该产品任何工作（设计/开发/发布）前，先读其 PRD.md | 直接更新 PRD.md，变更记其变更日志；代码改动走 `atlas/app/` 内常规工程流程 |
+| `atlas/` | AI 成长工作站产品项目（Linux 桌面端知识库+学习闭环应用，代号 atlas，**根目录级**）：单一 `PRD.md` 承载定位/需求/里程碑；`research/` 子目录存放其上游证据调研（ai-era-programmer、linux-desktop-ai-apps）；**MVP 代码在 `app/`**（Kotlin/Compose Desktop，gradle 工程，纳入本仓 git 管理）；**Android 手机端在 `app-android/`**（独立 Gradle 工程，srcDir 共享 `app/` 源码，平台差异走 `atlas.platform` 双端 facade，见其 README 与 PRD §13） | 做该产品任何工作（设计/开发/发布）前，先读其 PRD.md | 直接更新 PRD.md，变更记其变更日志；代码改动走 `atlas/app/` 与 `atlas/app-android/` 常规工程流程，共享文件的平台差异必须收敛进 atlas.platform |
 | `tools/` | 自用工具源码与命令行工具（含 `command/`） | 改工具前 | 工具内自有规则 |
 | `juejin-articles-index.md` | 博客文章总索引 | 写作找历史文章/选题时 | 发文后手动登记 |
 

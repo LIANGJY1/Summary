@@ -8,13 +8,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,25 +28,19 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isBackPressed
 import androidx.compose.ui.input.pointer.isForwardPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import atlas.ui.AtlasTheme
-import atlas.ui.AtlasThemes
 import atlas.ui.ColorSettingsPage
-import atlas.ui.CustomTheme
 import atlas.ui.LocalMarkdownContentStyle
 import atlas.ui.MarkdownContentStyle
-import atlas.ui.ThemeSpec
-import atlas.ui.IndexerHit
 import atlas.ui.LearningView
 import atlas.ui.NavBadge
 import atlas.ui.PreviewDialog
@@ -433,77 +423,6 @@ private fun NavTab(label: String, active: Boolean, onClick: () -> Unit, badge: (
     }
 }
 
-/** Ctrl+K 全局搜索浮层（PRD FR-B3）：输入即搜，↑↓ 选择，回车打开预览浮层 */
-@Composable
-fun CommandPalette(store: AppStore, onDismiss: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var idx by remember { mutableStateOf(0) }
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    val hits = remember(query) {
-        if (query.isBlank()) emptyList()
-        else Log.timed("Ctrl+K 即时搜索 q=$query", warnMs = 300, logAlways = false) { store.search(query) }.take(20)
-    }
-    Dialog(onDismissRequest = { Log.d("命令面板关闭（点击外部）"); onDismiss() }) {
-        Surface(
-            Modifier.fillMaxWidth(0.6f).heightIn(min = 120.dp, max = 480.dp)
-                .onPreviewKeyEvent { e ->
-                    if (e.type == KeyEventType.KeyDown) {
-                        when (e.key) {
-                            Key.DirectionDown -> { if (hits.isNotEmpty()) idx = (idx + 1) % hits.size; true }
-                            Key.DirectionUp -> { if (hits.isNotEmpty()) idx = (idx - 1 + hits.size) % hits.size; true }
-                            Key.Enter -> {
-                                hits.getOrNull(idx)?.let {
-                                    Log.i("命令面板回车打开 → ${it.path}##${it.section}")
-                                    store.requestPreview(it.path)
-                                }
-                                onDismiss(); true
-                            }
-                            else -> false
-                        }
-                    } else false
-                },
-            shape = MaterialTheme.shapes.medium,
-            color = Theme.Panel,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)),
-            tonalElevation = 3.dp,
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    query, { query = it; idx = 0 }, Modifier.fillMaxWidth(),
-                    placeholder = { Text("搜索全库") }, singleLine = true,
-                )
-                if (query.isNotBlank() && hits.isEmpty()) Text("库中没有找到相关内容。", color = Theme.Muted, fontSize = 12.sp)
-                LazyColumn(Modifier.weight(1f, fill = false)) {
-                    items(hits.withIndex().toList(), key = { it.value.hashCode() }) { (i, h) ->
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .clickable {
-                                    Log.i("命令面板点击打开 → ${h.path}##${h.section}")
-                                    store.requestPreview(h.path); onDismiss()
-                                }
-                                .background(if (i == idx) Theme.Selected else Color.Transparent)
-                                .padding(6.dp),
-                        ) {
-                            Text("${h.path}  ##${h.section}", fontSize = 11.sp, color = Theme.Info, fontFamily = FontFamily.Monospace, maxLines = 1)
-                            Text(h.snippet, fontSize = 12.sp, maxLines = 2)
-                        }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = {
-                        val pack = Log.timed("上下文包 q=$query", warnMs = 300) { store.contextPack(query) }
-                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(pack))
-                        Log.i("上下文包已复制到剪贴板 ${pack.length} 字符")
-                        store.showToast("已复制问题 + 相关笔记全文，粘贴给 AI 即可")
-                        onDismiss()
-                    }, enabled = query.isNotBlank()) { Text("复制为上下文包") }
-                    Text("回车打开 · Esc 关闭", fontSize = 11.sp, color = Theme.Muted)
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun SetupView(store: AppStore) {
     var path by remember { mutableStateOf(store.settings.libraryPath) }
@@ -545,29 +464,3 @@ fun SetupView(store: AppStore) {
     }
 }
 
-/** 合法旧自定义主题升级为 V2；未知内置名与坏记录安全回落到 Atlas。 */
-internal fun migrateThemeSettings(s: atlas.core.AppSettings): atlas.core.AppSettings {
-    val decoded = s.customThemes.mapNotNull { CustomTheme.decode(it) }
-    val migrated = decoded.map { it.encode() }
-    val customNames = decoded.map { it.name }.toSet()
-    val builtInNames = AtlasThemes.ALL.map { it.name }.toSet()
-    val selected = when {
-        s.themeName in customNames -> s.themeName
-        s.themeName in builtInNames -> s.themeName
-        else -> AtlasThemes.DEFAULT.name
-    }
-    return s.copy(themeName = selected, customThemes = migrated)
-}
-
-/** 主题名 → [ThemeSpec]：同名自定义优先，其次内置主题，未知名称回退 Atlas。 */
-internal fun resolveTheme(s: atlas.core.AppSettings): ThemeSpec {
-    val name = s.themeName
-    if (name.isNotBlank()) {
-        s.customThemes.asSequence()
-            .mapNotNull { CustomTheme.decode(it) }
-            .firstOrNull { it.name == name }
-            ?.let { return it.spec(s.darkTheme) }
-        AtlasThemes.ALL.firstOrNull { it.name == name }?.let { return it.spec(s.darkTheme) }
-    }
-    return AtlasThemes.DEFAULT.spec(s.darkTheme)
-}

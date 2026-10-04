@@ -1,6 +1,7 @@
 package atlas.core
 
 import androidx.compose.runtime.mutableStateOf
+import atlas.platform.Platform
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -124,9 +125,8 @@ class AaosCommandRunner(private val scope: CoroutineScope) {
     }
 
     private fun killProcessTree(process: Process) {
-        val descendants = process.toHandle().descendants().toList()
-        descendants.asReversed().forEach { runCatching { it.destroyForcibly() } }
-        runCatching { process.destroyForcibly() }
+        // 进程树终结是平台能力（桌面 ProcessHandle / Android 只能尽力杀根进程）
+        Platform.killProcessTree(process)
     }
 
     private companion object {

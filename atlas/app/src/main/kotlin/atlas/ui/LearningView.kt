@@ -34,8 +34,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -102,8 +100,8 @@ import atlas.core.ReorderSlot
 import atlas.core.QuestionStatus
 import atlas.core.SourceQuestions
 import atlas.core.TextDiff
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import atlas.platform.Platform
+import atlas.platform.PlatformTooltip
 
 /** 学习页只负责闪卡复习与卡片浏览；题目管理位于独立的「题库」页。 */
 @Composable
@@ -385,6 +383,45 @@ private enum class QuestionSearchScope(val label: String) {
     ALL("整个目录树"),
 }
 
+internal enum class QuestionLeadingSlot {
+    STATUS,
+    BATCH_SELECTION,
+    REORDER_POSITION,
+}
+
+internal fun questionLeadingSlot(batchTagMode: Boolean, reorderMode: Boolean): QuestionLeadingSlot = when {
+    batchTagMode -> QuestionLeadingSlot.BATCH_SELECTION
+    reorderMode -> QuestionLeadingSlot.REORDER_POSITION
+    else -> QuestionLeadingSlot.STATUS
+}
+
+internal fun reorderPositionFontSizeSp(position: Int): Float = when {
+    position >= 1_000 -> 8f
+    position >= 100 -> 9f
+    else -> 11f
+}
+
+internal data class QuestionCardHorizontalMetrics(
+    val cardStartInsetDp: Float,
+    val statusSlotWidthDp: Float,
+    val statusGapDp: Float,
+    val contentEndDp: Float,
+) {
+    val contentStartDp: Float get() = cardStartInsetDp + statusSlotWidthDp + statusGapDp
+
+    fun contentWidthDp(cardWidthDp: Float): Float =
+        (cardWidthDp - contentStartDp - contentEndDp).coerceAtLeast(0f)
+}
+
+private val sourceQuestionCardHorizontalMetrics = QuestionCardHorizontalMetrics(
+    cardStartInsetDp = 16f,
+    statusSlotWidthDp = 24f,
+    statusGapDp = 12f,
+    contentEndDp = 24f,
+)
+
+internal fun questionCardHorizontalMetrics(): QuestionCardHorizontalMetrics = sourceQuestionCardHorizontalMetrics
+
 /** 列表 key 必须区分同一源文件中重复题号的不同题目。 */
 internal fun sourceQuestionKey(entry: SourceQuestions.Entry): String =
     "${entry.sourcePath}#${entry.startOffset}"
@@ -403,6 +440,7 @@ internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, tota
 @Composable
 fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
+    val cardHorizontal = questionCardHorizontalMetrics()
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
@@ -637,7 +675,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
         }
         // 拖拽手柄：贴着目录右缘，中间画 1dp 分隔线，热区加宽到 9dp；悬停/拖拽时高亮
-        val resizeCursor = remember { PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR)) }
+        val resizeCursor = remember { Platform.resizePointerIcon() }
         val handleInteraction = remember { MutableInteractionSource() }
         val handleHovered by handleInteraction.collectIsHoveredAsState()
         val sidebarDensity = LocalDensity.current
@@ -689,8 +727,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 .padding(top = ui.spacing.page, end = ui.spacing.page, bottom = 4.dp),
         ) {
             Column(
-                // 页面列（搜索/工具行/题卡）与库内阅读流共用 1040dp 阅读网格，宽窗下整列居中；
-                // 卡片边框因此贴合内容，不再出现 1240 宽卡 + 卡内 1040 文字的两侧空带
+                // 页面列和题卡继续共用原有 1040dp 阅读网格；状态槽放在卡片内，正文整体后移。
                 Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().fillMaxHeight().align(Alignment.Center),
             ) {
         if (selectedReadmeDocument != null) {
@@ -804,7 +841,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text("批量标签", fontSize = 12.sp)
                 }
             }
-            TooltipArea(
+            PlatformTooltip(
                 tooltip = {
                     Surface(color = Theme.Elevated, shape = MaterialTheme.shapes.small) {
                         Text(
@@ -861,7 +898,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 color = Theme.Accent,
                 modifier = Modifier.clickable {
                     val absolute = store.sourceQuestionFile().absolutePath
-                    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(absolute), null)
+                    Platform.setClipboardText(absolute)
                     Log.i("题库源文档绝对路径已复制 $absolute")
                     store.showToast("已复制绝对路径")
                 },
@@ -987,7 +1024,6 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             ),
                         )
                         .fillMaxWidth()
-                        .hoverable(cardInteraction)
                         .zIndex(if (isDragging) 2f else 0f)
                         .graphicsLayer {
                             scaleX = cardScale
@@ -1007,6 +1043,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 0f
                             }
                         }
+                        .hoverable(cardInteraction)
                         .shadow(cardElevation, MaterialTheme.shapes.small)
                         .background(
                             when {
@@ -1039,270 +1076,263 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                 expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
                             }
                         }
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                        .padding(
+                            start = cardHorizontal.cardStartInsetDp.dp,
+                            end = cardHorizontal.contentEndDp.dp,
+                            top = 12.dp,
+                            bottom = 12.dp,
+                        ),
                 ) {
-                    // 卡片内侧宽度最多 992dp；题面与下方答案都从同一内边距起排。
-                    // 不能仅将题面收至 880dp，否则展开答案会比题面左移。
-                    BoxWithConstraints(
-                        Modifier.fillMaxWidth().clickable(
-                            interactionSource = cardInteraction,
-                            indication = null,
-                            enabled = !reorderMode,
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Box(
+                            Modifier.width(cardHorizontal.statusSlotWidthDp.dp).height(24.dp),
+                            contentAlignment = Alignment.TopCenter,
                         ) {
-                            if (batchTagMode) {
-                                toggleBatchSelection(entryKey)
-                            } else {
-                                locateSource(entry.sourcePath)
-                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                            }
-                        },
-                    ) {
-                        val statusGutterWidth = ((maxWidth - SourceQuestionContentWidth + 28.dp) / 2).coerceAtLeast(28.dp)
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .padding(end = 28.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .widthIn(max = SourceQuestionContentWidth),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            if (reorderMode) {
-                                Surface(
+                            when (questionLeadingSlot(batchTagMode, reorderMode)) {
+                                QuestionLeadingSlot.STATUS -> QuestionStatusControl(
+                                    status = entry.status,
+                                    enabled = true,
+                                    expanded = statusMenuTarget == entryKey,
+                                    onExpandedChange = { expandedMenu ->
+                                        statusMenuTarget = if (expandedMenu) entryKey else statusMenuTarget.takeUnless { it == entryKey }
+                                    },
+                                    onStatusSelected = { status ->
+                                        statusMenuTarget = null
+                                        locateSource(entry.sourcePath)
+                                        if (status != entry.status) {
+                                            store.saveSourceQuestion(entry, entry.question, entry.answer, status, entry.tags)
+                                        }
+                                        if (store.questionSearchVisible.value) store.questionSearchVisible.value = false
+                                    },
+                                )
+                                QuestionLeadingSlot.BATCH_SELECTION -> Checkbox(
+                                    checked = isBatchSelected,
+                                    onCheckedChange = { toggleBatchSelection(entryKey) },
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                QuestionLeadingSlot.REORDER_POSITION -> Surface(
+                                    modifier = Modifier.size(24.dp),
                                     color = if (isDragging) Theme.Pressed else Theme.Selected,
                                     shape = MaterialTheme.shapes.small,
                                 ) {
-                                    Text(
-                                        "${displayIndex + 1}",
-                                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                        color = Theme.Accent,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                    )
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        val position = displayIndex + 1
+                                        Text(
+                                            "$position",
+                                            color = Theme.Accent,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = reorderPositionFontSizeSp(position).sp,
+                                            maxLines = 1,
+                                        )
+                                    }
                                 }
-                                Spacer(Modifier.width(8.dp))
                             }
-                            Column(Modifier.weight(1f)) {
-                                val displayQuestion = remember(entry.question, gitDiff) {
-                                    annotatedQuestionDiff(entry.question, gitDiff)
-                                }
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        }
+                        Spacer(Modifier.width(cardHorizontal.statusGapDp.dp))
+                        Column(Modifier.weight(1f)) {
+                            Box(
+                                Modifier.fillMaxWidth().clickable(
+                                    interactionSource = cardInteraction,
+                                    indication = null,
+                                    enabled = !reorderMode,
                                 ) {
                                     if (batchTagMode) {
-                                        Checkbox(
-                                            checked = isBatchSelected,
-                                            onCheckedChange = { toggleBatchSelection(entryKey) },
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                        Spacer(Modifier.width(2.dp))
-                                    }
-                                    Text(
-                                        "Q${entry.number}",
-                                        fontSize = 11.sp,
-                                        color = Theme.Muted,
-                                    )
-                                    if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
-                                    entry.tags.take(3).forEach { tag ->
-                                        SourceQuestionTag(tag, !reorderMode && !batchTagMode, store.settings.questionTagFontSize) { editingEntry = entry }
-                                    }
-                                    if (entry.tags.size > 3) {
-                                        Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
-                                    }
-                                    if (entry.tags.isEmpty() && !reorderMode && !batchTagMode) {
-                                        SourceQuestionTag(
-                                            "＋ 标签",
-                                            true,
-                                            store.settings.questionTagFontSize,
-                                            isPlaceholder = true,
-                                            visible = cardHovered || isExpanded,
-                                        ) { if (!batchTagMode) editingEntry = entry }
-                                    }
-                                    Spacer(Modifier.weight(1f).height(18.dp))
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
-                                // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
-                                // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）。
-                                // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
-                                // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
-                                // 排序时文字选择无意义，整卡都是拖拽热区。
-                                // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
-                                // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
-                                if (reorderMode) {
-                                    Text(
-                                        displayQuestion,
-                                        style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
-                                        color = Theme.MdH1,
-                                    )
-                                } else {
-                                    key(entryKey, entry.question) {
-                                        SelectionContainer {
-                                            Text(
-                                                displayQuestion,
-                                                // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
-                                                style = ui.typography.itemTitle.copy(
-                                                    fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
-                                                    lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                ),
-                                                color = Theme.MdH1,
-                                            )
-                                        }
-                                    }
-                                }
-                                if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
-                                    Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
-                                }
-                            }
-                        }
-                        if (!batchTagMode) {
-                            Box(
-                                Modifier.align(Alignment.TopEnd)
-                                    .width(statusGutterWidth)
-                                    .height(18.dp)
-                                    .clickable(
-                                        interactionSource = cardInteraction,
-                                        indication = null,
-                                        enabled = !reorderMode,
-                                    ) {
+                                        toggleBatchSelection(entryKey)
+                                    } else {
                                         locateSource(entry.sourcePath)
                                         expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
-                                    },
-                            )
-                            QuestionStatusControl(
-                                status = entry.status,
-                                modifier = Modifier.align(Alignment.TopEnd),
-                                enabled = !reorderMode,
-                                expanded = statusMenuTarget == entryKey,
-                                onExpandedChange = { expandedMenu ->
-                                    statusMenuTarget = if (expandedMenu) entryKey else statusMenuTarget.takeUnless { it == entryKey }
-                                },
-                                onStatusSelected = { status ->
-                                    statusMenuTarget = null
-                                    locateSource(entry.sourcePath)
-                                    if (status != entry.status) {
-                                        store.saveSourceQuestion(entry, entry.question, entry.answer, status, entry.tags)
                                     }
-                                    if (store.questionSearchVisible.value) store.questionSearchVisible.value = false
                                 },
-                            )
-                        }
-                    }
-                    // 展开/收起必须带高度动画：直接增删答案块会让卡片高度瞬间跳变，下方卡片只能靠弹簧
-                    // 滑过来补位，过渡期盖在答案上互相重叠。高度连续变化后，跟随卡片才能同步滑动不脱节。
-                    // 弹簧参数与让位卡片一致，卡片底边与下方卡片作为一个系统运动；从顶部展开对齐题干。
-                    AnimatedVisibility(
-                        visible = isExpanded,
-                        enter = expandVertically(
-                            spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessMedium,
-                                visibilityThreshold = IntSize.VisibilityThreshold,
-                            ),
-                            expandFrom = Alignment.Top,
-                        ) + fadeIn(tween(120)),
-                        exit = shrinkVertically(
-                            spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessMedium,
-                                visibilityThreshold = IntSize.VisibilityThreshold,
-                            ),
-                            shrinkTowards = Alignment.Top,
-                        ) + fadeOut(tween(90)),
-                    ) {
-                        Column {
-                            if (entry.answer.isBlank()) {
-                                Spacer(Modifier.height(10.dp))
-                                Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
-                            } else {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .singleClickWithoutConsumingSelection {
-                                            if (store.settings.clickAnswerToEdit) editingEntry = entry
-                                    },
-                                    shape = MaterialTheme.shapes.small,
-                                    color = Color.Transparent,
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top,
                                 ) {
-                                    Column(Modifier.padding(top = 14.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("答案", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.Muted)
+                                    Column(Modifier.weight(1f)) {
+                                        val displayQuestion = remember(entry.question, gitDiff) {
+                                            annotatedQuestionDiff(entry.question, gitDiff)
                                         }
-                                        Spacer(Modifier.height(8.dp))
-                                        CompositionLocalProvider(
-                                            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
-                                            LocalMarkdownReadingColors provides MarkdownReadingColors(
-                                                body = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f),
-                                                bold = Theme.MdBold,
-                                                boldWeight = FontWeight.SemiBold,
-                                                inlineCode = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.98f),
-                                                inlineCodeBackground = lerp(
-                                                    Theme.Elevated,
-                                                    MaterialTheme.colorScheme.onSurface,
-                                                    0.14f,
-                                                ),
-                                            ),
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         ) {
-                                            // 同题面：内容变化时重建 Markdown 根选择容器，避免旧选区残留。
-                                            key(entryKey, entry.answer) {
-                                                MarkdownText(
-                                                    entry.answer,
-                                                    dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
-                                                    maxWidth = SourceQuestionContentWidth,
-                                                )
+                                            Text(
+                                                "Q${entry.number}",
+                                                fontSize = 11.sp,
+                                                color = Theme.Muted,
+                                            )
+                                            if (entry.tags.isNotEmpty() || !reorderMode) Spacer(Modifier.width(4.dp))
+                                            entry.tags.take(3).forEach { tag ->
+                                                SourceQuestionTag(tag, !reorderMode && !batchTagMode, store.settings.questionTagFontSize) { editingEntry = entry }
+                                            }
+                                            if (entry.tags.size > 3) {
+                                                Text("+${entry.tags.size - 3}", fontSize = store.settings.questionTagFontSize.sp, color = Theme.Muted)
+                                            }
+                                            if (entry.tags.isEmpty() && !reorderMode && !batchTagMode) {
+                                                SourceQuestionTag(
+                                                    "＋ 标签",
+                                                    true,
+                                                    store.settings.questionTagFontSize,
+                                                    isPlaceholder = true,
+                                                    visible = cardHovered || isExpanded,
+                                                ) { if (!batchTagMode) editingEntry = entry }
+                                            }
+                                            Spacer(Modifier.weight(1f).height(18.dp))
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        // key 绑定内容：文件重载/保存换入新文本时销毁并重建选区容器，
+                                        // 旧选区锚点不会残留到长度已变的文本上（否则 Compose 选区绘制
+                                        // getPathForRange 会抛 Start>End 越界，2026-09-28 弹窗复现）。
+                                        // 排序模式下不放 SelectionContainer：文字选区手势会消费拖动事件，
+                                        // 按在题干文字上时卡片抓不起来（2026-09-28 Q17 拖不动）；
+                                        // 排序时文字选择无意义，整卡都是拖拽热区。
+                                        // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
+                                        // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
+                                        if (reorderMode) {
+                                            Text(
+                                                displayQuestion,
+                                                style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                                color = Theme.MdH1,
+                                            )
+                                        } else {
+                                            key(entryKey, entry.question) {
+                                                SelectionContainer {
+                                                    Text(
+                                                        displayQuestion,
+                                                        // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
+                                                        style = ui.typography.itemTitle.copy(
+                                                            fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
+                                                            lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                        ),
+                                                        color = Theme.MdH1,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
+                                            Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                            // 展开/收起必须带高度动画：直接增删答案块会让卡片高度瞬间跳变，下方卡片只能靠弹簧
+                            // 滑过来补位，过渡期盖在答案上互相重叠。高度连续变化后，跟随卡片才能同步滑动不脱节。
+                            // 弹簧参数与让位卡片一致，卡片底边与下方卡片作为一个系统运动；从顶部展开对齐题干。
+                            AnimatedVisibility(
+                                visible = isExpanded,
+                                enter = expandVertically(
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioLowBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                        visibilityThreshold = IntSize.VisibilityThreshold,
+                                    ),
+                                    expandFrom = Alignment.Top,
+                                ) + fadeIn(tween(120)),
+                                exit = shrinkVertically(
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioLowBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                        visibilityThreshold = IntSize.VisibilityThreshold,
+                                    ),
+                                    shrinkTowards = Alignment.Top,
+                                ) + fadeOut(tween(90)),
+                            ) {
+                                Column {
+                                    if (entry.answer.isBlank()) {
+                                        Spacer(Modifier.height(10.dp))
+                                        Text("暂无答案", fontSize = 12.sp, color = Theme.WarnOrange)
+                                    } else {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .singleClickWithoutConsumingSelection {
+                                                    if (store.settings.clickAnswerToEdit) editingEntry = entry
+                                            },
+                                            shape = MaterialTheme.shapes.small,
+                                            color = Color.Transparent,
+                                        ) {
+                                            Column(Modifier.padding(top = 14.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text("答案", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.Muted)
+                                                }
+                                                Spacer(Modifier.height(8.dp))
+                                                CompositionLocalProvider(
+                                                    LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+                                                    LocalMarkdownReadingColors provides MarkdownReadingColors(
+                                                        body = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f),
+                                                        bold = Theme.MdBold,
+                                                        boldWeight = FontWeight.SemiBold,
+                                                        inlineCode = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.98f),
+                                                        inlineCodeBackground = lerp(
+                                                            Theme.Elevated,
+                                                            MaterialTheme.colorScheme.onSurface,
+                                                            0.14f,
+                                                        ),
+                                                    ),
+                                                ) {
+                                                    // 同题面：内容变化时重建 Markdown 根选择容器，避免旧选区残留。
+                                                    key(entryKey, entry.answer) {
+                                                        MarkdownText(
+                                                            entry.answer,
+                                                            dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
+                                                            maxWidth = SourceQuestionContentWidth,
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
+                                    Spacer(Modifier.height(7.dp))
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(top = 2.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
+                                        Text(
+                                            "移动",
+                                            Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
+                                            fontSize = 13.sp,
+                                            // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
+                                            color = Theme.Muted,
+                                        )
+                                        Text(
+                                            "删除",
+                                            Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
+                                            fontSize = 13.sp,
+                                            color = Theme.BadRed,
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Text(
+                                            "复制",
+                                            Modifier.clickable {
+                                                val content = "Q${entry.number}: ${entry.question}\n\nA:\n${entry.answer}"
+                                                runCatching {
+                                                    Platform.setClipboardText(content)
+                                                }.onSuccess {
+                                                    Log.i("题目与答案已复制 Q${entry.number}")
+                                                    store.showToast("已复制 Q${entry.number} 和答案")
+                                                }.onFailure { error ->
+                                                    Log.w("复制题目与答案失败 Q${entry.number}: ${error.message}")
+                                                    store.showToast("复制失败，请重试")
+                                                }
+                                            },
+                                            fontSize = 13.sp,
+                                            color = Theme.Accent,
+                                        )
+                                    }
                                 }
-                            }
-                            Spacer(Modifier.height(7.dp))
-                            Row(
-                                Modifier.fillMaxWidth().padding(top = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("编辑", Modifier.clickable { editingEntry = entry }, fontSize = 13.sp, color = Theme.Accent)
-                                Text(
-                                    "移动",
-                                    Modifier.clickable { Log.d("打开同源题目移动对话框 Q${entry.number}"); movingEntry = entry },
-                                    fontSize = 13.sp,
-                                    // 橙色语义保留给 git 改动标记与警告；移动按次级操作着色
-                                    color = Theme.Muted,
-                                )
-                                Text(
-                                    "删除",
-                                    Modifier.clickable { Log.d("打开同源题目删除确认 Q${entry.number}"); deletingEntry = entry },
-                                    fontSize = 13.sp,
-                                    color = Theme.BadRed,
-                                )
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    "复制",
-                                    Modifier.clickable {
-                                        val content = "Q${entry.number}: ${entry.question}\n\nA:\n${entry.answer}"
-                                        runCatching {
-                                            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(content), null)
-                                        }.onSuccess {
-                                            Log.i("题目与答案已复制 Q${entry.number}")
-                                            store.showToast("已复制 Q${entry.number} 和答案")
-                                        }.onFailure { error ->
-                                            Log.w("复制题目与答案失败 Q${entry.number}: ${error.message}")
-                                            store.showToast("复制失败，请重试")
-                                        }
-                                    },
-                                    fontSize = 13.sp,
-                                    color = Theme.Accent,
-                                )
                             }
                         }
                     }
                 }
-            }
         }
         }
         }
     }
+        }
         }
     renameTarget?.let { node ->
         RenameKnowledgeNodeDialog(store, node) { renameTarget = null }
@@ -1671,14 +1701,12 @@ private fun KnowledgeTreeNodeView(
         }
     }
     if (nameTruncated) {
-        TooltipArea(
+        PlatformTooltip(
             tooltip = { KnowledgeTreeNameTip(node.name) },
             delayMillis = 500,
-            // CursorPoint 默认 BottomEnd 对齐：提示框左上角贴光标向右下展开；
-            // 小偏移让光标箭头不压住提示框，窗口右/下边缘放不下时自动翻到另一侧
-            tooltipPlacement = TooltipPlacement.CursorPoint(
-                offset = DpOffset(10.dp, 12.dp),
-            ),
+            // CursorPoint 对齐：提示框左上角贴光标向右下展开；
+            // 小偏移让光标箭头不压住提示框，边缘放不下时自动翻到另一侧（Android 端无悬停提示，直接渲染）
+            cursorOffset = DpOffset(10.dp, 12.dp),
         ) {
             row()
         }

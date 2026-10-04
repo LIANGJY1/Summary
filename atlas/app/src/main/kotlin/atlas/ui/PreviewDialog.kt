@@ -21,7 +21,7 @@ import atlas.AppStore
 import atlas.core.DocMarker
 import atlas.core.Log
 import atlas.core.Tier
-import java.awt.Desktop
+import atlas.platform.Platform
 import java.io.File
 
 /** 检索命中（Ctrl+K 浮层与上下文包共用） */
@@ -59,7 +59,7 @@ fun PreviewDialog(store: AppStore, relPath: String, onDismiss: () -> Unit) {
                     if (note?.tier == Tier.LOCAL_ONLY) StatusChip("仅本地 🔒", Theme.WarnOrange)
                     OutlinedButton(onClick = {
                         Log.i("系统编辑器打开 $relPath")
-                        try { Desktop.getDesktop().open(File(store.settings.libraryPath, relPath)) }
+                        try { Platform.openFile(File(store.settings.libraryPath, relPath)) }
                         catch (e: Exception) { Log.e("系统编辑器打开失败 $relPath", e); store.showToast("打开失败：${e.message}") }
                     }) { Text("编辑器打开") }
                     OutlinedButton(onClick = {

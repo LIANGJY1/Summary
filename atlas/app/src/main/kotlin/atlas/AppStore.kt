@@ -27,6 +27,7 @@ import atlas.core.TextDiff
 import atlas.core.Tools
 import atlas.fsrs.FsrsEngine
 import atlas.index.Indexer
+import atlas.platform.Platform
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,7 +37,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.awt.Desktop
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -430,22 +430,19 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 }
                 val cold = tool == DeviceTools.Tool.COLD_BOOT_EMULATOR
                 ProcessBuilder(DeviceTools.emulatorArgs(emu, settings.emulatorAvd, cold))
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectOutput(Platform.discardRedirect())
                     .redirectErrorStream(false)
                     .start()
                 progress("模拟器启动中（${settings.emulatorAvd}${if (cold) "，冷启动" else ""}）")
                 0
             }
             DeviceTools.Tool.STRIP_SLASHES -> {
-                val cb = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                val text = runCatching {
-                    cb.getData(java.awt.datatransfer.DataFlavor.stringFlavor) as? String
-                }.getOrNull()
+                val text = Platform.getClipboardText()
                 if (text.isNullOrBlank()) {
                     progress("剪贴板为空，请先复制要处理的内容")
                     return 1
                 }
-                cb.setContents(java.awt.datatransfer.StringSelection(DeviceTools.stripCommentSlashes(text)), null)
+                Platform.setClipboardText(DeviceTools.stripCommentSlashes(text))
                 progress("已处理并写回剪贴板，可直接粘贴")
                 0
             }
@@ -846,8 +843,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     fun copyPromptToClipboard(index: Int) {
         val entry = prompts.getOrNull(index) ?: return
-        val cb = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-        cb.setContents(java.awt.datatransfer.StringSelection(entry.title + "\n\n" + entry.body), null)
+        Platform.setClipboardText(entry.title + "\n\n" + entry.body)
         showToast("已复制「${entry.title}」")
     }
 
@@ -982,7 +978,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             return
         }
         try {
-            Desktop.getDesktop().open(file)
+            Platform.openFile(file)
             Log.i("打开 skill 编辑器 ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("打开 skill 编辑器失败 ${file.absolutePath}", e)
@@ -1156,7 +1152,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         if (rootPath in gitUnavailableRoots) return null
         val probe = runCatching {
             val proc = ProcessBuilder("git", "-C", rootPath, "rev-parse", "--git-dir")
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(Platform.discardRedirect())
                 .start()
             proc.waitFor()
         }.getOrNull() ?: return null
@@ -1338,7 +1334,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     private fun gitShowHeadContent(file: File): String? = runCatching {
         val proc = ProcessBuilder("git", "-C", file.parentFile.absolutePath, "show", "HEAD:./${file.name}")
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(Platform.discardRedirect())
             .start()
         val text = proc.inputStream.readBytes().toString(Charsets.UTF_8)
         if (proc.waitFor() != 0) null else text

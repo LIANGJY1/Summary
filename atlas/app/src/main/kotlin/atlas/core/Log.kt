@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
-import javax.swing.SwingUtilities
+import atlas.platform.Platform
 
 /**
  * 轻量文件日志（零依赖）：<数据目录>/logs/atlas-YYYY-MM-DD.log，按天轮换，默认保留 14 天。
@@ -128,7 +128,7 @@ object Log {
             var lastReport = 0L
             while (true) {
                 try { Thread.sleep(500) } catch (_: InterruptedException) { return@Thread }
-                try { SwingUtilities.invokeLater { edtTick.incrementAndGet() } } catch (_: Exception) { return@Thread }
+                try { Platform.runOnUi { edtTick.incrementAndGet() } } catch (_: Exception) { return@Thread }
                 val now = edtTick.get()
                 if (now != lastSeen) {
                     if (stallStart > 0) {
