@@ -90,6 +90,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     val sourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
     /** 整棵知识库目录树中的 Q 题目，用于题库全局搜索。 */
     val allSourceQuestions = mutableStateListOf<SourceQuestions.Entry>()
+    /** 移动端题库只读搜索使用的全知识库 Q 题目，不受可编辑题目源映射限制。 */
+    val allKnowledgeQuestions = mutableStateListOf<SourceQuestions.Entry>()
     /** 题目内容相对 git HEAD 的差异；key = sourceQuestionGitKey，缺值 = 未知/未加载/git 不可用。 */
     val sourceQuestionGitDiffs = mutableStateMapOf<String, SourceQuestionGitDiff>()
     /** 当前同源题目文档中的章节标题，独立于题目答案展示。 */
@@ -1110,11 +1112,13 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val documents = scanKnowledgeDocuments()
                 val mappedDocuments = SourceQuestions.supportedDocuments(documents, settings.sourceQuestionPaths)
                 val mappedReadmes = SourceQuestions.supportedReadmeDocuments(documents, settings.sourceQuestionPaths)
-                val docContents = mappedDocuments.mapNotNull { path ->
+                val docContents = documents.mapNotNull { path ->
                     val file = sourceDocumentFile(path)
                     if (file.isFile) path to file.readText(Charsets.UTF_8) else null
                 }
-                val newAllSourceQuestions = SourceQuestions.parseAll(docContents)
+                val mappedContents = docContents.filter { (path, _) -> path in mappedDocuments }
+                val newAllSourceQuestions = SourceQuestions.parseAll(mappedContents)
+                val newAllKnowledgeQuestions = SourceQuestions.parseAll(docContents)
                 val source = sourceQuestionFile()
                 val sourceDocument = if (
                     source.isFile &&
@@ -1143,6 +1147,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     selectedDocumentContent = newSelectedDocumentContent
                     sourceQuestions.clear(); sourceQuestions.addAll(newSourceQuestions)
                     allSourceQuestions.clear(); allSourceQuestions.addAll(newAllSourceQuestions)
+                    allKnowledgeQuestions.clear(); allKnowledgeQuestions.addAll(newAllKnowledgeQuestions)
                     sourceSections.clear(); sourceSections.addAll(newSourceSections)
                     rebuildDueQueue()
                 }

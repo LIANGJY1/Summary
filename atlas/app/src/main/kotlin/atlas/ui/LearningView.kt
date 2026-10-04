@@ -242,6 +242,70 @@ private fun MobileReaderHeader(
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 }
 
+/** Android 题目阅读使用独立全屏层，避免长答案挤在列表卡片的内缩列里。 */
+@Composable
+private fun MobileQuestionReaderDialog(
+    entry: SourceQuestions.Entry,
+    entries: List<SourceQuestions.Entry>,
+    onDismiss: () -> Unit,
+    onSelect: (SourceQuestions.Entry) -> Unit,
+) {
+    val index = entries.indexOfFirst { sourceQuestionKey(it) == sourceQuestionKey(entry) }.coerceAtLeast(0)
+    val page = buildString {
+        append("## Q${entry.number}\n\n")
+        append(entry.question)
+        append("\n\n---\n\n## 答案\n\n")
+        append(entry.answer.ifBlank { "暂无答案。" })
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(0.dp),
+            color = Theme.Panel,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
+                        Text("‹ 返回", fontSize = 15.sp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Q${entry.number}", fontWeight = FontWeight.SemiBold, color = Theme.MdH1)
+                        Text(
+                            entry.sourcePath.substringAfterLast('/'),
+                            fontSize = 11.sp,
+                            color = Theme.Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text("${index + 1} / ${entries.size}", fontSize = 12.sp, color = Theme.Muted)
+                    TextButton(
+                        onClick = { entries.getOrNull(index - 1)?.let(onSelect) },
+                        enabled = index > 0,
+                        contentPadding = PaddingValues(horizontal = 5.dp, vertical = 4.dp),
+                    ) { Text("‹", fontSize = 25.sp) }
+                    TextButton(
+                        onClick = { entries.getOrNull(index + 1)?.let(onSelect) },
+                        enabled = index < entries.lastIndex,
+                        contentPadding = PaddingValues(horizontal = 5.dp, vertical = 4.dp),
+                    ) { Text("›", fontSize = 25.sp) }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                LazyMarkdownText(
+                    page,
+                    Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+        }
+    }
+}
+
 /** Android 阅读入口：知识库中的全部 Markdown 文档均可浏览，不要求配置题目映射。 */
 @Composable
 fun MobileKnowledgeReader(store: AppStore) {
@@ -625,6 +689,7 @@ internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, tota
 fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
     val cardHorizontal = questionCardHorizontalMetrics()
+    val compact = LocalConfiguration.current.screenWidthDp < 600
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
@@ -641,6 +706,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var sidebarWidth by remember { mutableStateOf(320.dp) }
     var sidebarDragging by remember { mutableStateOf(false) }
     var showMobileTree by remember { mutableStateOf(false) }
+    var mobileReaderEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
     var reorderMode by remember { mutableStateOf(false) }
     var batchTagMode by remember { mutableStateOf(false) }
     var selectedQuestionKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -650,7 +716,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
-    // 搜索栏默认隐藏，Ctrl+Shift+F 切换、Ctrl+F 打开（状态在 store：跨页签保留，根窗口统一处理按键）。
+    // 搜索栏可由页面按钮或键盘快捷键打开，状态在 store 中跨页签保留。
     // 收起即清词与范围——否则会留下看不见的过滤条件继续生效。
     val searchFocusRequester = remember { FocusRequester() }
     // 搜索区与页面根的窗口坐标：供"点击搜索区之外自动收起"判定
@@ -673,7 +739,21 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val rowSpacingPx = with(LocalDensity.current) { 6.dp.toPx() }
     var listViewportHeight by remember { mutableStateOf(0f) }
     // AppStore 在原地 clear/addAll 题目列表；取不可变快照作为缓存与手势 key，确保换文档后失效。
-    val sourceQuestionsSnapshot = store.sourceQuestions.toList()
+    val sourceQuestionsFromStore = store.sourceQuestions.toList()
+    val sourceQuestionsSnapshot = if (compact) {
+        remember(store.selectedSourcePath, store.selectedDocumentContent) {
+            SourceQuestions.parse(
+                store.selectedSourcePath,
+                store.selectedDocumentContent,
+                listOf(store.selectedSourcePath),
+            )
+        }
+    } else sourceQuestionsFromStore
+    val sourceSectionsSnapshot = if (compact) {
+        remember(store.selectedSourcePath, store.selectedDocumentContent) {
+            SourceQuestions.parseSections(store.selectedSourcePath, store.selectedDocumentContent, listOf(store.selectedSourcePath))
+        }
+    } else store.sourceSections.toList()
     LaunchedEffect(store.selectedSourcePath) {
         batchTagMode = false
         selectedQuestionKeys = emptySet()
@@ -692,7 +772,9 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             selectedQuestionKeys = emptySet()
         }
     }
-    val searchPool = if (searchScope == QuestionSearchScope.ALL) store.allSourceQuestions else sourceQuestionsSnapshot
+    val searchPool = if (searchScope == QuestionSearchScope.ALL) {
+        if (compact) store.allKnowledgeQuestions else store.allSourceQuestions
+    } else sourceQuestionsSnapshot
     val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
         entry.question.contains(query.trim(), ignoreCase = true) ||
             entry.tags.any { it.contains(query.trim(), ignoreCase = true) }
@@ -721,7 +803,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
         if (query.isBlank() && !dragging) {
-            store.sourceSections.forEach { add(SourceDocumentItem.Section(it)) }
+            sourceSectionsSnapshot.forEach { add(SourceDocumentItem.Section(it)) }
         }
     }
         // 兜底去重：并发重载的竞态若漏进重复条目，key 冲突会让整个列表崩溃
@@ -741,14 +823,14 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val mappedReadmeDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
         SourceQuestions.supportedReadmeDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
     }
-    val treeDocuments = remember(mappedDocuments, mappedReadmeDocuments) {
-        (mappedDocuments + mappedReadmeDocuments).distinct().sorted()
+    val allDocuments = store.knowledgeDocuments.toList()
+    val treeDocuments = remember(compact, allDocuments, mappedDocuments, mappedReadmeDocuments) {
+        if (compact) allDocuments else (mappedDocuments + mappedReadmeDocuments).distinct().sorted()
     }
     val directorySnapshot = store.knowledgeDirectories.toList()
     val knowledgeTree = remember(treeDocuments, directorySnapshot) {
         KnowledgeTree.build(treeDocuments, directorySnapshot)
     }
-    val compact = LocalConfiguration.current.screenWidthDp < 600
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
     val canBatchTag = selectedMappedDocument.isNotBlank() && !reorderMode && query.isBlank() &&
         SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)
@@ -756,12 +838,12 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     LaunchedEffect(selectedReadmeDocument) {
         if (selectedReadmeDocument != null) store.questionSearchVisible.value = false
     }
-    LaunchedEffect(compact, mappedDocuments, mappedReadmeDocuments, store.selectedSourcePath, store.mobileQuestionPath) {
-        if (compact && mappedDocuments.isNotEmpty()) {
-            val questionPaths = mappedDocuments + mappedReadmeDocuments
-            val target = store.mobileQuestionPath.takeIf { it in questionPaths }
+    LaunchedEffect(compact, allDocuments, mappedDocuments, store.selectedSourcePath, store.mobileQuestionPath) {
+        if (compact && allDocuments.isNotEmpty()) {
+            val target = store.mobileQuestionPath.takeIf { it in allDocuments }
                 ?: store.selectedSourcePath.takeIf { it in mappedDocuments }
-                ?: mappedDocuments.first()
+                ?: mappedDocuments.firstOrNull()
+                ?: allDocuments.first()
             if (store.mobileQuestionPath != target) store.mobileQuestionPath = target
             if (store.selectedSourcePath != target) store.selectSourceDocument(target)
         }
@@ -769,8 +851,18 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
 
     fun locateSource(path: String) {
         expandedDirs = expandedDirs + setOf("knowledge-base") + KnowledgeTree.ancestorPaths(path)
-        if (compact && path in treeDocuments) store.mobileQuestionPath = path
+        if (compact && path in allDocuments) store.mobileQuestionPath = path
         store.selectSourceDocument(path)
+    }
+
+    fun openOrToggleQuestion(entry: SourceQuestions.Entry, key: String, isExpanded: Boolean) {
+        locateSource(entry.sourcePath)
+        if (compact) {
+            mobileReaderEntry = entry
+            store.questionSearchVisible.value = false
+        } else {
+            expanded = if (isExpanded) expanded - key else expanded + key
+        }
     }
 
     fun resolveDragTarget() {
@@ -938,27 +1030,14 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         if (compact) {
             MobileReaderHeader(
                 title = "题库",
-                count = if (selectedReadmeDocument != null) "文档" else "${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题",
+                count = if (query.isNotBlank()) "${visible.size} 题" else if (sourceQuestionsSnapshot.isEmpty()) "文档" else "${sourceQuestionsSnapshot.size} 题",
                 path = store.selectedSourcePath,
                 onSearch = { store.questionSearchVisible.value = !store.questionSearchVisible.value },
                 onTree = { showMobileTree = true },
             )
         }
-        if (selectedReadmeDocument != null) {
-            key(selectedReadmeDocument) {
-                ReadmeDocumentView(
-                    store = store,
-                    path = selectedReadmeDocument,
-                    content = store.sourceReadmeContent.orEmpty(),
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        } else {
-        // 搜索栏默认隐藏，由 Ctrl+Shift+F 切换或 Ctrl+F 打开并聚焦；点击其外任意区域自动收起
         if (store.questionSearchVisible.value) {
-            Column(
-                Modifier.fillMaxWidth().onGloballyPositioned { searchRectInWindow = it.boundsInWindow() },
-            ) {
+            Column(Modifier.fillMaxWidth().onGloballyPositioned { searchRectInWindow = it.boundsInWindow() }) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -991,7 +1070,30 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     }
                 }
             }
+            Spacer(Modifier.height(6.dp))
         }
+        if (compact && query.isBlank() && sourceQuestionsSnapshot.isEmpty() && selectedReadmeDocument == null) {
+            if (store.selectedDocumentContent.isBlank()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("正在载入文档…", color = Theme.Muted)
+                }
+            } else {
+                LazyMarkdownText(
+                    store.selectedDocumentContent,
+                    Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+        } else if (selectedReadmeDocument != null && (!compact || query.isBlank())) {
+            key(selectedReadmeDocument) {
+                ReadmeDocumentView(
+                    store = store,
+                    path = selectedReadmeDocument,
+                    content = store.sourceReadmeContent.orEmpty(),
+                    modifier = if (compact) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize(),
+                )
+            }
+        } else {
+        // 搜索栏可由页面按钮或键盘快捷键打开；点击其外任意区域自动收起。
         Spacer(Modifier.height(6.dp))
         if (compact) {
             if (batchTagMode) {
@@ -1125,7 +1227,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         }
         }
         Spacer(Modifier.height(6.dp))
-        if (!SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
+        if (!compact && !SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
         Spacer(Modifier.height(8.dp))
@@ -1133,7 +1235,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         // 挂在它身上的 pointerInput 节点随之销毁，onDragCancel 触发——用户「抓着卡片滚动」滚到一半，
         // 拖拽就断了。挂在容器上则与单个卡片的存亡无关。
         LazyColumn(
-            Modifier.fillMaxSize()
+            Modifier.then(if (compact) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize())
                 .onGloballyPositioned { listViewportHeight = it.size.height.toFloat() }
                 .pointerInput(reorderMode, query, sourceQuestionsSnapshot) {
                     if (!canReorderList) return@pointerInput
@@ -1292,8 +1394,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             if (batchTagMode) {
                                 toggleBatchSelection(entryKey)
                             } else {
-                                locateSource(entry.sourcePath)
-                                expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                openOrToggleQuestion(entry, entryKey, isExpanded)
                             }
                         }
                         .padding(
@@ -1304,6 +1405,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         ),
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        if (!compact) {
                         Box(
                             Modifier.width(cardHorizontal.statusSlotWidthDp.dp).height(24.dp),
                             contentAlignment = Alignment.TopCenter,
@@ -1349,6 +1451,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             }
                         }
                         Spacer(Modifier.width(cardHorizontal.statusGapDp.dp))
+                        }
                         Column(Modifier.weight(1f)) {
                             Box(
                                 Modifier.fillMaxWidth().clickable(
@@ -1359,8 +1462,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     if (batchTagMode) {
                                         toggleBatchSelection(entryKey)
                                     } else {
-                                        locateSource(entry.sourcePath)
-                                        expanded = if (isExpanded) expanded - entryKey else expanded + entryKey
+                                        openOrToggleQuestion(entry, entryKey, isExpanded)
                                     }
                                 },
                             ) {
@@ -1570,7 +1672,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         Column(Modifier.weight(1f)) {
                             Text("知识库目录", fontWeight = FontWeight.Bold, color = Theme.MdH1)
                             Text(
-                                "${treeDocuments.size} 篇题目文档 · ${directorySnapshot.size} 个子目录",
+                                "${treeDocuments.size} 篇文档 · ${directorySnapshot.size} 个子目录",
                                 fontSize = 12.sp,
                                 color = Theme.Muted,
                             )
@@ -1602,6 +1704,17 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 }
             }
         }
+    }
+    mobileReaderEntry?.let { entry ->
+        MobileQuestionReaderDialog(
+            entry = entry,
+            entries = visible.ifEmpty { listOf(entry) },
+            onDismiss = { mobileReaderEntry = null },
+            onSelect = { next ->
+                locateSource(next.sourcePath)
+                mobileReaderEntry = next
+            },
+        )
     }
     renameTarget?.let { node ->
         RenameKnowledgeNodeDialog(store, node) { renameTarget = null }
