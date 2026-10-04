@@ -1,6 +1,6 @@
 # 稳定性治理：线程、协程与 IPC
 
-> 学习资料（文章模式沉淀）。主线包括按 owner 和生命周期证据判断线程与协程泄漏，按传输、服务端和业务结果定位 Binder 故障，以及把 Android 17 Keystore alias 配额当作需要 owner、状态和回滚期的持久资源治理。源文档：android-internals-wiki §20.8《线程与协程泄漏治理》、§20.9《Binder IPC 故障判断与性能诊断》、§20.10《Android 17 Keystore 密钥配额与登录恢复》。本地可核对的机制按 AAOS 13 源码标注版本。工程实践按材料口径转写，不确定处已弱化。Android 17 的 Keystore 配额数值与错误码边界已与官方文档核对。Binder 线程池规模、事务缓冲区与冻结进程的机制层见 `../01-architecture/04-binder.md`。Q 序列即结构，供 Atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线包括按 owner 和生命周期证据判断线程与协程泄漏，按传输、服务端和业务结果定位 Binder 故障，以及把 Android 17 Keystore alias 配额当作需要 owner、状态和回滚期的持久资源治理。源文档：android-internals-wiki §20.8《线程与协程泄漏治理》、§20.9《Binder IPC 故障判断与性能诊断》、§20.10《Android 17 Keystore 密钥配额与登录恢复》。本地可核对的机制按 AAOS 13 源码标注版本。工程实践按材料口径转写，不确定处已弱化。Android 17 的 Keystore 配额数值与错误码边界已与官方文档核对。Binder 线程池规模、事务缓冲区与冻结进程的机制层见 `../01-architecture/03-binder.md`。Q 序列即结构，供 Atlas 同源直读。
 
 **Q1: 线程快照里出现大量 WAITING 状态的 `Thread-N` 线程，能据此判定线程泄漏并强杀这些线程吗？**
 

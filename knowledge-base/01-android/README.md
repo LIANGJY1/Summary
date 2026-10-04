@@ -8,21 +8,23 @@
 
 ## 推荐学习顺序
 
-1. **Android 主干**：01 架构 → 02 应用框架 → 03 UI → 04 输入 → 05 渲染。
-2. **系统能力**：06 存储 → 07 内存 → 08 网络 → 09 音频。
-3. **平台实现**：11 系统服务 → 12 原生层 → 13 构建系统。
-4. **车载集成**：10 AAOS，建立在平台服务、网络、音频和 VHAL 基础上。
-5. **性能专项**：14 CPU 与功耗 → 15 性能、稳定性与诊断。
+目录和各目录内文档的两位数字前缀，就是以下实际阅读顺序：
 
-以上是学习路线；目录编号保持稳定，应用实践与工具题已按主题归入对应册。各册内的两位数字前缀表示建议阅读顺序。原 `16-app-practice/`、`17-tools/`、`18-defect-patterns/` 已按知识主题归并到 `01–15` 主题册；各目录内的两位数字前缀为建议阅读顺序。旧路径与本次归并明细见 `docs/superpowers/plans/android-kb-restructure/question-ledger.tsv`。
+1. **Android 主干（01–05）**：架构 → 应用框架 → UI → 输入 → 渲染。
+2. **系统能力（06–09）**：存储 → 内存 → 网络 → 音频。
+3. **平台实现（10–12）**：系统服务 → 原生层 → 构建系统。系统服务与原生层相邻；aconfig 运行时专题可先读 12-build-system/07 的声明与代码生成。
+4. **AAOS 集成（13）**：先看端到端车机链路和 CarService/VHAL，再看应用、车控信号、Kanzi 与缺陷案例。
+5. **性能专题（14–15）**：CPU 与功耗 → 性能、稳定性与诊断。15-performance 内先读学习方法、方法论、工具及 Perfetto 基础，再进入专题，最后读进阶追踪与 APM。
+
+原 `16-app-practice/`、`17-tools/`、`18-defect-patterns/` 的归并历史见 `docs/superpowers/plans/android-kb-restructure/question-ledger.tsv`。本次排序的逐题新旧映射见 `docs/superpowers/plans/android-kb-learning-order/mapping.tsv`。
 
 ## 01-architecture/
 
 - **跨层架构与系统服务：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 180 题）：
   - [01-system-architecture.md](01-architecture/01-system-architecture.md)（18 题）
   - [02-system-boot.md](01-architecture/02-system-boot.md)（45 题）
-  - [03-system-server.md](01-architecture/03-system-server.md)（11 题）
-  - [04-binder.md](01-architecture/04-binder.md)（19 题）
+  - [03-binder.md](01-architecture/03-binder.md)（19 题）
+  - [04-system-server.md](01-architecture/04-system-server.md)（11 题）
   - [05-hal.md](01-architecture/05-hal.md)（3 题）
   - [06-art-runtime.md](01-architecture/06-art-runtime.md)（20 题）
   - [07-jni.md](01-architecture/07-jni.md)（8 题）
@@ -36,8 +38,8 @@
 - **应用框架与应用架构实践：四大组件、Handler/Looper 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 83 题）：
   - [01-four-components.md](02-app-framework/01-four-components.md)（6 题）
   - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（11 题）
-  - [03-content-provider.md](02-app-framework/03-content-provider.md)（4 题）
-  - [04-parcel.md](02-app-framework/04-parcel.md)（2 题）
+  - [03-parcel.md](02-app-framework/03-parcel.md)（2 题）
+  - [04-content-provider.md](02-app-framework/04-content-provider.md)（4 题）
   - [05-collections-annotations.md](02-app-framework/05-collections-annotations.md)（3 题）
   - [06-private-space.md](02-app-framework/06-private-space.md)（3 题）
   - [07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md)（6 题）
@@ -54,10 +56,10 @@
   - [05-compose.md](03-ui/05-compose.md)（19 题）
   - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（18 题）
   - [07-driving-safety.md](03-ui/07-driving-safety.md)（18 题）
-  - [08-ui-debugging.md](03-ui/08-ui-debugging.md)（16 题）
-  - [09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md)（26 题）
-  - [10-app-compose-advanced-practice.md](03-ui/10-app-compose-advanced-practice.md)（24 题）
-  - [11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md)（32 题）
+  - [08-app-view-compose-practice.md](03-ui/08-app-view-compose-practice.md)（26 题）
+  - [09-app-compose-advanced-practice.md](03-ui/09-app-compose-advanced-practice.md)（24 题）
+  - [10-defect-ui-theme-fidelity.md](03-ui/10-defect-ui-theme-fidelity.md)（32 题）
+  - [11-ui-debugging.md](03-ui/11-ui-debugging.md)（16 题）
 
 ## 04-input/
 
@@ -105,14 +107,14 @@
 - **网络专项：网络框架、蜂窝连接、应用约束、传输协议、VPN、多 APN、车载网络、安全、应用连接实践与排查**（10 册 169 题）：
   - [01-network-framework.md](08-network/01-network-framework.md)（22 题）
   - [02-cellular-wireless.md](08-network/02-cellular-wireless.md)（26 题）
-  - [03-app-network-constraints.md](08-network/03-app-network-constraints.md)（14 题）
-  - [04-transport-protocols.md](08-network/04-transport-protocols.md)（16 题）
-  - [05-vpn.md](08-network/05-vpn.md)（10 题）
-  - [06-multi-apn-veth.md](08-network/06-multi-apn-veth.md)（19 题）
+  - [03-transport-protocols.md](08-network/03-transport-protocols.md)（16 题）
+  - [04-app-network-constraints.md](08-network/04-app-network-constraints.md)（14 题）
+  - [05-multi-apn-veth.md](08-network/05-multi-apn-veth.md)（19 题）
+  - [06-vpn.md](08-network/06-vpn.md)（10 题）
   - [07-vehicle-network.md](08-network/07-vehicle-network.md)（14 题）
   - [08-vehicle-security.md](08-network/08-vehicle-security.md)（8 题）
-  - [09-network-diagnostics.md](08-network/09-network-diagnostics.md)（10 题）
-  - [10-app-network-practice.md](08-network/10-app-network-practice.md)（30 题）
+  - [09-app-network-practice.md](08-network/09-app-network-practice.md)（30 题）
+  - [10-network-diagnostics.md](08-network/10-network-diagnostics.md)（10 题）
 
 ## 09-audio/
 
@@ -131,53 +133,53 @@
   - [12-diagnostics.md](09-audio/12-diagnostics.md)（6 题）
   - [13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md)（32 题）
 
-## 10-aaos/
-
-- **AAOS 专题：应用开发、车机链路、CarService、VHAL、车辆电源与多用户、CarLauncher、车控信号和 Kanzi 状态同步**（9 册 101 题）：
-  - [01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md)（5 题）
-  - [02-vehicle-links.md](10-aaos/02-vehicle-links.md)（3 题）
-  - [03-car-services.md](10-aaos/03-car-services.md)（12 题）
-  - [04-vhal-integration.md](10-aaos/04-vhal-integration.md)（4 题）
-  - [05-car-power-users.md](10-aaos/05-car-power-users.md)（4 题）
-  - [06-car-launcher.md](10-aaos/06-car-launcher.md)（4 题）
-  - [07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md)（27 题）
-  - [08-vehicle-signal-semantics.md](10-aaos/08-vehicle-signal-semantics.md)（24 题）
-  - [09-kanzi-state-sync.md](10-aaos/09-kanzi-state-sync.md)（18 题）
-
-## 11-platform-services/
+## 10-platform-services/
 
 - **独立系统服务契约：广播、通知、位置、生物识别、aconfig 运行时、AVF 虚拟化、平台 AI 服务**（7 册 34 题）：
-  - [01-broadcast.md](11-platform-services/01-broadcast.md)（4 题）
-  - [02-notifications.md](11-platform-services/02-notifications.md)（6 题）
-  - [03-location.md](11-platform-services/03-location.md)（6 题）
-  - [04-biometrics.md](11-platform-services/04-biometrics.md)（5 题）
-  - [05-aconfig-runtime.md](11-platform-services/05-aconfig-runtime.md)（5 题）
-  - [06-avf-virtualization.md](11-platform-services/06-avf-virtualization.md)（4 题）
-  - [07-ai-services.md](11-platform-services/07-ai-services.md)（4 题）
+  - [01-broadcast.md](10-platform-services/01-broadcast.md)（4 题）
+  - [02-notifications.md](10-platform-services/02-notifications.md)（6 题）
+  - [03-location.md](10-platform-services/03-location.md)（6 题）
+  - [04-biometrics.md](10-platform-services/04-biometrics.md)（5 题）
+  - [05-aconfig-runtime.md](10-platform-services/05-aconfig-runtime.md)（5 题）
+  - [06-avf-virtualization.md](10-platform-services/06-avf-virtualization.md)（4 题）
+  - [07-ai-services.md](10-platform-services/07-ai-services.md)（4 题）
 
-## 12-platform-native/
+## 11-platform-native/
 
 - **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 102 题）：
-  - [01-kernel-gki.md](12-platform-native/01-kernel-gki.md)（11 题）
-  - [02-driver-runtime.md](12-platform-native/02-driver-runtime.md)（11 题）
-  - [03-binder-driver.md](12-platform-native/03-binder-driver.md)（10 题）
-  - [04-shared-memory.md](12-platform-native/04-shared-memory.md)（10 题）
-  - [05-bionic-linker.md](12-platform-native/05-bionic-linker.md)（21 题）
-  - [06-logd.md](12-platform-native/06-logd.md)（3 题）
-  - [07-bpf.md](12-platform-native/07-bpf.md)（6 题）
-  - [08-rust-native.md](12-platform-native/08-rust-native.md)（6 题）
-  - [09-app-native-stability.md](12-platform-native/09-app-native-stability.md)（24 题）
+  - [01-kernel-gki.md](11-platform-native/01-kernel-gki.md)（11 题）
+  - [02-driver-runtime.md](11-platform-native/02-driver-runtime.md)（11 题）
+  - [03-binder-driver.md](11-platform-native/03-binder-driver.md)（10 题）
+  - [04-shared-memory.md](11-platform-native/04-shared-memory.md)（10 题）
+  - [05-bionic-linker.md](11-platform-native/05-bionic-linker.md)（21 题）
+  - [06-logd.md](11-platform-native/06-logd.md)（3 题）
+  - [07-bpf.md](11-platform-native/07-bpf.md)（6 题）
+  - [08-rust-native.md](11-platform-native/08-rust-native.md)（6 题）
+  - [09-app-native-stability.md](11-platform-native/09-app-native-stability.md)（24 题）
 
-## 13-build-system/
+## 12-build-system/
 
-- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块与 aconfig**（7 册 82 题）：
-  - [01-product-config.md](13-build-system/01-product-config.md)（15 题）
-  - [02-soong-modules.md](13-build-system/02-soong-modules.md)（26 题）
-  - [03-android-executables.md](13-build-system/03-android-executables.md)（6 题）
-  - [04-android-system-images.md](13-build-system/04-android-system-images.md)（8 题）
-  - [05-android-kernel-build.md](13-build-system/05-android-kernel-build.md)（14 题）
-  - [06-kernel-modules.md](13-build-system/06-kernel-modules.md)（4 题）
-  - [07-aconfig.md](13-build-system/07-aconfig.md)（9 题）
+- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块与 aconfig**（7 册 83 题）：
+  - [01-product-config.md](12-build-system/01-product-config.md)（15 题）
+  - [02-soong-modules.md](12-build-system/02-soong-modules.md)（26 题）
+  - [03-android-executables.md](12-build-system/03-android-executables.md)（7 题）
+  - [04-android-system-images.md](12-build-system/04-android-system-images.md)（8 题）
+  - [05-android-kernel-build.md](12-build-system/05-android-kernel-build.md)（14 题）
+  - [06-kernel-modules.md](12-build-system/06-kernel-modules.md)（4 题）
+  - [07-aconfig.md](12-build-system/07-aconfig.md)（9 题）
+
+## 13-aaos/
+
+- **AAOS 专题：应用开发、车机链路、CarService、VHAL、车辆电源与多用户、CarLauncher、车控信号和 Kanzi 状态同步**（9 册 101 题）：
+  - [01-vehicle-links.md](13-aaos/01-vehicle-links.md)（3 题）
+  - [02-car-services.md](13-aaos/02-car-services.md)（12 题）
+  - [03-vhal-integration.md](13-aaos/03-vhal-integration.md)（4 题）
+  - [04-car-power-users.md](13-aaos/04-car-power-users.md)（4 题）
+  - [05-aaos-app-dev.md](13-aaos/05-aaos-app-dev.md)（5 题）
+  - [06-car-launcher.md](13-aaos/06-car-launcher.md)（4 题）
+  - [07-vehicle-signal-semantics.md](13-aaos/07-vehicle-signal-semantics.md)（24 题）
+  - [08-kanzi-state-sync.md](13-aaos/08-kanzi-state-sync.md)（18 题）
+  - [09-defect-state-cache-startup.md](13-aaos/09-defect-state-cache-startup.md)（27 题）
 
 ## 14-cpu-power/
 
@@ -190,23 +192,23 @@
 ## 15-performance/
 
 - **性能与稳定性实践、诊断工具：流畅性、响应速度、ANR、应用稳定性/启动/可观测性、Perfetto、APM、功耗与平台优化**（19 册 523 题）：
-  - [01-smoothness.md](15-performance/01-smoothness.md)（35 题）
-  - [02-responsiveness.md](15-performance/02-responsiveness.md)（31 题）
-  - [03-anr.md](15-performance/03-anr.md)（29 题）
-  - [04-memory-performance.md](15-performance/04-memory-performance.md)（23 题）
-  - [05-power.md](15-performance/05-power.md)（25 题）
-  - [06-network-performance.md](15-performance/06-network-performance.md)（20 题）
-  - [07-platform-optimization.md](15-performance/07-platform-optimization.md)（13 题）
-  - [08-performance-learning-path.md](15-performance/08-performance-learning-path.md)（8 题）
-  - [09-app-stability.md](15-performance/09-app-stability.md)（25 题）
-  - [10-app-crash-patterns.md](15-performance/10-app-crash-patterns.md)（20 题）
-  - [11-app-startup-optimization.md](15-performance/11-app-startup-optimization.md)（34 题）
-  - [12-app-observability-governance.md](15-performance/12-app-observability-governance.md)（27 题）
-  - [13-app-observability-diagnostics.md](15-performance/13-app-observability-diagnostics.md)（33 题）
-  - [14-performance-methodology.md](15-performance/14-performance-methodology.md)（35 题）
-  - [15-performance-tools.md](15-performance/15-performance-tools.md)（38 题）
-  - [16-perfetto-analysis.md](15-performance/16-perfetto-analysis.md)（35 题）
-  - [17-perfetto-advanced.md](15-performance/17-perfetto-advanced.md)（30 题）
+  - [01-performance-learning-path.md](15-performance/01-performance-learning-path.md)（8 题）
+  - [02-performance-methodology.md](15-performance/02-performance-methodology.md)（35 题）
+  - [03-performance-tools.md](15-performance/03-performance-tools.md)（38 题）
+  - [04-perfetto-analysis.md](15-performance/04-perfetto-analysis.md)（35 题）
+  - [05-smoothness.md](15-performance/05-smoothness.md)（35 题）
+  - [06-responsiveness.md](15-performance/06-responsiveness.md)（31 题）
+  - [07-app-startup-optimization.md](15-performance/07-app-startup-optimization.md)（34 题）
+  - [08-anr.md](15-performance/08-anr.md)（29 题）
+  - [09-memory-performance.md](15-performance/09-memory-performance.md)（23 题）
+  - [10-power.md](15-performance/10-power.md)（25 题）
+  - [11-network-performance.md](15-performance/11-network-performance.md)（20 题）
+  - [12-platform-optimization.md](15-performance/12-platform-optimization.md)（13 题）
+  - [13-app-stability.md](15-performance/13-app-stability.md)（25 题）
+  - [14-app-crash-patterns.md](15-performance/14-app-crash-patterns.md)（20 题）
+  - [15-perfetto-advanced.md](15-performance/15-perfetto-advanced.md)（30 题）
+  - [16-app-observability-governance.md](15-performance/16-app-observability-governance.md)（27 题）
+  - [17-app-observability-diagnostics.md](15-performance/17-app-observability-diagnostics.md)（33 题）
   - [18-apm-platform.md](15-performance/18-apm-platform.md)（30 题）
   - [19-apm-internals.md](15-performance/19-apm-internals.md)（32 题）
 
@@ -216,25 +218,25 @@
 - 早期长文：[framework/](../../docs/others/framework/)、[性能优化.md](../../docs/others/性能优化.md)、[Launcher3_Technical_Document.md](../../docs/others/Launcher3_Technical_Document.md)、[OTA_LIFECYCLE.md](../../docs/others/OTA_LIFECYCLE.md)、[MVVM_Optimization_Report.md](../../docs/others/MVVM_Optimization_Report.md)
 - 项目个案：[../career/work-project-analysis/](../career/work-project-analysis/)；通用协议地基：[../网络/](../网络/)
 
-## 全册速览（2026-10-04 全局审查后实测题数）
+## 全册速览（2026-10-04 排序后实测题数）
 
 | 册 | 标题 | 题数 |
 | --- | --- | ---: |
 | [01-architecture/01-system-architecture.md](01-architecture/01-system-architecture.md) | Android 系统架构 | 18 |
 | [01-architecture/02-system-boot.md](01-architecture/02-system-boot.md) | Android 系统启动流程 | 45 |
-| [01-architecture/03-system-server.md](01-architecture/03-system-server.md) | SystemServer | 11 |
-| [01-architecture/04-binder.md](01-architecture/04-binder.md) | Binder | 19 |
+| [01-architecture/03-binder.md](01-architecture/03-binder.md) | Binder | 19 |
+| [01-architecture/04-system-server.md](01-architecture/04-system-server.md) | SystemServer | 11 |
 | [01-architecture/05-hal.md](01-architecture/05-hal.md) | HAL | 3 |
 | [01-architecture/06-art-runtime.md](01-architecture/06-art-runtime.md) | ART | 20 |
 | [01-architecture/07-jni.md](01-architecture/07-jni.md) | JNI | 8 |
 | [01-architecture/08-package-management.md](01-architecture/08-package-management.md) | 应用包管理：安装、校验与归档 | 9 |
 | [01-architecture/09-app-sandbox.md](01-architecture/09-app-sandbox.md) | 应用沙箱 | 16 |
-| [01-architecture/10-permissions.md](01-architecture/10-permissions.md) | Android 权限系统（android.permission.*） | 3 |
+| [01-architecture/10-permissions.md](01-architecture/10-permissions.md) | Android 权限系统 | 3 |
 | [01-architecture/11-selinux.md](01-architecture/11-selinux.md) | Android SELinux | 28 |
 | [02-app-framework/01-four-components.md](02-app-framework/01-four-components.md) | Android 四大组件：职责、启动方式与生命周期 | 6 |
 | [02-app-framework/02-handler-looper.md](02-app-framework/02-handler-looper.md) | Handler 消息机制与 MessageQueue 实现 | 11 |
-| [02-app-framework/03-content-provider.md](02-app-framework/03-content-provider.md) | ContentProvider 服务链路 | 4 |
-| [02-app-framework/04-parcel.md](02-app-framework/04-parcel.md) | Parcel 与序列化契约 | 2 |
+| [02-app-framework/03-parcel.md](02-app-framework/03-parcel.md) | Parcel 与序列化契约 | 2 |
+| [02-app-framework/04-content-provider.md](02-app-framework/04-content-provider.md) | ContentProvider 服务链路 | 4 |
 | [02-app-framework/05-collections-annotations.md](02-app-framework/05-collections-annotations.md) | 集合与注解的框架契约 | 3 |
 | [02-app-framework/06-private-space.md](02-app-framework/06-private-space.md) | Private Space 与应用可见性 | 3 |
 | [02-app-framework/07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md) | Android MVP 架构 | 6 |
@@ -247,10 +249,10 @@
 | [03-ui/05-compose.md](03-ui/05-compose.md) | Compose 运行期与 View 互操作 | 19 |
 | [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 18 |
 | [03-ui/07-driving-safety.md](03-ui/07-driving-safety.md) | 车机交互安全与驾驶分心 | 18 |
-| [03-ui/08-ui-debugging.md](03-ui/08-ui-debugging.md) | UI 疑难排查与体验踩坑 | 16 |
-| [03-ui/09-app-view-compose-practice.md](03-ui/09-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 26 |
-| [03-ui/10-app-compose-advanced-practice.md](03-ui/10-app-compose-advanced-practice.md) | 渲染实战：Compose 进阶 | 24 |
-| [03-ui/11-defect-ui-theme-fidelity.md](03-ui/11-defect-ui-theme-fidelity.md) | UI 还原与主题适配：资源完整性与设计稿落地的可迁移规则 | 32 |
+| [03-ui/08-app-view-compose-practice.md](03-ui/08-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 26 |
+| [03-ui/09-app-compose-advanced-practice.md](03-ui/09-app-compose-advanced-practice.md) | 渲染实战：Compose 进阶 | 24 |
+| [03-ui/10-defect-ui-theme-fidelity.md](03-ui/10-defect-ui-theme-fidelity.md) | UI 还原与主题适配：资源完整性与设计稿落地的可迁移规则 | 32 |
+| [03-ui/11-ui-debugging.md](03-ui/11-ui-debugging.md) | UI 疑难排查与体验踩坑 | 16 |
 | [04-input/01-input-system.md](04-input/01-input-system.md) | Android 输入系统：分发、延迟与安全边界 | 27 |
 | [04-input/02-app-event-dispatch.md](04-input/02-app-event-dispatch.md) | 应用层事件分发：方法链、返回值语义与多点触控 | 21 |
 | [04-input/03-input-reader.md](04-input/03-input-reader.md) | 设备接入与 InputReader：内核 input 事件、设备分类与触摸适配 | 17 |
@@ -278,14 +280,14 @@
 | [07-memory/04-app-memory-practice.md](07-memory/04-app-memory-practice.md) | 内存实践：堆预算、泄漏治理、Native 排查与线上监控 | 32 |
 | [08-network/01-network-framework.md](08-network/01-network-framework.md) | Android 网络框架 | 22 |
 | [08-network/02-cellular-wireless.md](08-network/02-cellular-wireless.md) | 蜂窝数据与无线连接 | 26 |
-| [08-network/03-app-network-constraints.md](08-network/03-app-network-constraints.md) | 应用网络编程与系统约束 | 14 |
-| [08-network/04-transport-protocols.md](08-network/04-transport-protocols.md) | 传输细节与协议设计 | 16 |
-| [08-network/05-vpn.md](08-network/05-vpn.md) | Android VPN | 10 |
-| [08-network/06-multi-apn-veth.md](08-network/06-multi-apn-veth.md) | 车机多 APN 与虚拟网卡 | 19 |
+| [08-network/03-transport-protocols.md](08-network/03-transport-protocols.md) | 传输细节与协议设计 | 16 |
+| [08-network/04-app-network-constraints.md](08-network/04-app-network-constraints.md) | 应用网络编程与系统约束 | 14 |
+| [08-network/05-multi-apn-veth.md](08-network/05-multi-apn-veth.md) | 车机多 APN 与虚拟网卡 | 19 |
+| [08-network/06-vpn.md](08-network/06-vpn.md) | Android VPN | 10 |
 | [08-network/07-vehicle-network.md](08-network/07-vehicle-network.md) | 车载网络架构与设计 | 14 |
 | [08-network/08-vehicle-security.md](08-network/08-vehicle-security.md) | 车机网络安全 | 8 |
-| [08-network/09-network-diagnostics.md](08-network/09-network-diagnostics.md) | 网络排查工具与实践 | 10 |
-| [08-network/10-app-network-practice.md](08-network/10-app-network-practice.md) | 网络与连接实践：HTTPDNS、选网、配额与近场连接治理 | 30 |
+| [08-network/09-app-network-practice.md](08-network/09-app-network-practice.md) | 网络与连接实践：HTTPDNS、选网、配额与近场连接治理 | 30 |
+| [08-network/10-network-diagnostics.md](08-network/10-network-diagnostics.md) | 网络排查工具与实践 | 10 |
 | [09-audio/01-aosp-audio.md](09-audio/01-aosp-audio.md) | AOSP 音频子系统 | 19 |
 | [09-audio/02-phone-audio-focus.md](09-audio/02-phone-audio-focus.md) | 手机侧音频焦点与路由 | 7 |
 | [09-audio/03-aaos-audio.md](09-audio/03-aaos-audio.md) | AAOS 车机音频 | 15 |
@@ -299,58 +301,58 @@
 | [09-audio/11-playback-hal.md](09-audio/11-playback-hal.md) | 播放数据与 HAL：PCM 怎样变成车内声音 | 4 |
 | [09-audio/12-diagnostics.md](09-audio/12-diagnostics.md) | 全链路实验与排障：从点击到扬声器逐层取证 | 6 |
 | [09-audio/13-defect-bluetooth-mechanisms.md](09-audio/13-defect-bluetooth-mechanisms.md) | 蓝牙机制：缺陷模式与修复范式 | 32 |
-| [10-aaos/01-aaos-app-dev.md](10-aaos/01-aaos-app-dev.md) | Android Auto 与 AAOS 应用执行、模板生命周期和媒体性能 | 5 |
-| [10-aaos/02-vehicle-links.md](10-aaos/02-vehicle-links.md) | Android 车机九类端到端链路、通信边界与排查方法 | 3 |
-| [10-aaos/03-car-services.md](10-aaos/03-car-services.md) | AAOS CarService 非核心服务：媒体、蓝牙、遥测与车载管理 | 12 |
-| [10-aaos/04-vhal-integration.md](10-aaos/04-vhal-integration.md) | VHAL 集成与契约 | 4 |
-| [10-aaos/05-car-power-users.md](10-aaos/05-car-power-users.md) | AAOS 车辆电源、VHAL 属性与多用户服务 | 4 |
-| [10-aaos/06-car-launcher.md](10-aaos/06-car-launcher.md) | CarLauncher 实现与任务嵌入 | 4 |
-| [10-aaos/07-defect-state-cache-startup.md](10-aaos/07-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 27 |
-| [10-aaos/08-vehicle-signal-semantics.md](10-aaos/08-vehicle-signal-semantics.md) | 车控信号语义：超时显示、双编码与值域换算 | 24 |
-| [10-aaos/09-kanzi-state-sync.md](10-aaos/09-kanzi-state-sync.md) | Kanzi 双端状态同步：状态残留、乐观更新与能力差异 | 18 |
-| [11-platform-services/01-broadcast.md](11-platform-services/01-broadcast.md) | 广播队列与投递 | 4 |
-| [11-platform-services/02-notifications.md](11-platform-services/02-notifications.md) | 通知服务链路 | 6 |
-| [11-platform-services/03-location.md](11-platform-services/03-location.md) | 位置服务链路 | 6 |
-| [11-platform-services/04-biometrics.md](11-platform-services/04-biometrics.md) | 生物识别服务链路 | 5 |
-| [11-platform-services/05-aconfig-runtime.md](11-platform-services/05-aconfig-runtime.md) | aconfig 运行时：存储与 aflags | 5 |
-| [11-platform-services/06-avf-virtualization.md](11-platform-services/06-avf-virtualization.md) | AVF 虚拟化 | 4 |
-| [11-platform-services/07-ai-services.md](11-platform-services/07-ai-services.md) | 平台 AI 服务 | 4 |
-| [12-platform-native/01-kernel-gki.md](12-platform-native/01-kernel-gki.md) | 内核与 GKI | 11 |
-| [12-platform-native/02-driver-runtime.md](12-platform-native/02-driver-runtime.md) | 内核驱动运行时 | 11 |
-| [12-platform-native/03-binder-driver.md](12-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 10 |
-| [12-platform-native/04-shared-memory.md](12-platform-native/04-shared-memory.md) | 共享内存：ashmem、ION 与 DMA-BUF | 10 |
-| [12-platform-native/05-bionic-linker.md](12-platform-native/05-bionic-linker.md) | Bionic 动态链接器：命名空间隔离与符号解析 | 21 |
-| [12-platform-native/06-logd.md](12-platform-native/06-logd.md) | Android 日志调用、丢弃与 logcat 过滤边界 | 3 |
-| [12-platform-native/07-bpf.md](12-platform-native/07-bpf.md) | BPF 可观测与可编程边界 | 6 |
-| [12-platform-native/08-rust-native.md](12-platform-native/08-rust-native.md) | 平台 Rust 与 FFI | 6 |
-| [12-platform-native/09-app-native-stability.md](12-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
-| [13-build-system/01-product-config.md](13-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
-| [13-build-system/02-soong-modules.md](13-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |
-| [13-build-system/03-android-executables.md](13-build-system/03-android-executables.md) | Android 可执行文件 | 6 |
-| [13-build-system/04-android-system-images.md](13-build-system/04-android-system-images.md) | Android 系统镜像 | 8 |
-| [13-build-system/05-android-kernel-build.md](13-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
-| [13-build-system/06-kernel-modules.md](13-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |
-| [13-build-system/07-aconfig.md](13-build-system/07-aconfig.md) | aconfig：声明与构建期代码生成 | 9 |
+| [10-platform-services/01-broadcast.md](10-platform-services/01-broadcast.md) | 广播队列与投递 | 4 |
+| [10-platform-services/02-notifications.md](10-platform-services/02-notifications.md) | 通知服务链路 | 6 |
+| [10-platform-services/03-location.md](10-platform-services/03-location.md) | 位置服务链路 | 6 |
+| [10-platform-services/04-biometrics.md](10-platform-services/04-biometrics.md) | 生物识别服务链路 | 5 |
+| [10-platform-services/05-aconfig-runtime.md](10-platform-services/05-aconfig-runtime.md) | aconfig 运行时：存储与 aflags | 5 |
+| [10-platform-services/06-avf-virtualization.md](10-platform-services/06-avf-virtualization.md) | AVF 虚拟化 | 4 |
+| [10-platform-services/07-ai-services.md](10-platform-services/07-ai-services.md) | 平台 AI 服务 | 4 |
+| [11-platform-native/01-kernel-gki.md](11-platform-native/01-kernel-gki.md) | 内核与 GKI | 11 |
+| [11-platform-native/02-driver-runtime.md](11-platform-native/02-driver-runtime.md) | 内核驱动运行时 | 11 |
+| [11-platform-native/03-binder-driver.md](11-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 10 |
+| [11-platform-native/04-shared-memory.md](11-platform-native/04-shared-memory.md) | 共享内存：ashmem、ION 与 DMA-BUF | 10 |
+| [11-platform-native/05-bionic-linker.md](11-platform-native/05-bionic-linker.md) | Bionic 动态链接器：命名空间隔离与符号解析 | 21 |
+| [11-platform-native/06-logd.md](11-platform-native/06-logd.md) | Android 日志调用、丢弃与 logcat 过滤边界 | 3 |
+| [11-platform-native/07-bpf.md](11-platform-native/07-bpf.md) | BPF 可观测与可编程边界 | 6 |
+| [11-platform-native/08-rust-native.md](11-platform-native/08-rust-native.md) | 平台 Rust 与 FFI | 6 |
+| [11-platform-native/09-app-native-stability.md](11-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
+| [12-build-system/01-product-config.md](12-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
+| [12-build-system/02-soong-modules.md](12-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |
+| [12-build-system/03-android-executables.md](12-build-system/03-android-executables.md) | Android 可执行文件 | 7 |
+| [12-build-system/04-android-system-images.md](12-build-system/04-android-system-images.md) | Android 系统镜像 | 8 |
+| [12-build-system/05-android-kernel-build.md](12-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
+| [12-build-system/06-kernel-modules.md](12-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |
+| [12-build-system/07-aconfig.md](12-build-system/07-aconfig.md) | aconfig：声明与构建期代码生成 | 9 |
+| [13-aaos/01-vehicle-links.md](13-aaos/01-vehicle-links.md) | Android 车机九类端到端链路、通信边界与排查方法 | 3 |
+| [13-aaos/02-car-services.md](13-aaos/02-car-services.md) | CarService 服务速览 | 12 |
+| [13-aaos/03-vhal-integration.md](13-aaos/03-vhal-integration.md) | VHAL 集成与契约 | 4 |
+| [13-aaos/04-car-power-users.md](13-aaos/04-car-power-users.md) | AAOS 车辆电源、VHAL 属性与多用户服务 | 4 |
+| [13-aaos/05-aaos-app-dev.md](13-aaos/05-aaos-app-dev.md) | Android Auto 与 AAOS 应用执行、模板生命周期和媒体性能 | 5 |
+| [13-aaos/06-car-launcher.md](13-aaos/06-car-launcher.md) | CarLauncher 实现与任务嵌入 | 4 |
+| [13-aaos/07-vehicle-signal-semantics.md](13-aaos/07-vehicle-signal-semantics.md) | 车控信号语义：超时显示、双编码与值域换算 | 24 |
+| [13-aaos/08-kanzi-state-sync.md](13-aaos/08-kanzi-state-sync.md) | Kanzi 双端状态同步：状态残留、乐观更新与能力差异 | 18 |
+| [13-aaos/09-defect-state-cache-startup.md](13-aaos/09-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 27 |
 | [14-cpu-power/01-scheduler-power-framework.md](14-cpu-power/01-scheduler-power-framework.md) | 调度与功耗框架 | 35 |
-| [15-performance/01-smoothness.md](15-performance/01-smoothness.md) | 流畅性：卡顿定义、分析方法与系统链路 | 35 |
-| [15-performance/02-responsiveness.md](15-performance/02-responsiveness.md) | 响应速度：从输入到反馈的延迟分析与专项优化 | 31 |
-| [15-performance/03-anr.md](15-performance/03-anr.md) | ANR：超时契约、诊断与预警 | 29 |
-| [15-performance/04-memory-performance.md](15-performance/04-memory-performance.md) | 内存性能：增长归因、低内存影响与抖动诊断 | 23 |
-| [15-performance/05-power.md](15-performance/05-power.md) | Android 功耗：模型、归因与 App 优化 | 25 |
-| [15-performance/06-network-performance.md](15-performance/06-network-performance.md) | Android 网络性能：请求分段、TLS 与 DNS 诊断 | 20 |
-| [15-performance/07-platform-optimization.md](15-performance/07-platform-optimization.md) | 平台性能优化与前沿评估 | 13 |
-| [15-performance/08-performance-learning-path.md](15-performance/08-performance-learning-path.md) | 学习方法与检查清单 | 8 |
-| [15-performance/09-app-stability.md](15-performance/09-app-stability.md) | 稳定性治理：度量、崩溃与 ANR | 25 |
-| [15-performance/10-app-crash-patterns.md](15-performance/10-app-crash-patterns.md) | 崩溃防护与偶现排查：缺陷形态与排查方法 | 20 |
-| [15-performance/11-app-startup-optimization.md](15-performance/11-app-startup-optimization.md) | 启动优化：应用侧启动治理 | 34 |
-| [15-performance/12-app-observability-governance.md](15-performance/12-app-observability-governance.md) | 可观测性体系与治理 | 27 |
-| [15-performance/13-app-observability-diagnostics.md](15-performance/13-app-observability-diagnostics.md) | 可观测性线上诊断 | 33 |
-| [15-performance/14-performance-methodology.md](15-performance/14-performance-methodology.md) | 性能方法论 | 35 |
-| [15-performance/15-performance-tools.md](15-performance/15-performance-tools.md) | 性能分析工具 | 38 |
-| [15-performance/16-perfetto-analysis.md](15-performance/16-perfetto-analysis.md) | Perfetto 采集与 SQL 分析 | 35 |
-| [15-performance/17-perfetto-advanced.md](15-performance/17-perfetto-advanced.md) | Perfetto 进阶：Profile 火焰图、CPU 频率、BufferQueue、Agent 协议、SDK 与 FrameTimeline | 30 |
-| [15-performance/18-apm-platform.md](15-performance/18-apm-platform.md) | APM 平台与 SDK | 30 |
-| [15-performance/19-apm-internals.md](15-performance/19-apm-internals.md) | APM 专项原理与架构 | 32 |
 | [14-cpu-power/02-energy-efficiency.md](14-cpu-power/02-energy-efficiency.md) | 能效专项：LLM DVFS、传感器批处理与 CPU Cache | 18 |
 | [14-cpu-power/03-app-power-practice.md](14-cpu-power/03-app-power-practice.md) | 功耗优化实践：诊断取证与 App 侧治理 | 28 |
 | [14-cpu-power/04-app-cpu-size-optimization.md](14-cpu-power/04-app-cpu-size-optimization.md) | CPU 与体积优化 | 28 |
+| [15-performance/01-performance-learning-path.md](15-performance/01-performance-learning-path.md) | 学习方法与检查清单 | 8 |
+| [15-performance/02-performance-methodology.md](15-performance/02-performance-methodology.md) | 性能方法论 | 35 |
+| [15-performance/03-performance-tools.md](15-performance/03-performance-tools.md) | 性能分析工具 | 38 |
+| [15-performance/04-perfetto-analysis.md](15-performance/04-perfetto-analysis.md) | Perfetto 采集与 SQL 分析 | 35 |
+| [15-performance/05-smoothness.md](15-performance/05-smoothness.md) | 流畅性：卡顿定义、分析方法与系统链路 | 35 |
+| [15-performance/06-responsiveness.md](15-performance/06-responsiveness.md) | 响应速度：从输入到反馈的延迟分析与专项优化 | 31 |
+| [15-performance/07-app-startup-optimization.md](15-performance/07-app-startup-optimization.md) | 启动优化：应用侧启动治理 | 34 |
+| [15-performance/08-anr.md](15-performance/08-anr.md) | ANR：超时契约、诊断与预警 | 29 |
+| [15-performance/09-memory-performance.md](15-performance/09-memory-performance.md) | 内存性能：增长归因、低内存影响与抖动诊断 | 23 |
+| [15-performance/10-power.md](15-performance/10-power.md) | Android 功耗：模型、归因与 App 优化 | 25 |
+| [15-performance/11-network-performance.md](15-performance/11-network-performance.md) | Android 网络性能：请求分段、TLS 与 DNS 诊断 | 20 |
+| [15-performance/12-platform-optimization.md](15-performance/12-platform-optimization.md) | 平台性能优化与前沿评估 | 13 |
+| [15-performance/13-app-stability.md](15-performance/13-app-stability.md) | 稳定性治理：度量、崩溃与 ANR | 25 |
+| [15-performance/14-app-crash-patterns.md](15-performance/14-app-crash-patterns.md) | 崩溃防护与偶现排查：缺陷形态与排查方法 | 20 |
+| [15-performance/15-perfetto-advanced.md](15-performance/15-perfetto-advanced.md) | Perfetto 进阶：Profile 火焰图、CPU 频率、BufferQueue、Agent 协议、SDK 与 FrameTimeline | 30 |
+| [15-performance/16-app-observability-governance.md](15-performance/16-app-observability-governance.md) | 可观测性体系与治理 | 27 |
+| [15-performance/17-app-observability-diagnostics.md](15-performance/17-app-observability-diagnostics.md) | 可观测性线上诊断 | 33 |
+| [15-performance/18-apm-platform.md](15-performance/18-apm-platform.md) | APM 平台与 SDK | 30 |
+| [15-performance/19-apm-internals.md](15-performance/19-apm-internals.md) | APM 专项原理与架构 | 32 |

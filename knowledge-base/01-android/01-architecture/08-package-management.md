@@ -1,6 +1,6 @@
 # 应用包管理：安装、校验与归档
 
-> 学习资料（文章模式沉淀）。边界：本文回答"应用从分发制品到安装事务、dexopt 编排、增量与分阶段安装、应用归档与恢复"；资源与 Configuration 更新归 [../03-ui/03-resources.md](../03-ui/03-resources.md)；构建期模块声明归 13-build-system。源文档：android-internals-wiki §1.16–§1.17；机制按本地 AAOS13 源码（Android 13）核对，安装 dexopt 迁往 ART Service（Android 14 起）与平台级 App Archiving（Android 15 起）已标注版本差异。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"应用从分发制品到安装事务、dexopt 编排、增量与分阶段安装、应用归档与恢复"；资源与 Configuration 更新归 [../03-ui/03-resources.md](../03-ui/03-resources.md)；构建期模块声明归 12-build-system。源文档：android-internals-wiki §1.16–§1.17；机制按本地 AAOS13 源码（Android 13）核对，安装 dexopt 迁往 ART Service（Android 14 起）与平台级 App Archiving（Android 15 起）已标注版本差异。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 商店上传的是 AAB，手机端最终安装的却是 APK：AAB 为什么不能直接安装，设备端 PackageInstaller 对 base/split APK 集合校验什么？**
 

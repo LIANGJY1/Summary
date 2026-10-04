@@ -1,6 +1,6 @@
 # 稳定性治理：资源泄漏与进程恢复
 
-> 学习资料（文章模式沉淀）。主线：把"内存不足"拆成 Java 堆、Native、线程、地址空间与 FD 的独立失败路径，先分类再选工具，并按独立进程边界处理 WebView renderer 的退出与恢复。源文档：android-internals-wiki §20.5《OOM、进程资源治理与 WebView Renderer 恢复》、§20.6《Native 内存泄漏的线上分层监控》、§20.7《FD 耗尽监控与故障排查》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（MemoryLimiter、mallopt 的 M_PURGE_ALL/M_PURGE_FAST、ProfilingManager 的 heap profile 为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；WebView renderer 终止处理契约（不复用旧实例、新建实例、返回 true）已与官方文档核对（官方页面 2026-08-13 更新）。lmkd、整理回调与 MemoryLimiter 的机制层见 [../07-memory/01-memory-management.md](01-memory-management.md)；ANR 机制层见 [../15-performance/03-anr.md](../15-performance/03-anr.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：把"内存不足"拆成 Java 堆、Native、线程、地址空间与 FD 的独立失败路径，先分类再选工具，并按独立进程边界处理 WebView renderer 的退出与恢复。源文档：android-internals-wiki §20.5《OOM、进程资源治理与 WebView Renderer 恢复》、§20.6《Native 内存泄漏的线上分层监控》、§20.7《FD 耗尽监控与故障排查》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（MemoryLimiter、mallopt 的 M_PURGE_ALL/M_PURGE_FAST、ProfilingManager 的 heap profile 为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；WebView renderer 终止处理契约（不复用旧实例、新建实例、返回 true）已与官方文档核对（官方页面 2026-08-13 更新）。lmkd、整理回调与 MemoryLimiter 的机制层见 [../07-memory/01-memory-management.md](01-memory-management.md)；ANR 机制层见 [../15-performance/08-anr.md](../15-performance/08-anr.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 一条"内存不足"告警可能来自哪几类资源失败？哪些会抛出 Java `OutOfMemoryError`？**
 

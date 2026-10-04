@@ -1,6 +1,6 @@
 # Android 网络框架
 
-> 学习资料（文章模式沉淀）。主线：Connectivity 层的"已连接"语义、默认网络评分与切换、多网络绑定、DNS 解析链与 Private DNS、策略路由、车机以太网、dumpsys 排查。VPN 见 [05-vpn.md](05-vpn.md)；车机多 APN 见 [06-multi-apn-veth.md](06-multi-apn-veth.md)。机制按社区分析与通用 Android/Linux 知识沉淀（2026-09 检索），本地 AAOS13 树含 VPN 与 Telephony data 层源码（已核对部分随题标注），ConnectivityService/netd 不在本地树、未做源码级核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：Connectivity 层的"已连接"语义、默认网络评分与切换、多网络绑定、DNS 解析链与 Private DNS、策略路由、车机以太网、dumpsys 排查。VPN 见 [06-vpn.md](06-vpn.md)；车机多 APN 见 [05-multi-apn-veth.md](05-multi-apn-veth.md)。机制按社区分析与通用 Android/Linux 知识沉淀（2026-09 检索），本地 AAOS13 树含 VPN 与 Telephony data 层源码（已核对部分随题标注），ConnectivityService/netd 不在本地树、未做源码级核对。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: ConnectivityManager 报告"已连接"意味着什么？为什么 isConnected() 被废弃？**
 

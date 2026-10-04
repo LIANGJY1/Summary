@@ -458,6 +458,31 @@ private fun isListSeparatorBlank(lines: List<String>, index: Int, followingLine:
 /** 列表层级栈条目：indent 为源码缩进列；counter 给子级有序列表提供 a/b/c 计数。 */
 private class MdListLevel(val indent: Int, var counter: Int)
 
+/** 记录同一缩进层的列表组是否包含更深缩进的子列表。 */
+private class MdListGroup(val indent: Int, var hasNestedList: Boolean = false)
+
+private fun markdownListGroups(lines: List<String>): Map<Int, MdListGroup> {
+    val groupsByLine = mutableMapOf<Int, MdListGroup>()
+    val stack = mutableListOf<MdListGroup>()
+    lines.forEachIndexed { index, line ->
+        val indent = line.takeWhile { it == ' ' }.length
+        if (isMarkdownListItem(line)) {
+            while (stack.isNotEmpty() && stack.last().indent > indent) stack.removeAt(stack.lastIndex)
+            val parent = stack.lastOrNull()
+            val group = if (parent?.indent == indent) {
+                parent
+            } else {
+                if (parent != null && parent.indent < indent) parent.hasNestedList = true
+                MdListGroup(indent).also { stack.add(it) }
+            }
+            groupsByLine[index] = group
+        } else if (line.isNotBlank()) {
+            while (stack.isNotEmpty() && stack.last().indent >= indent) stack.removeAt(stack.lastIndex)
+        }
+    }
+    return groupsByLine
+}
+
 /** 嵌套有序列表的字母标记：1→a.、2→b.，26 之后进位为 aa.、ab.。 */
 private fun mdOrderedLetterMarker(n: Int): String {
     var x = n.coerceAtLeast(1)
@@ -504,6 +529,7 @@ private fun MdInlineText(
     style: TextStyle = TextStyle.Default,
     color: Color = Color.Unspecified,
 ) {
+    val markdownStyle = style.copy(letterSpacing = 0.2.sp)
     val readingColors = LocalMarkdownReadingColors.current
     val fontSize = style.fontSize.takeIf { it != TextUnit.Unspecified } ?: LocalMarkdownContentStyle.current.fontSizeSp.sp
     val chipFont = fontSize * 0.92f
@@ -513,7 +539,7 @@ private fun MdInlineText(
     val displayed = colorIfDirty(annotated, lineIndex, dirtyLines)
     val codeRanges = displayed.getStringAnnotations(MD_INLINE_CODE_TAG, 0, displayed.length)
     if (codeRanges.isEmpty()) {
-        Text(displayed, modifier = modifier, style = style, color = color)
+        Text(displayed, modifier = modifier, style = markdownStyle, color = color)
         return
     }
     val density = LocalDensity.current
@@ -539,14 +565,19 @@ private fun MdInlineText(
                     val lastGlyph = layout.getBoundingBox(end - 1)
                     val left = firstGlyph.left - horizontalInset
                     val right = lastGlyph.right + horizontalInset
-                    // 字符框的高度会随换行后的字体 run / 行距分配变化：同一截图里
-                    // 第一行约 20px，第二行却达到 29px。只用字符框求水平边界；
-                    // 垂直方向按代码字号定高，居中放在每行的行框内。
+                    // 字符框的高度会随换行后的字体 run / 行距分配变化，只用它求水平边界。
+                    // 背景围绕代码字号的 em 盒绘制：基线以上 0.7em、以下 0.3em，
+                    // 再加上下相同的 padding，避免背景上沿显得比下沿更空。
                     val lineTop = layout.getLineTop(line).toFloat()
                     val lineBottom = layout.getLineBottom(line).toFloat()
                     val availableHeight = (lineBottom - lineTop - 2 * lineEdgeInset).coerceAtLeast(1f)
+                    val baseline = layout.getLineBaseline(line)
                     val pillHeight = minOf(chipFontPx + 2 * chipVerticalPadding, availableHeight)
-                    val top = lineTop + (lineBottom - lineTop - pillHeight) / 2f
+                    val emCenter = baseline - chipFontPx * 0.2f
+                    val top = (emCenter - pillHeight / 2f).coerceIn(
+                        lineTop + lineEdgeInset,
+                        lineBottom - lineEdgeInset - pillHeight,
+                    )
                     val bottom = top + pillHeight
                     if (right > left && bottom > top) {
                         drawRoundRect(
@@ -561,7 +592,7 @@ private fun MdInlineText(
         },
         // 明确让首行与续行采用同一种行高余量分配；否则即使背景等高，
         // 默认首行裁切仍会让代码字形到药丸顶部的距离不同。
-        style = style.copy(lineHeightStyle = LineHeightStyle(
+        style = markdownStyle.copy(lineHeightStyle = LineHeightStyle(
             alignment = LineHeightStyle.Alignment.Center,
             trim = LineHeightStyle.Trim.None,
         )),
@@ -687,8 +718,14 @@ private fun ReaderMarkdownText(
     // 默认阅读正文略低于全局 onSurface；题库答案可单独覆盖，保留其它页面原色阶。
     val contentColor = readingColors?.body ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.93f)
     val codeTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
-    val bodyStyle = ui.typography.body.copy(fontSize = mdSp(14), lineHeight = mdLh(23), color = contentColor)
+    val bodyStyle = ui.typography.body.copy(
+        fontSize = mdSp(14),
+        lineHeight = mdLh(23),
+        letterSpacing = 0.2.sp,
+        color = contentColor,
+    )
     val lines = md.lines()
+    val listGroups = remember(lines) { markdownListGroups(lines) }
     Box(modifier.fillMaxWidth()) {
         Column(
             Modifier.widthIn(max = effectiveMax).fillMaxWidth().align(Alignment.CenterStart),
@@ -732,8 +769,8 @@ private fun ReaderMarkdownText(
                 // 字形宽度左右浮动），与正文间距 = 20dp − 字形宽，随标记类型略有差异。
                 // 嵌套层级画缩进参考线：落在该级标记列左侧 4dp（级数×20−4dp，避开左对齐字形，
                 // 也避开上一级最宽标记），向下延伸 7dp 桥接块间距实现跨行连续；段落打断处自然断开。
-                // 顶层列表项保持分组呼吸感；二级同层条目稍松，三级同层条目
-                // 使用基础块距，使子列表内部的节奏与父项到首个子项一致。
+                // 顶层列表保留组间留白；无子列表的有序同级项收紧，含子列表时
+                // 保留原来的层级节奏。二级条目稍松，三级及更深沿用基础块距。
                 val guideLevels = when {
                     isListItem -> visualDepth
                     continuation -> visualDepth - 1
@@ -741,6 +778,11 @@ private fun ReaderMarkdownText(
                 }
                 val listTopSpacing = when {
                     !isListItem -> 0.dp
+                    numbered != null && sameLevelSibling && listGroups[i]?.hasNestedList == false -> when {
+                        visualDepth == 0 -> 4.dp
+                        visualDepth == 1 && lines.getOrNull(i - 1)?.isBlank() != true -> 2.dp
+                        else -> 0.dp
+                    }
                     visualDepth == 0 -> 8.dp
                     !sameLevelSibling -> 0.dp
                     lines.getOrNull(i - 1)?.isBlank() == true -> 0.dp
@@ -800,6 +842,7 @@ private fun ReaderMarkdownText(
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = mdSp(13),
                                             lineHeight = mdLh(20),
+                                            letterSpacing = 0.5.sp,
                                             softWrap = false,
                                             color = codeTextColor,
                                         )

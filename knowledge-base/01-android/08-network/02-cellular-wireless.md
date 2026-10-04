@@ -1,6 +1,6 @@
 # 蜂窝数据与无线连接
 
-> 学习资料（文章模式沉淀）。主线：APN 配置来源与类型、Android 12+ 蜂窝数据栈模型、数据开关与豁免、蜂窝可用性验证、热点与网络共享、Wi-Fi 编程面、Network Security Config、网络库实践（连接池与 DNS 切换坑）。Telephony data 层类名与 apns 样例按本地 AAOS13 源码核对（部分同步树，Wi-Fi/Tethering 模块不在本地）；官方规则与社区经验口径随题标注（2026-09 检索）。多 APN 拓扑见 [06-multi-apn-veth.md](06-multi-apn-veth.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：APN 配置来源与类型、Android 12+ 蜂窝数据栈模型、数据开关与豁免、蜂窝可用性验证、热点与网络共享、Wi-Fi 编程面、Network Security Config、网络库实践（连接池与 DNS 切换坑）。Telephony data 层类名与 apns 样例按本地 AAOS13 源码核对（部分同步树，Wi-Fi/Tethering 模块不在本地）；官方规则与社区经验口径随题标注（2026-09 检索）。多 APN 拓扑见 [05-multi-apn-veth.md](05-multi-apn-veth.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: APN 配置从哪里来？类型有哪些、各干什么用？**
 

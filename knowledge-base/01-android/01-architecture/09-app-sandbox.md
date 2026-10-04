@@ -1,6 +1,6 @@
 # 应用沙箱
 
-> 学习资料（文章模式沉淀）。主线：UID/SELinux/seccomp 三层沙箱、多用户 UID 架构、seccomp 拒绝（SIGSYS）实战、UID 分配与段位、Zygote specialize 降权链。SELinux 拒绝排查与策略书写见 [11-selinux.md](11-selinux.md)；多进程初始化的启动期视角见 [../15-performance/11-app-startup-optimization.md](../15-performance/11-app-startup-optimization.md)（应用实践册）。2026-09-26 追加 Q5–Q12：沙箱与 UID 的源码深讲（UID 分配与段位、Zygote specialize 降权链、数据目录 DAC、sharedUserId 三层过滤、隔离进程与 SDK 沙箱、getCallingUid 安全语义），相关 UID 机制按 AOSP Application Sandbox、SELinux concepts、Zygote 文档与源码走读核对，常量按 Process.java（AOSP 13–17）核对。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：UID/SELinux/seccomp 三层沙箱、多用户 UID 架构、seccomp 拒绝（SIGSYS）实战、UID 分配与段位、Zygote specialize 降权链。SELinux 拒绝排查与策略书写见 [11-selinux.md](11-selinux.md)；多进程初始化的启动期视角见 [../15-performance/07-app-startup-optimization.md](../15-performance/07-app-startup-optimization.md)（应用实践册）。2026-09-26 追加 Q5–Q12：沙箱与 UID 的源码深讲（UID 分配与段位、Zygote specialize 降权链、数据目录 DAC、sharedUserId 三层过滤、隔离进程与 SDK 沙箱、getCallingUid 安全语义），相关 UID 机制按 AOSP Application Sandbox、SELinux concepts、Zygote 文档与源码走读核对，常量按 Process.java（AOSP 13–17）核对。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 中的 Sandbox 怎么理解？**
 

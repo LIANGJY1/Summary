@@ -1,8 +1,17 @@
 # View 测量、布局与绘制
 
-> 学习资料（文章模式沉淀）。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。AOSP 机制按本地 AAOS13 源码（Android 13）核对（View.java、ViewRootImpl.java、Choreographer.java、`libs/hwui/`），加速与绘制模型按官方文档口径（2026-09 检索），经验性结论标注社区口径。帧调度见 [../05-rendering/01-render-pipeline-vsync.md](../05-rendering/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](09-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../15-performance/01-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。AOSP 机制按本地 AAOS13 源码（Android 13）核对（View.java、ViewRootImpl.java、Choreographer.java、`libs/hwui/`），加速与绘制模型按官方文档口径（2026-09 检索），经验性结论标注社区口径。帧调度见 [../05-rendering/01-render-pipeline-vsync.md](../05-rendering/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](08-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../15-performance/05-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: 自定义 View 首次显示时为什么要先 measure、再 layout、最后 draw？**
+**Q1: Android View 与 ViewGroup 分别表示什么？**
+
+View 是界面树中可参与测量、布局、绘制和输入处理的基础节点。ViewGroup 是 View 的容器子类，除自身视图职责外还负责组织子 View 的测量、布局和事件分发。
+
+1. **View**：按钮、文本和自定义绘制控件通常是叶节点，但是否可滚动、聚焦或响应点击，取决于具体实现与状态。
+2. **ViewGroup**：线性布局等容器持有子节点，并决定它们的测量约束、位置和输入事件如何向下分发。ViewGroup 也可以绘制自身内容。
+
+因此，不能只凭“它是一个 View”推断控件支持某种交互或容器行为。
+
+**Q2: 自定义 View 首次显示时为什么要先 measure、再 layout、最后 draw？**
 
 三趟遍历分别解决尺寸、位置和像素内容。layout 依赖 measure 的结果，draw 又依赖已经确定的几何信息，因此正常首次呈现按 measure → layout → draw 进行。
 
@@ -11,15 +20,6 @@
 3. **draw（绘制）**：框架根据最终尺寸和位置生成 View 内容，并递归绘制子树。
 
 窗口首次遍历时，ViewRootImpl 依次执行 performMeasure、performLayout 和 performDraw。measure 还可能因父子尺寸协商而重复，但布局必须使用最终测量结果。具体实现可在 View.java 与 ViewRootImpl.java 核对。
-
-**Q2: Android View 与 ViewGroup 分别表示什么？**
-
-View 是界面树中可参与测量、布局、绘制和输入处理的基础节点。ViewGroup 是 View 的容器子类，除自身视图职责外还负责组织子 View 的测量、布局和事件分发。
-
-1. **View**：按钮、文本和自定义绘制控件通常是叶节点，但是否可滚动、聚焦或响应点击，取决于具体实现与状态。
-2. **ViewGroup**：线性布局等容器持有子节点，并决定它们的测量约束、位置和输入事件如何向下分发。ViewGroup 也可以绘制自身内容。
-
-因此，不能只凭“它是一个 View”推断控件支持某种交互或容器行为。
 
 **Q3: Android View 动画、帧动画和属性动画分别改变什么？**
 

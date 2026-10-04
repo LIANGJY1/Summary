@@ -1,8 +1,19 @@
 # Activity 与窗口生命周期
 
-> 学习资料（文章模式沉淀）。主线：Activity 启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、透明主题的尺寸陷阱、Configuration 变更的两条路径与 relaunch 语义、状态保存时机、启动模式与任务栈、切换动画期间的双窗口、首帧与启动度量、可见性与内存回调、车机多用户多显示下的归属差异。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityThread.java、`core/java/android/internal/policy/PhoneWindow.java`、ViewRootImpl.java），版本相关结论按官方文档口径（2026-09 检索）。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../15-performance/11-app-startup-optimization.md)，ANR 契约见 [ANR](../15-performance/03-anr.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：Activity 启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、透明主题的尺寸陷阱、Configuration 变更的两条路径与 relaunch 语义、状态保存时机、启动模式与任务栈、切换动画期间的双窗口、首帧与启动度量、可见性与内存回调、车机多用户多显示下的归属差异。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityThread.java、`core/java/android/internal/policy/PhoneWindow.java`、ViewRootImpl.java），版本相关结论按官方文档口径（2026-09 检索）。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../15-performance/07-app-startup-optimization.md)，ANR 契约见 [ANR](../15-performance/08-anr.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: Activity 执行到 onResume 后界面还没出现，首帧前后经历了哪些阶段？**
+**Q1: Activity 从创建到前后台切换时，常见生命周期回调顺序是什么？**
+
+首次显示、启动另一个 Activity、从后台返回和结束页面的回调序列不同。应按场景理解回调含义，不能把某一条序列当作所有设备状态下的固定承诺。
+
+1. **首次显示**：通常依次调用 `onCreate()`、`onStart()`、`onResume()`。
+2. **同进程从 A 启动 B**：A 先调用 `onPause()`，随后 B 创建并进入 `onResume()`。A 完全不可见后才调用 `onStop()`。多窗口和转场可能改变可见状态。
+3. **从停止状态返回**：通常依次调用 `onRestart()`、`onStart()`、`onResume()`。
+4. **结束 Activity**：按返回结束页面时先调用 `onPause()`。若离开可见状态，再调用 `onStop()`，随后调用 `onDestroy()`。配置变化重建也可能触发销毁，但原因与用户结束页面不同。
+
+`onStart()` 表示 Activity 进入可见状态，`onResume()` 表示它进入前台交互状态，`onPause()` 表示失去前台交互，`onStop()` 表示不再可见。多窗口、窗口转场、配置变化和系统版本会影响具体顺序。按回调语义管理资源，不依赖所有场景都走同一条路径。
+
+**Q2: Activity 执行到 onResume 后界面还没出现，首帧前后经历了哪些阶段？**
 
 以 Android 13 AOSP 冷启动为例，首帧链路分三步：
 
@@ -17,7 +28,7 @@
 
 因此，`onResume()` 不代表首帧已显示。首帧耗时应以首帧实际呈现为终点，例如 TTID（Time to Initial Display，初始显示耗时），而不是量到 `onResume()`。调用链可在 Android 13 的 `ActivityThread.java`、`Activity.java` 和 `ViewRootImpl.java` 中核对。
 
-**Q2: Android 内存紧张时哪些应用进程更容易被系统回收？**
+**Q3: Android 内存紧张时哪些应用进程更容易被系统回收？**
 
 系统依据进程中最重要的活动组件及其与用户交互的关系评估重要性。当前前台交互进程通常最重要，纯缓存后台进程通常最容易在内存压力下被结束。中间等级由可见窗口、正在运行的 Service 等因素决定。
 
@@ -30,7 +41,20 @@
 
 缓存进程可能被直接结束而不回调 `onDestroy()`。应在合适时机保存轻量界面状态。持续后台工作交给系统认可的任务或服务机制，而不要依赖某个进程长时间存活。
 
-**Q3: `FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？**
+**Q4: `startActivity()` 如何在任务选择与 Activity 实例复用之间作出决定？**
+
+系统先选目标任务，再决定目标 Activity 是复用还是新建。这是两个相关但不同的判断：任务已被选中，不代表该任务中的任意 Activity 都会被复用。
+
+沿下面的源码路径分析：
+
+1. **规范化启动请求**：结合 Intent、launch flags、目标 Activity 的 launchMode 与 taskAffinity，确定启动参数。
+2. **选择目标 Task**：检查现有任务与目标任务匹配条件。被选中的任务可能被带到前台，但其中目标实例是否存在还要单独判断。
+3. **处理目标栈**：结合目标实例在栈中的位置、清栈标记和启动模式，决定保留、清除上层 Activity 或复用目标实例。
+4. **创建或复用 Activity**：无可复用实例时创建新实例。复用时交付新 Intent 并可能调用 `onNewIntent()`。把最终分支与实际生命周期回调对应起来。
+
+具体 Android 版本决定内部实现。`startActivityInner()` 等方法名和分支会变化，不是稳定 SDK 契约。
+
+**Q5: `FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？**
 
 这三个 Intent flag 分别影响目标任务选择与目标实例所在栈的处理，效果还要和目标 Activity 的 launchMode、启动方及现有任务一起判断。
 
@@ -40,18 +64,7 @@
 
 判断结果时分别确认所选任务、目标实例在栈中的位置和最终回调。不能只依据单个 flag 名称推断完整返回栈。
 
-**Q4: Activity 从创建到前后台切换时，常见生命周期回调顺序是什么？**
-
-首次显示、启动另一个 Activity、从后台返回和结束页面的回调序列不同。应按场景理解回调含义，不能把某一条序列当作所有设备状态下的固定承诺。
-
-1. **首次显示**：通常依次调用 `onCreate()`、`onStart()`、`onResume()`。
-2. **同进程从 A 启动 B**：A 先调用 `onPause()`，随后 B 创建并进入 `onResume()`。A 完全不可见后才调用 `onStop()`。多窗口和转场可能改变可见状态。
-3. **从停止状态返回**：通常依次调用 `onRestart()`、`onStart()`、`onResume()`。
-4. **结束 Activity**：按返回结束页面时先调用 `onPause()`。若离开可见状态，再调用 `onStop()`，随后调用 `onDestroy()`。配置变化重建也可能触发销毁，但原因与用户结束页面不同。
-
-`onStart()` 表示 Activity 进入可见状态，`onResume()` 表示它进入前台交互状态，`onPause()` 表示失去前台交互，`onStop()` 表示不再可见。多窗口、窗口转场、配置变化和系统版本会影响具体顺序。按回调语义管理资源，不依赖所有场景都走同一条路径。
-
-**Q5: Launcher Activity 的 Intent Filter 应声明什么？**
+**Q6: Launcher Activity 的 Intent Filter 应声明什么？**
 
 应用启动器通过 MAIN action 与 LAUNCHER category 识别可显示的应用入口。该 filter 表达入口发现语义，不会单独保证 Activity 一定能启动。
 
@@ -59,7 +72,7 @@
 2. **category**：声明 `android.intent.category.LAUNCHER`，让启动器将组件作为应用图标入口展示。
 3. **组件可启动条件**：目标 Activity 必须允许启动器从外部访问。对 targetSdk 31 及以上且声明了 Intent Filter 的组件，必须显式设置 `android:exported`。Launcher 入口通常需设为 `true`，否则其他应用无法启动它。还要满足组件权限等限制。
 
-**Q6: Intent Filter 中的 action、category 与 data 分别匹配什么？**
+**Q7: Intent Filter 中的 action、category 与 data 分别匹配什么？**
 
 Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三组约束共同决定候选组件，不能彼此替代。
 
@@ -69,7 +82,7 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 通过 `startActivity()` 解析隐式 Intent 时，候选 filter 通常还必须声明 `CATEGORY_DEFAULT`。显式 Intent 或使用其他查询 flags 的场景有不同规则。
 
-**Q7: 隐式 Intent 如何通过 Intent Filter 找到可启动的 Activity？**
+**Q8: 隐式 Intent 如何通过 Intent Filter 找到可启动的 Activity？**
 
 系统把隐式 Intent 与已安装组件的 Intent Filter 比较，筛出符合条件的候选，再按解析结果选择启动对象。匹配成功不等于启动必然成功，也不保证只有一个候选。
 
@@ -80,7 +93,7 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 调用方只表达操作意图、无需绑定某个实现类时适合隐式 Intent。对查询结果应结合包可见性、导出状态、权限和实际启动结果判断。
 
-**Q8: 启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？**
+**Q9: 启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？**
 
 `onWindowFocusChanged(true)` 只表示窗口获得输入焦点，不承诺窗口内容已经绘制或提交到显示合成链路。需要避免启动遮罩早于内容消失时，应等内容首帧对应的缓冲区提交，再移除遮罩。这仍不等于面板已经完成物理扫描显示。
 
@@ -93,13 +106,13 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 因此，焦点变化适合处理输入焦点语义。以新内容替换启动遮罩时，应按所需的可见性保证选择帧提交或实际呈现时点。
 
-**Q9: setContentView 后应用内容为什么不直接成为窗口根 View？**
+**Q10: setContentView 后应用内容为什么不直接成为窗口根 View？**
 
 PhoneWindow 是应用侧 Window 的实现，负责生成并持有 DecorView、解析窗口主题属性并保存窗口参数（`core/java/android/internal/policy/PhoneWindow.java` 本地核对）。DecorView 是窗口根 ViewGroup，内部包含由框架管理的窗口部件，以及承载应用内容的 ContentFrameLayout。
 
 setContentView 把应用布局放进内容容器。需要调整状态栏背景、标题栏等框架部件时，应使用对应主题属性，而不是直接修改 DecorView 内部控件。
 
-**Q10: 在 onCreate 里读取根 View 宽高得到 0，应该等到哪个时机？**
+**Q11: 在 onCreate 里读取根 View 宽高得到 0，应该等到哪个时机？**
 
 onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth() / getHeight() 可能仍为 0。透明或无标题主题本身不会让 View 提前得到尺寸。
 
@@ -108,7 +121,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 1. **布局完成后读取**：在根 View 上注册 `OnLayoutChangeListener`，首次布局回调中读取宽高。只需读取一次时，在回调里移除监听器。
 2. **绘制前读取**：使用 `doOnPreDraw` 等一次性预绘制回调，在首帧绘制前读取已经确定的布局尺寸。
 
-**Q11: 旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？**
+**Q12: 旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？**
 
 系统根据 Activity 是否声明自行处理某类配置变化，决定调用 `onConfigurationChanged()` 还是销毁并重建 Activity。未在 `android:configChanges` 中覆盖的变化通常会触发重建。该属性只应列出 Activity 确实能自行适配的配置类型。
 
@@ -118,7 +131,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 配置项名称与变化覆盖关系以应用 targetSdk 和目标 Android 版本的 Activity manifest 文档为准。
 
-**Q12: 进程被系统回收后页面状态丢失，onSaveInstanceState 哪些内容需要自己保存？**
+**Q13: 进程被系统回收后页面状态丢失，onSaveInstanceState 哪些内容需要自己保存？**
 
 系统预计 Activity 可能被销毁并恢复时，会调用 onSaveInstanceState 保存轻量的临时界面状态。用户按返回结束页面或应用调用 finish() 时，系统不保证调用它（Android 官方文档口径）。因此它不适合保存必须持久化的业务数据。
 
@@ -130,7 +143,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 把轻量临时状态写入 Bundle，在 onCreate 或 onViewCreated 恢复。用户数据与必须持久化的业务状态应由数据层保存。
 
-**Q13: 详情页返回后直接退出应用，是否由 `singleTask` 清理了返回栈？**
+**Q14: 详情页返回后直接退出应用，是否由 `singleTask` 清理了返回栈？**
 
 `singleTask` 会让目标 Activity 在匹配的任务中以根 Activity 形式复用。系统清除其上方页面后，按返回可能直接离开该任务。先检查目标 launchMode 和任务栈，再判断是否是该行为导致。
 
@@ -144,7 +157,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 Intent flags 也会影响启动结果。若页面需要普通的页面内返回栈，不要只为复用实例而随意设置 `singleTask`。
 
-**Q14: Activity 复用后收到新 Intent，为什么 `getIntent()` 仍是旧值？**
+**Q15: Activity 复用后收到新 Intent，为什么 `getIntent()` 仍是旧值？**
 
 当启动规则复用已有 Activity 实例时，系统通过 `onNewIntent()` 交付新 Intent，但不会自动替应用更新 Activity 保存的 Intent 字段，因此 `getIntent()` 仍可能返回最初启动时的 Intent。
 
@@ -152,7 +165,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 2. **回调差异**：复用实例时调用 `onNewIntent()`，不会重新调用该实例的 `onCreate()`。若系统创建新实例，则走新的创建生命周期。
 3. **同步业务输入**：把回调参数作为新的业务输入处理。需要后续 `getIntent()` 返回新值时，在回调里显式调用 `setIntent(intent)`。否则 Activity 自身仍保存旧 Intent。
 
-**Q15: 跨应用启动后 Activity 跑进了意外的任务栈，`taskAffinity` 与 `allowTaskReparenting` 起什么作用？**
+**Q16: 跨应用启动后 Activity 跑进了意外的任务栈，`taskAffinity` 与 `allowTaskReparenting` 起什么作用？**
 
 `taskAffinity` 表达 Activity 倾向加入哪个任务，`allowTaskReparenting` 允许系统在相应任务再次到前台时，把 Activity 从启动它的任务迁到 affinity 匹配的任务。两项都不能单独决定完整启动结果。
 
@@ -161,7 +174,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 3. **适用模式**：官方清单语义将重新归属限制在 `standard` 与 `singleTop` 模式。`singleTask` 和 `singleInstance` Activity 作为任务根，不按该方式 reparent。
 4. **运行时核对**：检查启动方、`NEW_TASK` 等 flags、目标 launchMode、两侧 affinity 和当前任务栈。记录实际 task 归属，不依赖固定 `taskId` 或唯一返回路径。
 
-**Q16: Activity 切换时短暂看到前后两个页面，窗口动画期间发生了什么？**
+**Q17: Activity 切换时短暂看到前后两个页面，窗口动画期间发生了什么？**
 
 某些窗口转场会让旧 Activity 的窗口内容与新 Activity 的首帧在一段时间内都参与显示合成，因此画面可能短暂重叠。它不是两个 Activity 同时处于 resumed 状态的证明。
 
@@ -171,11 +184,11 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 
 对话框若在过渡期间出现，也要结合窗口类型、显示时序和目标显示检查，不能仅从 Activity 回调顺序判断画面归属。
 
-**Q17: 启动指标显示首帧很快但页面仍是骨架，首帧与 reportFullyDrawn 分别表示什么？**
+**Q18: 启动指标显示首帧很快但页面仍是骨架，首帧与 reportFullyDrawn 分别表示什么？**
 
 首帧表示界面已开始绘制。reportFullyDrawn() 表示应用认为关键内容已可用，并向系统报告启动完成（Android 官方文档口径）。两者应按各自语义采集：首帧可能只显示占位骨架，不能代替“主要内容已可用”的指标。
 
-**Q18: 应用退到后台后收到 `onTrimMemory()`，哪些状态可以释放？**
+**Q19: 应用退到后台后收到 `onTrimMemory()`，哪些状态可以释放？**
 
 收到 `TRIM_MEMORY_UI_HIDDEN` 表示应用 UI 已不再可见，可释放只服务于当前 UI 且能重建的资源，例如位图或动画缓存。它不表示进程已经被杀，也不应清除必须恢复的用户状态。
 
@@ -183,7 +196,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 2. **必须保留的数据**：跨进程死亡仍需保留的业务数据写入持久化存储。轻量临时 UI 状态用实例状态机制保存。
 3. **版本边界**：Android 14 起系统不再发送多个旧的运行期与内存压力 trim 等级，Android 15 起这些常量已弃用。`TRIM_MEMORY_UI_HIDDEN` 与 `TRIM_MEMORY_BACKGROUND` 仍是当前文档强调的两类信号。应按实际系统版本处理回调，不能期待完整旧等级序列。
 
-**Q19: 车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？**
+**Q20: 车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？**
 
 Activity 的运行归属同时涉及 Android 用户与 Display：Activity 在所属用户的应用进程和状态空间中运行，并被系统放置到某个显示区域。车机的 occupant zone（座位区）可以把乘员用户与显示器关联，因此同一时刻可能存在多个可见或活动的用户上下文。
 
@@ -193,7 +206,7 @@ Activity 的运行归属同时涉及 Android 用户与 Display：Activity 在所
 
 车机的 occupant zone 策略由 AAOS 配置与平台服务决定。同一时刻有多个可见用户，不代表 Android 全局只有一个当前用户的约束消失。
 
-**Q20: Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？**
+**Q21: Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？**
 
 这类问题通常由重活占用首帧、生命周期外仍执行回调，或额外窗口干扰转场造成。排查时先把操作绑定到正确时点，并让异步结果服从当前 Activity/视图生命周期。
 
@@ -203,7 +216,7 @@ Activity 的运行归属同时涉及 Android 用户与 Display：Activity 在所
 4. **在 `onPause()` 提交 UI 变化**：Activity 已失去前台交互，此时修改的布局可能很快不可见，也可能与窗口动画竞争。将可见性相关变更放到合适的 resumed 状态。
 5. **异步结果写入旧实例**：配置重建或视图销毁后，旧回调仍可能持有旧 Activity/View。让界面观察生命周期感知的数据，并在结果应用前确认当前 owner 有效。
 
-**Q21: Fragment 返回后旧 View 仍被观察者更新，视图生命周期该怎么绑定？**
+**Q22: Fragment 返回后旧 View 仍被观察者更新，视图生命周期该怎么绑定？**
 
 Fragment 实例可能比它创建的 View 树活得更久，因此视图观察者必须绑定到 `viewLifecycleOwner`，并在视图销毁时解除直接的 View 引用。将观察者绑定到 Fragment 自身会让旧视图在 `onDestroyView()` 后继续被引用。
 
@@ -213,7 +226,7 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 
 回退栈和 ViewPager2 等场景可能保留 Fragment 实例而销毁 View。具体回调取决于导航和宿主状态，不应把示例顺序当成每条路径都必须完整经过的固定序列。
 
-**Q22: 切换 Fragment 页面后状态与内存表现不同，`show/hide`、`replace`、ViewPager2 有什么差别？**
+**Q23: 切换 Fragment 页面后状态与内存表现不同，`show/hide`、`replace`、ViewPager2 有什么差别？**
 
 三种方式在视图保留、Fragment 实例保留和回退语义上不同，选型应看返回时是否要保留现有 View 树，以及可接受的内存成本。
 
@@ -222,7 +235,7 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 3. **ViewPager2 + `FragmentStateAdapter`**：Adapter 管理 Fragment 实例与保存状态。离当前页面较远的项可被销毁并保存状态，回到该项时再创建 Fragment。近邻页面的保留受 offscreen page limit 和 RecyclerView 回收行为影响，不能断言所有离屏页都立即销毁 View。
 4. **选择**：高频平级切换可用 `show/hide`（接受多份 View 常驻）或 ViewPager2。需要明确导航返回语义时使用 `replace` 与 back stack。切回来状态缺失时，检查是否错误销毁了本应保留的视图或业务状态。
 
-**Q23: 网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？**
+**Q24: 网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？**
 
 `commit()` 异步排队执行，`commitNow()` 在当前调用点同步执行，`commitAllowingStateLoss()` 允许在状态已保存后提交但可能让界面状态在恢复时丢失。网络回调不应通过 allowing-state-loss 来掩盖生命周期竞态。
 
@@ -233,7 +246,7 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 
 `onSaveInstanceState()` 之后 FragmentManager 可能已禁止普通事务。具体异常时点与生命周期实现应按 AndroidX 版本核对。
 
-**Q24: 共享 ViewModel 后页面重建却不刷新或旧 View 泄漏，作用域与观察者应绑定谁？**
+**Q25: 共享 ViewModel 后页面重建却不刷新或旧 View 泄漏，作用域与观察者应绑定谁？**
 
 ViewModel 的 `ViewModelStoreOwner` 决定数据实例存活与共享范围，观察者的 LifecycleOwner 决定何时接收更新。两者应分别选择，不能把数据共享范围误当成 View 生命周期。
 
@@ -242,19 +255,6 @@ ViewModel 的 `ViewModelStoreOwner` 决定数据实例存活与共享范围，�
 3. **导航图作用域**：`navGraphViewModels()` 以导航图对应的 back stack entry 为 owner。图对应的回退栈 entry 移除后清理实例。
 4. **观察视图状态**：只要观察结果会更新 Fragment 的 View，就绑定 `viewLifecycleOwner`。视图重建后，新 owner 重新观察共享 ViewModel。不要把观察者绑在 Fragment 实例生命周期上。
 5. **避免泄漏**：ViewModel 不持有 Fragment、Activity、View 或 ViewBinding 引用。ViewModel 可能比单个视图活得更久，直接引用会把已销毁的视图树留在内存中。
-
-**Q25: `startActivity()` 如何在任务选择与 Activity 实例复用之间作出决定？**
-
-系统先选目标任务，再决定目标 Activity 是复用还是新建。这是两个相关但不同的判断：任务已被选中，不代表该任务中的任意 Activity 都会被复用。
-
-沿下面的源码路径分析：
-
-1. **规范化启动请求**：结合 Intent、launch flags、目标 Activity 的 launchMode 与 taskAffinity，确定启动参数。
-2. **选择目标 Task**：检查现有任务与目标任务匹配条件。被选中的任务可能被带到前台，但其中目标实例是否存在还要单独判断。
-3. **处理目标栈**：结合目标实例在栈中的位置、清栈标记和启动模式，决定保留、清除上层 Activity 或复用目标实例。
-4. **创建或复用 Activity**：无可复用实例时创建新实例。复用时交付新 Intent 并可能调用 `onNewIntent()`。把最终分支与实际生命周期回调对应起来。
-
-具体 Android 版本决定内部实现。`startActivityInner()` 等方法名和分支会变化，不是稳定 SDK 契约。
 
 **Q26: AAOS Launcher 设置 `FLAG_ACTIVITY_NEW_TASK` 后，系统是否一定新建任务？**
 

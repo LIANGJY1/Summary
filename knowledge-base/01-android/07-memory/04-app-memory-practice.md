@@ -1,6 +1,6 @@
 # 内存实践：堆预算、泄漏治理、Native 排查与线上监控
 
-> 学习资料（文章模式沉淀）。主线：应用侧内存实践——堆预算与 GC 友好编码、内存泄漏治理、Native 与虚拟内存排查、Bitmap 优化、大内存与多进程策略、端侧推理内存管理与线上监控的落地判断。源文档：android-internals-wiki 第 23 章《内存实践》§23.1–§23.7；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（MemoryLimiter、ProfilingManager 触发器、`Debug.getRss()`、16 KiB 页要求为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；Compose、OkHttp、KOOM 等独立发布组件按材料口径转写并标注组件版本，Play 内存门槛（2027-02 起）按材料口径转写，材料声明已与官方公告核对、本次网络不可用未重复核对。GC、lmkd、冻结与 MemoryLimiter 的机制层见 [../07-memory/01-memory-management.md](01-memory-management.md)；OOM 分类与 Native、FD 监控视角见 [04-stability-leaks.md](03-app-memory-stability.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：应用侧内存实践——堆预算与 GC 友好编码、内存泄漏治理、Native 与虚拟内存排查、Bitmap 优化、大内存与多进程策略、端侧推理内存管理与线上监控的落地判断。源文档：android-internals-wiki 第 23 章《内存实践》§23.1–§23.7；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（MemoryLimiter、ProfilingManager 触发器、`Debug.getRss()`、16 KiB 页要求为 Android 14–17 能力，AAOS13 无或不同），工程实践按材料口径转写、不确定处已弱化；Compose、OkHttp、KOOM 等独立发布组件按材料口径转写并标注组件版本，Play 内存门槛（2027-02 起）按材料口径转写，材料声明已与官方公告核对、本次网络不可用未重复核对。GC、lmkd、冻结与 MemoryLimiter 的机制层见 [../07-memory/01-memory-management.md](01-memory-management.md)；OOM 分类与 Native、FD 监控视角见 [03-app-memory-stability.md](03-app-memory-stability.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 只看 `Runtime.maxMemory()` 和一次堆曲线就判断 Java 堆健康，为什么不可靠？应该比较哪些信号？**
 

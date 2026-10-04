@@ -2,15 +2,28 @@
 
 > 从产物类型、Soong 构建到设备启动，理解 Android 可执行文件及常见运行问题。`/init` 示例按 AAOS 13 源码说明。维护者：session-to-knowledge。
 
-**Q1: Android 中的可执行文件、ELF、Soong 模块名和设备路径分别是什么？**
+**Q1: [done] 静态链接与动态链接有什么区别？**
 
-本机可执行文件是内核可通过 `execve` 建立程序映像并启动的程序；动态链接 ELF 的共享库则由内核启动的动态链接器加载。因此，“可执行文件”这里指本机程序，不泛指由 Android 运行时或框架启动的 JAR、APK。ELF 是常见的文件格式，不等于“可执行程序”；Soong 模块名用于构建依赖，产物文件名和设备安装路径由构建配置决定。
+静态链接把所需静态库代码并入可执行文件；动态链接则在启动时依赖动态链接器和共享库。AAOS 13 的 `init_first_stage` 静态链接，`init_second_stage` 动态链接：前者启动时 `/system` 尚未挂载，后者启动时系统分区已可用。
+
+1. **首阶段静态链接：**`init_first_stage` 设置 `static_executable: true`，因此启动时不需要动态链接器加载共享库。省略该属性时，Soong 默认构建动态可执行文件。静态链接不代表程序不依赖内核，也不妨碍它主动加载共享库。
+2. **系统阶段动态链接：**`init_second_stage` 将 `main.cpp` 和 `libinit` 等代码构建为 `/system/bin/init`，未设置 `static_executable: true`，Soong 因而按动态可执行文件构建。系统分区挂载后，动态链接器先加载 Bionic 共享库，再由 C 运行时从 ELF 入口 `_start` 调用 `main()`；它也可链接静态库，`libinit` 就是此例。
+
+源码依据：AAOS 13 的 `system/core/init/Android.bp`、Soong `cc` 模块实现和 Bionic 启动代码。
+
+**Q2: [done] Android 本机可执行文件、ELF、Soong 模块名和设备路径分别是什么？**
+
+这里的“本机可执行文件”指可由 Linux 内核按 `exec` 机制启动的本机程序，Android 平台二进制常见为 ELF。普通进程通常通过 `execve` 或 `execveat` 请求内核装载；启动时内核也可用内部的 `kernel_execve` 启动 `/init`。APK 是应用包，不是本机可执行映像；系统创建或复用应用进程后，由 ART 加载并执行其中的 DEX。共享库虽常为 ELF，仍需动态链接器加载，不能独立启动。ELF 是文件格式，不等于可执行程序；Soong 模块名用于构建依赖，产物文件名和设备安装路径由构建配置决定。
 
 1. **ELF：**描述二进制文件的格式；可执行程序和 `.so` 共享库都可能是 ELF，能否启动还取决于文件类型、CPU 架构、动态链接器及依赖库。
 2. **Soong 模块名：**构建图中的名称，例如 `init_second_stage`；它不一定是最终文件名。
 3. **产物名与路径：**`stem` 可将产物命名为 `init`，安装规则再决定它位于 ramdisk 还是 `/system/bin/init`。AAOS 13 的 `init` 就由不同模块生成并安装到不同位置。
 
-**Q2: Android 启动时执行的 `/init` 是什么，为什么源码里有两个 init？**
+
+
+
+
+**Q3: Android 启动时执行的 `/init` 是什么，为什么源码里有两个 init？**
 
 `/init` 是 ramdisk 根目录中的 ELF 可执行程序，内核启动用户空间时执行它作为 PID 1。AAOS 13 中，它由 Soong 模块 `init_first_stage` 构建；模块名不是设备上的文件名。
 
@@ -21,7 +34,11 @@
 
 这里的文件名和安装位置对应 AAOS 13 的 ramdisk 启动布局；具体产品应以实际 ramdisk 和启动配置为准。源码见 `system/core/init/Android.bp`、`first_stage_main.cpp`、`first_stage_init.cpp` 和 `main.cpp`。
 
-**Q3: 源码编译的可执行文件和预编译可执行文件有什么区别？**
+
+
+
+
+**Q4: 源码编译的可执行文件和预编译可执行文件有什么区别？**
 
 区别在输入来源：`cc_binary` 用源码为目标 Android 架构编译程序；`cc_prebuilt_binary` 将已有二进制登记进 Soong 构建图。两者都可能产出可安装、可启动的程序。
 
@@ -29,24 +46,23 @@
 2. **只有产物：**使用 `cc_prebuilt_binary` 导入，但先确认它面向 Android、匹配设备 ABI，并具备设备所需的动态链接器和依赖库。
 3. **不能只看架构：**宿主机 Linux 程序即使同为 ARM，也可能依赖 glibc；Android 通常使用 Bionic，因此不能据此认定它能在 Android 运行。
 
-**Q4: `.so`、静态库、Java JAR 和 APK 都是可执行文件吗？**
 
-它们用途不同：本机可执行 ELF 可直接启动；库用于被程序链接或加载；JAR 需由 Android 运行时启动；APK 则由 Android 应用框架安装和启动。
+
+
+
+**Q5: `.so`、静态库、Java JAR 和 APK 都是可执行文件吗？**
+
+它们用途不同：本机可执行 ELF 可作为独立程序启动；库供程序链接或加载；JAR 由运行时加载；APK 是应用安装包，安装后由 Android 框架在应用进程中启动组件。
 
 1. **可执行 ELF：**例如 `/init` 或命令行工具，由内核装载并进入程序入口。
 2. **共享库 `.so`：**供程序运行时加载，本身通常没有可直接启动的程序入口；它虽也是 ELF，但不是命令行程序。
 3. **静态库 `.a`：**链接时把所需代码并入消费者，通常不作为独立文件在设备上启动。
 4. **Java JAR：**包含 Java/DEX 类，普通 JAR 不是内核可执行文件；设备侧程序需由 `app_process` 等运行时入口加载。
-5. **APK：**是应用安装包，不是 ELF；应用由 Zygote 和 Android 框架创建进程并启动组件。
+5. **APK：**是应用安装包，不是本机可执行文件；系统通过 Zygote 创建或复用应用进程，再由 ART 加载 DEX 代码，Android 框架在进程中启动应用组件。
 
-**Q5: 静态链接与动态链接有什么区别，AAOS 13 的两个 init 为什么采用不同方式？**
 
-静态链接把所需静态库代码并入可执行文件；动态链接则在启动时依赖动态链接器和共享库。AAOS 13 的 `init_first_stage` 静态链接，`init_second_stage` 动态链接：前者启动时 `/system` 尚未挂载，后者启动时系统分区已可用。
 
-1. **首阶段静态链接：**`init_first_stage` 设置 `static_executable: true`，因此启动时不需要动态链接器加载共享库。省略该属性时，Soong 默认构建动态可执行文件。静态链接不代表程序不依赖内核，也不妨碍它主动加载共享库。
-2. **系统阶段动态链接：**`init_second_stage` 将 `main.cpp` 和 `libinit` 等代码构建为 `/system/bin/init`，未设置 `static_executable: true`，Soong 因而按动态可执行文件构建。系统分区挂载后，动态链接器先加载 Bionic 共享库，再由 C 运行时从 ELF 入口 `_start` 调用 `main()`；它也可链接静态库，`libinit` 就是此例。
 
-源码依据：AAOS 13 的 `system/core/init/Android.bp`、Soong `cc` 模块实现和 Bionic 启动代码。
 
 **Q6: 构建、打进系统镜像和运行可执行文件分别由什么控制？**
 
@@ -55,6 +71,10 @@
 1. **构建：**`m <模块名>` 构建该模块及其依赖；构建成功不代表文件已进入设备镜像。
 2. **安装进产品：**产品配置通过 `PRODUCT_PACKAGES` 等方式选择模块；模块的安装属性决定能否安装及目标分区。
 3. **启动运行：**命令行程序可由 shell 执行；系统服务通常由 init 的 `.rc` 服务项启动；Java 程序由相应 Android 运行时入口启动。
+
+
+
+
 
 **Q7: Android 可执行文件存在却无法运行，应该先查什么？**
 
