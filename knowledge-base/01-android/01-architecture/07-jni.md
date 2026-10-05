@@ -36,12 +36,12 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 4. **启用检查**：在可调试设备上按该 Android 版本配置 CheckJNI，再执行稳定复现用例。可在应用 manifest 中启用 `android:debuggable` 以只对该应用启用，或在可用的调试设备上设置 `debug.checkjni=1`。CheckJNI 会检测部分 JNI 契约误用并报告 `JNI DETECTED ERROR IN APPLICATION`，但不能替代内存分析器发现所有泄漏。
 5. **定位分配点**：使用 heapprofd 等 native 内存分析工具关联分配调用栈，并将增长曲线与复现操作次数对照。
 
-**Q5: Android 的 `@FastNative` 和 `@CriticalNative` 分别减少什么调用开销？它们有哪些限制？**
+**Q5: [learning] Android 的 `@FastNative` 和 `@CriticalNative` 分别减少什么调用开销？它们有哪些限制？**
 
 两种注解都针对短小、高频的 JNI 调用，减少托管代码与 native 之间的转换开销。执行期间 GC 不能为关键工作挂起该线程，因而长时间运行或阻塞会延误 GC。`@FastNative` 保留常规 JNI 参数能力；`@CriticalNative` 更严格，适用的方法不能访问 Java 对象，ABI 中也没有 `JNIEnv*` 和 `jclass` 参数。
 
-1. **`@FastNative`**：ART 在 native 调用期间延迟挂起检查，因此方法应快速返回。不要在其中执行阻塞 I/O、长时间等待或回调 Java，否则会延迟 GC 和其他线程的挂起。
-2. **`@CriticalNative`**：仅用于静态方法，参数与返回值不能含 Java 对象。调用 ABI 不传 `JNIEnv*` 和 `jclass`，native 函数签名必须与这种约定匹配。
+1. `@FastNative`：ART 在 native 调用期间延迟挂起检查，因此方法应快速返回。不要在其中执行阻塞 I/O、长时间等待或回调 Java，否则会延迟 GC 和其他线程的挂起。
+2. `@CriticalNative`：仅用于静态方法，参数与返回值不能含 Java 对象。调用 ABI 不传 `JNIEnv*` 和 `jclass`，native 函数签名必须与这种约定匹配。
 3. **版本与注册**：Android 8 起平台内部实现这些优化。Android 8–10 的按名称动态查找尚未实现，Android 11 存在已知问题，因此 Android 8–11 必须使用 `RegisterNatives` 显式注册。Android 12 起支持内建动态查找，但性能敏感方法仍建议显式注册。Android 14（API 34）起成为 CTS 测试的公开 API。Android 7 及更早版本会忽略注解，`@CriticalNative` 的 ABI 不匹配可能造成参数编组错误和崩溃。Android 8–13 的兼容保证弱于 Android 14 之后，面向广泛设备兼容时应谨慎使用。
 4. **性能证据**：官方曾在特定设备上报告普通 JNI、FastNative 和 CriticalNative 的微基准时延约为 115 ns、35 ns 和 25 ns。该数字只代表对应设备和测试条件，不能当作应用实际收益保证。
 5. **使用判断**：先测量跨界调用是否为热点，再确认方法满足线程挂起、参数类型和耗时约束。若主要成本在计算、分配或数据复制，换注解不一定解决瓶颈。
@@ -65,11 +65,11 @@ native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始
 2. critical 区域必须短小，不得阻塞、等待锁或调用其他 JNI 函数，因为 VM 可能在此期间延迟 GC 或线程挂起。
 3. 不要根据 `isCopy` 的值决定是否释放，也不要把指针缓存到全局变量或异步任务中。
 
-**Q8: `Get<Type>ArrayElements` 的三种 Release 模式有什么区别，修改后的数组应选哪一种？**
+**Q8: [learning] `Get<Type>ArrayElements` 的三种 Release 模式有什么区别，修改后的数组应选哪一种？**
 
 `Get<Type>ArrayElements` 可能返回 pin 住的数组存储，也可能返回副本。Release 时要按是否提交修改和是否结束访问选择模式。
 
-1. **`0`**：提交修改并释放访问资源。常规读写完成后要让结果生效时使用。
-2. **`JNI_ABORT`**：不提交对副本所做的修改并释放访问资源。只读访问适合用它避免不必要的回写；若 VM 给出的是直接数组存储，则修改已发生，不能把它当作撤销修改。
-3. **`JNI_COMMIT`**：提交对副本的修改，但保留访问资源，之后仍须再调用一次 Release 结束访问。适用于需要阶段性提交、但还要继续使用指针的场景。
+1. `0`：提交修改并释放访问资源。常规读写完成后要让结果生效时使用。
+2. `JNI_ABORT`：不提交对副本所做的修改并释放访问资源。只读访问适合用它避免不必要的回写；若 VM 给出的是直接数组存储，则修改已发生，不能把它当作撤销修改。
+3. `JNI_COMMIT`：提交对副本的修改，但保留访问资源，之后仍须再调用一次 Release 结束访问。适用于需要阶段性提交、但还要继续使用指针的场景。
 4. **配对规则**：每次成功取得的 Elements 指针最终都必须释放。不要跨 Release 保存指针，因为 VM 可能使用临时副本或移动后的存储。

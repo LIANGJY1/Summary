@@ -10,9 +10,9 @@
 
 元注解是修饰注解类型的注解，写在注解类型的声明上。三个常用元注解控制不同维度：
 
-1. **`@Retention`：**指定注解保留到源码、class 文件还是运行时。若省略，默认按 `CLASS` 保留到 class 文件。
-2. **`@Target`：**限制注解可放置的位置，取值为 ElementType 枚举，常用的有 TYPE、FIELD、METHOD、PARAMETER、CONSTRUCTOR、ANNOTATION_TYPE，Java 8 起新增 TYPE_USE 与 TYPE_PARAMETER，Java 9 起新增 MODULE。若省略，注解可用于除类型参数声明外的所有声明位置，但不能标注类型用法。
-3. **`@Inherited`：**运行时按类查询时可沿父类找到注解。它不会复制注解，也不会让方法或接口注解自动继承。
+1. `@Retention`：指定注解保留到源码、class 文件还是运行时。若省略，默认按 `CLASS` 保留到 class 文件。
+2. `@Target`：限制注解可放置的位置，取值为 ElementType 枚举，常用的有 TYPE、FIELD、METHOD、PARAMETER、CONSTRUCTOR、ANNOTATION_TYPE，Java 8 起新增 TYPE_USE 与 TYPE_PARAMETER，Java 9 起新增 MODULE。若省略，注解可用于除类型参数声明外的所有声明位置，但不能标注类型用法。
+3. `@Inherited`：运行时按类查询时可沿父类找到注解。它不会复制注解，也不会让方法或接口注解自动继承。
 
 应按消费者选择保留策略：只供编译期使用的注解通常不必保留到运行时；反射读取需要 `RUNTIME` 保留。`@Inherited` 只影响运行时类注解查询，与保留策略是两个独立问题。
 

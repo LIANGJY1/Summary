@@ -111,7 +111,7 @@ uinput 是内核提供的虚拟输入设备接口：用户态程序打开 `/dev/
 
 `KEYCODE_DPAD_UP/DOWN/LEFT/RIGHT`、`KEYCODE_TAB` 这类导航键不走触摸分发，而由 `ViewRootImpl` 转成焦点移动：按键未被普通按键逻辑消费时进入 `performFocusNavigation()`，把键码映射为 `FOCUS_UP/DOWN/LEFT/RIGHT/FORWARD/BACKWARD` 方向，调用焦点系统在 View 树上寻找下一个可聚焦 View 并请求焦点（按 AAOS13 源码核对，`ViewRootImpl.java`）。`KEYCODE_DPAD_CENTER`/`KEYCODE_ENTER`/空格在焦点所在 View 上转成"点击"。
 
-应用配合要求集中在三件事：一是**可聚焦性**——控件 `focusable` 且在触摸模式下也可聚焦（车机旋钮界面常要求 `focusableInTouchMode`，否则触摸模式切换会丢焦点）；二是**焦点可见性**——`focusable` 的 View 要画焦点态（foreground/drawable selector），旋钮用户靠它知道在哪；三是**布局可达性**——焦点搜索基于几何邻近与方向，被遮挡、越界滚动、RecyclerView 子项未布局完成都会导致"焦点跳不到"，滚动容器的子项要能自动滚入可见区。
+应用配合要求集中在三件事：一是可聚焦性——控件 `focusable` 且在触摸模式下也可聚焦（车机旋钮界面常要求 `focusableInTouchMode`，否则触摸模式切换会丢焦点）；二是焦点可见性——`focusable` 的 View 要画焦点态（foreground/drawable selector），旋钮用户靠它知道在哪；三是布局可达性——焦点搜索基于几何邻近与方向，被遮挡、越界滚动、RecyclerView 子项未布局完成都会导致"焦点跳不到"，滚动容器的子项要能自动滚入可见区。
 
 车机旋钮方案的分工：AOSP 的 RotaryController（无障碍服务）负责解析旋钮并驱动同样的焦点移动，应用侧只需要按焦点导航规范做好可聚焦性——这也是"适配旋钮 = 适配焦点导航"的原因。调试时 `adb shell input keyevent DPAD_LEFT` 可在无旋钮环境验证焦点链。
 

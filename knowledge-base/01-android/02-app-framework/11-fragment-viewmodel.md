@@ -26,18 +26,18 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 
 三种方式在视图保留、Fragment 实例保留和回退语义上不同，选型应看返回时是否要保留现有 View 树，以及可接受的内存成本。
 
-1. **`show()` / `hide()`**：只改变已添加 Fragment View 的可见性，不触发 Fragment 生命周期回调。页面切换快且状态保留，但隐藏页的 View 树通常仍占内存。
-2. **`replace()`**：移除容器中的旧 Fragment 并加入新实例。不加入回退栈时，旧 Fragment 会按移除路径销毁。加入回退栈时，旧视图销毁而实例状态可随 back stack 保留，弹栈时再恢复。
-3. **ViewPager2 + `FragmentStateAdapter`**：Adapter 管理 Fragment 实例与保存状态。离当前页面较远的项可被销毁并保存状态，回到该项时再创建 Fragment。近邻页面的保留受 offscreen page limit 和 RecyclerView 回收行为影响，不能断言所有离屏页都立即销毁 View。
+1. `show()` / `hide()`：只改变已添加 Fragment View 的可见性，不触发 Fragment 生命周期回调。页面切换快且状态保留，但隐藏页的 View 树通常仍占内存。
+2. `replace()`：移除容器中的旧 Fragment 并加入新实例。不加入回退栈时，旧 Fragment 会按移除路径销毁。加入回退栈时，旧视图销毁而实例状态可随 back stack 保留，弹栈时再恢复。
+3. ViewPager2 + `FragmentStateAdapter`：Adapter 管理 Fragment 实例与保存状态。离当前页面较远的项可被销毁并保存状态，回到该项时再创建 Fragment。近邻页面的保留受 offscreen page limit 和 RecyclerView 回收行为影响，不能断言所有离屏页都立即销毁 View。
 4. **选择**：高频平级切换可用 `show/hide`（接受多份 View 常驻）或 ViewPager2。需要明确导航返回语义时使用 `replace` 与 back stack。切回来状态缺失时，检查是否错误销毁了本应保留的视图或业务状态。
 
 **Q4: [learning] 网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？**
 
 `commit()` 异步排队执行，`commitNow()` 在当前调用点同步执行，`commitAllowingStateLoss()` 允许在状态已保存后提交但可能让界面状态在恢复时丢失。网络回调不应通过 allowing-state-loss 来掩盖生命周期竞态。
 
-1. **`commit()`**：将事务安排到主线程执行，支持加入 back stack。FragmentManager 已保存宿主状态后仍调用，通常抛出 `IllegalStateException`，因为新事务不在已保存快照中。
-2. **`commitNow()`**：在当前调用点同步执行事务，方法返回前完成相应 Fragment 生命周期推进。不能对已调用 `addToBackStack()` 的事务使用，因为同步执行无法按异步回退栈事务保存。
-3. **`commitAllowingStateLoss()`**：语义接近异步 `commit()`，但允许状态已保存后执行。若 Activity 随后按旧快照恢复，这次 UI 事务可能丢失，因此只适用于丢失该 UI 变化可接受的场景。
+1. `commit()`：将事务安排到主线程执行，支持加入 back stack。FragmentManager 已保存宿主状态后仍调用，通常抛出 `IllegalStateException`，因为新事务不在已保存快照中。
+2. `commitNow()`：在当前调用点同步执行事务，方法返回前完成相应 Fragment 生命周期推进。不能对已调用 `addToBackStack()` 的事务使用，因为同步执行无法按异步回退栈事务保存。
+3. `commitAllowingStateLoss()`：语义接近异步 `commit()`，但允许状态已保存后执行。若 Activity 随后按旧快照恢复，这次 UI 事务可能丢失，因此只适用于丢失该 UI 变化可接受的场景。
 4. **回调处理**：网络结果返回时先确认宿主与当前视图仍处于允许事务的生命周期状态，再提交必要变更。使用该方法的理由是避免把异步竞态误当作可忽略的状态差异。
 
 `onSaveInstanceState()` 之后 FragmentManager 可能已禁止普通事务。具体异常时点与生命周期实现应按 AndroidX 版本核对。

@@ -34,14 +34,14 @@
 
 版本边界：字段清理和 ART 退出行为按 AAOS 13（Android 13）源码核对，android-internals-wiki 中的 Android 17 源码核对结论一致。AAOS 13 文件为 `libcore/ojluni/src/main/java/java/lang/Thread.java`。
 
-**Q3: `/proc/self/status` 的 `Threads`、`/proc/self/task`、Java `Thread` 快照与组件指标各能回答什么？`ThreadGroup.activeCount()` 能当硬限流依据吗？**
+**Q3: [learning] `/proc/self/status` 的 `Threads`、`/proc/self/task`、Java `Thread` 快照与组件指标各能回答什么？`ThreadGroup.activeCount()` 能当硬限流依据吗？**
 
 四类观测的统计对象不同，不能互相替代。`ThreadGroup.activeCount()` 只能提供估算值，不适合作为硬限流依据，因为计数与枚举之间线程可能启动或退出，`enumerate(Thread[])` 在数组过小时还会静默截断。
 
 各观测面的含义如下：
 
-1. **`/proc/self/status` 的 `Threads`：**当前进程中的 Linux task 总数，不提供线程来源和状态。
-2. **`/proc/self/task/<tid>`：**单个 task 的 TID、comm 短名称和调度状态，但看不到已退出且尚未 `join()` 的 pthread。
+1. `/proc/self/status` 的 `Threads`：当前进程中的 Linux task 总数，不提供线程来源和状态。
+2. `/proc/self/task/<tid>`：单个 task 的 TID、comm 短名称和调度状态，但看不到已退出且尚未 `join()` 的 pthread。
 3. **Java Thread 快照：**只覆盖有 Java peer 的线程并提供调用栈。各线程栈采样时刻不同，因此不是同一瞬间的一致快照。
 4. **线程池、协程和 SDK 指标：**能提供 owner、队列等组件语义，但只覆盖已接入监控的组件。
 
@@ -148,7 +148,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 2. `ExecutorService.asCoroutineDispatcher()` 创建独立 dispatcher，owner 结束时必须关闭。
 3. 协程没有独立的 Linux 调度优先级，内核调度的是线程。在可复用的线程池协程中调用 `Process.setThreadPriority()` 会改变 worker 属性并影响后续无关任务。需要稳定线程属性的组件应使用有界专用 executor，并在 `ThreadFactory` 中设置线程属性。
 
-**Q9: 一次同步 Binder 调用失败时，为什么不能凭一个 Java 异常断言“服务端没有执行”？排查时应分别记录哪三个结果？**
+**Q9: [learning] 一次同步 Binder 调用失败时，为什么不能凭一个 Java 异常断言“服务端没有执行”？排查时应分别记录哪三个结果？**
 
 不能只凭客户端异常断定服务端没有执行。同步调用可能在请求序列化、驱动投递、服务端执行或回复序列化与返回阶段失败。回复过大时服务端可能已经执行完，只是客户端没有收到结果。官方因此要求把 `TransactionTooLargeException` 当作部分失败处理。
 
@@ -165,9 +165,9 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 3. **扣款或消费一次性令牌等非幂等操作：**结果未知时只查询提交状态，不能盲目重放。
 4. **权限或参数错误：**修正 `SecurityException` 对应的权限或身份，以及参数错误。退避重试不会解决这类问题。
 5. **请求序列化失败：**本地运行时异常通常意味着请求未交给服务端，但仍需确认异常发生位置。
-6. **`oneway` 调用：**本地返回不代表目标已经处理。要保证投递结果，需另行设计确认和序号协议。
+6. `oneway` 调用：本地返回不代表目标已经处理。要保证投递结果，需另行设计确认和序号协议。
 
-**Q10: 调用 framework 管理类需要到处 `catch (RemoteException)` 吗？服务端 `onTransact()` 抛出的异常如何回到客户端？**
+**Q10: [learning] 调用 framework 管理类需要到处 `catch (RemoteException)` 吗？服务端 `onTransact()` 抛出的异常如何回到客户端？**
 
 不需要，也不一定可行。`RemoteException` 是受检异常，但 `PackageManager`、`ActivityManager` 等 framework 管理类通常会在内部捕获它，再通过 `rethrowFromSystemServer()` 转换成该 API 约定的运行时异常。只有自有 AIDL 代理对象或签名明确声明 `RemoteException` 的接口，才应在调用处处理这类受检异常。
 
@@ -175,7 +175,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 1. **可编码的同步异常：**若 Parcel 支持编码，服务端异常会写入回复并在客户端重放。AAOS 13 `Parcel.java` 的 `getExceptionCode()` 支持 `SecurityException`、`BadParcelableException`、`IllegalArgumentException`、`NullPointerException`、`IllegalStateException`、`NetworkOnMainThreadException`、`UnsupportedOperationException`、`ServiceSpecificException` 和 BootClassLoader 中的 Parcelable 异常。
 2. **权限与业务错误：**这些异常通常说明请求已到达服务端。`SecurityException` 应修复权限或调用身份，不应自动重试。`ServiceSpecificException` 携带服务自定义 `errorCode`，接口契约应说明每个错误码能否重试。
-3. **`oneway`：**没有同步回复通道，服务端异常无法沿调用路径返回。需要业务确认时，应另行设计回调和超时。
+3. `oneway`：没有同步回复通道，服务端异常无法沿调用路径返回。需要业务确认时，应另行设计回调和超时。
 4. **客户端解包失败：**`BadParcelableException`、找不到 Parcelable 类加载器或 Stable AIDL 版本不兼容不等同于远端死亡。日志要记录接口版本、transaction code 和错误发生方向。
 
 **Q11: 驱动返回 `FAILED_TRANSACTION` 时 Java 层如何选异常？小 Parcel 调用失败却抛 `DeadObjectException` 合理吗？**
@@ -221,7 +221,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 普通应用没有可依赖的全局 Binder 拦截点。`Binder.ProxyTransactListener` 和 `BinderInternal.Observer` 属于隐藏或平台内部接口，Native 和 Rust Binder 也不一定经过同一个 Java 入口。反射或 Native Hook 还会改变被测路径的时序。
 
-**Q14: ANR trace 显示主线程停在 `BinderProxy.transactNative`，接下来怎样补全证据链？**
+**Q14: [learning] ANR trace 显示主线程停在 `BinderProxy.transactNative`，接下来怎样补全证据链？**
 
 这条客户端堆栈只能证明主线程正在等待一次 IPC，不能说明服务端正在做什么。应使用 Perfetto 对齐时间线，采集 `binder_driver`、`sched` 和相关 atrace 类别，沿 flow 找到服务端线程，确认它在排队、等待锁、执行 I/O 还是发起下游 Binder，再检查回复返回后客户端何时恢复。
 
@@ -230,7 +230,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 1. **客户端：**记录调用接口、线程、request ID、开始等待与返回时间，以及失败类别。
 2. **服务端：**检查 request ID 是否到达、副作用是否完成、`onTransact()` 与业务函数耗时、Binder 线程状态、锁持有情况和进程崩溃、冻结或重启时间。
 3. **嵌套调用：**检查服务端是否等待锁、磁盘、硬件或下游 Binder。A 调 B、B 又同步回调 A 可能形成跨进程循环等待。
-4. **`oneway` 调用：**还要检查队列策略、丢弃或合并数量和消费序号缺口。
+4. `oneway` 调用：还要检查队列策略、丢弃或合并数量和消费序号缺口。
 5. **工具限制：**`dumpsys binder <pid>` 并非所有量产设备都提供。`/sys/kernel/debug/binder` 或 binderfs 统计节点受构建类型和 SELinux 限制。`FAILED BINDER TRANSACTION`、`oneway spamming` 等日志标签随构建变化，只能作为辅助证据。
 
 修复方向取决于根因。服务端 `onTransact()` 应快速校验并复制参数，再把耗时工作交给有容量上限的业务 executor，以便尽快释放 Binder 线程。不要持有应用锁发起外部同步 Binder 调用。确实无法避免时，应约定统一的跨进程加锁顺序并设计超时。
@@ -357,8 +357,8 @@ alias 生命周期可用以下状态迁移表示：
 
 `android:process` 的取值决定进程的命名与归属：
 
-1. **冒号开头（如 `:remote`）**：声明私有进程，最终进程名是"包名:remote"。私有进程只属于本应用，其他应用的组件不能与它运行在同一进程。
-2. **完整包名式命名（如 `com.example.remote`）**：声明全局进程名。传统上其他应用若声明相同的进程名并以 sharedUserId 共享 UID，可以尝试运行在同一进程；但 sharedUserId 机制已被平台废弃（API 29 起新安装的应用会被忽略该声明），不应再把"跨应用同进程"当作可依赖的设计。
+1. 冒号开头（如 `:remote`）：声明私有进程，最终进程名是"包名:remote"。私有进程只属于本应用，其他应用的组件不能与它运行在同一进程。
+2. 完整包名式命名（如 `com.example.remote`）：声明全局进程名。传统上其他应用若声明相同的进程名并以 sharedUserId 共享 UID，可以尝试运行在同一进程；但 sharedUserId 机制已被平台废弃（API 29 起新安装的应用会被忽略该声明），不应再把"跨应用同进程"当作可依赖的设计。
 
 实践中大多数多进程需求（推送、WebView 独立进程、媒体播放等）用冒号私有进程即可：隔离内存占用与故障域，同时不引入跨应用共享的复杂度。
 

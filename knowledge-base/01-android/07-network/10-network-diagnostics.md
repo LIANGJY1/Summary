@@ -32,7 +32,7 @@ ftrace 事件里有网络相关探针：TCP 重传、连接状态迁移、网卡
 
 **Q8: [learning] 车机网络的弱网/异常场景怎么在台架上造出来？**
 
-用 netem（内核 tc qdisc，userdebug/root 可用）在出口网卡上注入损伤：`netem delay/loss/duplicate/reorder/corrupt` 分别造延迟、丢包、重复、乱序、比特错，`rate` 限带宽，`-HISTGRAM` 类分布可造抖动（通用 Linux 机制；注意 netem 挂在 egress，双向损伤要在两端或 ifb 回环造）。测试矩阵至少覆盖六场景：好网基线、高丢包（1%/5%/20%）、高延迟与抖动（弱信号蜂窝）、窄带宽（2G/边缘速率）、**切换抖动**（两网来回横跳，`ip link` up/down 脚本化）、**无网与假网**（断链、以及"有链路无外网"的认证门户态）。三个补充：v6-only/CLAT 场景单独列一档（02 册 Q13 的 UDP 分片坑只有 v6-only 才暴露）；真实弱网样本用 pcap 录制回放比人造参数更可信；全部脚本化进 CI，台架每轮跑一次六场景矩阵，网络回归不靠人肉。
+用 netem（内核 tc qdisc，userdebug/root 可用）在出口网卡上注入损伤：`netem delay/loss/duplicate/reorder/corrupt` 分别造延迟、丢包、重复、乱序、比特错，`rate` 限带宽，`-HISTGRAM` 类分布可造抖动（通用 Linux 机制；注意 netem 挂在 egress，双向损伤要在两端或 ifb 回环造）。测试矩阵至少覆盖六场景：好网基线、高丢包（1%/5%/20%）、高延迟与抖动（弱信号蜂窝）、窄带宽（2G/边缘速率）、切换抖动（两网来回横跳，`ip link` up/down 脚本化）、无网与假网（断链、以及"有链路无外网"的认证门户态）。三个补充：v6-only/CLAT 场景单独列一档（02 册 Q13 的 UDP 分片坑只有 v6-only 才暴露）；真实弱网样本用 pcap 录制回放比人造参数更可信；全部脚本化进 CI，台架每轮跑一次六场景矩阵，网络回归不靠人肉。
 
 **Q9: [learning] radio log、tcpdump、应用埋点三个时间轴对不齐，怎么对齐？**
 

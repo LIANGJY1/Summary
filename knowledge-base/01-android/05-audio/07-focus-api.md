@@ -85,12 +85,12 @@ public final class ShortSoundFocus implements AutoCloseable {
 
 配置项及省略后果必须逐项核对：
 
-1. **`setUsage(USAGE_ASSISTANCE_SONIFICATION)`**：明确普通 UI 音效，使 AAOS 13 映射到 `SYSTEM_SOUND`。省略时 Builder 默认 usage 为 `USAGE_UNKNOWN`，车机通常映射到 `MUSIC`，会改变焦点矩阵和路由。
-2. **`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`**：表明短时声音容许旧持焦者继续。Builder 必须给 gain 类型。换成 `AUDIOFOCUS_GAIN_TRANSIENT` 将使并发矩阵即使允许共存也可能让旧持有者丢焦。
-3. **`setAudioAttributes(attributes)`**：让焦点与播放器用同一用途。省略时 AudioFocusRequest 默认 `USAGE_MEDIA`。若播放器仍按 UI 音效播放，就会出现焦点/路由语义错位。
-4. **`setOnAudioFocusChangeListener(..., Handler(Looper.getMainLooper()))`**：失焦时在主线程结束该短音并放弃请求，避免已停止播放却继续占着焦点。显式主线程 Handler 是为了让本例的 `play()`/`finish()` 与回调共享线程。省略监听器时，在未要求延迟焦点的条件下 Builder 可创建请求，但应用收不到后续变化。省略 Handler 的重载会使用 AudioManager 创建时关联的 Looper，不能假定始终是主线程。
-5. **未调用 `setAcceptsDelayedFocusGain(true)`**：默认为 false，焦点暂不可用时本例立即失败。若要延迟播放，必须显式打开、保持回调，并在收到 `AUDIOFOCUS_GAIN` 后启动。对点击反馈通常不合适。
-6. **未调用 `setWillPauseWhenDucked(true)`**：默认 false。此参数表达“本应用持焦时，别人请求 MAY_DUCK，本应用希望暂停”。它不控制本次请求能否并发。短音若被其他声音打断，本例在 loss 回调停止。
+1. `setUsage(USAGE_ASSISTANCE_SONIFICATION)`：明确普通 UI 音效，使 AAOS 13 映射到 `SYSTEM_SOUND`。省略时 Builder 默认 usage 为 `USAGE_UNKNOWN`，车机通常映射到 `MUSIC`，会改变焦点矩阵和路由。
+2. `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`：表明短时声音容许旧持焦者继续。Builder 必须给 gain 类型。换成 `AUDIOFOCUS_GAIN_TRANSIENT` 将使并发矩阵即使允许共存也可能让旧持有者丢焦。
+3. `setAudioAttributes(attributes)`：让焦点与播放器用同一用途。省略时 AudioFocusRequest 默认 `USAGE_MEDIA`。若播放器仍按 UI 音效播放，就会出现焦点/路由语义错位。
+4. `setOnAudioFocusChangeListener(..., Handler(Looper.getMainLooper()))`：失焦时在主线程结束该短音并放弃请求，避免已停止播放却继续占着焦点。显式主线程 Handler 是为了让本例的 `play()`/`finish()` 与回调共享线程。省略监听器时，在未要求延迟焦点的条件下 Builder 可创建请求，但应用收不到后续变化。省略 Handler 的重载会使用 AudioManager 创建时关联的 Looper，不能假定始终是主线程。
+5. 未调用 `setAcceptsDelayedFocusGain(true)`：默认为 false，焦点暂不可用时本例立即失败。若要延迟播放，必须显式打开、保持回调，并在收到 `AUDIOFOCUS_GAIN` 后启动。对点击反馈通常不合适。
+6. 未调用 `setWillPauseWhenDucked(true)`：默认 false。此参数表达“本应用持焦时，别人请求 MAY_DUCK，本应用希望暂停”。它不控制本次请求能否并发。短音若被其他声音打断，本例在 loss 回调停止。
 
 本类要求宿主在主线程串行调用 `play()`/`finish()`。若跨线程使用，要通过 Handler 串行派发或同步状态。`stopPlayback` 应允许重复调用，因为失焦回调和宿主结束动作可能先后到达。它不支持多个音效实例重叠持焦。`startPlayback` 应异步或快速返回。实际播放器的 AudioAttributes 也必须设为相同 usage。来源：[AudioFocusRequest API 与默认值](https://developer.android.com/reference/android/media/AudioFocusRequest)、[AudioAttributes.Builder](https://developer.android.com/reference/android/media/AudioAttributes.Builder)、[AAOS 13 CarAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。
 
@@ -98,9 +98,9 @@ public final class ShortSoundFocus implements AutoCloseable {
 
 媒体应按焦点变化管理同一个播放会话，不能仅看 AudioManager 当前音量，也不能定时自行“抢回来”。
 
-1. **`AUDIOFOCUS_LOSS`**：视为永久失焦，停止或暂停并释放本次焦点会话。用户再次点播放时重新申请。不要等待系统必然恢复。
-2. **`AUDIOFOCUS_LOSS_TRANSIENT`**：暂时暂停并保留可恢复状态。随后收到 `AUDIOFOCUS_GAIN` 才恢复，而且还要确认用户没有在等待期间主动暂停。
-3. **`AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`**：普通音乐可降低音量继续播放。有语音内容的播客、有声书可通过 `setWillPauseWhenDucked(true)` 请求回调并暂停，以免丢失语义。Android 8+ 系统可自动 duck 非语音内容而不回调应用。AAOS 外部焦点策略也会影响通知方式，不能依赖“每次都会收到 CAN_DUCK”。
+1. `AUDIOFOCUS_LOSS`：视为永久失焦，停止或暂停并释放本次焦点会话。用户再次点播放时重新申请。不要等待系统必然恢复。
+2. `AUDIOFOCUS_LOSS_TRANSIENT`：暂时暂停并保留可恢复状态。随后收到 `AUDIOFOCUS_GAIN` 才恢复，而且还要确认用户没有在等待期间主动暂停。
+3. `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`：普通音乐可降低音量继续播放。有语音内容的播客、有声书可通过 `setWillPauseWhenDucked(true)` 请求回调并暂停，以免丢失语义。Android 8+ 系统可自动 duck 非语音内容而不回调应用。AAOS 外部焦点策略也会影响通知方式，不能依赖“每次都会收到 CAN_DUCK”。
 
 来源：[Android 音频焦点回调和自动 duck](https://developer.android.com/media/optimize/audio-focus)、[AAOS 并发条件](https://source.android.com/docs/automotive/audio/audio-focus)。
 

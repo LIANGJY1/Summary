@@ -38,5 +38,5 @@ bootloader 负责加载启动所需的物理镜像并启动内核，不负责解
 1. **bootloader 阶段：**bootloader 根据设备启动配置读取 boot chain 所需物理分区，例如 boot、vendor_boot、init_boot、dtbo 和 vbmeta，并将内核与 ramdisk 交给内核启动。具体组合取决于 Android 发布版本、GKI、A/B 与 recovery 布局。
 2. **first-stage init：**init 从 ramdisk 启动并读取设备 fstab。对标记为 first-stage mount 的条目，它解析 `super` 元数据、创建逻辑分区映射设备，再挂载 system、vendor 等早期所需分区。fstab 中的分区类型和 first-stage 标记决定实际挂载集合，不能假设所有动态分区都会在同一时刻挂载。
 3. **Virtual A/B 特例：**启用压缩快照的设备可能需要 first-stage init 在挂载系统分区前启动 ramdisk 中的 `snapuserd`，让逻辑设备读取经过 snapshot 映射的数据。切换到系统分区并加载 SELinux policy 时，init 还需按版本定义的时序重新启动或切换 snapuserd 上下文，避免 snapshot I/O 中断。
-4. **`/data` 阶段：**init 在挂载 `/data` 前要按设备配置完成 metadata encryption 的密钥准备。常见 fstab/init 流程会在 late-fs 阶段等待 KeyMint/Keymaster 等依赖，再通过 `mount_all` 处理 `/data` 条目。阶段名称、等待服务和 fstab 标记随设备实现变化，因此具体顺序要检查产品 init rc 与 fstab。
+4. `/data` 阶段：init 在挂载 `/data` 前要按设备配置完成 metadata encryption 的密钥准备。常见 fstab/init 流程会在 late-fs 阶段等待 KeyMint/Keymaster 等依赖，再通过 `mount_all` 处理 `/data` 条目。阶段名称、等待服务和 fstab 标记随设备实现变化，因此具体顺序要检查产品 init rc 与 fstab。
 5. **文件系统安全层：**只读系统分区通常可在 block device 上叠加 dm-verity 校验。`/data` 可配置 dm-default-key 等 metadata encryption 机制。Android 9 的 system-as-root 布局把 root 文件系统并入 `system.img`，由内核将 `system` 挂载为根文件系统。Android 10 起，逻辑 `system` 分区不能再由内核直接挂载，系统分区映射和早期挂载由 ramdisk 中的 first-stage init 处理。升级设备会保留其原有启动布局，不能只按运行的 Android 版本推断分区形态。

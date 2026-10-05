@@ -1,6 +1,6 @@
 # Bionic 动态链接器：命名空间隔离与符号解析
 
-> 学习资料（文章模式沉淀，**证据等级：二手**）。主线：Android 动态链接器为什么需要命名空间隔离、命名空间的可达性判定为何有"路径"与"符号"两套语义、`dlopen` 的三段查找流程，以及 `ld.config` 运行时配置如何把 Treble 的隔离策略落地。源文档：Android 官方《链接器命名空间》文档（`source.android.com/docs/core/architecture/vndk/linker-namespace`）、AOSP `platform/bionic` 的 `linker/linker.cpp`、`linker/linker_namespaces.cpp`、`linker/linker.h`、`linker/dlfcn.cpp`、`linker/linker_main.cpp` 源码，以及中文社区对 `do_dlopen` 调用链的源码分析。**本册结论未逐条核对本地 AOSP 源码**，字段与枚举以官方文档与 AOSP 源码为准；版本差异已标注。已有 01 册的 Binder 与 JNI 册覆盖的是框架层调用与 JNI 桥接，本册是其加载底座，不重复。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀，证据等级：二手）。主线：Android 动态链接器为什么需要命名空间隔离、命名空间的可达性判定为何有"路径"与"符号"两套语义、`dlopen` 的三段查找流程，以及 `ld.config` 运行时配置如何把 Treble 的隔离策略落地。源文档：Android 官方《链接器命名空间》文档（`source.android.com/docs/core/architecture/vndk/linker-namespace`）、AOSP `platform/bionic` 的 `linker/linker.cpp`、`linker/linker_namespaces.cpp`、`linker/linker.h`、`linker/dlfcn.cpp`、`linker/linker_main.cpp` 源码，以及中文社区对 `do_dlopen` 调用链的源码分析。本册结论未逐条核对本地 AOSP 源码，字段与枚举以官方文档与 AOSP 源码为准；版本差异已标注。已有 01 册的 Binder 与 JNI 册覆盖的是框架层调用与 JNI 桥接，本册是其加载底座，不重复。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 动态链接器为什么需要"命名空间"这种机制，glibc 的同名机制解决了什么不同的问题？**
 
@@ -162,7 +162,7 @@ void* __loader_android_dlopen_ext(const char* filename, int flags,
 }
 ```
 
-差别体现在 `load_library` 的第一个分支上：只有 Java 层 `System.loadLibrary` 触发的加载才携带 `extinfo`，此时 so 文件**已经由 ClassLoader 加载进内存**，所以走重载路径直接复用；native 层直接调 `dlopen`/`android_dlopen_ext` 时 `extinfo` 为空，必须先 `open_library` 真正打开文件。`do_dlopen` 在 `extinfo != NULL` 时同样直接尝试 `load_library` 重载。判断规则：从 Java 侧 `System.loadLibrary` 成功但随后 `dlopen` 同一库失败，说明两者落在了**不同的命名空间**——前者是 ClassLoader 映射的命名空间，后者是调用方 so 所属的命名空间；这类"能加载但找不到"的典型根因就是调用方 so 与 Java 代码不在同一命名空间。
+差别体现在 `load_library` 的第一个分支上：只有 Java 层 `System.loadLibrary` 触发的加载才携带 `extinfo`，此时 so 文件已经由 ClassLoader 加载进内存，所以走重载路径直接复用；native 层直接调 `dlopen`/`android_dlopen_ext` 时 `extinfo` 为空，必须先 `open_library` 真正打开文件。`do_dlopen` 在 `extinfo != NULL` 时同样直接尝试 `load_library` 重载。判断规则：从 Java 侧 `System.loadLibrary` 成功但随后 `dlopen` 同一库失败，说明两者落在了不同的命名空间——前者是 ClassLoader 映射的命名空间，后者是调用方 so 所属的命名空间；这类"能加载但找不到"的典型根因就是调用方 so 与 Java 代码不在同一命名空间。
 
 **Q7: [learning] 命名空间之间是怎么建立"共享库"关系的，`shared_libs` 与 `allow_all_shared_libs` 有何区别？**
 
@@ -222,7 +222,7 @@ static const ElfW(Sym)* dlsym_linear_lookup(android_namespace_t* ns,
 }
 ```
 
-线性查找里有两条跳过规则值得记住：非 `RTLD_GLOBAL` 的库会被跳过，但注释明确说明**不跳过 `RTLD_LOCAL` 库**——`RTLD_LOCAL` 库也要参与 `dlsym(RTLD_DEFAULT, ...)`，这是为兼容 target SDK 低于 23 的应用（代码里以 `get_target_sdk_version() >= 23` 判定）。另外线性查找未命中时会回落到 `dlsym_handle_lookup_impl` 去查调用者的 `local_group_root`。按 handle 查找时，若 handle 是主可执行文件，会直接转成对 `RTLD_DEFAULT` 的线性查找——因为主可执行文件与所有 `DT_NEEDED` 库都带 `RTLD_GLOBAL` 且按广度优先顺序加载，一次线性查找就够。判断规则：`dlsym` 返回 null 但符号确实存在于某个已加载库里时，先确认查找起点——`RTLD_NEXT` 从调用者**之后**开始，所以它看不到调用者自己定义的同名符号，这是设计而非缺陷。
+线性查找里有两条跳过规则值得记住：非 `RTLD_GLOBAL` 的库会被跳过，但注释明确说明不跳过 `RTLD_LOCAL` 库——`RTLD_LOCAL` 库也要参与 `dlsym(RTLD_DEFAULT, ...)`，这是为兼容 target SDK 低于 23 的应用（代码里以 `get_target_sdk_version() >= 23` 判定）。另外线性查找未命中时会回落到 `dlsym_handle_lookup_impl` 去查调用者的 `local_group_root`。按 handle 查找时，若 handle 是主可执行文件，会直接转成对 `RTLD_DEFAULT` 的线性查找——因为主可执行文件与所有 `DT_NEEDED` 库都带 `RTLD_GLOBAL` 且按广度优先顺序加载，一次线性查找就够。判断规则：`dlsym` 返回 null 但符号确实存在于某个已加载库里时，先确认查找起点——`RTLD_NEXT` 从调用者**之后**开始，所以它看不到调用者自己定义的同名符号，这是设计而非缺陷。
 
 **Q9: [learning] `ld.config` 是怎么产生的，设备上的哪个文件是真正生效的那份？**
 
@@ -235,7 +235,7 @@ ld.config.txt                 有运行时命名空间隔离的设备
 ld.config.vndk_lite.txt       有 VNDK-SP 命名空间隔离的设备
 ```
 
-VNDK 配置与 VNDK Lite 配置的区别在于隔离彻底程度：VNDK 配置创建 `default`、`vndk`、`sphal`、`rs` 四个命名空间且**全部隔离**，确保 `system` 分区的模块不依赖 `vendor` 分区的库，反之亦然；供应商进程侧则是 `default`（隔离，装供应商库）、`vndk`（装 VNDK 与 VNDK-SP）、`system`（装 LL-NDK 及其依赖）三个命名空间。Android 8.1 起 VNDK 配置是默认配置，官方建议把 `BOARD_VNDK_VERSION` 设为 `current` 以启用完整隔离。Android 9 的变化是给供应商进程也加入了 `vndk` 命名空间、把 VNDK 库与默认命名空间隔离，并把 `PRODUCT_FULL_TREBLE` 换成更具体的 `PRODUCT_TREBLE_LINKER_NAMESPACES`，同时新增 `product` 与 `odm` 分区。判断规则：排查命名空间问题时，第一步是读设备上**实际的** `ld.config`（在 `/system/etc/linkerconfig/` 一带），而不是源码树里的模板——两者可能因设备配置而不同，源码树里的那份不代表设备实际加载的隔离策略。
+VNDK 配置与 VNDK Lite 配置的区别在于隔离彻底程度：VNDK 配置创建 `default`、`vndk`、`sphal`、`rs` 四个命名空间且全部隔离，确保 `system` 分区的模块不依赖 `vendor` 分区的库，反之亦然；供应商进程侧则是 `default`（隔离，装供应商库）、`vndk`（装 VNDK 与 VNDK-SP）、`system`（装 LL-NDK 及其依赖）三个命名空间。Android 8.1 起 VNDK 配置是默认配置，官方建议把 `BOARD_VNDK_VERSION` 设为 `current` 以启用完整隔离。Android 9 的变化是给供应商进程也加入了 `vndk` 命名空间、把 VNDK 库与默认命名空间隔离，并把 `PRODUCT_FULL_TREBLE` 换成更具体的 `PRODUCT_TREBLE_LINKER_NAMESPACES`，同时新增 `product` 与 `odm` 分区。判断规则：排查命名空间问题时，第一步是读设备上实际的 `ld.config`（在 `/system/etc/linkerconfig/` 一带），而不是源码树里的模板——两者可能因设备配置而不同，源码树里的那份不代表设备实际加载的隔离策略。
 
 **Q10: [learning] 动态链接器自己是怎么被加载并完成自举的，`AT_BASE` 起到了什么作用？**
 
@@ -364,7 +364,7 @@ vendor_available + product_available      不适用             core、产品、
 product_specific + vendor_available       core、vendor       产品、vendor
 ```
 
-`hidl_interface` 有个隐含行为：它同时隐含 `product_available: true` 与 `vendor_available: true`，但未在 `Android.bp` 中显式写出，因此无论是否带 `system_ext_specific: true` 都对所有分区可用。迁移时最常见的构建错误是"任何带 `product_specific: true` 的 `hidl_interface` 模块都不适用于系统模块"，官方给的修法是把它改成 `system_ext_specific: true`。判断规则：接口强制执行带来的构建错误分两类——**链接类型错误**说明 Java 模块的 `sdk_version` 范围不匹配（修法是扩展应用的 `sdk_version` 或收紧库的），**运行时链接失败**说明原生侧跨分区依赖（修法是改模块属性而不是加 `PRODUCT_ENFORCE_ARTIFACT_PATH_REQUIREMENTS` 之类的绕过开关）。
+`hidl_interface` 有个隐含行为：它同时隐含 `product_available: true` 与 `vendor_available: true`，但未在 `Android.bp` 中显式写出，因此无论是否带 `system_ext_specific: true` 都对所有分区可用。迁移时最常见的构建错误是"任何带 `product_specific: true` 的 `hidl_interface` 模块都不适用于系统模块"，官方给的修法是把它改成 `system_ext_specific: true`。判断规则：接口强制执行带来的构建错误分两类——链接类型错误说明 Java 模块的 `sdk_version` 范围不匹配（修法是扩展应用的 `sdk_version` 或收紧库的），运行时链接失败说明原生侧跨分区依赖（修法是改模块属性而不是加 `PRODUCT_ENFORCE_ARTIFACT_PATH_REQUIREMENTS` 之类的绕过开关）。
 
 **Q16: [learning] 这几层机制的版本差异会让结论失效吗，跨版本迁移时必须重新核对什么？**
 

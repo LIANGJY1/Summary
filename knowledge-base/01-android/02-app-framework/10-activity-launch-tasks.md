@@ -19,9 +19,9 @@
 
 这三个 Intent flag 分别影响目标任务选择与目标实例所在栈的处理，效果还要和目标 Activity 的 launchMode、启动方及现有任务一起判断。
 
-1. **`FLAG_ACTIVITY_NEW_TASK`**：要求系统在任务上下文中启动 Activity。系统会尝试选择合适的已有任务。没有可复用任务时才创建新任务。
-2. **`FLAG_ACTIVITY_SINGLE_TOP`**：目标实例已位于所选任务栈顶时复用它，并向 `onNewIntent()` 交付新 Intent。目标实例不在栈顶时通常创建新实例。
-3. **`FLAG_ACTIVITY_CLEAR_TOP`**：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。对 `standard` 目标且未加 `SINGLE_TOP` 时，目标实例自身也随上方页面一起出栈销毁并重建新实例；加上 `SINGLE_TOP` 才改为通过 `onNewIntent()` 复用现有实例。
+1. `FLAG_ACTIVITY_NEW_TASK`：要求系统在任务上下文中启动 Activity。系统会尝试选择合适的已有任务。没有可复用任务时才创建新任务。
+2. `FLAG_ACTIVITY_SINGLE_TOP`：目标实例已位于所选任务栈顶时复用它，并向 `onNewIntent()` 交付新 Intent。目标实例不在栈顶时通常创建新实例。
+3. `FLAG_ACTIVITY_CLEAR_TOP`：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。对 `standard` 目标且未加 `SINGLE_TOP` 时，目标实例自身也随上方页面一起出栈销毁并重建新实例；加上 `SINGLE_TOP` 才改为通过 `onNewIntent()` 复用现有实例。
 
 判断结果时分别确认所选任务、目标实例在栈中的位置和最终回调。不能只依据单个 flag 名称推断完整返回栈。
 
@@ -60,11 +60,11 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 常见 launchMode 的差异如下：
 
-1. **`standard`**：默认模式，每次启动通常创建新实例。
-2. **`singleTop`**：目标实例已在栈顶时复用，否则创建新实例。
-3. **`singleTask`**：在匹配任务中复用根 Activity，并清除其上方页面。
-4. **`singleInstance`**：Activity 独占自己的任务，任务栈中不放入其他 Activity。
-5. **`singleInstancePerTask`**：API 31 起提供。实例作为任务根页面，一个任务至多一个该模式实例，但可在满足 `NEW_DOCUMENT` 或 `MULTIPLE_TASK` 等条件时存在于不同任务。
+1. `standard`：默认模式，每次启动通常创建新实例。
+2. `singleTop`：目标实例已在栈顶时复用，否则创建新实例。
+3. `singleTask`：在匹配任务中复用根 Activity，并清除其上方页面。
+4. `singleInstance`：Activity 独占自己的任务，任务栈中不放入其他 Activity。
+5. `singleInstancePerTask`：API 31 起提供。实例作为任务根页面，一个任务至多一个该模式实例，但可在满足 `NEW_DOCUMENT` 或 `MULTIPLE_TASK` 等条件时存在于不同任务。
 
 Intent flags 也会影响启动结果。若页面需要普通的页面内返回栈，不要只为复用实例而随意设置 `singleTask`。
 
@@ -121,7 +121,7 @@ AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分�
 
 两种方式可以并用，系统解析启动请求时把清单的静态声明与本次 Intent 携带的 flag 一起判断：launchMode 描述该 Activity 的固定归属规则，flag 描述这一次启动的动态行为。
 
-1. **清单 `android:launchMode`**：取值覆盖 `standard`、`singleTop`、`singleTask`、`singleInstance`，API 31 起增加 `singleInstancePerTask`，作用于该 Activity 的每一次启动。它表达不了 `FLAG_ACTIVITY_CLEAR_TOP` 这类清栈动作，没有对应的取值。
+1. 清单 `android:launchMode`：取值覆盖 `standard`、`singleTop`、`singleTask`、`singleInstance`，API 31 起增加 `singleInstancePerTask`，作用于该 Activity 的每一次启动。它表达不了 `FLAG_ACTIVITY_CLEAR_TOP` 这类清栈动作，没有对应的取值。
 2. **Intent flag**：如 `FLAG_ACTIVITY_NEW_TASK`、`FLAG_ACTIVITY_SINGLE_TOP`、`FLAG_ACTIVITY_CLEAR_TOP`，只在本次启动生效，可以组合。它表达不了 `singleInstance` 这类模式，没有对应的 flag。
 3. **同时设置的生效方式**：两者叠加解析而非二选一，清单为 `standard` 的 Activity 加上 `FLAG_ACTIVITY_SINGLE_TOP` 同样获得栈顶复用。“flag 优先级更高”的常见说法应理解为动态行为叠加在静态模式之上，但 flag 改变不了 `singleInstance` 的独占任务语义。
 4. **选择**：要求所有入口都遵循同一模式时写清单。只想对特定路径（如通知跳转）改变行为时用 flag。

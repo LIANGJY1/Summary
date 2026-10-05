@@ -118,13 +118,13 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 2. **消息传递**：适合边界清晰、数据较小的请求与事件，可把权限和调用契约集中到接口上，但会产生序列化、排队与传输开销。
 3. **Android 常用组合**：Binder/AIDL 传递结构化请求与响应。大型二进制内容通常通过文件描述符、共享内存句柄或 URI 引用，不直接塞进 Binder Parcel。
 
-**Q13: AIDL 的 `in`、`out`、`inout` 参数方向怎样影响传输成本，什么时候该避免 `inout`？**
+**Q13: [learning] AIDL 的 `in`、`out`、`inout` 参数方向怎样影响传输成本，什么时候该避免 `inout`？**
 
 参数方向决定对象在哪一侧编组和回传。`inout` 要双向传输同一对象，通常比单向参数有更高的编组成本，因此只在接口语义确实需要双向修改时使用。
 
-1. **`in`**：客户端把对象发送给服务端。原语类型默认是 `in`。
-2. **`out`**：客户端提供待填充对象，服务端写入后把结果回传。它不是“可选返回值”的通用替代方案。
-3. **`inout`**：对象先发送到服务端，服务端修改后再回传。Stable AIDL 指南建议尽量避免，因为要承担来回封送成本。
+1. `in`：客户端把对象发送给服务端。原语类型默认是 `in`。
+2. `out`：客户端提供待填充对象，服务端写入后把结果回传。它不是“可选返回值”的通用替代方案。
+3. `inout`：对象先发送到服务端，服务端修改后再回传。Stable AIDL 指南建议尽量避免，因为要承担来回封送成本。
 4. **替代方式**：能拆成明确返回值或单向请求/响应接口时，优先选这种方式，让调用方知道哪些字段跨进程、在哪个方向更新。
 
 方向标记只适用于需要标记方向的非原语参数。设计时同时检查 AIDL 版本、生成后类型与对象复制成本。
@@ -138,11 +138,11 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 3. **自写 Parcelable**：对象包含文件描述符时，`describeContents()` 必须返回 `CONTENTS_FILE_DESCRIPTOR`，并聚合嵌套对象的标志。`writeToParcel` 与 `CREATOR` 的字段读写顺序必须严格一致。
 4. **定位方向**：记录发送端写入的键和值类型，并在接收端记录读取时使用的 class loader，先确认双方使用相同定义再追查 Parcel 格式。
 
-**Q15: 冻结状态、扩展错误、AIDL trace 和 Perfetto Binder 事件分别能证明什么？**
+**Q15: [learning] 冻结状态、扩展错误、AIDL trace 和 Perfetto Binder 事件分别能证明什么？**
 
 这些观察源回答不同问题。驱动能力声明、线程状态快照、一次性错误详情和时间轨迹不能互相替代。
 
-1. **binderfs `features`**：列出驱动编译或启用的能力，例如 `oneway_spam_detection`、`extended_error`、`freeze_notification`。它说明功能可用，不表示该功能当前发生。
+1. binderfs `features`：列出驱动编译或启用的能力，例如 `oneway_spam_detection`、`extended_error`、`freeze_notification`。它说明功能可用，不表示该功能当前发生。
 2. **冻结状态**：`BINDER_GET_FROZEN_INFO` 返回 `sync_recv` 和 `async_recv` 位标志，不提供累计次数或耗时。`sync_recv == 3` 表示两个状态位都为 1，不是发生三次同步事务。`async_recv` 也不是单调计数。
 3. **扩展错误**：`BINDER_GET_EXTENDED_ERROR` 返回线程级一次性信息（`id`、`command`、`param`），读取后立即重置。libbinder 只对 `ENOSPC` 提供专门解释。
 4. **AIDL trace**：`ATRACE_TAG_AIDL` 可提供 `AIDL::cpp::<接口>::<方法>::server` 形式的方法时间片，不含参数内容。方法名依赖轨迹映射；只采集内核 Binder 事件时 `interface` 或 `method_name` 可能为空，映射缺失时切片名可退化为 `UNKNOWN_CODE_<n>`。
@@ -158,11 +158,11 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 2. 端到端时间应由 Perfetto Binder flow 分析。录制文件可能含敏感数据，应按敏感数据管理并在分析完成后清理。
 3. `binder_calls_stats` 是 framework 按 UID、接口和方法聚合的统计，带抽样。它不是驱动队列监视器，也不是“更细统计模式”开关。
 
-**Q17: 排查 Binder 问题有哪些实用工具？驱动调试节点在新内核上从哪里读？**
+**Q17: [learning] 排查 Binder 问题有哪些实用工具？驱动调试节点在新内核上从哪里读？**
 
 用户态统计、驱动态状态和服务注册状态要分别观察：
 
-1. **`dumpsys binder_calls`**：按 UID 汇总调用 CPU 耗时。列格式为 cpu_time（微秒）、占比、recorded_call_count、call_count、包名/UID。单 UID 占比异常高可能表示 Binder 热点。`call_count` 远大于 `recorded_call_count` 表示统计受采样影响。末尾 Exceptions 段计数大于 0 表示远端调用抛过异常，可按异常类名追查。
+1. `dumpsys binder_calls`：按 UID 汇总调用 CPU 耗时。列格式为 cpu_time（微秒）、占比、recorded_call_count、call_count、包名/UID。单 UID 占比异常高可能表示 Binder 热点。`call_count` 远大于 `recorded_call_count` 表示统计受采样影响。末尾 Exceptions 段计数大于 0 表示远端调用抛过异常，可按异常类名追查。
 2. **驱动调试节点（双路径）**：新内核通常经 binderfs 提供 `/dev/binderfs/binder_logs/`，旧内核常见 `/sys/kernel/debug/binder/`。节点包括 `state`、`stats`、`transactions`、`transaction_log` 和 `failed_transaction_log`。`proc/<pid>` 按进程列出各线程正在等待或处理的事务，可用于调查线程池是否耗尽。
 3. **判读要点**：`failed_transaction_log` 中 `BR_DEAD_REPLY` 或 `BR_FAILED_RETURN` 密集出现，说明对端死亡或句柄失效。它是环形日志，只保留最近若干条。
 4. **权限**：userdebug + root 才能读驱动节点（`su 0 cat`）。

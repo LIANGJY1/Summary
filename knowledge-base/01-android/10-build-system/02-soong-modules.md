@@ -108,7 +108,7 @@ cc_binary {
 
     1. **模块类型：**`android_app` 声明可安装 APK 模块；同样源码若声明为 `android_library`，则产出供其他模块依赖的库。
     2. **模块名：**`name` 是 Soong 模块名，供依赖和产品配置引用；省略会导致模块无法注册，也不等于 APK 包名。
-    3. **源码输入：**`srcs` 路径相对当前 `Android.bp`。应用 Java 和 `vehiclebase` Java 直接编入 APK；AIDL glob 选中并编译该目录下的 AIDL，`**` 表示递归匹配子目录。
+    3. **源码输入：`srcs` 路径相对当前 `Android.bp`。应用 Java 和 `vehiclebase` Java 直接编入 APK；AIDL glob 选中并编译该目录下的 AIDL，`` 表示递归匹配子目录。
     4. **模块内 AIDL 搜索根：**`aidl.local_include_dirs` 相对当前模块目录，为 `import` 提供搜索根，不负责选择编译文件。例如，`IVehicleSdkService.aidl` 导入 `com.yadea.apf.vehiclesdk.ITirePressureListener`，编译器会在该根下查找 `com/yadea/apf/vehiclesdk/ITirePressureListener.aidl`。文件即使匹配 `srcs`，仍需搜索根才能按包名找到。
     5. **源码树 AIDL 搜索根：**`aidl.include_dirs` 也为 `import` 提供搜索根，但路径相对 Android 源码树根目录；`local_include_dirs` 相对模块目录。这里指向平台媒体 AIDL，不会自动编译这些文件，也不建立模块依赖。当前 AIDL 导入未见平台媒体接口，无法仅凭此配置确认它必需。
     6. **资源目录：**`resource_dirs` 指定应用资源。默认目录是模块下的 `res`，这里使用非默认路径，所以显式配置。
@@ -246,7 +246,7 @@ cc_binary {
 
     1. **模块类型与名称：**`android_library` 产出供依赖的库，不单独安装；`name` 是 Soong 模块名，必须唯一，供其他模块引用。
     2. **Manifest：**`manifest` 指定库的清单，路径相对当前 `Android.bp`。省略时默认使用模块目录下的 `AndroidManifest.xml`，该文件不存在就无法构建；本例文件在 `vehiclesdk/src/main/`，所以显式指定。
-    3. **源码：**`srcs` 选择本库参与编译的文件；路径相对 `Android.bp`，`**/*.java` 递归匹配 Java 源码。它可省略，但省略后不会编译本库 Java 文件。
+    3. **源码：`srcs` 选择本库参与编译的文件；路径相对 `Android.bp`，`/*.java` 递归匹配 Java 源码。它可省略，但省略后不会编译本库 Java 文件。
     4. **静态依赖：**`static_libs` 声明本库依赖的其他模块；这里依赖 `yadea_vehiclebase`。该属性可省略；若源码用到其他库的类型却未通过依赖提供，构建会缺少对应类型或资源。
     5. **优化开关：**`optimize.enabled: false` 显式关闭库优化；它不是必需属性。AAOS 13 的 `android_library` 默认已关闭优化，因此此处显式设置与省略效果相同。
     6. **后续库的新增属性：**`yadea_vehiclebase` 和 `yadea_anwsdkservice` 还声明 AIDL 输入；`yadea_vehiclebase` 另声明平台 API 和 Car API 依赖：
@@ -850,7 +850,7 @@ java_library {
 
 2. **检查 root 请求门槛：**两棵树的 `packages/modules/adb/daemon/restart_service.cpp` 相同。`restart_root_service()` 在 `__android_log_is_debuggable()` 为 false 时拒绝请求；该检查对应 `ro.debuggable`。通过后，代码设置 `service.adb.root=1` 并重启 `adbd`，让新进程重新判断是否保留 root。
 
-3. **检查 `adbd` 身份：**两棵树的 `packages/modules/adb/daemon/main.cpp` 中，`should_drop_privileges()` 先以 `ro.secure` 初始化降权状态；只有 `ro.debuggable=1` 且 `service.adb.root=1` 时，才取消降权；`service.adb.root=0` 则要求降权。降权路径通过 minijail 将 `adbd` 的 UID/GID 改为 `shell`。两棵树的 `packages/modules/adb/Android.bp` 都未设置 `ALLOW_ADBD_ROOT`，因此应以实际的请求处理和降权代码为准，不能套用其他分支的宏判断。
+3. 检查 `adbd` 身份：两棵树的 `packages/modules/adb/daemon/main.cpp` 中，`should_drop_privileges()` 先以 `ro.secure` 初始化降权状态；只有 `ro.debuggable=1` 且 `service.adb.root=1` 时，才取消降权；`service.adb.root=0` 则要求降权。降权路径通过 minijail 将 `adbd` 的 UID/GID 改为 `shell`。两棵树的 `packages/modules/adb/Android.bp` 都未设置 `ALLOW_ADBD_ROOT`，因此应以实际的请求处理和降权代码为准，不能套用其他分支的宏判断。
 
 4. **区分 ADB 鉴权：**`ro.adb.secure` 控制连接主机是否需要 ADB 授权，不是 `adbd` 是否以 root 运行的开关。两棵树的 `main.cpp` 将它用于主机认证判断；因此“需要电脑端 RSA 授权”和“shell 是否拿到 root”是两个独立问题。
 

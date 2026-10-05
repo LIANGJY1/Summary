@@ -14,9 +14,9 @@
 
 三个属性都是 `INT32_VEC`、`ON_CHANGE`、只读，按本地 HAL 接口文件核对（`hardware/interfaces/automotive/vehicle/aidl/.../VehicleProperty.aidl`）：
 
-1. **`HW_KEY_INPUT`（0x0A10）**：`[0]` 动作（`VehicleHwKeyInputAction`：0 按下、1 抬起）、`[1]` 标准 Android 按键码、`[2]` 目标显示（`VehicleDisplay`：MAIN=0、INSTRUMENT_CLUSTER=1）、`[3]` 可选的重复次数（≥1，缺省 1）；
-2. **`HW_ROTARY_INPUT`（0x0A20）**：`[0]` 旋钮类型（`RotaryInputType`：SYSTEM_NAVIGATION=0、AUDIO_VOLUME=1）、`[1]` 定位点数（正=顺时针、负=逆时针）、`[2]` 目标显示、`[3..]` 相邻定位点之间的纳秒级时间差（定位点多于 1 时携带）；属性 timestamp 是第一个定位点的时刻。官方文档同时要求：同方向连续定位点必须合并为一个事件上报，不要拆成多条；
-3. **`HW_CUSTOM_INPUT`（0x0A30）**：`[0]` 自定义输入码（官方给 `CUSTOM_EVENT_F1..F10`（1001–1010）作便捷命名，OEM 可用任意值）、`[1]` 目标显示、`[2]` 重复计数（0=非重复）。
+1. `HW_KEY_INPUT`（0x0A10）：`[0]` 动作（`VehicleHwKeyInputAction`：0 按下、1 抬起）、`[1]` 标准 Android 按键码、`[2]` 目标显示（`VehicleDisplay`：MAIN=0、INSTRUMENT_CLUSTER=1）、`[3]` 可选的重复次数（≥1，缺省 1）；
+2. `HW_ROTARY_INPUT`（0x0A20）：`[0]` 旋钮类型（`RotaryInputType`：SYSTEM_NAVIGATION=0、AUDIO_VOLUME=1）、`[1]` 定位点数（正=顺时针、负=逆时针）、`[2]` 目标显示、`[3..]` 相邻定位点之间的纳秒级时间差（定位点多于 1 时携带）；属性 timestamp 是第一个定位点的时刻。官方文档同时要求：同方向连续定位点必须合并为一个事件上报，不要拆成多条；
+3. `HW_CUSTOM_INPUT`（0x0A30）：`[0]` 自定义输入码（官方给 `CUSTOM_EVENT_F1..F10`（1001–1010）作便捷命名，OEM 可用任意值）、`[1]` 目标显示、`[2]` 重复计数（0=非重复）。
 
 三个属性都只面向驾驶员的两块屏（MAIN 与 CLUSTER），乘员屏输入不走 VHAL 输入属性（走标准 Android 输入子系统）。对角线 nudge 没有专用键值，官方做法是用水平与垂直事件序列合成。自定义键的码值语义是 OEM 内部约定，必须与 VHAL 实现和消费服务同步维护，改一边不改另一边就是"按了没反应"。
 
@@ -36,7 +36,7 @@
 按 AAOS13 源码核对（`CarInputService.java` 的 `onKeyEvent`），顺序固定为五步：
 
 1. **特殊键特判**：`KEYCODE_VOICE_ASSIST` 与 `KEYCODE_CALL` 走车机专用的长按/短按处理，不再往下走；
-2. **强制分配显示**：`assignDisplayId` 用 `CarOccupantZoneService.getDisplayIdForDriver()` 把目标显示类型换算成真实 displayId 并**覆盖**事件已有值——即使 VHAL 带了 displayId 也会被重写；
+2. 强制分配显示：`assignDisplayId` 用 `CarOccupantZoneService.getDisplayIdForDriver()` 把目标显示类型换算成真实 displayId 并覆盖事件已有值——即使 VHAL 带了 displayId 也会被重写；
 3. **仪表路由**：目标为仪表屏且已注册 cluster 键监听时，交给监听者消费；
 4. **捕获仲裁**：`mCaptureController.onKeyEvent` 返回 true 时事件被捕获者吃掉，分发结束；
 5. **默认注入**：调用注入实现（默认 `InputManagerHelper.injectInputEvent`）把事件交给系统 InputDispatcher。
@@ -134,7 +134,7 @@ AAOS 自带车机定制输入法 `packages/apps/Car/LatinIME`（包名与手机�
 
 按 AAOS13 源码核对（`CarShellCommand.java`）与官方 readme：
 
-1. **注入**：`adb shell cmd car_service inject-key [-d 0|1] [-t 延迟ms | -a down|up] <键码>`（缺省按下抬起成对，`-d 1` 投到仪表）；`inject-rotary [-d 显示] [-i 10|11] [-c true] [-dt 毫秒差列表]`（`-i` 10=导航旋钮、11=音量旋钮，`-dt` 要求降序非负）；`inject-custom-input [-d 显示] [-r 重复] F1..F10|整数`。注意这些命令直调 `CarInputService` 的注入入口，**走完整车载分发链（含捕获仲裁）**，与 `adb shell input keyevent`（绕过 CarService 直注入系统）语义不同——测车载行为用前者，测应用层行为用后者；
+1. 注入：`adb shell cmd car_service inject-key [-d 0|1] [-t 延迟ms | -a down|up] <键码>`（缺省按下抬起成对，`-d 1` 投到仪表）；`inject-rotary [-d 显示] [-i 10|11] [-c true] [-dt 毫秒差列表]`（`-i` 10=导航旋钮、11=音量旋钮，`-dt` 要求降序非负）；`inject-custom-input [-d 显示] [-r 重复] F1..F10|整数`。注意这些命令直调 `CarInputService` 的注入入口，走完整车载分发链（含捕获仲裁），与 `adb shell input keyevent`（绕过 CarService 直注入系统）语义不同——测车载行为用前者，测应用层行为用后者；
 2. **状态**：`dumpsys car_service --services CarInputService`（长按配置、捕获控制器状态）、`--services InputHalService`（三个能力标志，VHAL 是否支持输入看这里）；
 3. **无旋钮模拟旋控**：userdebug 版本开启 `settings put secure android.car.ROTARY_KEY_EVENT_FILTER 1` 后，用键盘模拟——WASD 或方向键 nudge、F 或逗号中心、R 或 Esc 返回、Q/C 逆时针旋转、E/V 顺时针（Shift 按住按 10 格计）；仅 debuggable 构建生效；
 4. **模拟器**：`car_x86_64` 镜像的 Extended controls 有 Car rotary 面板。

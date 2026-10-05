@@ -29,14 +29,14 @@
 
 以 SurfaceFlinger 为例，应用将渲染缓冲区经 BufferQueue 交给它。SurfaceFlinger 按 vsync 周期把缓冲区句柄、几何、混合模式和 Z 序等图层信息经 Binder 交给 Composer HAL。厂商 HAL 再通过 DRM/KMS ioctl 把图层提交给显示控制器的硬件 plane；需要 GPU 合成的图层则由 SurfaceFlinger 的 RenderEngine 经 DRM 渲染节点处理。此原生路径不要求每一步都经过 Java 框架服务，“跨层直达”描述的是组件直接跨越相应接口边界。
 
-**Q3: Android 实际工作场景中都有哪些架构问题？如何定位架构问题？**
+**Q3: [learning] Android 实际工作场景中都有哪些架构问题？如何定位架构问题？**
 
 真实架构问题的共同形态是"现象在应用、根因可能在任何一层"：典型场景如主线程同步 Binder 调用过长、SurfaceFlinger 合成变长、Camera 请求返回慢。定位的标准动作是沿"进程 → 跨层接口 → 线程状态 → 内核等待对象"逐边界取证，每多跨一个边界就多保存一份证据。
 
 三个典型场景的取证路径：
 
 1. **主线程同步 Binder 很长**：先取调用方 Binder 时间片、目标进程与线程，向下追目标线程的调度、锁、I/O 与下游 Binder；不要直接得出"Binder 驱动慢"；
-2. **`surfaceflinger` 的 composite 变长**：先取 SF 主线程、CompositionEngine、HWC/RenderEngine 事件，向下追合成类型、同步栅栏、GPU/HWC 与图层变化；不要直接得出"一定是应用绘制慢"；
+2. `surfaceflinger` 的 composite 变长：先取 SF 主线程、CompositionEngine、HWC/RenderEngine 事件，向下追合成类型、同步栅栏、GPU/HWC 与图层变化；不要直接得出"一定是应用绘制慢"；
 3. **Camera 请求返回慢**：先取应用框架、CameraService 与 HAL 间的事务及请求 ID，向下追 HAL 线程、FMQ/缓冲区、同步栅栏、驱动与传感器；不要直接得出"HAL 只是接口，不会延迟"。
 
 通用定位流程：

@@ -91,14 +91,14 @@ fork 复制已有进程，而此时没有用户态进程可供复制。execve �
 
 
 
-**Q7: [tags:系统启动] 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
+**Q7: [learning] [tags:系统启动] 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
 
 内核已把控制权交给 `/init`，但 init 第一阶段的工作尚未完成。此刻不能把 init 后续挂载、装载的内容算作内核已完成的状态。此时的状态如下：
 
 1. **CPU/内核态**：调度器、内存管理和已注册的内核驱动可运行。设备所需 vendor 模块可能由 init 第一阶段稍后加载。
 2. **进程**：当前用户态进程只有 PID 1。它刚由 kernel_init 内核线程 execve `/init` 变身而来。
 3. **根文件系统**：刚解包的 ramdisk（内存里），只有 init、fstab、少量工具；
-4. **`/dev`、`/proc`、`/sys`**：尚未由 init 挂载。
+4. `/dev`、`/proc`、`/sys`：尚未由 init 挂载。
 5. **系统分区**：system/vendor 分区尚未挂载，AVB 校验流程也未由 init 完成。
 6. **SELinux**：策略未装载，强制访问控制尚未按 Android 策略生效。
 7. **属性服务**：init 尚未完成第二阶段属性初始化，因此不能说系统属性“全部为零”。启动参数仍可从 `/proc/cmdline` 等内核接口读取。
@@ -109,15 +109,15 @@ fork 复制已有进程，而此时没有用户态进程可供复制。execve �
 
 
 
-**Q8: [tags:系统启动] init 为什么要在启动中途 execv 自己两次？三个阶段各自做什么？**
+**Q8: [learning] [tags:系统启动] init 为什么要在启动中途 execv 自己两次？三个阶段各自做什么？**
 
 init 是同一个二进制以三个不同进程映像接力：第一阶段在 ramdisk 上搭最小环境，之后 execv 切入 selinux_setup 镜像装载策略，再 execv 切入 second_stage 常驻形态——中间两次 exec 是因为 SELinux 域转换只发生在 exec 时刻，这是把"同一程序不同阶段需要不同信任级别"交由内核保证的做法。
 
 链路（Android 13 批注）：
 
 1. **FirstStageMain**：挂载 `/dev`、`/proc`、`/sys` 与设备节点，调用 LoadKernelModules 加载 vendor 内核模块，再由 DoFirstStageMount 按 fstab 挂载 system/vendor 等只读分区。
-2. **`execv("selinux_setup")` 与 SetupSelinux**：合成并装载 sepolicy，再完成 SELinux 域切换。
-3. **`execv("second_stage")` 与 SecondStageMain**：执行 PropertyInit 与 SelinuxRestoreContext，建立 epoll、signalfd、属性 socket 等事件源，解析 rc 后进入常驻主循环。
+2. `execv("selinux_setup")` 与 SetupSelinux：合成并装载 sepolicy，再完成 SELinux 域切换。
+3. `execv("second_stage")` 与 SecondStageMain：执行 PropertyInit 与 SelinuxRestoreContext，建立 epoll、signalfd、属性 socket 等事件源，解析 rc 后进入常驻主循环。
 
 三个阶段通过 `execv` 接力，因此全局变量与静态状态不会从前一阶段自动带到后一阶段。跨阶段数据可通过环境变量（如 `INIT_AVB_VERSION`）或文件传递。exec 接力适合需要程序映像或安全域边界的阶段划分；若只是逻辑分层，函数调用更简单，也更容易调试。
 
@@ -125,18 +125,18 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 
 
-**Q9: `/dev`、`/proc`、`/sys` 三个伪文件系统分别提供什么信息？init 为什么要先挂载它们？**
+**Q9: [learning] `/dev`、`/proc`、`/sys` 三个伪文件系统分别提供什么信息？init 为什么要先挂载它们？**
 
 这三个伪文件系统把内核维护的设备、进程和设备模型状态呈现为文件接口，内容不按普通磁盘文件方式保存。init 第一阶段挂载它们，是为了让后续初始化能够读取启动状态、发现设备节点并访问内核设备模型。
 
-1. **`/dev`：设备节点**。字符设备和块设备节点包含主设备号与次设备号。打开节点后，内核据此路由到相应驱动。Android 的 `/dev` 通常由 tmpfs 承载。
+1. `/dev`：设备节点。字符设备和块设备节点包含主设备号与次设备号。打开节点后，内核据此路由到相应驱动。Android 的 `/dev` 通常由 tmpfs 承载。
     1. ueventd 根据内核事件和规则创建、配置大部分设备节点。
     2. init 与其他系统服务也可创建特定节点或符号链接，因此不是所有节点都只能由 ueventd 创建。
-2. **`/proc`：进程和内核运行状态**。
+2. `/proc`：进程和内核运行状态。
     1. `/proc/<pid>/` 为每个进程提供状态目录。
     2. `meminfo`、`cpuinfo` 等文件报告资源信息，`/proc/sys` 提供 sysctl 参数接口。
     3. init 会读取 `/proc/cmdline` 中的内核启动参数，例如 `androidboot.mode=charger`，据此选择启动路径。
-3. **`/sys`：内核设备模型**。
+3. `/sys`：内核设备模型。
     1. `/sys/devices` 展示设备本体，`/sys/class` 按设备类别聚合，`/sys/module` 列出已加载模块。
     2. 设备目录下的 `uevent` 文件可用于重放设备事件。
     3. 向 `/sys/power/state` 写入支持的值可请求系统休眠。
@@ -159,7 +159,7 @@ GKI（Generic Kernel Image，通用内核镜像）把通用内核与符合 KMI�
 
 
 
-**Q11: [tags:系统启动] fstab 是什么？init 第一阶段怎么按它挂载分区？**
+**Q11: [learning] [tags:系统启动] fstab 是什么？init 第一阶段怎么按它挂载分区？**
 
 fstab（file system table）是文件系统挂载声明表。每行说明块设备、挂载点、文件系统类型、挂载选项和 fs_mgr 标志。init 的挂载组件 fs_mgr 依据这些标志执行策略，因此 fstab 是挂载配置，init 是执行器。
 
@@ -169,13 +169,13 @@ fstab 每行由块设备路径、挂载点、文件系统类型、内核挂载�
 
 1. **块设备路径**：指定数据来源。换成设备实际分区路径，不能假定每个产品都使用 `/dev/block/by-name/...`。
 2. **挂载点与文件系统类型**：分别指定目录和文件系统驱动。改动或省略会导致该条目不能按预期挂载，具体错误取决于解析和设备节点状态。
-3. **`ro` 与 `barrier=1`**：`ro` 请求只读挂载。`barrier=1` 是示例中 ext4 的写屏障挂载选项，具体支持与默认行为由文件系统和内核版本决定；省略它时应核对目标版本默认值，不能推断行为一定相反。
-4. **`wait`**：等待设备节点就绪再尝试挂载。省略时不声明此等待策略。
-5. **`avb=vbmeta`**：要求 fs_mgr 使用指定的 vbmeta 关联配置执行 AVB 验证。省略后，这一行本身不声明该 AVB 校验关系。
-6. **`first_stage_mount`**：将条目标记为第一阶段需要处理的挂载。省略后不能依赖第一阶段挂载它。
-7. **`logical`**：说明这是动态逻辑分区。省略后不能让 fs_mgr 按该标志识别逻辑分区。
-8. **`first_stage_logical` 兼容写法**：部分旧资料或分支配置会出现该标记。它是否受目标 fs_mgr 识别以及与 `first_stage_mount`、`logical` 的组合关系必须查对应分支，不能跨版本机械替换。
-9. **`latemount` 与文件系统类型**：`latemount` 用于将适合延后的条目留到后续挂载阶段处理，常见于 `/data`。`/data` 也常使用 f2fs。它与 `first_stage_mount` 表达不同阶段策略，不能不加判断地同时复制到同一行。
+3. `ro` 与 `barrier=1`：`ro` 请求只读挂载。`barrier=1` 是示例中 ext4 的写屏障挂载选项，具体支持与默认行为由文件系统和内核版本决定；省略它时应核对目标版本默认值，不能推断行为一定相反。
+4. `wait`：等待设备节点就绪再尝试挂载。省略时不声明此等待策略。
+5. `avb=vbmeta`：要求 fs_mgr 使用指定的 vbmeta 关联配置执行 AVB 验证。省略后，这一行本身不声明该 AVB 校验关系。
+6. `first_stage_mount`：将条目标记为第一阶段需要处理的挂载。省略后不能依赖第一阶段挂载它。
+7. `logical`：说明这是动态逻辑分区。省略后不能让 fs_mgr 按该标志识别逻辑分区。
+8. `first_stage_logical` 兼容写法：部分旧资料或分支配置会出现该标记。它是否受目标 fs_mgr 识别以及与 `first_stage_mount`、`logical` 的组合关系必须查对应分支，不能跨版本机械替换。
+9. `latemount` 与文件系统类型：`latemount` 用于将适合延后的条目留到后续挂载阶段处理，常见于 `/data`。`/data` 也常使用 f2fs。它与 `first_stage_mount` 表达不同阶段策略，不能不加判断地同时复制到同一行。
 10. **加密标志**：设备 fstab 还可能含 `encrypted`、`fileencryption` 等 fs_mgr 加密标志。它们涉及设备加密方案和文件级加密参数，具体取值必须依据目标设备实现。省略效果取决于设备的加密配置，不能用未知占位值代替真实值。
 
 启动早期使用的 fstab 副本位于 ramdisk 可访问范围，供第一阶段读取；完整版常位于 vendor 等分区配置目录。条目集合、文件名和阶段选择受 Android 版本与设备配置影响。
@@ -215,7 +215,7 @@ Treble 设备的 system 与 vendor 可独立更新，但内核最终只装载一
 
 
 
-**Q14: [tags:系统启动] .rc 文件怎么理解？**
+**Q14: [learning] [tags:系统启动] .rc 文件怎么理解？**
 
 `.rc` 文件是用 Android Init Language 写的声明式配置，相当于 init 的"启动脚本 + 服务注册表"：一个 `service` 块声明一个长驻进程（名字、可执行文件、参数与选项），一个 `on <触发器>` 块声明一组要执行的命令。init 第二阶段解析全部 `.rc` 后，按触发器执行动作、按服务定义 fork/exec 进程并监督。
 
@@ -237,7 +237,7 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 4. **Zygote socket**：`--socket-name=zygote` 指定与 init 创建的 `zygote` socket 相匹配的名称。`socket zygote stream 660 root system` 由 init 创建 Unix stream socket，权限为 `0660`，所有者 `root`，所属组 `system`。省略 socket 声明会让 init 不为服务预建该 fd；省略 socket-name 则由目标 app_process 版本的默认值决定，配置显式匹配可避免两端名称不一致。
 5. **USAP socket**：`socket usap_pool_primary stream 660 root system` 为主 Zygote 的 USAP 池另建同权限的 stream socket。若设备不启用该路径，此 socket 可以不配置；启用后需与 Zygote 的池配置一致。
 6. **class 分组**：`class main` 把服务归入 main 类，供 `class_start main` 一类命令批量启动。省略 class 时 init 使用默认服务类，不会自动成为 main 类成员。
-7. **`onrestart` 与其他选项**：`onrestart` 用于声明服务退出并准备重启时要执行的动作，例如重启依赖服务。示例没有该项，因此没有额外声明此类动作。`.rc` 的其他服务选项仍按目标 init 版本的默认值处理。
+7. `onrestart` 与其他选项：`onrestart` 用于声明服务退出并准备重启时要执行的动作，例如重启依赖服务。示例没有该项，因此没有额外声明此类动作。`.rc` 的其他服务选项仍按目标 init 版本的默认值处理。
 
 `.rc` 把启动进程、启动参数、socket 和重启动作声明化，init 按触发器和服务配置执行。分析开机耗时与进程拉起顺序时，`.rc` 是第一手材料。
 
@@ -641,7 +641,7 @@ webview_zygote 是供 WebView 渲染进程使用的专用 Zygote。应用声明 
 
 
 
-**Q41: [tags:系统启动] 服务崩溃后 init 的 Reap 裁决按什么顺序处理？哪些情况会放大成整机重启？**
+**Q41: [learning] [tags:系统启动] 服务崩溃后 init 的 Reap 裁决按什么顺序处理？哪些情况会放大成整机重启？**
 
 Reap 负责处理 init 已监督服务的退出，并按顺序决定清理、状态和重启动作：
 
@@ -655,7 +655,7 @@ Reap 会触发的系统级后果分三类，不能把“写入故障属性”和
 
 1. **critical 服务**：Android 13 该路径的默认崩溃窗口为 4 分钟，计数超过 4（第 5 次）后可触发 fatal。重启目标由服务或产品配置决定，不一定是 bootloader。
 2. **APEX 可更新组件进程**：相应崩溃计数超过门槛后可设置 `sys.init.updatable_crashing`，通知 apexd/update_verifier 处理。这与 critical 服务立即进入 fatal reboot 的路径不同。
-3. **显式声明 `reboot_on_failure`** 的服务异常退出：按配置直接触发重启。
+3. 显式声明 `reboot_on_failure` 的服务异常退出：按配置直接触发重启。
 
 服务状态由可组合的 SVC_* 位标志表示，而不是互斥枚举，因此 oneshot、disabled、critical 等状态可能并存。oneshot 服务正常退出后会进入 disabled，不会再被 `class_start` 拉起，需要显式 `start`。stop 后立即 start 时的 RESTART 中间态会跳过置 disabled 的步骤，否则服务可能无法重新启动。
 
@@ -676,14 +676,14 @@ init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口
 
 
 
-**Q43: [tags:系统启动] 设备"突然重启/黑屏"，怎么从日志快速判断死在哪一层——内核、init、Zygote 还是 system_server？**
+**Q43: [learning] [tags:系统启动] 设备"突然重启/黑屏"，怎么从日志快速判断死在哪一层——内核、init、Zygote 还是 system_server？**
 
 四层故障的日志指纹不同，先看设备是否发生内核重启，再定位用户态服务退出或 system_server 看门狗动作。不同设备的 fatal reboot target 和日志保留方式可能不同，不能只凭黑屏外观判断。
 
 1. **内核 panic**：pstore/console-ramoops 中出现 `Kernel panic - not syncing: ...` 是内核崩溃证据。若随后发生设备重启，通常看不到同一次启动继续产生的 Android 日志。
 2. **init 监督或 fatal 策略**：`Attempted to kill init!` 表示有进程尝试终止 PID 1。`critical process ... exited ...` 表示关键服务崩溃计数进入 init fatal 路径。最终重启目标受服务与产品配置控制。
 3. **Zygote 服务退出**：若 logcat 中 init 报告 `Service 'zygote' ... received signal`，观察 init 是否重启 Zygote，以及 `system_server` PID 是否随新 Zygote 改变。Zygote 服务的 `onrestart` 配置可能连带重启其他 native 服务。
-4. **system_server Watchdog**：`*** WATCHDOG KILLING SYSTEM PROCESS` 和 `Blocked in ...` 是 Watchdog 证据。结合 `pre_watchdog`/`watchdog` DropBox 记录及线程栈找阻塞点。它通常表现为 Framework 重启，不等于内核重启。
+4. **system_server Watchdog：`* WATCHDOG KILLING SYSTEM PROCESS` 和 `Blocked in ...` 是 Watchdog 证据。结合 `pre_watchdog`/`watchdog` DropBox 记录及线程栈找阻塞点。它通常表现为 Framework 重启，不等于内核重启。
 5. **区分内核重启与 Framework 重启**：对比 `/proc/sys/kernel/random/boot_id`、进程 PID、`sys.boot_completed` 和 pstore。boot_id 改变说明经历内核启动；PID 或 Framework 状态变化但 boot_id 未变时，应优先查用户态恢复链。`BOOT_COMPLETED` 是否再次出现不能单独作为判据。
 
 

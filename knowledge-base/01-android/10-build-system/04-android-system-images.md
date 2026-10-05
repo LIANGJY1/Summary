@@ -6,9 +6,9 @@
 
 `system.img` 是 system 分区的镜像，不等于整机 ROM。整机软件由多个分区镜像和设备配置共同组成。`target_files.zip` 与 OTA 包是供后续打包、升级流程使用的归档产物。
 
-1. **`system.img`：**封装 system 分区文件系统内容的镜像，Android 13 构建规则将其输出到 `$(PRODUCT_OUT)/system.img`。
+1. `system.img`：封装 system 分区文件系统内容的镜像，Android 13 构建规则将其输出到 `$(PRODUCT_OUT)/system.img`。
 2. **其他分区镜像：**如 `vendor.img`、`product.img`、`system_ext.img`、`boot.img`，各自承载不同分区或启动内容。是否生成取决于产品配置。
-3. **`target_files.zip`：**包含分区文件、镜像和构建元数据，供 OTA、工厂包等后续工具使用。它不是单个分区镜像。
+3. `target_files.zip`：包含分区文件、镜像和构建元数据，供 OTA、工厂包等后续工具使用。它不是单个分区镜像。
 4. **OTA 包：**由 `target_files.zip` 等输入生成，面向设备升级流程，可能包含完整或增量更新数据。它不是可直接写入某个分区的 `system.img`。[AOSP OTA 打包说明](https://source.android.com/docs/core/ota/tools)
 
 **Q2: [learning] ramdisk 会打包进哪个启动镜像，Android 12 和 Android 13 设备有何区别？**

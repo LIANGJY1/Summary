@@ -28,15 +28,15 @@
 
 因此，`onResume()` 不代表首帧已显示。首帧耗时应以首帧实际呈现为终点，例如 TTID（Time to Initial Display，初始显示耗时），而不是量到 `onResume()`。调用链可在 Android 13 的 `ActivityThread.java`、`Activity.java` 和 `ViewRootImpl.java` 中核对。
 
-**Q3: 启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？**
+**Q3: [learning] 启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？**
 
 `onWindowFocusChanged(true)` 只表示窗口获得输入焦点，不承诺窗口内容已经绘制或提交到显示合成链路。需要避免启动遮罩早于内容消失时，应等内容首帧对应的缓冲区提交，再移除遮罩。这仍不等于面板已经完成物理扫描显示。
 
 四个可观测时点的承诺强度不同：
 
-1. **`onResume()`**：Activity 进入 resumed 状态，可以处理前台生命周期工作。不承诺像素已绘制。
-2. **`onPostResume()`**：框架在 `onResume()` 之后回调。仍不承诺首帧已经绘制。
-3. **`onWindowFocusChanged(true)`**：窗口取得输入焦点。它不等于首帧已绘制，也不保证用户已经看到新内容。
+1. `onResume()`：Activity 进入 resumed 状态，可以处理前台生命周期工作。不承诺像素已绘制。
+2. `onPostResume()`：框架在 `onResume()` 之后回调。仍不承诺首帧已经绘制。
+3. `onWindowFocusChanged(true)`：窗口取得输入焦点。它不等于首帧已绘制，也不保证用户已经看到新内容。
 4. **首帧缓冲区提交**：例如 API 29 起可用的 `registerFrameCommitCallback()` 可观察 ViewRoot 的帧缓冲提交。提交之后 SurfaceFlinger 仍需合成并显示。若要判断实际呈现时刻，应使用帧时间线或 presentation timestamp 等显示侧证据。
 
 因此，焦点变化适合处理输入焦点语义。以新内容替换启动遮罩时，应按所需的可见性保证选择帧提交或实际呈现时点。
@@ -92,14 +92,14 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 首帧表示界面已开始绘制。reportFullyDrawn() 表示应用认为关键内容已可用，并向系统报告启动完成（Android 官方文档口径）。两者应按各自语义采集：首帧可能只显示占位骨架，不能代替“主要内容已可用”的指标。
 
-**Q10: Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？**
+**Q10: [learning] Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？**
 
 这类问题通常由重活占用首帧、生命周期外仍执行回调，或额外窗口干扰转场造成。排查时先把操作绑定到正确时点，并让异步结果服从当前 Activity/视图生命周期。
 
-1. **在 `onResume()` 做重活**：同步 I/O、图片解码或长计算会占用主线程首帧预算。`doOnPreDraw` 在当前帧绘制前执行，在其中启动重活仍可能推迟首帧。把重活放到后台线程，并在首帧之后按需更新 UI。
+1. 在 `onResume()` 做重活：同步 I/O、图片解码或长计算会占用主线程首帧预算。`doOnPreDraw` 在当前帧绘制前执行，在其中启动重活仍可能推迟首帧。把重活放到后台线程，并在首帧之后按需更新 UI。
 2. **延迟任务跨入后台**：`postDelayed` 回调在 Activity 停止后仍可能运行并触碰界面。使用可取消句柄，在 `onStop()` 取消不再需要的任务，或通过生命周期感知的调度收敛回调。
 3. **首帧前显示 Toast/Dialog**：额外窗口会改变层级或 Insets 条件，使首帧和窗口过渡更难判断。确认它确实需要在首帧前显示，并核对窗口类型和时机。
-4. **在 `onPause()` 提交 UI 变化**：Activity 已失去前台交互，此时修改的布局可能很快不可见，也可能与窗口动画竞争。将可见性相关变更放到合适的 resumed 状态。
+4. 在 `onPause()` 提交 UI 变化：Activity 已失去前台交互，此时修改的布局可能很快不可见，也可能与窗口动画竞争。将可见性相关变更放到合适的 resumed 状态。
 5. **异步结果写入旧实例**：配置重建或视图销毁后，旧回调仍可能持有旧 Activity/View。让界面观察生命周期感知的数据，并在结果应用前确认当前 owner 有效。
 
 **Q11: [learning] `onStart()`/`onStop()` 与 `onResume()`/`onPause()` 两对回调分别以什么维度划分 Activity 状态，为什么要拆成两对？**
@@ -126,8 +126,8 @@ A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创�
 保存时机以 targetSdk 的 API 28（Android 9.0）为分界：达到 28 时固定在 `onStop()` 之后调用，低于 28 时在 `onStop()` 之前、与 `onPause()` 的先后没有保证。恢复推荐 `onRestoreInstanceState()`，它只在确有状态可恢复时回调，参数 Bundle 必有值。
 
 1. **保存时机的版本分界**：targetSdk 达到 API 28 后，`onSaveInstanceState()` 固定在 `onStop()` 之后，应用可以安全地在 `onStop()` 里提交 Fragment 事务。低于 28 时发生在 `onStop()` 之前，无法保证与 `onPause()` 的先后（`Activity.onSaveInstanceState()` 注释口径，已按 Android 13 本地源码核对）。
-2. **`onCreate()` 恢复**：正常启动时传入的 Bundle 为 null，必须判空后才能使用；适合恢复不依赖 View 树的业务数据。
-3. **`onRestoreInstanceState()` 恢复**：系统只在携带了保存状态时才回调（`ActivityThread.handleStartActivity()` 中 `r.state` 非空才调用），位于 `onStart()` 之后、`onResume()` 之前。无需判空，适合恢复界面相关状态。
+2. `onCreate()` 恢复：正常启动时传入的 Bundle 为 null，必须判空后才能使用；适合恢复不依赖 View 树的业务数据。
+3. `onRestoreInstanceState()` 恢复：系统只在携带了保存状态时才回调（`ActivityThread.handleStartActivity()` 中 `r.state` 非空才调用），位于 `onStart()` 之后、`onResume()` 之前。无需判空，适合恢复界面相关状态。
 
 需要区分“从未保存”与“有保存状态”时走 `onCreate()` 判空路径。界面状态统一放 `onRestoreInstanceState()` 可以省掉判空样板。
 

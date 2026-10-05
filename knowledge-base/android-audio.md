@@ -23,7 +23,7 @@
 
 **现象**：车机项目（Android 车机 Launcher）要做"特定音乐 App 播放时执行某动作"。第一版用 `AudioPlaybackConfiguration.getClientUid()` 反查包名判断音源，实车日志里所有播放配置返回同一大堆包名（40+ 个）；改用"配置存在即播放"判断状态，又出现"明明没在放歌却全部判定为播放中"。
 
-**原因**：两层机制事实叠加。①车机全系统应用共享 `android.uid.system`（UID 1000），`getClientUid()` 拿到 UID 后 `getPackagesForUid()` 反查返回的是整个共享组的包名集合——共享 UID 环境下 UID→包名反查天然失效；②audio HAL 启动时为每个 usage 预注册 playback config，`AudioManager.getActivePlaybackConfigurations()` 返回的是**全部注册项**而非"正在出声"的列表，必须再按 `playerState == PLAYER_STATE_STARTED` 过滤。而焦点层 `AudioFocusInfo.getPackageName()` 是系统在焦点申请时已解析好的字段，不经过 UID 反查，可靠。
+原因：两层机制事实叠加。①车机全系统应用共享 `android.uid.system`（UID 1000），`getClientUid()` 拿到 UID 后 `getPackagesForUid()` 反查返回的是整个共享组的包名集合——共享 UID 环境下 UID→包名反查天然失效；②audio HAL 启动时为每个 usage 预注册 playback config，`AudioManager.getActivePlaybackConfigurations()` 返回的是全部注册项而非"正在出声"的列表，必须再按 `playerState == PLAYER_STATE_STARTED` 过滤。而焦点层 `AudioFocusInfo.getPackageName()` 是系统在焦点申请时已解析好的字段，不经过 UID 反查，可靠。
 
 **误区**：直觉认为 `getActivePlaybackConfigurations()` 里的"active"就是"正在播放"——实际它是"已注册"；直觉认为拿 UID 反查包名是标准 API 用法——在共享 UID 的系统应用/车机/定制 ROM 环境这条路根本不通，还容易误判成自己代码的 bug 反复排查。
 

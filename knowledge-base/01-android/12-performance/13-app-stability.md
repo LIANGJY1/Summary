@@ -8,7 +8,7 @@
 
 按进程结局分流：
 
-1. **应用进程退出，有未捕获 `Throwable`**：Java Crash，主证据是 Java 堆栈、异常原因链与当前版本的混淆映射；
+1. 应用进程退出，有未捕获 `Throwable`：Java Crash，主证据是 Java 堆栈、异常原因链与当前版本的混淆映射；
 2. **应用进程退出，有致命信号**：Native Crash，主证据是 tombstone、原始符号与 Build ID；
 3. **应用进程退出，应用没有临终回调**：LMKD 终止、系统终止或用户操作，主证据是 `ApplicationExitInfo`、Android vitals 与系统内存状态；
 4. **进程仍在，系统给出超时报告**：ANR，主证据是 ANR trace、原因文本与 Perfetto；用户选择等待后进程可以继续运行，ANR 不等于退出；

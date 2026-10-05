@@ -49,7 +49,7 @@ long trace 通过 `write_into_file: true` 让 service 周期性把 central buffe
 3. **Native heap sampling（heapprofd）**：Android 10+，目标 App 需 `profileable`/`debuggable`；
 4. **ART 对象分配采样**：Android 12+，在 heapprofd 配置中加 `heaps: "com.android.art"`，门槛同上；
 5. **Java heap dump（retained graph）**：Android 11+，门槛同上；
-6. **`linux.perf` 调用栈采样**：Android 12+ 平台具备（AAOS13 sepolicy 已有 `traced_perf` 域），门槛同上；
+6. `linux.perf` 调用栈采样：Android 12+ 平台具备（AAOS13 sepolicy 已有 `traced_perf` 域），门槛同上；
 7. **功耗 rail**：Android 10+ 且设备实现了对应 HAL，机型能力决定有无数据；
 8. **logcat in trace**：官方 `android.log` 标注 userdebug builds 支持，普通 user build 不应默认视为可用。
 

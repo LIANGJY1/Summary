@@ -105,12 +105,12 @@ framework/系统开发者的常见工作是新增进程、服务、属性、设�
 
 以 `auditd : avc:  denied  { find } for pid=7283 uid=10093 name=audio scontext=u:r:nsr_appstore:s0 tcontext=u:object_r:audio_service:s0 tclass=service_manager permissive=0` 为例，按日志阅读顺序逐段拆：
 
-1. **`avc: denied { find }`**：`avc_audit` 按固定模板生成拒绝消息，模板中的空格是格式而不是额外字段；`avc_dump_av` 将权限位图转换成权限名。`find` 是 `service_manager` 类的服务查找权限，其他类有各自的权限名。
-2. **`pid=7283 uid=10093 name=audio`**：本例中 servicemanager 的审计回调从 Binder 调用者身份取得 pid/uid，`name` 是待查的服务名。内核类 AVC 的字段由内核审计路径生成，因此字段来源不能一概而论。
-3. **`scontext` 与 `tcontext`**：`avc_dump_query` 将源、目标 SID 转回安全上下文。本例源是 `nsr_appstore` 域，目标类型是 `audio_service`；服务标签来自 service_contexts，文件标签来自 file_contexts。
-4. **`tclass=service_manager`**：表示访问目标是服务注册表中的条目，不能据此推断实际服务进程的域。
-5. **`permissive=0`**：表示本次拒绝处于强制模式；宽容模式下同类访问仍可记录，但会标记 `permissive=1` 并放行。
-6. **行首 `auditd` 与日志 pid**：userspace AVC 的 tag 和日志行 pid 描述写日志的进程；本例 pid 555 是 servicemanager，而被拒调用方是 `pid=7283`。
+1. `avc: denied { find }`：`avc_audit` 按固定模板生成拒绝消息，模板中的空格是格式而不是额外字段；`avc_dump_av` 将权限位图转换成权限名。`find` 是 `service_manager` 类的服务查找权限，其他类有各自的权限名。
+2. `pid=7283 uid=10093 name=audio`：本例中 servicemanager 的审计回调从 Binder 调用者身份取得 pid/uid，`name` 是待查的服务名。内核类 AVC 的字段由内核审计路径生成，因此字段来源不能一概而论。
+3. `scontext` 与 `tcontext`：`avc_dump_query` 将源、目标 SID 转回安全上下文。本例源是 `nsr_appstore` 域，目标类型是 `audio_service`；服务标签来自 service_contexts，文件标签来自 file_contexts。
+4. `tclass=service_manager`：表示访问目标是服务注册表中的条目，不能据此推断实际服务进程的域。
+5. `permissive=0`：表示本次拒绝处于强制模式；宽容模式下同类访问仍可记录，但会标记 `permissive=1` 并放行。
+6. 行首 `auditd` 与日志 pid：userspace AVC 的 tag 和日志行 pid 描述写日志的进程；本例 pid 555 是 servicemanager，而被拒调用方是 `pid=7283`。
 
 修复时的用法：scontext 的域、tcontext 的类型、tclass、被拒权限四段照抄就是一条 allow 规则，`allow nsr_appstore audio_service:service_manager find;`。
 

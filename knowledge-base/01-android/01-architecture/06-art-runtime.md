@@ -50,17 +50,17 @@ ART Service（Android 14 起管理应用 dexopt）只对应用暴露 verify、sp
 
 前提：过滤器决定验证与编译的范围，speed-profile 只编 profile 覆盖的方法。机制：新装应用无 profile、baseline profile 未就位时无热点可依，回退 verify 是官方设计而非异常；查询实际生效值用 `adb shell cmd package art dump`。结果：安装后首启走解释与 JIT 不代表配置错误；要首启即有 AOT，必须让安装时就有 profile 可用（Baseline Profile 途径）。
 
-**Q8: pm.dexopt.* 各场景的默认过滤器是什么？"安装后第一次启动慢"的完整链路怎么解释？**
+**Q8: [learning] pm.dexopt.* 各场景的默认过滤器是什么？"安装后第一次启动慢"的完整链路怎么解释？**
 
 Android 14 及以上的 ART Service 按 dexopt reason 选择默认 compiler filter。标准默认值如下，产品可以按设备策略覆盖：
 
-1. **`pm.dexopt.first-boot=verify`**：首次启动后的 dexopt 只验证 DEX，不生成常规 AOT 机器码。
-2. **`pm.dexopt.boot-after-ota=verify`**：整机 OTA 后按 verify 处理应用代码。
-3. **`pm.dexopt.boot-after-mainline-update=verify`**：Mainline 模块更新后按 verify 处理应用代码。
-4. **`pm.dexopt.bg-dexopt=speed-profile`**：后台 dexopt 根据可用 profile 编译热点方法；profile 不可用时回退 verify。
-5. **`pm.dexopt.inactive=verify`**：对不活跃应用执行降级时采用 verify。
-6. **`pm.dexopt.cmdline=verify`**：命令行请求未显式指定其他 filter 时采用 verify。
-7. **`pm.dexopt.shared=speed`**：为被其他应用共享使用、通常不能使用本地 profile 的应用提供回退 filter。
+1. `pm.dexopt.first-boot=verify`：首次启动后的 dexopt 只验证 DEX，不生成常规 AOT 机器码。
+2. `pm.dexopt.boot-after-ota=verify`：整机 OTA 后按 verify 处理应用代码。
+3. `pm.dexopt.boot-after-mainline-update=verify`：Mainline 模块更新后按 verify 处理应用代码。
+4. `pm.dexopt.bg-dexopt=speed-profile`：后台 dexopt 根据可用 profile 编译热点方法；profile 不可用时回退 verify。
+5. `pm.dexopt.inactive=verify`：对不活跃应用执行降级时采用 verify。
+6. `pm.dexopt.cmdline=verify`：命令行请求未显式指定其他 filter 时采用 verify。
+7. `pm.dexopt.shared=speed`：为被其他应用共享使用、通常不能使用本地 profile 的应用提供回退 filter。
 
 安装后首次启动偏慢的一条常见链路是：安装期按 verify 验证，运行时 JIT 采集热点，之后后台任务才按可用 profile 做 speed-profile 编译。A/B OTA 设备还可在重启前对新系统中的应用执行编译，让结果在切换系统槽位后可用；这取决于设备是否启用相应后台 OTA dexopt 流程。
 
@@ -104,14 +104,14 @@ Android 17 `mark_compact.cc` 中的对象代际大致按以下过程推进：
 
 该改进可通过 Google Play 系统更新提供给 Android 12 及以上设备，因此不能仅凭系统版本低于 Android 17 就断定功能不存在。其收益也不是所有应用都相同：年轻代对象回收更频繁、单次成本可能更低，但对象存活率高、跨代引用多或堆压力大时效果会变化。验证时观察目标进程 GC 事件，对比 young/full collection 次数、暂停分布、GC CPU 时间和峰值 RSS，不要只检查属性或总 GC 次数。
 
-**Q13: Profile、DM、SDM、SDC 四类文件分别解决什么问题？各自的版本边界是什么？**
+**Q13: [learning] Profile、DM、SDM、SDC 四类文件分别解决什么问题？各自的版本边界是什么？**
 
 四类文件分别承载 profile 输入、Dex Metadata、Secure Dex Metadata 和设备侧匹配信息：
 
 1. **Profile**：Baseline、Startup 和 Cloud Profile 为构建或 ART 提供热点选择信息，三者生成方和生效阶段不同。
-2. **`.dm`**：Dex Metadata 是 ZIP 文件，与 APK 同基名，例如 `base.apk` 对应 `base.dm`。它可携带供 speed-profile AOT 使用的 `primary.prof`，也可携带可选的 `primary.vdex` 验证数据。
-3. **`.sdm`**：Secure Dex Metadata 携带面向特定 ISA 的云端 AOT 产物，至少含 `primary.odex`。文件名带 ISA 段，例如 `base.arm64.sdm`。SDM 使用与 APK 相同 signer 的 v3 签名；安装阶段验证该签名。
-4. **`.sdc`**：设备端 artd 生成的 Secure Dex Metadata Cache，记录 SDM 时间戳和设备 ART APEX 版本等匹配信息。它不是签名文件，不能替代安装阶段对 SDM 的验证。
+2. `.dm`：Dex Metadata 是 ZIP 文件，与 APK 同基名，例如 `base.apk` 对应 `base.dm`。它可携带供 speed-profile AOT 使用的 `primary.prof`，也可携带可选的 `primary.vdex` 验证数据。
+3. `.sdm`：Secure Dex Metadata 携带面向特定 ISA 的云端 AOT 产物，至少含 `primary.odex`。文件名带 ISA 段，例如 `base.arm64.sdm`。SDM 使用与 APK 相同 signer 的 v3 签名；安装阶段验证该签名。
+4. `.sdc`：设备端 artd 生成的 Secure Dex Metadata Cache，记录 SDM 时间戳和设备 ART APEX 版本等匹配信息。它不是签名文件，不能替代安装阶段对 SDM 的验证。
 
 版本边界：SDM/SDC 在 Android 16 引入，Android 17 延续；AAOS 13 源码中没有 ArtManagedInstallFileHelper，因此 Android 13 不具备这一 SDM 路径。DM 更早就存在，但行为会变化：AAOS 13 的 DexMetadataHelper 会用 ZIP 内 `manifest.json` 校验包名和版本号，并提供 `pm.dexopt.dm.require_manifest` 属性；Android 17 实现已移除 manifest 读取和相关属性。不能把一版行为直接套用到另一版。
 
@@ -150,13 +150,13 @@ Android 17 `mark_compact.cc` 中的对象代际大致按以下过程推进：
 3. 安装 APK、DM，以及 ISA 匹配的 SDM。
 
 固定设备构建、ART APEX 版本、温度和存储余量，每组多轮并报告 P50/P90 与失败回退次数。用 `pm art dump`、`ART_DEX2OAT_REPORTED` 统计和 trace 分别确认“SDM 被接收”与“SDM 被运行时采用”，这两个检查点不能混为一谈。
-**Q17: 常用的 dalvik.vm.* 调试属性有哪些？为什么改了不重启就不生效？**
+**Q17: [learning] 常用的 dalvik.vm.* 调试属性有哪些？为什么改了不重启就不生效？**
 
 ART 运行时属性由 Zygote 创建新虚拟机时读取。AndroidRuntime 会把部分属性转换为 ART 运行选项，其他属性则作为特定运行时策略输入；修改属性不会追溯改变已创建的 ART 实例，因此要让新值生效，必须重启读取它的进程，通常需要按设备策略重启 Zygote 或重启设备。
 
 常用属性及其值如何影响运行时：
 
-1. **`dalvik.vm.checkjni`**：值为 true/1 时为新建运行时启用 CheckJNI，值为 false/0 时关闭该属性控制的检查。启用后 JNI 误用可能导致进程 abort，并输出 `JNI DETECTED ERROR IN APPLICATION`。默认值受构建类型和产品配置影响，先读设备实际值，不要假定量产与 userdebug 相同。
+1. `dalvik.vm.checkjni`：值为 true/1 时为新建运行时启用 CheckJNI，值为 false/0 时关闭该属性控制的检查。启用后 JNI 误用可能导致进程 abort，并输出 `JNI DETECTED ERROR IN APPLICATION`。默认值受构建类型和产品配置影响，先读设备实际值，不要假定量产与 userdebug 相同。
 2. **堆大小属性**：`dalvik.vm.heapstartsize` 控制初始堆大小，`dalvik.vm.heapsize` 控制堆上限，`dalvik.vm.heapgrowthlimit` 控制普通应用堆增长上限。它们的值是设备构建配置的大小值；未设置时 ART 使用目标版本与设备配置对应的默认值，不存在适用于所有设备的单一数值。增大值可能提高单进程可用堆空间，也会影响整机内存压力。
 3. **JIT 属性**：在 ART JIT 可用的版本中，`dalvik.vm.usejit` 控制 JIT 是否启用，`dalvik.vm.jitthreshold` 指定方法热度计数触发 JIT 编译的阈值。阈值越低通常越早尝试编译，但增加编译工作；未设置时使用对应运行时版本的默认值。Android 14 起 profile 始终启用，Android 13 及以前的 `dalvik.vm.usejitprofiles` 才能控制 JIT profile 是否使用。
 4. **Profile 属性**：`dalvik.vm.profilebootclasspath` 控制是否采集 boot classpath profile；`dalvik.vm.hot-startup-method-samples` 设置启动热点方法采样数量。前者取布尔类值，后者取数值；省略值时走对应分支默认配置，需从设备属性和 AndroidRuntime 实现确认。

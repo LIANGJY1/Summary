@@ -57,7 +57,7 @@ object PetConfig {
 }
 ```
 
-1. **`const val` 条件：**它要求编译器能在编译期确定初始化值，并会把该值内联到使用处。普通 `val` 不要求初始化器满足这一条件。
+1. `const val` 条件：它要求编译器能在编译期确定初始化值，并会把该值内联到使用处。普通 `val` 不要求初始化器满足这一条件。
 2. **R 字段版本：**AGP 8.0 至 8.x 中，`android.nonFinalResIds` 的默认值为 `true`，应用与测试模块的 R 字段默认非 final。显式设为 `false` 时，应用与测试模块生成 final 字段。AGP 9.0 起由 `android.enableAppCompileTimeRClass` 控制应用是否按非 final R 字段编译，默认值从 `false` 改为 `true`。设为 `false` 可保留 AGP 8.13 的编译行为。库模块的 R 字段始终非 final，因为最终资源 ID 要在使用该库的应用或测试打包时确定。旧版 AGP 或覆写默认值时，应用模块可能生成 final 字段，因此同一写法会因模块和构建配置不同而表现不同。相关依据为 Android Gradle Plugin 8.0 和 9.0.1 release notes。
 3. **修改方式：**资源引用使用普通 `val`，需要编译期常量的 `const val` 留给字面量或其他合法 const 表达式。AGP 8.x 中 `android.nonFinalResIds=false` 可让应用与测试生成 final R 字段。AGP 9.0 起应核对 `android.enableAppCompileTimeRClass`，其默认 `true` 让应用按非 final R 编译，显式设为 `false` 会保留旧编译行为。库模块仍不能依赖 final R 字段。非 final R 有利于增量编译与资源处理优化，不要仅为消除一个 `const` 编译错误而改变项目构建策略。
 4. **检查顺序：**先确认报错模块是应用、测试还是库，再核对 AGP 版本和 `android.nonFinalResIds`。IDE 与命令行表现不一致时，还要确认二者解析的是同一变体和同一生成的 R 类，不能仅凭 IDE 标红或一次构建成功认定字段属性。

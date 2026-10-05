@@ -148,9 +148,9 @@ ORDER BY afts.ts;
 
 三者分属三层，不能当同一个队列长度读：
 
-- **`QueuedBuffer - <name>BLAST#<id>`**：App 进程内 BLAST 的计数器（按 AAOS13 源码核对，`BLASTBufferQueue.cpp`），写入值为 `mNumFrameAvailable + mNumAcquired - mPendingRelease.size()`，是 BLAST 内部可用帧、已取得 buffer 与暂存 release 回调的组合变化，不等同于任何 BufferQueue 的 queued slot 数；
-- **`BufferTX - <layerName>`**：SurfaceFlinger 侧计数器（Android 13 定义在 `BufferStateLayer.h`），buffer transaction 到达服务端时增加、latch 或 drop 时减少，描述尚未被消费或丢弃的服务端提交；
-- **`BufferQueueCore::mQueue.size()`**：某条 BufferQueue 真正的 queued `BufferItem` 数，但常规 Perfetto trace 不直接给出这个成员。
+- `QueuedBuffer - <name>BLAST#<id>`：App 进程内 BLAST 的计数器（按 AAOS13 源码核对，`BLASTBufferQueue.cpp`），写入值为 `mNumFrameAvailable + mNumAcquired - mPendingRelease.size()`，是 BLAST 内部可用帧、已取得 buffer 与暂存 release 回调的组合变化，不等同于任何 BufferQueue 的 queued slot 数；
+- `BufferTX - <layerName>`：SurfaceFlinger 侧计数器（Android 13 定义在 `BufferStateLayer.h`），buffer transaction 到达服务端时增加、latch 或 drop 时减少，描述尚未被消费或丢弃的服务端提交；
+- `BufferQueueCore::mQueue.size()`：某条 BufferQueue 真正的 queued `BufferItem` 数，但常规 Perfetto trace 不直接给出这个成员。
 
 结合源码公式判读 `QueuedBuffer`：计数器上升说明可用帧或 acquired buffer 增加、释放进度没有同步抵消；长期高位说明 BLAST 处理、SF 消费或 release 回调可能落后（等待一组更新同时提交的同步 transaction 也会暂时阻止消费）；上升后 `dequeueBuffer` 变长说明积压已向 Producer 传导；计数器已回落而渲染仍停顿，要查 release fence、GPU/driver 等待、线程调度或应用锁。多个 Surface 同时更新时，把计数器名、`layer_name`、layer id、BufferQueue 名与 frame token 配对，主窗口的 Stuffing 不能自动归因给同进程的视频 layer。
 
@@ -253,10 +253,10 @@ producer 只能向设备上的 `traced` 服务提交数据；采集配置、buff
 
 custom data source 继承 `perfetto::DataSource<T>`，每个活动 trace session 创建独立实例（SDK 细节按材料转写）。四个入口的约束：
 
-- **`OnSetup`**：解析本实例配置、准备有界状态；`SetupArgs::config` 只在回调期间有效，不能保存指针；
-- **`OnStart`**：启动子系统采样；回调可能来自 Perfetto 内部线程；
-- **`Trace(lambda)`**：按活动实例写 packet；没有活动实例时 lambda 不执行（计算成本高的参数应放 lambda 内），并发 session 会让同一 lambda 执行多次；
-- **`OnStop`**：停止采样并写收尾 packet；不应长时间阻塞 Perfetto 回调线程。
+- `OnSetup`：解析本实例配置、准备有界状态；`SetupArgs::config` 只在回调期间有效，不能保存指针；
+- `OnStart`：启动子系统采样；回调可能来自 Perfetto 内部线程；
+- `Trace(lambda)`：按活动实例写 packet；没有活动实例时 lambda 不执行（计算成本高的参数应放 lambda 内），并发 session 会让同一 lambda 执行多次；
+- `OnStop`：停止采样并写收尾 packet；不应长时间阻塞 Perfetto 回调线程。
 
 访问实例状态时用 `GetDataSourceLocked()` 取得带锁句柄，避免 session 停止与业务线程写入同时发生时访问已销毁的实例。`OnStop` 中存在异步清理时，调用 `StopArgs::HandleStopAsynchronously()` 取得 acknowledgement closure：清理线程写完末尾 packet 后，要在最后一次 `Trace()` lambda 中显式调用 `TraceContext::Flush()`，再执行该回调；整个过程必须在 consumer 配置的 stop timeout 内完成，超时后服务强制停止，之后写出的末尾数据不会进入 trace。
 

@@ -28,7 +28,7 @@ AAOS13 的 `Heap::ThrowOutOfMemoryError()` 生成的文本形如 `Failed to allo
 3. **until OOM**：到 OOME 还可增长的剩余空间；
 4. **target footprint**：GC 用来调节堆增长的目标值，不是硬上限；
 5. **growth limit**：应用堆增长上限，由 `dalvik.vm.heapgrowthlimit` 等设备属性配置；
-6. **`<1% of heap free after GC`**：GC 后无法保留 `kMinFreeHeapAfterGcForAlloc`（0.01）要求的最小空闲比例，描述的是比例限制，不能仅凭这句断定引用泄漏。
+6. `<1% of heap free after GC`：GC 后无法保留 `kMinFreeHeapAfterGcForAlloc`（0.01）要求的最小空闲比例，描述的是比例限制，不能仅凭这句断定引用泄漏。
 
 抛出机制上还有一个兜底：AAOS13 的 `Thread::ThrowOutOfMemoryError()` 先尝试构造带文本的 OOME，若构造时再次耗尽内存，线程改用 Runtime 启动期预分配的 OOME 对象（`thread.cc` 核对）——保证异常状态可设置，但没有完整文本与栈。因此监控平台只能提取 allocation size、growth limit 等已知字段做辅助分组，原始文本和栈必须保留；判断泄漏要比较同一场景、同一 GC 状态下对象数量与 retained size，错误文本替代不了 heap dump 的引用关系。
 
@@ -102,7 +102,7 @@ Android 8（API 26）起，`WebViewClient.onRenderProcessGone(view, detail)` 是
 三个常见误判：
 
 1. **RSS 上升不等于泄漏**：新触达的代码页、文件页、线程栈和 allocator 保留页都会抬高 RSS；
-2. **`uordblks` 回落而 RSS 不回落，不等于 `free()` 失效**：Scudo 可以保留已释放页供后续复用，是否归还内核受尺寸、碎片与 release 策略影响；
+2. `uordblks` 回落而 RSS 不回落，不等于 `free()` 失效：Scudo 可以保留已释放页供后续复用，是否归还内核受尺寸、碎片与 release 策略影响；
 3. **malloc 统计平稳不等于 Native 资源平稳**：`mmap(MAP_ANONYMOUS)` 自研内存池、GraphicBuffer、AHardwareBuffer 与 dma-buf 可能完全绕过 malloc。
 
 采样时每个维度要绑定场景与时间点；比较点必须具有相近的页面、网络、播放与前后台状态，"启动后 1 分钟/1 小时"的固定时刻只适合连续使用场景。
@@ -200,13 +200,13 @@ fdsan（file descriptor sanitizer）用 owner tag 发现重复关闭、关闭后
 
 FD 监控提供的是故障前的趋势、构成与所有权证据，它不能替代 tombstone、ANR trace 或 `ApplicationExitInfo` 的判定，常见越界推论要逐条排除：
 
-1. **`OutOfMemoryError: pthread_create` 不证明 Java 堆满**：要看 task 趋势、栈大小与 `VmSize`，属于线程资源失败；
-2. **`EMFILE` 失败的那次 `open` 不一定是泄漏点**：它只是第一个撞上 soft limit 的调用，泄漏源要看类型分布与增长来源；
-3. **`ENFILE` 不能推出当前 App 单独泄漏**：它是系统级文件表压力；
+1. `OutOfMemoryError: pthread_create` 不证明 Java 堆满：要看 task 趋势、栈大小与 `VmSize`，属于线程资源失败；
+2. `EMFILE` 失败的那次 `open` 不一定是泄漏点：它只是第一个撞上 soft limit 的调用，泄漏源要看类型分布与增长来源；
+3. `ENFILE` 不能推出当前 App 单独泄漏：它是系统级文件表压力；
 4. **fdsan abort 不代表数量到上限**：它指向的是所有权错误（重复关闭、错误所有者），与打开数无关；
-5. **`FD_SET` FORTIFY abort 不代表打开数超过 1024**：编号达到 1024 即可触发；
+5. `FD_SET` FORTIFY abort 不代表打开数超过 1024：编号达到 1024 即可触发；
 6. **Binder 线程全在等待不靠加线程解决**：常由同步事务阻塞或调用环造成，线程数只是伴随现象；
-7. **`anon_inode:[eventpoll]` 持续增长不一定是泄漏**：Looper/HandlerThread 会正常持有 epoll/eventfd，只有随页面或模块反复销毁而持续增长才构成泄漏证据。
+7. `anon_inode:[eventpoll]` 持续增长不一定是泄漏：Looper/HandlerThread 会正常持有 epoll/eventfd，只有随页面或模块反复销毁而持续增长才构成泄漏证据。
 
 排查顺序因此是：先看 FD 总量、类型分布与最大编号的趋势，再定位持续增长的类别与创建方，最后回到创建模块与生命周期所有者修复。
 

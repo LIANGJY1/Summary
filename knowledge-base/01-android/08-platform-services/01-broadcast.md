@@ -19,7 +19,7 @@ Android 17（API 37）不再用前台队列和后台队列各自维护全局待�
 1. **待处理队列：**每个进程队列含 `mPendingUrgent`、`mPending` 和 `mPendingOffload`。系统优先取 urgent，再取普通项，最后取 offload 项。连续调度 3 个 urgent 后会让更低优先级且等待更久的队列有机会，连续调度 10 个普通项后会考虑 offload，避免低优先级广播一直饥饿。
 2. **并行槽：**Android 17 AOSP 默认普通设备允许 4 个暖进程队列并行，低内存设备允许 2 个。urgent 广播可在普通并行上限之外额外占 1 个槽。额外槽只为 urgent 留出推进机会，不代表所有场景都固定并行 5 个。常量可由 `activity_manager_native_boot` 命名空间的 DeviceConfig 调整。
 3. **冷启动限制：**清单接收器可以使目标应用冷启动，但系统同一时刻只发起一个广播引起的冷启动，以控制启动资源竞争。冷启动完成、应用线程就绪后，系统才调度接收器执行。
-4. **`runnableAt`：**这是进程队列进入可运行队列的排序时间，不是提前执行时间。Android 17 AOSP 的默认偏移包括：
+4. `runnableAt`：这是进程队列进入可运行队列的排序时间，不是提前执行时间。Android 17 AOSP 的默认偏移包括：
 
     1. urgent、带前台标记或目标处于前台/测试插桩状态的队列可按 −120 秒偏移排序。
     2. 普通队列通常加 500 毫秒，缓存进程队列通常加 120 秒。
@@ -47,5 +47,5 @@ Android 17（API 37）不再用前台队列和后台队列各自维护全局待�
 对于需要等待接收器完成的广播，Android 17 `BroadcastQueueImpl.dispatchReceivers()` 在调度回调前启动 ANR 定时器，`finishReceiverLocked()` 在完成回执到达后取消它。排队等待和拉起冷进程发生在回调调度前，不计入这个接收器完成窗口。因此端到端广播耗时长，不能单凭这一点断定发生了接收器超时。无序且无结果回调的动态接收器属于 assumed-delivered，不走此完成等待计时。
 
 1. **超时结果：**接收器超过对应的 `TIMEOUT` 后，其投递状态记为超时并进入应用无响应处理。超时记录可包含 Intent 与接收包名、类名。调查时应区分进程队列等待、冷启动、回调运行和完成回执等待。
-2. **`goAsync()` 契约：**它只把完成时点从 `onReceive()` 返回延后到 `PendingResult.finish()`，不会暂停计时或增加超时额度。应在 `finally` 中调用 `finish()`，并把任务提交点定义为工作已可靠移交，例如已持久化入队。下载、迁移和大规模扫描应交给 `JobScheduler` 或 WorkManager。
+2. `goAsync()` 契约：它只把完成时点从 `onReceive()` 返回延后到 `PendingResult.finish()`，不会暂停计时或增加超时额度。应在 `finally` 中调用 `finish()`，并把任务提交点定义为工作已可靠移交，例如已持久化入队。下载、迁移和大规模扫描应交给 `JobScheduler` 或 WorkManager。
 3. **状态维度：**`delivery[]` 记录每个接收器的 PENDING、SCHEDULED、DEFERRED、DELIVERED、SKIPPED、TIMEOUT 或 FAILURE。`APP_RECEIVE` 等状态描述整条广播记录的执行阶段。逐接收器投递结果和整条记录状态回答不同问题，不能互相替代。

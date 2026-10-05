@@ -78,8 +78,8 @@
 
 三类旁路能力作用不同，权限都在系统侧：
 
-1. **`InputFilter`（全局过滤器）**：隐藏系统接口，由 WMS/IMS 经 `WindowManagerInternal.setInputFilter()` 安装（按 AAOS13 源码核对，`InputManagerService.setInputFilter()` 保存过滤器并只向原生同步启用状态），可拦截原事件后决定放行、消费或经 `sendInputEvent()` 发替代事件，典型实现是 `AccessibilityInputFilter`。普通应用没有入口。
-2. **`InputMonitor`（监视窗口）**：`InputManagerService.monitorGestureInput()` 创建手势监视通道与 spy window，调用方必须持有 `android.permission.MONITOR_INPUT`（按 AAOS13 源码核对，平台清单声明于 `AndroidManifest.xml`，保护级别为 `signature|recents`）。监控阶段只读副本；接管需另调 `pilferPointers()`，且不能注入替代事件。SystemUI 的边缘返回手势即此模式。
+1. `InputFilter`（全局过滤器）：隐藏系统接口，由 WMS/IMS 经 `WindowManagerInternal.setInputFilter()` 安装（按 AAOS13 源码核对，`InputManagerService.setInputFilter()` 保存过滤器并只向原生同步启用状态），可拦截原事件后决定放行、消费或经 `sendInputEvent()` 发替代事件，典型实现是 `AccessibilityInputFilter`。普通应用没有入口。
+2. `InputMonitor`（监视窗口）：`InputManagerService.monitorGestureInput()` 创建手势监视通道与 spy window，调用方必须持有 `android.permission.MONITOR_INPUT`（按 AAOS13 源码核对，平台清单声明于 `AndroidManifest.xml`，保护级别为 `signature|recents`）。监控阶段只读副本；接管需另调 `pilferPointers()`，且不能注入替代事件。SystemUI 的边缘返回手势即此模式。
 3. **无障碍按键过滤**：需服务配置声明 `canRequestFilterKeyEvents` 能力并在运行时置 `FLAG_REQUEST_FILTER_KEY_EVENTS`；`onKeyEvent()` 收到副本，返回 true 表示消费。判定发生在 `AccessibilityManagerService`/`KeyEventDispatcher` 与服务进程一侧的异步等待，材料按 Android 17 核对的等待上限为 500 ms，不是 `InputDispatcher` 同步等待远端 Binder。
 
 版本边界：Android 17 的 `InputFilter` 是 C++ 包装层加 Rust 实现的辅助功能过滤器（防重复键、慢速键、粘滞键），`EventHub`/`InputReader`/`InputDispatcher` 仍是 C++；AAOS13 源码中不存在这套 Rust 过滤器，"InputFlinger 已用 Rust 重写"的说法不成立。无障碍触摸另有 API 34 起的 `setMotionEventSources()` 通用运动事件来源监听，与触摸探索的 `FLAG_SEND_MOTION_EVENTS` 不是同一开关。
@@ -88,10 +88,10 @@
 
 四类入口都最终经系统注入，但身份、目标与过滤器关系不同：
 
-1. **`Instrumentation.sendPointerSync()`**：标准注入，目标 UID 固定为 `Process.myUid()`，只能命中测试目标自身拥有的窗口；使用 `WAIT_FOR_FINISH` 只等到 `FINISHED`，不保证界面已绘制；
-2. **`UiAutomation.injectInputEvent()`**：经受信任的 `UiAutomationConnection` 标准注入，可跨应用窗口，按 `sync` 参数选择 `WAIT_FOR_FINISH` 或 `ASYNC`；
-3. **`adb shell input`**：`InputShellCommand` 以 shell 身份走标准注入，目标是 shell 权限允许的范围；
-4. **`AccessibilityService.dispatchGesture()`**：不使用 `INJECT_EVENTS` 通用入口，而在无障碍变换链内由 `MotionEventInjector` 生成事件（需 `canPerformGestures` 声明），可指定 `displayId`。
+1. `Instrumentation.sendPointerSync()`：标准注入，目标 UID 固定为 `Process.myUid()`，只能命中测试目标自身拥有的窗口；使用 `WAIT_FOR_FINISH` 只等到 `FINISHED`，不保证界面已绘制；
+2. `UiAutomation.injectInputEvent()`：经受信任的 `UiAutomationConnection` 标准注入，可跨应用窗口，按 `sync` 参数选择 `WAIT_FOR_FINISH` 或 `ASYNC`；
+3. `adb shell input`：`InputShellCommand` 以 shell 身份走标准注入，目标是 shell 权限允许的范围；
+4. `AccessibilityService.dispatchGesture()`：不使用 `INJECT_EVENTS` 通用入口，而在无障碍变换链内由 `MotionEventInjector` 生成事件（需 `canPerformGestures` 声明），可指定 `displayId`。
 
 标准注入入口最终都经过 `InputManagerService` 的权限检查（`INJECT_EVENTS`，并按需检查 Instrumentation 来源 UID），不满足抛 `SecurityException`。普通注入事件绕过全局 `InputFilter`，只有专用测试入口或无障碍链内生成的事件才进入过滤器。
 
@@ -157,9 +157,9 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 回调分三层（已与官方文档核对）：
 
-1. **平台提交回调 `OnBackInvokedCallback`**（API 33）：只有 `onBackInvoked()`，提交后通知，没有进度方法；
-2. **平台进度回调 `OnBackAnimationCallback`**（API 34）：`onBackStarted()`/`onBackProgressed()`/`onBackCancelled()`/`onBackInvoked()`，可接收开始、进度、取消与提交；
-3. **AndroidX 兼容层 `OnBackPressedCallback`**：`handleOnBackPressed()` 一直可用，进度方法自 activity 1.8.0 增加，且只有框架 API 34+ 才由系统驱动。
+1. 平台提交回调 `OnBackInvokedCallback`（API 33）：只有 `onBackInvoked()`，提交后通知，没有进度方法；
+2. 平台进度回调 `OnBackAnimationCallback`（API 34）：`onBackStarted()`/`onBackProgressed()`/`onBackCancelled()`/`onBackInvoked()`，可接收开始、进度、取消与提交；
+3. AndroidX 兼容层 `OnBackPressedCallback`：`handleOnBackPressed()` 一直可用，进度方法自 activity 1.8.0 增加，且只有框架 API 34+ 才由系统驱动。
 
 清单属性语义随版本变化：Android 13/14 用于显式加入新模型（开发者选项测试动画）；Android 15 移除开发者开关，已加入的应用显示返回主屏、跨任务、跨 Activity 三类系统动画；Android 16 起对目标版本为 36+ 的应用默认启用，仍可设 `false` 临时退出，且启用后旧 `onBackPressed()` 不再调用、`KEYCODE_BACK` 不再分发给应用。API 36 新增 `PRIORITY_SYSTEM_NAVIGATION_OBSERVER` 观察者优先级（值为 -2，只观察不消费）；API 36 同时只允许注册一个此优先级回调，API 37 起才允许注册多个。普通 `OnBackInvokedCallback` 自 API 33 起就支持注册多个，按优先级及同优先级的注册顺序分发。
 

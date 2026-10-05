@@ -6,8 +6,8 @@
 
 Android 仍由 AudioFlinger 承载播放数据、AudioPolicyService 选择路由。车机再加入车载音区和设备拓扑配置，以及承接车辆控制信号的 AudioControl HAL。具体音区、功放和音源组合因车型而异，不适合写死在通用框架代码中。
 
-1. **`car_audio_configuration.xml`**：描述音区、音量组、音频 context 与 bus 设备的关系，由 CarAudioService 解析。Android 优先从 `/vendor/etc/car_audio_configuration.xml` 加载，找不到时再回退 `/system/etc/car_audio_configuration.xml`。
-2. **`audio_policy_configuration.xml`**：声明 Audio HAL 提供的端口与路由，包括车机的 BUS 类型设备端点。CarAudioService 引用的 bus 地址必须能在这里找到对应设备。
+1. `car_audio_configuration.xml`：描述音区、音量组、音频 context 与 bus 设备的关系，由 CarAudioService 解析。Android 优先从 `/vendor/etc/car_audio_configuration.xml` 加载，找不到时再回退 `/system/etc/car_audio_configuration.xml`。
+2. `audio_policy_configuration.xml`：声明 Audio HAL 提供的端口与路由，包括车机的 BUS 类型设备端点。CarAudioService 引用的 bus 地址必须能在这里找到对应设备。
 3. **AudioControl HAL**：承接车辆侧音频控制接口，例如外部焦点请求、设备 duck/mute 通知、设备增益变化回调、fade 与 balance。具体能力取决于接口版本：Android 13 的 HIDL 2.0 封装不支持设备 duck/mute 通知，相关能力需要 AIDL AudioControl HAL。它不代替 AudioPolicyService 选择播放路由。
 4. **bus 的边界**：audio bus 是软件可见的虚拟设备端点。HAL/厂商实现负责把 bus 映射到实际功放和声道，具体映射因车型而异。
 

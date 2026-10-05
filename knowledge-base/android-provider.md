@@ -78,7 +78,7 @@ readRaw()?.takeIf { (it == 1) != initial }        // ② 注册后立刻读现�
 
 （稳定事实变体）
 
-**原理**：系统设置存储是独立 APK `com.android.providers.settings`（priv-app——预置在 /system/priv-app 的特权系统应用），清单声明 sharedUserId=android.uid.system 且 android:process="system"，**不占独立进程，寄宿在 system_server（Android 系统核心服务进程）内**；provider 声明 multiprocess=false，全系统单实例、所有进程同一数据视图。应用侧 `Settings.Global/System/Secure` 的静态方法只是便捷封装，经 ContentResolver 跨进程调用；全表常驻内存，首次经 AMS 拿 Binder 代理后直连 provider。源码：Android 8.0 起在 `frameworks/base/packages/SettingsProvider/`（主体逻辑集中在 SettingsProvider.java 单类）；7.x 及以前在 `packages/providers/SettingsProvider/`。
+原理：系统设置存储是独立 APK `com.android.providers.settings`（priv-app——预置在 /system/priv-app 的特权系统应用），清单声明 sharedUserId=android.uid.system 且 android:process="system"，不占独立进程，寄宿在 system_server（Android 系统核心服务进程）内；provider 声明 multiprocess=false，全系统单实例、所有进程同一数据视图。应用侧 `Settings.Global/System/Secure` 的静态方法只是便捷封装，经 ContentResolver 跨进程调用；全表常驻内存，首次经 AMS 拿 Binder 代理后直连 provider。源码：Android 8.0 起在 `frameworks/base/packages/SettingsProvider/`（主体逻辑集中在 SettingsProvider.java 单类）；7.x 及以前在 `packages/providers/SettingsProvider/`。
 
 **优缺点**：优点——最早可用、永不被杀（寄宿 system_server，生命周期与系统同寿）；读廉价（内存缓存＋Binder 直达）；自带一对多变更通知（ContentObserver）；写有签名级权限闸门，三方只读、不可篡改。缺点——写 Secure/Global 需 WRITE_SECURE_SETTINGS（仅系统签名/特权应用拿得到），普通应用写不进；每次写入都落盘＋广播通知，只适合低频小 KV。
 

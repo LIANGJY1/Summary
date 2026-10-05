@@ -15,9 +15,9 @@ Kconfig 声明功能开关、可选值与依赖，Kbuild 根据最终配置值�
 
 外部模块应调用与目标设备内核相匹配的 Kbuild，并提供已配置、已准备的内核构建树和模块源码目录。典型形式为 `make -C <kernel-build-tree> M=<module-source-dir> modules`，但实际架构与工具链参数必须沿用目标 Android 内核分支提供的构建脚本。
 
-1. **`-C <kernel-build-tree>`：**让 make 先切换到目标内核源码或其输出构建目录，再由其中的 Kbuild 规则编译。该目录必须包含本次构建所需的内核配置和生成头文件。
-2. **`M=<module-source-dir>`：**告诉 Kbuild 外部模块源码位于何处。它不同于内核树本身，也不会替模块补齐内核配置、导出符号信息或目标工具链。
-3. **`modules`：**请求 Kbuild 执行外部模块构建目标，产物通常为 `.ko`。是否还需准备 Module.symvers、配置额外变量或运行 Android kernel build 脚本，取决于目标分支的构建流程。
+1. `-C <kernel-build-tree>`：让 make 先切换到目标内核源码或其输出构建目录，再由其中的 Kbuild 规则编译。该目录必须包含本次构建所需的内核配置和生成头文件。
+2. `M=<module-source-dir>`：告诉 Kbuild 外部模块源码位于何处。它不同于内核树本身，也不会替模块补齐内核配置、导出符号信息或目标工具链。
+3. `modules`：请求 Kbuild 执行外部模块构建目标，产物通常为 `.ko`。是否还需准备 Module.symvers、配置额外变量或运行 Android kernel build 脚本，取决于目标分支的构建流程。
 4. **目标工具链：**`ARCH=arm64` 一类值选择目标内核架构，不能按执行构建的主机架构默认推断。`LLVM=1` 让 Kbuild 使用 LLVM 工具链。使用 GNU 交叉工具时，`CROSS_COMPILE` 提供 GNU 工具前缀。纯 LLVM 交叉编译通常不需要它，除非还要调用非 LLVM assembler 或工具。
 5. **为何不能用主机默认值：**宿主机 GCC 可能产生错误架构或不兼容的对象文件。模块还必须匹配目标内核版本、配置、生成头文件、符号 CRC 与 ABI。Android kernel manifest 和产品构建脚本通常固定了可兼容的 Clang 版本与参数，应使用该路径，不要硬编码个人主机工具链。
 

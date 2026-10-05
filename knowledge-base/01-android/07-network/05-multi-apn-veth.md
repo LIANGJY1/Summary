@@ -16,7 +16,7 @@
 
 **Q4: [learning] 应用怎么把流量绑定到指定网卡？Java 层 Network 绑定与内核 SO_BINDTODEVICE 是两套什么机制？**
 
-两套机制，别混：一是 **Android Network 绑定**——`ConnectivityManager.bindProcessToNetwork()` 或 `Network.bindSocket()`，作用于框架登记的 netId，适合绑 Wi-Fi/蜂窝这类"框架可见网络"；二是 **内核接口绑定**——`SO_BINDTODEVICE` 套接字选项或 `ip rule`/路由策略，直接按接口名（veth、rmnet）收口，veth 这类框架不当作 Network 的链路只能走这套。项目文档要求"应用绑定对应虚拟网卡"，具体落在哪套由项目实现决定（未核对），判断方法：能 `bindProcessToNetwork` 拿到该网卡的 Network 就是前者，只能写套接字选项就是后者。绑定错了的表象一致：包从默认网卡发出、私网不可达。
+两套机制，别混：一是 Android Network 绑定——`ConnectivityManager.bindProcessToNetwork()` 或 `Network.bindSocket()`，作用于框架登记的 netId，适合绑 Wi-Fi/蜂窝这类"框架可见网络"；二是 内核接口绑定——`SO_BINDTODEVICE` 套接字选项或 `ip rule`/路由策略，直接按接口名（veth、rmnet）收口，veth 这类框架不当作 Network 的链路只能走这套。项目文档要求"应用绑定对应虚拟网卡"，具体落在哪套由项目实现决定（未核对），判断方法：能 `bindProcessToNetwork` 拿到该网卡的 Network 就是前者，只能写套接字选项就是后者。绑定错了的表象一致：包从默认网卡发出、私网不可达。
 
 **Q5: [learning] veth + SNAT 的数据路径里，SNAT 解决什么？为什么虚拟网关地址固定、物理地址可变？**
 

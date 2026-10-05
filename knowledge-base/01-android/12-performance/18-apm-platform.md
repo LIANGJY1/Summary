@@ -100,7 +100,7 @@ btrace 3.0 已删除 2.0 的编译期全量插桩，改为 ShadowHook 与 JNI Ho
 
 **Q11: [learning] btrace 的开源 Android 产物为什么不能直接接入 Android 17 / API 37 生产项目？维护 source fork 至少要验收什么？**
 
-因为它 Hook 并解析 ART 私有实现且没有公开 ABI 承诺，预编译产物也不满足 16 KB 对齐。落到具体机制：核心方法采样解析旧的 `art::StackVisitor::WalkStack<CountTransitions::kNo>(bool)` C++ 符号；AAOS13 的 `art/runtime/stack.h` 中该成员模板已是"单模板参数 `CountTransitions` + bool 参数"的形态，材料称 Android 17 又给 `WalkStack` 增加了第二个模板参数、新旧 mangled symbol 不同——符号解析失败时 `StackVisitor::init()` 返回 false，方法采样整体失效。随包 `librheatrace.so` 与 `libc++_shared.so` 的 ELF LOAD 段对齐为 4 KB（`2**12`），不满足 16 KB 环境要求的 `2**14`。
+因为它 Hook 并解析 ART 私有实现且没有公开 ABI 承诺，预编译产物也不满足 16 KB 对齐。落到具体机制：核心方法采样解析旧的 `art::StackVisitor::WalkStack<CountTransitions::kNo>(bool)` C++ 符号；AAOS13 的 `art/runtime/stack.h` 中该成员模板已是"单模板参数 `CountTransitions` + bool 参数"的形态，材料称 Android 17 又给 `WalkStack` 增加了第二个模板参数、新旧 mangled symbol 不同——符号解析失败时 `StackVisitor::init()` 返回 false，方法采样整体失效。随包 `librheatrace.so` 与 `libc++_shared.so` 的 ELF LOAD 段对齐为 4 KB（`212`），不满足 16 KB 环境要求的 `214`。
 
 结果上的陷阱：Android 17 设备上可能仍产出一份只有系统轨道的 `.pb`，文件存在不能证明方法采样成功。维护 fork 的验收至少包括：
 

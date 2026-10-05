@@ -54,9 +54,9 @@ adb shell 'cat /sys/kernel/sched_ext/enable_seq 2>/dev/null'
 
 sched_ext 的调度回调把 CPU 选择、入队和分发拆成不同阶段。`select_cpu()` 提供唤醒时的 CPU 选择提示，`enqueue()` 决定任务排入哪条队列，`dispatch()` 在本地和全局队列都没有可运行任务时补充任务。
 
-1. **`select_cpu()`：**在唤醒阶段给出 CPU 选择提示，可省略并使用默认实现。返回值不是绑定关系，核心调度器仍可按任务亲和性等条件修正选择。
-2. **`enqueue()`：**决定唤醒任务进入 global DSQ、某 CPU 的 local DSQ，或由调度器暂存在自定义队列。默认实现可把任务放入 global DSQ。
-3. **`dispatch()`：**当当前 CPU 的 local DSQ 和 global DSQ 都没有可运行任务时调用，用于从 BPF 自定义队列取任务并移入可执行队列。只使用内建 DSQ 的调度器通常不需要实现它。
+1. `select_cpu()`：在唤醒阶段给出 CPU 选择提示，可省略并使用默认实现。返回值不是绑定关系，核心调度器仍可按任务亲和性等条件修正选择。
+2. `enqueue()`：决定唤醒任务进入 global DSQ、某 CPU 的 local DSQ，或由调度器暂存在自定义队列。默认实现可把任务放入 global DSQ。
+3. `dispatch()`：当当前 CPU 的 local DSQ 和 global DSQ 都没有可运行任务时调用，用于从 BPF 自定义队列取任务并移入可执行队列。只使用内建 DSQ 的调度器通常不需要实现它。
 4. **DSQ 执行：**每个 CPU 只从自己的 local DSQ 选择当前任务。调度器可以建立自定义 DSQ，并按 FIFO 或虚拟时间顺序管理其中的任务，再把它们分发到 local DSQ。
 
 **Q6: [learning] sched_ext 怎样通过 CPU performance target 协同 schedutil？这个目标值能否直接证明关键任务性能提升？**

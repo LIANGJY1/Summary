@@ -52,7 +52,7 @@ CarTelemetryService 是 OEM 遥测的收集与处理服务：客户端推送 Met
 
 CarBugreportManagerService 走车机专用的 `carbugreportd`/`cardumpstatez` 通道：无分享确认弹窗、直接写调用方提供的两个输出 fd（主 zip + 额外输出），专为车机可控采集设计。
 
-1. **使用前提**：需要 `DUMP` 权限的系统应用触发，且**只在 userdebug/eng 构建可用**（user build 上服务直接不可用）——线上用户版拿不到。
+1. 使用前提：需要 `DUMP` 权限的系统应用触发，且只在 userdebug/eng 构建可用（user build 上服务直接不可用）——线上用户版拿不到。
 2. **约束**：同一时刻只允许一个 bugreport（并发返回 IN_PROGRESS）。进度经 onProgress(0–100) 回调、错误按 DUMPSTATE_FAILED/CONNECTION_FAILED 等码区分。
 3. **边界**：标准 BugreportManager 走 framework dumpstate 加用户确认 UI——两条通道不要混为一谈。
 

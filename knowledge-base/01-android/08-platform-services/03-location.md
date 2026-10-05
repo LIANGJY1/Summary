@@ -16,9 +16,9 @@
 
 三者分别适用于读取已有缓存、获取一次新鲜位置和持续订阅。它们是否启动 provider、是否可能返回 `null`、以及应用需要维持的注册时长都不同。
 
-1. **`getLastKnownLocation(provider)`**：读指定 provider 的缓存，不启动硬件。判断新鲜度用 `Location.getElapsedRealtimeAgeMillis()`（单调时钟，不受修改系统时间影响），不要用 `System.currentTimeMillis() - location.getTime()` 做唯一依据，并结合 accuracy 判断能否使用。
-2. **`getCurrentLocation()`**：Android 17 AOSP 把不超过 10 秒的缓存视为“current”，否则可启动 provider 获取一次新位置。请求 duration 超过 30 秒时会被 `LocationProviderManager` 截到 30 秒。请求超时或系统无法取得有效位置时回调可收到 `null`，缺少位置权限则可能直接抛 `SecurityException`。保留 `CancellationSignal` 并在业务结束时取消，不要让单次等待成为无期限状态。
-3. **`requestLocationUpdates()`**：Listener 适合进程存活且生命周期清晰的页面或服务。保存同一实例并在 `onStop()` 用 `removeUpdates(listener)` 取消，避免页面不可见后仍收到更新。`PendingIntent` 适合跨组件交付，但仍受后台位置权限与系统节流约束。取消某个注册会把它从服务端合并请求中移除，是否降低 provider 工作量取决于其他调用者的请求。
+1. `getLastKnownLocation(provider)`：读指定 provider 的缓存，不启动硬件。判断新鲜度用 `Location.getElapsedRealtimeAgeMillis()`（单调时钟，不受修改系统时间影响），不要用 `System.currentTimeMillis() - location.getTime()` 做唯一依据，并结合 accuracy 判断能否使用。
+2. `getCurrentLocation()`：Android 17 AOSP 把不超过 10 秒的缓存视为“current”，否则可启动 provider 获取一次新位置。请求 duration 超过 30 秒时会被 `LocationProviderManager` 截到 30 秒。请求超时或系统无法取得有效位置时回调可收到 `null`，缺少位置权限则可能直接抛 `SecurityException`。保留 `CancellationSignal` 并在业务结束时取消，不要让单次等待成为无期限状态。
+3. `requestLocationUpdates()`：Listener 适合进程存活且生命周期清晰的页面或服务。保存同一实例并在 `onStop()` 用 `removeUpdates(listener)` 取消，避免页面不可见后仍收到更新。`PendingIntent` 适合跨组件交付，但仍受后台位置权限与系统节流约束。取消某个注册会把它从服务端合并请求中移除，是否降低 provider 工作量取决于其他调用者的请求。
 
 **Q3: [learning] 同一 `gps` provider 上同时有 1 秒与 30 秒两个注册，底层 GNSS 如何工作？请求怎样合并？**
 

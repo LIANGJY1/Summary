@@ -147,10 +147,10 @@ DeliQueue 路径不使用遗留私有字段 `mMessages`。官方迁移说明明�
 3. **设备端插桩测试：**使用 `TestLooperManager`。API 36 起可用 `peekWhen()` 和 `poll()`。
 4. **替代断言：**需要判断队列中是否还有待处理工作时，基于 Handler 语义、IdleHandler 或性能轨迹证据重建，而不是寻找新的内部字段。
 
-**Q12: Android `Messenger` 与 AIDL Binder 适合什么通信需求？**
+**Q12: [learning] Android `Messenger` 与 AIDL Binder 适合什么通信需求？**
 
 `Messenger` 把 `Message` 封装为 Binder 消息，并交给服务端关联的 Handler/Looper 处理。AIDL 则生成有类型的方法接口。选择取决于是否需要消息队列语义、接口类型约束和并发控制。
 
-1. **选择 `Messenger`**：消息种类少、无需复杂返回值，且单个 Looper 串行处理足够时使用。它便于复用 Handler 的队列与线程语义。
+1. 选择 `Messenger`：消息种类少、无需复杂返回值，且单个 Looper 串行处理足够时使用。它便于复用 Handler 的队列与线程语义。
 2. **选择 AIDL**：需要明确的方法和参数契约、同步返回值，或自行管理服务端并发时使用。
 3. **共同边界**：跨进程传输仍由 Binder 承载。两种方式都要处理服务死亡、线程切换和调用失败。`Messenger` 的排队不等于消息必定完成。

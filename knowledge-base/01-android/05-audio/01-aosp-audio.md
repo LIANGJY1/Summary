@@ -14,9 +14,9 @@ audioserver.rc 中与调度和权限相关的配置有三项：
 
 省略时使用 init 或系统默认行为，不能按当前显式值的反面推断：
 
-1. **省略 `user`**：Android init 默认以 root 身份运行服务，因此权限会比显式指定 audioserver 用户更宽。
-2. **省略 `capabilities`**：服务以非 root 用户运行时不会获得 Linux capabilities。audioserver 显式声明 `BLOCK_SUSPEND` 才具备对应 capability。
-3. **省略 `ioprio`**：init 不施加该服务级 I/O 优先级设置，实际优先级沿用目标系统的进程与内核默认行为。audioserver 显式设置这些项，是为了减少对宽泛权限和普通 I/O 调度的依赖。
+1. 省略 `user`：Android init 默认以 root 身份运行服务，因此权限会比显式指定 audioserver 用户更宽。
+2. 省略 `capabilities`：服务以非 root 用户运行时不会获得 Linux capabilities。audioserver 显式声明 `BLOCK_SUSPEND` 才具备对应 capability。
+3. 省略 `ioprio`：init 不施加该服务级 I/O 优先级设置，实际优先级沿用目标系统的进程与内核默认行为。audioserver 显式设置这些项，是为了减少对宽泛权限和普通 I/O 调度的依赖。
 
 AAudioService 的条件启动在 main_audioserver.cpp：先经 AudioFlinger 查询系统 MMAP 策略，策略为 AUTO 或 ALWAYS 时才 instantiate。这是为了防止客户端在不支持的设备上误用 AAudioService。若服务未启动，可以判断该系统没有开放 AAudio MMAP 服务路径。策略为 AUTO 时，MMAP 不可用可走普通音频框架数据路径。策略为 ALWAYS 时，MMAP 不可用会导致建流失败，不能统一概括成自动回退。
 
@@ -42,18 +42,18 @@ AAudioService 的条件启动在 main_audioserver.cpp：先经 AudioFlinger 查�
 
 这是 HAL 能力声明文件，四个标签各回答一个问题（primary 配置样例核对）：
 
-1. **`modules`**：声明有哪些音频 HAL 实例，并提供 HAL 版本信息。
-2. **`mixPort`**：声明软件侧音频流端点。
+1. `modules`：声明有哪些音频 HAL 实例，并提供 HAL 版本信息。
+2. `mixPort`：声明软件侧音频流端点。
 
     1. `role="source"` 表示输出混音流，`role="sink"` 表示输入流。
     2. 输出端口的 `flags` 表示配置用途，例如 primary output 声明 `AUDIO_OUTPUT_FLAG_PRIMARY`。
 
-3. **`devicePort`**：声明物理或虚拟设备端点。
+3. `devicePort`：声明物理或虚拟设备端点。
 
     1. `type` 指明设备类别，例如 `AUDIO_DEVICE_OUT_SPEAKER`。
     2. `address` 区分同类型的多个设备实例。
 
-4. **`route`**：mix 到 device 的合法连接，如 primary output 连到 Speaker。
+4. `route`：mix 到 device 的合法连接，如 primary output 连到 Speaker。
 
 引擎可选的设备受两个条件限制：设备端点必须在本文件声明，并且当前处于连接状态。车机的 audio bus 也要先声明为 BUS 类型的 `devicePort`，之后才能被策略选中。
 
@@ -72,11 +72,11 @@ Android 13 及更早版本的 AOSP Audio HAL 使用 HIDL。Android 14 起 AOSP �
 
 openOutput 创建线程时按 flags 顺序判断（AudioFlinger.cpp 分支核对）：
 
-1. **`AUDIO_OUTPUT_FLAG_MMAP_NOIRQ`**：建 MmapPlaybackThread，客户端直写映射缓冲。
-2. **`AUDIO_OUTPUT_FLAG_SPATIALIZER`**：建 SpatializerThread，空间音频输出。
-3. **`AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD`**：建 OffloadThread，压缩码流交 DSP 解码。
-4. **`AUDIO_OUTPUT_FLAG_DIRECT`**：建 DirectOutputThread，不经软件混音。
-5. **其余（含 `PRIMARY`、`DEEP_BUFFER`）**：建 MixerThread，通用软件混音。
+1. `AUDIO_OUTPUT_FLAG_MMAP_NOIRQ`：建 MmapPlaybackThread，客户端直写映射缓冲。
+2. `AUDIO_OUTPUT_FLAG_SPATIALIZER`：建 SpatializerThread，空间音频输出。
+3. `AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD`：建 OffloadThread，压缩码流交 DSP 解码。
+4. `AUDIO_OUTPUT_FLAG_DIRECT`：建 DirectOutputThread，不经软件混音。
+5. 其余（含 `PRIMARY`、`DEEP_BUFFER`）：建 MixerThread，通用软件混音。
 
 `AUDIO_OUTPUT_FLAG_DEEP_BUFFER` 没有专属分支。它落在 MixerThread，只是选择了缓冲更长的输出配置档，用更高延迟换取对混音周期抖动的容忍，软件混音器仍是同一个实现。排查时先区分配置档与线程类型：flag 决定使用哪个输出配置，线程类型决定数据如何混合。primary 与 deep-buffer 是两个独立的 openOutput 实例，各自有一条线程，因此不会互相混音。
 
@@ -116,8 +116,8 @@ openOutput 创建线程时按 flags 顺序判断（AudioFlinger.cpp 分支核对
 
 两种传输模式决定数据怎么进共享内存（AudioTrack.java 常量核对）：
 
-1. **`MODE_STREAM`（值 1）**：生命周期内持续 `write()` 把 PCM 推进共享内存环形缓冲，适合时长未知的长流。
-2. **`MODE_STATIC`（值 0）**：play 前一次性把全部音频写入共享内存，之后只控制回放（循环、定位），不再逐次供数。
+1. `MODE_STREAM`（值 1）：生命周期内持续 `write()` 把 PCM 推进共享内存环形缓冲，适合时长未知的长流。
+2. `MODE_STATIC`（值 0）：play 前一次性把全部音频写入共享内存，之后只控制回放（循环、定位），不再逐次供数。
 
 STATIC 适合 UI 短音效、按键音这类时长已知、体量小、重复播放的素材，收益是省去持续供数的管理。它不是低延迟机制，静态音轨仍可能走普通混音线程。低延迟要看 FAST 槽位是否接纳，以及 MMAP 路径是否可用。
 
@@ -139,8 +139,8 @@ STATIC 适合 UI 短音效、按键音这类时长已知、体量小、重复播
 
 两个 dumpsys 各管一面（服务注册名核对）：
 
-1. **`dumpsys media.audio_flinger`**（AudioFlinger，数据面）：每个输出/输入线程的当前配置（采样率、格式、flags）、tracks 列表（活动状态、音量、underrun 计数）与效果链——回答"声音现在处于什么数据状态"。
-2. **`dumpsys audio`**（AudioService，策略面）：设备与路由、各 stream 音量与 mute、焦点请求与 players 登记——回答"系统为什么这么路由与判定"。
+1. `dumpsys media.audio_flinger`（AudioFlinger，数据面）：每个输出/输入线程的当前配置（采样率、格式、flags）、tracks 列表（活动状态、音量、underrun 计数）与效果链——回答"声音现在处于什么数据状态"。
+2. `dumpsys audio`（AudioService，策略面）：设备与路由、各 stream 音量与 mute、焦点请求与 players 登记——回答"系统为什么这么路由与判定"。
 
 联合用法：无声问题先看 AudioFlinger 对应线程有没有 active track、underrun 是否增长，以区分"没送数据"与"送了没出声"。再看 AudioService 中该流的焦点是否被拒，以及路由是否落在预期设备。只看一边会把策略问题误判成数据问题，或反之。
 
@@ -148,9 +148,9 @@ STATIC 适合 UI 短音效、按键音这类时长已知、体量小、重复播
 
 MixerThread 的混音结果按效果处理情况经过三块缓冲，最终写入 HAL：
 
-1. **`mMixerBuffer`**：AudioMixer 将各普通音轨的处理结果累加到此缓冲。
-2. **`mEffectBuffer`**：有需要经过 session 效果链时，效果输入和输出会使用效果缓冲。无效果路径不必经过它。
-3. **`mSinkBuffer`**：按输出格式整理最终样本，再交给 HAL 输出流。
+1. `mMixerBuffer`：AudioMixer 将各普通音轨的处理结果累加到此缓冲。
+2. `mEffectBuffer`：有需要经过 session 效果链时，效果输入和输出会使用效果缓冲。无效果路径不必经过它。
+3. `mSinkBuffer`：按输出格式整理最终样本，再交给 HAL 输出流。
 
 AudioMixer 的单轨处理会根据音轨配置选择重采样、音量处理和格式转换等 hook，总混音阶段再把各轨结果累加。具体缓冲是否逐一复制取决于输出线程和效果路径。不能把箭头图理解成每个周期都无条件完整拷贝三次。
 

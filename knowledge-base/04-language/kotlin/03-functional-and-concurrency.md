@@ -45,7 +45,7 @@ fun printUntilZero(values: List<Int>) {
 }
 ```
 
-1. **裸 `return`：**它是非局部返回，退出 `printUntilZero`，而不是只结束当前 `forEach` lambda。因为 `forEach` 是 inline，lambda 的控制流可并入调用它的函数。
+1. 裸 `return`：它是非局部返回，退出 `printUntilZero`，而不是只结束当前 `forEach` lambda。因为 `forEach` 是 inline，lambda 的控制流可并入调用它的函数。
 2. **带标签返回：**`return@forEach` 只结束当前 lambda 调用，随后 `forEach` 继续处理下一项，语义接近循环体中的 `continue`。
 3. **普通循环：**若需要 `break`、跨多层循环的退出或复杂分支，显式 `for` 循环可直接表达目标控制结构，不依赖 lambda 标签。
 4. **inline API 的限制：**非 inline 函数的 lambda 不能用裸 `return` 退出调用方。inline 函数的 `noinline` lambda 同样没有非局部返回能力。`crossinline` lambda 仍可内联，但显式禁止非局部返回，常用于 lambda 会被转交给另一个执行上下文的情况。

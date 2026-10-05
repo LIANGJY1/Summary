@@ -31,13 +31,13 @@ Android 13 的 `InstallPackageHelper.installPackagesTraced()` 将包事务组织
 
 Android 13 的安装 dexopt 仍在 Package Manager 侧编排：DexOptHelper 发起请求、PackageDexOptimizer 经 `mInstaller.dexopt` 走 Binder 调 installd，真正编译在 dex2oat 进程完成（AAOS13 源码核对）；Android 14 起这项工作迁移到 ART Service（ArtManagerLocal 与 artd 守护进程）统一调度，分析新版本的编译问题要把链路追到 ART Service，不能沿用 PMS→installd 主线描述。dexopt 是尽力而为步骤：编译失败的应用先以解释执行或较低优化级别运行，再由后台任务补齐，因此 dex2oat 失败通常不导致安装回滚；反过来，安装成功也不证明 AOT 已完成。实际编译过滤器还受 `pm.dexopt.<reason>` 配置、Profile 可用性与设备状态影响，请求 speed-profile 不等于必然全量 AOT。
 
-**Q4: Android 13 的 PMS 已用 Computer 快照优化查询，这是否意味着包查询无锁？查询变慢时该怎么归因？**
+**Q4: [learning] Android 13 的 PMS 已用 Computer 快照优化查询，这是否意味着包查询无锁？查询变慢时该怎么归因？**
 
 Package Manager 的 Computer 快照减少只读查询对主状态锁的依赖，但不等于无锁。Android 13 PMS 的锁职责和查询路径如下：
 
-1. **`mLock`**：保护内存中的包状态，持锁时间应尽量短。
-2. **`mInstallLock`**：保护对 installd 的访问；按该分支约束，不应持有 `mLock` 时再获取它。
-3. **`mSnapshotLock`**：用于构造快照。
+1. `mLock`：保护内存中的包状态，持锁时间应尽量短。
+2. `mInstallLock`：保护对 installd 的访问；按该分支约束，不应持有 `mLock` 时再获取它。
+3. `mSnapshotLock`：用于构造快照。
 4. **查询快照**：`snapshotComputer()` 比较数据版本，版本一致时返回缓存快照，快照落后时才在相应锁保护下重建。写路径持有 `mLock` 时可能返回基于当前可变数据的实时查询视图。
 5. **结果构造**：`getPackageInfo()` 还需按调用方可见性、用户状态和查询 flags 过滤并构造结果。
 

@@ -277,7 +277,7 @@ Android 17 用 CPU 执行资格（capability）模型决策：OomAdjuster 计算
 1. **解码阶段降采样**：`inSampleSize` 平台规则是小于等于 1 按 1、最终取 2 的幂、值为 n 时像素数约为 1/n²；应先读边界再计算，避免把尺寸刚好的图再放大；
 2. **像素复用**：`inBitmap` 要求候选 Bitmap 可变且非 `HARDWARE`（API 19+ 解码字节不超过候选 `getAllocationByteCount()`），不满足抛 `IllegalArgumentException`，必须使用 `decode*()` 返回值而不是假设返回传入对象；成熟图片库已实现完整候选筛选，业务无需重复造池；
 3. **格式选择**：`RGB_565` 减半但可能色带，`HARDWARE` 由图形后端管理、CPU 像素访问会失败，且设备通常用统一物理内存，"不占 RAM"是误导；
-4. **`recycle()` 是所有权操作**：立即释放像素，前提是能证明此后无 View、Drawable、图片库或后台任务使用；现代应用优先靠清晰所有权与 GC 管理生命周期，库管理的 Bitmap 不由业务手动回收。
+4. `recycle()` 是所有权操作：立即释放像素，前提是能证明此后无 View、Drawable、图片库或后台任务使用；现代应用优先靠清晰所有权与 GC 管理生命周期，库管理的 Bitmap 不由业务手动回收。
 
 **Q32: [learning] 16 KB Page Size 对应用意味着什么？Android 13 设备需要关心吗？**
 
@@ -285,8 +285,8 @@ Android 17 用 CPU 执行资格（capability）模型决策：OomAdjuster 计算
 
 兼容性有两道独立门槛，修好一道另一道仍可能失败：
 
-1. **ELF 可加载段对齐**：每个 `.so` 的 `PT_LOAD` 段要能按 16 KiB 边界映射（`llvm-objdump -p` 检查 `align` 至少 2**14）；
-2. **APK 内未压缩 `.so` 的 ZIP 对齐**：文件起始偏移要 16 KiB 对齐（`zipalign -c -P 16 4`；AAB 用 bundletool 检查 `PAGE_ALIGNMENT_16K`）。
+1. **ELF 可加载段对齐：每个 `.so` 的 `PT_LOAD` 段要能按 16 KiB 边界映射（`llvm-objdump -p` 检查 `align` 至少 214）；
+2. APK 内未压缩 `.so` 的 ZIP 对齐：文件起始偏移要 16 KiB 对齐（`zipalign -c -P 16 4`；AAB 用 bundletool 检查 `PAGE_ALIGNMENT_16K`）。
 
 工具链基线：AGP 8.5.1+、Build Tools 35+、NDK r28+（默认生成兼容 ELF）；NDK r27 及以下需链接参数 `-Wl,-z,max-page-size=16384` 与 `-Wl,-z,common-page-size=16384`。纯 Java/Kotlin 且依赖无原生代码通常免改，仍应在 16 KiB 环境测试——SDK 常经 AAR 带入 `.so`。源码中写死的 `4096`（页对齐位运算、`mprotect` 地址、页数换算）都要改为运行时 `sysconf(_SC_PAGESIZE)` 查询。已与官方文档核对的 Play 要求：目标版本为 Android 15（API 35）及以上的应用必须支持 64 位设备的 16 KB 页，自 2027 年 2 月 1 日起不满足的应用更新无法发布。
 

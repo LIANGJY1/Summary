@@ -87,7 +87,7 @@ C 通常由编译器翻译为目标平台的机器码，再由操作系统装载
 
 1. **限定名：**直接写 `std::cout`，作用范围最明确。
 2. **using 声明：**`using std::cout;` 只引入 `cout`。
-3. **`using namespace` 的限制：**它后面必须是命名空间名，不能写 `using namespace std::cout;`。
+3. `using namespace` 的限制：它后面必须是命名空间名，不能写 `using namespace std::cout;`。
 4. **原因：**`cout` 是对象，不是命名空间。要精确引入它，应写 `using std::cout;`。
 
 

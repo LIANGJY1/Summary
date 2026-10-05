@@ -91,8 +91,8 @@ C++ 标准不规定源码文件必须使用哪种扩展名。扩展名主要帮�
 
 不能。它们能帮助检查文件格式、架构和动态依赖，不能验证内核、initramfs 布局及 PID 1 行为。
 
-1. **`file`：**可报告可执行与可链接格式（ELF，Executable and Linkable Format）、目标架构以及识别到的静态或动态链接信息。显示 `x86-64` 只说明目标架构，仍需与内核架构匹配。
-2. **`ldd`：**用于查看动态依赖。对静态 ELF 显示 `not a dynamic executable` 与其没有常规动态库依赖相符，不是错误。
+1. `file`：可报告可执行与可链接格式（ELF，Executable and Linkable Format）、目标架构以及识别到的静态或动态链接信息。显示 `x86-64` 只说明目标架构，仍需与内核架构匹配。
+2. `ldd`：用于查看动态依赖。对静态 ELF 显示 `not a dynamic executable` 与其没有常规动态库依赖相符，不是错误。
 3. **启动条件：**还要确认文件位于初始 RAM 文件系统（initramfs）根目录并命名为 `/init`，应用二进制接口（ABI，Application Binary Interface）和运行库适配目标环境，而且程序能持续履行进程标识符 1（PID 1，Process ID 1）的职责。打印后退出的示例程序不是可用的系统 init。
 
 
