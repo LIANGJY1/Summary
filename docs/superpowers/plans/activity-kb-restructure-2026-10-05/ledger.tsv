@@ -1,0 +1,24 @@
+old_path	old_q	old_title	action	new_path	new_q	reviewer	review_state
+03-ui/01-activity.md	Q3	Android 内存紧张时哪些应用进程更容易被系统回收？	move-rewrite	07-memory/01-memory-management.md	Q33	session-to-knowledge	migrated（改写为应用侧视角，与 Q17/Q21 adj 档位深题互补）
+03-ui/01-activity.md	Q4	startActivity() 如何在任务选择与 Activity 实例复用之间作出决定？	move	02-app-framework/10-activity-launch-tasks.md	Q1	session-to-knowledge	migrated
+03-ui/01-activity.md	Q5	[learning] FLAG_ACTIVITY_NEW_TASK、SINGLE_TOP 与 CLEAR_TOP 如何改变 Activity 启动？	move	02-app-framework/10-activity-launch-tasks.md	Q2	session-to-knowledge	migrated
+03-ui/01-activity.md	Q6	Launcher Activity 的 Intent Filter 应声明什么？	move	02-app-framework/10-activity-launch-tasks.md	Q3	session-to-knowledge	migrated
+03-ui/01-activity.md	Q7	[learning] Intent Filter 中的 action、category 与 data 分别匹配什么？	move	02-app-framework/10-activity-launch-tasks.md	Q4	session-to-knowledge	migrated
+03-ui/01-activity.md	Q8	隐式 Intent 如何通过 Intent Filter 找到可启动的 Activity？	move	02-app-framework/10-activity-launch-tasks.md	Q5	session-to-knowledge	migrated
+03-ui/01-activity.md	Q14	详情页返回后直接退出应用，是否由 singleTask 清理了返回栈？	move	02-app-framework/10-activity-launch-tasks.md	Q6	session-to-knowledge	migrated
+03-ui/01-activity.md	Q15	Activity 复用后收到新 Intent，为什么 getIntent() 仍是旧值？	move	02-app-framework/10-activity-launch-tasks.md	Q7	session-to-knowledge	migrated
+03-ui/01-activity.md	Q16	跨应用启动后 Activity 跑进了意外的任务栈，taskAffinity 与 allowTaskReparenting 起什么作用？	move	02-app-framework/10-activity-launch-tasks.md	Q8	session-to-knowledge	migrated
+03-ui/01-activity.md	Q26	AAOS Launcher 设置 FLAG_ACTIVITY_NEW_TASK 后，系统是否一定新建任务？	move	02-app-framework/10-activity-launch-tasks.md	Q9	session-to-knowledge	migrated
+03-ui/01-activity.md	Q27	从 Launcher 点击图标时，为什么目标进程已存活仍可能创建新的 Activity？	move	02-app-framework/10-activity-launch-tasks.md	Q10	session-to-knowledge	migrated
+03-ui/01-activity.md	Q32	[learning] 在 Application 或 Service 等 Context 里调用 startActivity() 为什么抛 AndroidRuntimeException，应该怎么改？	move	02-app-framework/10-activity-launch-tasks.md	Q11	session-to-knowledge	migrated
+03-ui/01-activity.md	Q33	[learning] 为 Activity 指定启动行为时，清单里的 android:launchMode 与 Intent flag 各能表达什么，两者同时设置时如何生效？	move	02-app-framework/10-activity-launch-tasks.md	Q12	session-to-knowledge	migrated
+03-ui/01-activity.md	Q34	[learning] 前台任务栈为 A、B，后台任务栈为 C、D（C、D 均为 singleTask 且声明了与包名不同的同一 taskAffinity），从 B 启动已存在的 D 后连续按返回，回退顺序是什么？	move	02-app-framework/10-activity-launch-tasks.md	Q13	session-to-knowledge	migrated
+03-ui/01-activity.md	Q35	[learning] 同一应用内 A 为 standard，B、C 均为 singleTask 且未修改 taskAffinity，依次执行 A 启动 B、B 启动 C、C 启动 A、A 再次启动 B，返回栈如何变化，连按两次返回停在哪个界面？	move	02-app-framework/10-activity-launch-tasks.md	Q14	session-to-knowledge	migrated
+03-ui/01-activity.md	Q22	Fragment 返回后旧 View 仍被观察者更新，视图生命周期该怎么绑定？	move	02-app-framework/11-fragment-viewmodel.md	Q2	session-to-knowledge	migrated
+03-ui/01-activity.md	Q23	切换 Fragment 页面后状态与内存表现不同，show/hide、replace、ViewPager2 有什么差别？	move	02-app-framework/11-fragment-viewmodel.md	Q3	session-to-knowledge	migrated
+03-ui/01-activity.md	Q24	网络回调在 onSaveInstanceState() 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？	move	02-app-framework/11-fragment-viewmodel.md	Q4	session-to-knowledge	migrated
+03-ui/01-activity.md	Q25	共享 ViewModel 后页面重建却不刷新或旧 View 泄漏，作用域与观察者应绑定谁？	move	02-app-framework/11-fragment-viewmodel.md	Q5	session-to-knowledge	migrated
+03-ui/01-activity.md	Q36	[learning] Fragment 的实例生命周期与视图生命周期为什么分成两段？onCreateView 与 onViewCreated 的职责应怎样划分？	move	02-app-framework/11-fragment-viewmodel.md	Q1	session-to-knowledge	migrated
+03-ui/01-activity.md	Q19	应用退到后台后收到 onTrimMemory()，哪些状态可以释放？	merge	07-memory/04-app-memory-practice.md	Q2（就地增强）	session-to-knowledge	migrated（机制已被 07-memory/01 Q14 与 04 Q2 覆盖，状态去向纪律并入 Q2 答案）
+03-ui/01-activity.md	Q20	车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？	move	03-ui/06-aaos-ui.md	Q19	session-to-knowledge	migrated
+03-ui/01-activity.md	—	保留题重编（旧 Q1/Q2/Q9/Q10/Q11/Q12/Q13/Q17/Q18/Q21/Q28–Q31 → 新 Q1–Q14）	renumber	03-ui/01-activity.md	Q1–Q14	session-to-knowledge	migrated

@@ -75,3 +75,14 @@ try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream("student.
 Parcel 本质是一段顺序字节缓冲区：Java 层的 `writeInt()`、`writeString()` 等方法把值按类型编码后依次写入缓冲区，读取侧按相同顺序解码。`Parcel.java` 的写入方法最终落到 native 方法（如 `nativeWriteInt()`），在 C++ 层把值写进底层 Parcel 对象管理的内存缓冲区；读取路径对称，由 native 层直接从缓冲区取字节再封装回 Java 数据结构。直接操作内存缓冲区、不经过中间格式，是 Parcel 编解码开销低的机制基础。
 
 它能承载的内容包括基本类型、`Parcelable` 对象、`IBinder` 引用以及由这些组成的容器与 Bundle。缓冲区里的数据由 Binder 事务投递到接收进程的映射缓冲区后，接收方拿到的是另一段内容相同的缓冲区，再走同样的 native 读取路径还原——这也是 Parcel 只适合暂存传输、不适合当持久化格式的机制侧原因：它的编码绑定当前平台的内存布局与版本实现。
+
+**Q9: [learning] Serializable 提供了哪些私有定制钩子？单例对象反序列化为什么会变成两份，readResolve 怎样修复？**
+
+序列化基础设施在默认反射编码之外预留了一组按方法名约定的钩子：类声明 private void writeObject(ObjectOutputStream) 与 private void readObject(ObjectInputStream) 时，ObjectOutputStream/ObjectInputStream 会在默认读写过程中回调它们，用于字段加密、瞬态字段重建这类字段级定制；声明 readResolve() 与 writeReplace() 则可以在对象还原或写出时整体替换实例。
+
+readResolve 的经典用途是保护单例。默认反序列化不经过构造器，而是按流中数据直接在内存重建一份实例：单例类即使构造器私有，反序列化也会得到第二个实例，单例契约被绕过。声明 private Object readResolve() { return getInstance(); } 后，readObject 返回前会用该方法的结果替换新造的实例，调用方始终拿回同一个对象。
+
+1. **钩子必须声明为 private**：基础设施按约定反射查找这些方法，private 防止子类意外继承或覆盖这套定制。
+2. **枚举单例无需修补**：枚举实例的唯一性由语言层面保证，反序列化不会产生新实例。
+
+选择规则：字段级定制用 writeObject/readObject，实例级替换（单例、对象规范化）用 readResolve；定制越深与字段结构耦合越紧，能靠 transient 加显式重建解决的就不要手写完整读写。

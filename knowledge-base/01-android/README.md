@@ -1,6 +1,6 @@
 # Android 学习资料目录
 
-> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。2026-10-03 目录重构；2026-10-04 全局审查将大型混合册拆回题组边界、按主题重排性能册；全部文件名改为英文 kebab-case 短主题词，并将原 16–18 三个目录的应用实践、工具与缺陷题按知识主题归并至 01–15；混合主题文档按"读者问题"拆分归位（拆分明细见 `docs/superpowers/plans/android-kb-restructure/` 的迁移台账）；两个空答案已处置（CarLauncher 启动题并入启动册、Android.bp 生效题与同册 Q11 去重）；`11-defects/08` 提交治理迁出至 [../04-exp/](../04-exp/)，`16-project-architecture` 项目个案迁出至 [../career/work-project-analysis/](../career/work-project-analysis/)，`14-network/10` 通用协议地基迁出至 [../网络/](../网络/)。维护者：session-to-knowledge。
+> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。2026-10-03 目录重构；2026-10-04 全局审查将大型混合册拆回题组边界、按主题重排性能册；全部文件名改为英文 kebab-case 短主题词，并将原 16–18 三个目录的应用实践、工具与缺陷题按知识主题归并至 01–15；2026-10-05 按"读者问题"二次拆分 03-ui/01-activity 混合册：生命周期与首帧留 03-ui/01，启动/任务栈拆至 02-app-framework/10，Fragment/ViewModel 拆至 02-app-framework/11，进程等级与 onTrimMemory 归 07-memory，多显示归属归 03-ui/06（明细见 `docs/superpowers/plans/activity-kb-restructure-2026-10-05/`）。混合主题文档按"读者问题"拆分归位（拆分明细见 `docs/superpowers/plans/android-kb-restructure/` 的迁移台账）；两个空答案已处置（CarLauncher 启动题并入启动册、Android.bp 生效题与同册 Q11 去重）；`11-defects/08` 提交治理迁出至 [../04-exp/](../04-exp/)，`16-project-architecture` 项目个案迁出至 [../career/work-project-analysis/](../career/work-project-analysis/)，`14-network/10` 通用协议地基迁出至 [../网络/](../网络/)。维护者：session-to-knowledge。
 
 ## 面试冲刺
 
@@ -35,26 +35,28 @@
 
 ## 02-app-framework/
 
-- **应用框架与应用架构实践：四大组件、Handler/Looper、Messenger 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 93 题）：
+- **应用框架与应用架构实践：四大组件、Activity 启动与任务栈、Fragment 与 ViewModel、Handler/Looper、Messenger 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（11 册 112 题）：
   - [01-four-components.md](02-app-framework/01-four-components.md)（6 题）
   - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（12 题）
-  - [03-parcel.md](02-app-framework/03-parcel.md)（8 题）
+  - [03-parcel.md](02-app-framework/03-parcel.md)（9 题）
   - [04-content-provider.md](02-app-framework/04-content-provider.md)（4 题）
   - [05-collections-annotations.md](02-app-framework/05-collections-annotations.md)（3 题）
   - [06-private-space.md](02-app-framework/06-private-space.md)（3 题）
   - [07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md)（7 题）
   - [08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md)（23 题）
   - [09-defect-main-thread-async.md](02-app-framework/09-defect-main-thread-async.md)（27 题）
+  - [10-activity-launch-tasks.md](02-app-framework/10-activity-launch-tasks.md)（14 题）
+  - [11-fragment-viewmodel.md](02-app-framework/11-fragment-viewmodel.md)（5 题）
 
 ## 03-ui/
 
-- **UI 专题：Activity、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 261 题）：
-  - [01-activity.md](03-ui/01-activity.md)（36 题）
+- **UI 专题：Activity 生命周期与首帧、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 240 题）：
+  - [01-activity.md](03-ui/01-activity.md)（14 题）
   - [02-view.md](03-ui/02-view.md)（27 题）
   - [03-resources.md](03-ui/03-resources.md)（25 题）
   - [04-window-system.md](03-ui/04-window-system.md)（20 题）
   - [05-compose.md](03-ui/05-compose.md)（19 题）
-  - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（18 题）
+  - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（19 题）
   - [07-driving-safety.md](03-ui/07-driving-safety.md)（18 题）
   - [08-app-view-compose-practice.md](03-ui/08-app-view-compose-practice.md)（26 题）
   - [09-app-compose-advanced-practice.md](03-ui/09-app-compose-advanced-practice.md)（24 题）
@@ -96,8 +98,8 @@
 
 ## 07-memory/
 
-- **内存管理与应用内存实践：内存全景与 GC、lmkd/Freezer、回收压缩、ZRAM、MTE、泄漏治理与诊断**（4 册 115 题）：
-  - [01-memory-management.md](07-memory/01-memory-management.md)（32 题）
+- **内存管理与应用内存实践：内存全景与 GC、lmkd/Freezer、回收压缩、ZRAM、MTE、泄漏治理与诊断**（4 册 116 题）：
+  - [01-memory-management.md](07-memory/01-memory-management.md)（33 题）
   - [02-reclaim-compression.md](07-memory/02-reclaim-compression.md)（26 题）
   - [03-app-memory-stability.md](07-memory/03-app-memory-stability.md)（25 题）
   - [04-app-memory-practice.md](07-memory/04-app-memory-practice.md)（32 题）
@@ -235,19 +237,21 @@
 | [01-architecture/11-selinux.md](01-architecture/11-selinux.md) | Android SELinux | 28 |
 | [02-app-framework/01-four-components.md](02-app-framework/01-four-components.md) | Android 四大组件：职责、启动方式与生命周期 | 6 |
 | [02-app-framework/02-handler-looper.md](02-app-framework/02-handler-looper.md) | Handler 消息机制与 MessageQueue 实现 | 11 |
-| [02-app-framework/03-parcel.md](02-app-framework/03-parcel.md) | Parcel 与序列化契约 | 8 |
+| [02-app-framework/03-parcel.md](02-app-framework/03-parcel.md) | Parcel 与序列化契约 | 9 |
 | [02-app-framework/04-content-provider.md](02-app-framework/04-content-provider.md) | ContentProvider 服务链路 | 4 |
 | [02-app-framework/05-collections-annotations.md](02-app-framework/05-collections-annotations.md) | 集合与注解的框架契约 | 3 |
 | [02-app-framework/06-private-space.md](02-app-framework/06-private-space.md) | Private Space 与应用可见性 | 3 |
 | [02-app-framework/07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md) | Android MVP 架构 | 7 |
 | [02-app-framework/08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md) | 稳定性治理：线程、协程与 IPC | 23 |
 | [02-app-framework/09-defect-main-thread-async.md](02-app-framework/09-defect-main-thread-async.md) | 主线程与异步时序：缺陷模式与修复范式 | 27 |
-| [03-ui/01-activity.md](03-ui/01-activity.md) | Activity 与窗口生命周期 | 36 |
+| [02-app-framework/10-activity-launch-tasks.md](02-app-framework/10-activity-launch-tasks.md) | Activity 启动、任务栈与 Intent 匹配 | 14 |
+| [02-app-framework/11-fragment-viewmodel.md](02-app-framework/11-fragment-viewmodel.md) | Fragment 生命周期与 ViewModel 作用域 | 5 |
+| [03-ui/01-activity.md](03-ui/01-activity.md) | Activity 生命周期与首帧 | 14 |
 | [03-ui/02-view.md](03-ui/02-view.md) | View 测量、布局与绘制 | 27 |
 | [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 25 |
 | [03-ui/04-window-system.md](03-ui/04-window-system.md) | 窗口系统与 WindowManagerService | 20 |
 | [03-ui/05-compose.md](03-ui/05-compose.md) | Compose 运行期与 View 互操作 | 19 |
-| [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 18 |
+| [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 19 |
 | [03-ui/07-driving-safety.md](03-ui/07-driving-safety.md) | 车机交互安全与驾驶分心 | 18 |
 | [03-ui/08-app-view-compose-practice.md](03-ui/08-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 26 |
 | [03-ui/09-app-compose-advanced-practice.md](03-ui/09-app-compose-advanced-practice.md) | 渲染实战：Compose 进阶 | 24 |
@@ -274,7 +278,7 @@
 | [06-storage/01-partitions.md](06-storage/01-partitions.md) | 运行时分区与挂载 | 4 |
 | [06-storage/02-storage-io.md](06-storage/02-storage-io.md) | 存储与 I/O：架构分层、文件系统调度与配置持久化 | 23 |
 | [06-storage/03-app-io-storage-practice.md](06-storage/03-app-io-storage-practice.md) | I/O 与存储实践：文件、数据库、缓存、媒体与网络 | 39 |
-| [07-memory/01-memory-management.md](07-memory/01-memory-management.md) | Android 内存管理与压力治理 | 32 |
+| [07-memory/01-memory-management.md](07-memory/01-memory-management.md) | Android 内存管理与压力治理 | 33 |
 | [07-memory/02-reclaim-compression.md](07-memory/02-reclaim-compression.md) | 回收压缩与专项内存 | 26 |
 | [07-memory/03-app-memory-stability.md](07-memory/03-app-memory-stability.md) | 稳定性治理：资源泄漏与进程恢复 | 25 |
 | [07-memory/04-app-memory-practice.md](07-memory/04-app-memory-practice.md) | 内存实践：堆预算、泄漏治理、Native 排查与线上监控 | 32 |

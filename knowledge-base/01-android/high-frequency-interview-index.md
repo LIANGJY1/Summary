@@ -1,6 +1,6 @@
 # 面试高频索引
 
-> 编排产物（非蒸馏，无 Q 块）：把本目录的高频面试主题按热度编排成"主题 → 册·Q"速查。热度为通用 Android/AAOS 面试经验判断：★ 必备（几乎每轮会问）、★★ 高频（大厂/平台岗常问）、★★★ 加分项（有区分度）。2026-10-04 学习顺序重排后，册名和题号按本轮映射更新；检索仍以 atlas 全文为准。AAOS 岗位重点见文末专项段。
+> 编排产物（非蒸馏，无 Q 块）：把本目录的高频面试主题按热度编排成"主题 → 册·Q"速查。热度为通用 Android/AAOS 面试经验判断：★ 必备（几乎每轮会问）、★★ 高频（大厂/平台岗常问）、★★★ 加分项（有区分度）。2026-10-04 学习顺序重排后，册名和题号按本轮映射更新；2026-10-05 QA 题库沉淀的新增题已并入对应条目；检索仍以 atlas 全文为准。AAOS 岗位重点见文末专项段。
 
 ## ★ 必备热题
 
@@ -23,7 +23,7 @@
 4. **init/启动链**：02-system-boot Q1–Q2；02-system-boot Q3–Q4；02-system-boot Q5–Q6；02-system-boot Q7–Q8；02-system-boot Q9–Q10；02-system-boot Q11–Q12；02-system-boot Q13–Q14；02-system-boot Q15–Q16；02-system-boot Q17–Q18（启动链与 init 各阶段）
 5. **应用进程诞生**：02-system-boot Q29；应用侧冷启动指标见 15-performance/07-app-startup-optimization Q1–Q2；15-performance/07-app-startup-optimization Q3–Q4
 6. **SELinux 拒绝与策略书写**：11-selinux 全册 28 题（基础概念与开发者视角 Q1–Q5；avc 与启动期校验 Q6–Q8；规则、标签与属性配置 Q9–Q14；service_manager 检查和案例 Q15–Q23；ioctl、工作模式与验证 Q24–Q28）；启动期装载见 02-system-boot Q11
-7. **多进程/多用户**：09-app-sandbox Q3（UID 公式与跨用户）；15-performance/07-app-startup-optimization Q13；Q16（初始化分流）
+7. **多进程/多用户**：09-app-sandbox Q3（UID 公式与跨用户）；15-performance/07-app-startup-optimization Q13；Q16（初始化分流）；02-app-framework/08-app-thread-ipc-stability Q22–Q23（android:process 命名与单进程假设失效）
 8. **前台服务与后台限制**：14-cpu-power/03-app-power-practice Q7–Q9、Q27（FGS 类型与 BOOT_COMPLETED 豁免）；02-system-boot Q37
 9. **Freezer 冻结机制**：01-system-architecture Q9；01-memory-management Q27；01-memory-management Q28（冻结中 Binder 语义）；14-cpu-power/03-app-power-practice Q26
 10. **Native crash 与符号化**：15-performance/13-app-stability Q15–Q20；07-jni Q2；03-binder Q18（RefBase abort）
@@ -32,10 +32,14 @@
 13. **线程优先级/实时调度误区**：14-cpu-power/01 Q2/Q6/Q7；01-kernel-gki Q5（vendor hooks 观测）
 14. **主线程 Binder ANR 实案**：02-app-framework/08-app-thread-ipc-stability Q14；02-app-framework/09-defect-main-thread-async Q1、Q6–Q7；08-anr Q11、Q17
 15. **窗口系统与 relayout**：03-ui/04（窗口三副面孔、addWindow 校验与返回码、relayout 与遍历调度分工、WindowState·Token·DisplayContent、z 序与 surface placement、Insets 体系与 WindowInsetsController）；窗口管理总览另见 04-window-system
-16. **Activity 生命周期与首帧**：03-ui/01（启动到首帧时序、四个可观测时点、setContentView 与 DecorView、透明主题尺寸陷阱、配置变化与 relaunch、状态保存时机、启动模式与任务栈、切换动画双窗口、首帧度量、Fragment 视图生命周期、页面切换策略与事务提交边界、ViewModel 作用域）
+16. **Activity 生命周期与首帧**：03-ui/01（生命周期两对正交维度、回调分场景顺序、onPause 时序约束、启动到首帧时序、四个可观测时点、setContentView 与 DecorView、透明主题尺寸陷阱、配置变化与 relaunch、状态保存时机与版本分界、View 层次保存委托链、切换动画双窗口、首帧度量、时序缺陷排查）；启动模式、任务栈与 Intent 匹配见 02-app-framework/10
 17. **View 绘制与失效语义**：03-ui/02（MeasureSpec 尺寸契约、layout vs onLayout、requestLayout vs invalidate 分工、display list 与"不 invalidate 就不重绘"、脏区传播、绘制顺序与裁剪、图层类型、SurfaceView vs TextureView、SurfaceView 打洞与 mDrawFinished 边界、TextureView 双队列与 TextureView/GLSurfaceView 帧时序）；渲染实践见 03-ui/08–09 与 05-rendering/09–10
-18. **资源限定符与多屏适配**：03-ui/03（限定符优先级与顺序、默认资源兜底、版本限定符、深色模式三件事、dp·sp·fontScale、限定符≠窗口尺寸、RTL、ViewBinding 联合字段缺失）；组件运行期适配坑见 ../../android-ui.md
+18. **资源限定符与多屏适配**：03-ui/03（限定符优先级与顺序、默认资源兜底、版本限定符、深色模式三件事、dp·sp·fontScale、限定符≠窗口尺寸、RTL、ViewBinding 联合字段缺失、Drawable 本质与 BitmapDrawable/shape 属性）；组件运行期适配坑见 ../../android-ui.md
 19. **事件分发与输入系统**：04-input 七册——02（Activity→View 方法链与返回值语义、onTouch/onClick/onLongClick 时序与互斥、onInterceptTouchEvent 调用时机、pointer id vs index、getX/getRawX、滑动冲突两策略与嵌套滚动、ACTION_CANCEL 清理、TouchDelegate 热区、ACTION_OUTSIDE）、04（扫描码/键码/字符三层、HOME 为什么拦不到、组合键与 framework 连击、downTime/eventTime 与 repeat、fallback 合成键）、05（窗口命中与 touchableRegion、每屏焦点、touch mode、监视窗口）、01（输入 ANR 计时与 iq·oq·wq、输入过期丢弃）、07（dumpsys input 字段、注入工具对比）
+20. **序列化与 Parcelable**：02-app-framework/03-parcel（选型与读写契约、Serializable 反射机制与 serialVersionUID、transient 与 Externalizable、Parcel 本质与 native 路径）；事务缓冲区限制见 03-binder Q2–Q3
+21. **MVP 架构与解耦**：02-app-framework/07-mvp-architecture 全册（职责边界、接口解耦、异步与生命周期协调、Presenter 引用管理）
+22. **Activity 启动与任务栈**：02-app-framework/10（任务选择与实例复用两条判断、NEW_TASK/SINGLE_TOP/CLEAR_TOP、launchMode 与 flag 叠加语义、Intent Filter 的 action/category/data 匹配与 queryIntentActivities、taskAffinity 与 allowTaskReparenting、冷热启动与实例复用区分、非 Activity Context 启动、任务栈组合场景推演）
+23. **Fragment 与 ViewModel**：02-app-framework/11（实例与视图两段式生命周期、viewLifecycleOwner 观察契约、show/hide/replace/ViewPager2 取舍、commit/commitNow/commitAllowingStateLoss 边界、ViewModelStoreOwner 作用域）
 
 ## ★★★ 加分项（区分度）
 
@@ -62,7 +66,7 @@
 4. **网络（车机向）**：08-network 十册按编号阅读：01 网络框架 → 02 蜂窝与无线 → 03 传输协议 → 04 应用网络约束 → 05 多 APN 与 veth → 06 VPN → 07 车载网络 → 08 车载安全 → 09 应用连接实践 → 10 专项诊断。多网绑定、DNS、弱网与车云通道分别回到对应册核对。
 5. **UI 定制与案例**：06-aaos-ui Q18（CarSystemUI 依赖注入结构）；06-aaos-ui Q17、06-car-launcher Q4（CarSystemUI 恢复与焦点修复案例）
 6. **输入与旋钮（AAOS 向）**：04-input/06 全册（VHAL 三输入属性 int32Values 语义、InputHalService 加工与防御、CarInputService 五步分发、语音/通话键车载长按、CustomInputEvent 无人捕获即丢弃、capture 排他栈与音量旋钮不可捕获、旋钮 VHAL 与 Linux 设备双链路、RotaryService 无障碍形态与三模式、FocusArea/FocusParkingView 契约、触摸退出检测与 HUN nudge 劫持、cluster 按键两代路由、车机 IME 与旋钮输入法、inject-key/-rotary 调试、旋钮失灵五层排查）；方向盘 HID/uinput 与 VHAL 路线取舍见 04-input/04 册 Q8；外设（键鼠/手柄）接入排查见 04-input/07 册 Q16
-7. **UI 与分心（AAOS 向）**：03-ui 基础与排查专题——01（Activity 启动到首帧/生命周期与配置变化/状态保存/任务栈/Fragment 视图生命周期）、02（View 测量布局绘制/MeasureSpec/requestLayout 与 invalidate/脏区和 child drawing order/Layer 与 SurfaceFlinger 可见边界/SurfaceView 打洞及独立合成/TextureView 双 BufferQueue 与 SurfaceTexture 所有权/GLSurfaceView 渲染节奏）、03（资源限定符/深色主题/字号与 RTL/多显示 Configuration）、04（窗口层级与 token/addWindow/relayout 与遍历/Insets/IME/多窗口与窗口排查）、05（Compose 组合与状态/derivedStateOf/稳定性与 strong skipping/Effect/View 互操作）、06（CarService 与 car-lib/模板与原生应用/occupant zone/多用户/电源策略/旋钮与仪表/投影）、07（驾驶状态与 UX 限制映射/restriction mode/应用声明/乘员屏/受限交互/安全验证）、11（白屏与黑屏/首帧和掉帧归因/诊断工具/重绘与 Insets/输入超时/多显示和电源策略/回归检查）
+7. **UI 与分心（AAOS 向）**：03-ui 基础与排查专题——01（Activity 启动到首帧/生命周期与配置变化/状态保存）、02（View 测量布局绘制/MeasureSpec/requestLayout 与 invalidate/脏区和 child drawing order/Layer 与 SurfaceFlinger 可见边界/SurfaceView 打洞及独立合成/TextureView 双 BufferQueue 与 SurfaceTexture 所有权/GLSurfaceView 渲染节奏）、03（资源限定符/深色主题/字号与 RTL/多显示 Configuration）、04（窗口层级与 token/addWindow/relayout 与遍历/Insets/IME/多窗口与窗口排查）、05（Compose 组合与状态/derivedStateOf/稳定性与 strong skipping/Effect/View 互操作）、06（CarService 与 car-lib/occupant zone 与多显示归属/模板与原生应用/多用户隔离/电源策略/旋钮与仪表/投影）、07（驾驶状态与 UX 限制映射/restriction mode/应用声明/乘员屏/受限交互/安全验证）、11（白屏与黑屏/首帧和掉帧归因/诊断工具/重绘与 Insets/输入超时/多显示和电源策略/回归检查）
 8. **多用户与乘员**：04-car-power-users Q2–Q3；09-app-sandbox Q3；02-system-boot Q30；02-system-boot Q43（用户启动与 AAOS headless system user）；03-ui/06 Q9
 9. **其余服务速览**：02-car-services 全册（媒体源/蓝牙/遥测/诊断/bugreport/投影）
 10. **车辆信号链路与五层映射**：01-vehicle-links Q1（33 条链路总表）；网络地基机制见 ../../网络/01-network-fundamentals（分层模型/DNS 层级递归/TLS 握手/TCP 状态机/IP 分片/NAT 与 conntrack/全链路走读/分层校验）

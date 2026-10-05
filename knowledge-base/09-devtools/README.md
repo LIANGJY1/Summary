@@ -4,7 +4,7 @@
 
 ## 文档
 
-1. [版本控制与 Git](01-version-control-git.md)（7 题）— merge 快进与合并提交的产生条件、--no-ff 与 --squash 的取舍、cherry-pick 语义与冲突流程、pull 协作、Gerrit 评审推送。
+1. [版本控制与 Git](01-version-control-git.md)（9 题）— Git 整体原理、快进语义与产生条件、--no-ff 与 --squash 的取舍、cherry-pick 语义与冲突流程、pull 协作、Gerrit 评审推送。
 
 ## 写作边界
 

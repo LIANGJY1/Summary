@@ -179,3 +179,13 @@ AAOS CarSystemUI 在其实现中扩展 platform SystemUI 的依赖图。新增�
 2. **OEM 扩展**：OEM 按项目扩展点添加 Binder 或 Dagger Module，并遵守现有依赖图生命周期。不要假定任何任意自建 component 都能替代宿主依赖图。
 3. **排查绑定**：遇到 MissingBinding 或单例作用域错误，沿构造注入关系检查 binding 所属 Module、子组件安装位置和 scope。
 4. **图形化工具**：仓库自带 daggervis 脚本可导出组件图，适合检查绑定关系。RRO 只能替换允许覆盖的资源，不能改变 Dagger 绑定。
+
+**Q19: [learning] 车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？**
+
+Activity 的运行归属同时涉及 Android 用户与 Display：Activity 在所属用户的应用进程和状态空间中运行，并被系统放置到某个显示区域。车机的 occupant zone（座位区）可以把乘员用户与显示器关联，因此同一时刻可能存在多个可见或活动的用户上下文。
+
+1. **用户维度**：确认发起启动的用户、目标用户及目标 Activity 是否允许在该用户下运行。系统用户、当前驾驶员和乘员用户并不是同一个 UID/用户空间。
+2. **显示维度**：确认启动请求的目标 Display、Activity 任务当前所在 Display，以及该显示是否映射到预期 occupant zone。不要默认 Activity 一定在默认显示上。
+3. **资源与尺寸**：从当前 Activity 的用户和显示上下文获取资源、密度与窗口尺寸。不能用默认显示结果推断其他显示布局。
+
+车机的 occupant zone 策略由 AAOS 配置与平台服务决定。同一时刻有多个可见用户，不代表 Android 全局只有一个当前用户的约束消失。

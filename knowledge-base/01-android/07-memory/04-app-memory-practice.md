@@ -12,7 +12,7 @@
 
 边界：趋势信号不知道对象是否可回收，单次超阈值不能证明泄漏；单次快照也解释不了抖动。生产采样要限制频率、合并连续事件并记录场景。
 
-**Q2: `LruCache` 的 `sizeOf` 计量和 `trimToSize` 行为有哪些边界？Android 14 之后应响应哪些 `onTrimMemory` 等级？**
+**Q2: [learning] `LruCache` 的 `sizeOf` 计量和 `trimToSize` 行为有哪些边界？Android 14 之后应响应哪些 `onTrimMemory` 等级？**
 
 `LruCache` 按 `sizeOf` 返回值累计条目大小、超限后调用 `trimToSize` 淘汰最旧条目（按 AAOS13 `LruCache.java` 核对）；`sizeOf` 没覆盖的开销（键字符串、条目对象头）会让真实占用大于 `maxBytes`，而 `trimToSize` 只收缩当前条目、不会永久修改构造时传入的最大容量，后续写入仍会重新增长。Android 14（API 34）起应聚焦 `TRIM_MEMORY_UI_HIDDEN` 与 `TRIM_MEMORY_BACKGROUND` 两个等级。
 
@@ -20,7 +20,7 @@
 
 版本边界：Android 13 仍发送完整档位；按材料核对（Android 17 语境），`TRIM_MEMORY_RUNNING_*`、`TRIM_MEMORY_MODERATE`、`TRIM_MEMORY_COMPLETE` 自 API 34 起不再投递、`onLowMemory()` 不再调用并于 API 35 弃用，兼容旧系统可保留旧等级处理。
 
-反例：不要在回调里调用 `System.gc()`——释放引用只是让对象可回收，GC 时机仍由 ART 决定；也不要释放播放、导航等仍在使用的资源，收缩过多会导致回前台重新加载。
+反例：不要在回调里调用 `System.gc()`——释放引用只是让对象可回收，GC 时机仍由 ART 决定；也不要释放播放、导航等仍在使用的资源，收缩过多会导致回前台重新加载。收到回调时还要分清两类状态的去向：能从磁盘或网络重建的 UI 缓存可以释放；跨进程死亡仍需保留的用户数据必须走持久化存储，轻量临时界面状态走 onSaveInstanceState 的实例状态机制——不能把 trim 回调当成持久化或恢复数据的时机。
 
 **Q3: 大 JSON 响应、一次性读大文件把堆峰值顶上去时，按什么顺序处理？`Sequence` 一定更省内存吗？**
 
