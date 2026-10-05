@@ -1,6 +1,6 @@
 # VFS 与挂载
 
-> 通用操作系统虚拟文件系统与挂载学习资料。主线：VFS 的统一接口与分派、vnode 与 inode 的概念辨析、挂载后路径查找的变化。原 07 册更名并补规范格式（2026-10-06）。Q 序列即结构，供 atlas 同源直读。
+> 通用操作系统虚拟文件系统与挂载学习资料。主线：VFS 的统一接口与分派、vnode 与 inode 的概念辨析、挂载后路径查找的变化。原 07 册更名并补规范格式；2026-10-06 按 kernel.org 与 AOSP fs_mgr 官方文档口径扩充 bind mount、mount namespace 与 overlayfs 三题。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] VFS 怎样让应用用统一接口访问不同文件系统？**
 
@@ -15,3 +15,28 @@
 **Q3: [learning] 文件系统挂载后，路径查找发生了什么变化？**
 
 挂载把一个文件系统的根接到现有目录树中的挂载点；路径遍历到该挂载点时，后续查找转入被挂载文件系统。挂载通常需要注册文件系统类型、准备超级块或根对象并建立挂载关系，具体步骤随操作系统与文件系统实现而异。
+
+**Q4: [learning] bind mount 与普通挂载有什么区别？它解决了什么问题？**
+
+普通挂载把一个独立文件系统的根接到目录树；bind mount 则把"已有目录树中的某段子树"重新映射到另一个挂载点——两端是同一文件系统的同一份内容，不新建文件系统、不存在格式化对象，只是命名空间里多了一个入口视图。
+
+1. **语义**：挂载点是子树的别名，经任一路径的修改都作用于同一数据；卸载别名不影响原路径。
+2. **用途**：为容器/chroot 补齐 /proc、/dev 等入口；把只读位置以只读标志重新暴露；Android 开发期的 adb remount 也用 bind/overlay 组合在只读分区上提供可写视图（平台细节归 `../../01-android/10-build-system/01-product-config.md` 相邻主题）。
+3. **边界**：bind mount 的复制是挂载动作而非数据拷贝；移动（rename）挂载点下的内容与普通文件操作相同。
+
+**Q5: [learning] mount namespace 是什么？它如何让不同进程看到不同的挂载布局？**
+
+mount namespace 是内核提供的挂载视图隔离：每个命名空间持有独立的"挂载点集合"，进程关联到某个 namespace 后，它看到的目录树就由该集合决定。新建 namespace（clone/unshare 带 `CLONE_NEWNS`）会复制父视图，此后原视图与新视图各自 add mount / umount 互不可见。
+
+1. **复制语义**：新 namespace 从父视图快照起步；此后一侧的新挂载不会出现在另一侧。
+2. **传播关系**：视图间可配置挂载传播（private、shared、slave 等），shared 使挂载事件在多个 namespace 间广播，private 则完全隔离——容器运行时据此决定宿主新挂载是否渗入容器。
+3. **用途**：容器与沙箱为每个实例构造独立挂载布局；Android 的应用隔离与多用户也在内核 mount namespace 之上叠加视图（平台侧实现归 `../../01-android/` 沙箱与存储专题）。
+
+**Q6: [learning] overlayfs 的上下层语义是什么？Android 为什么用它给只读分区提供可写视图？**
+
+overlayfs 把多个目录叠加成单个合并视图：lower 层只读（可多层叠放，通常来自只读分区或镜像），upper 层可写，合并结果对应用表现为一个普通目录。写路径的规则是"写时上提"：
+
+1. **读取**：upper 有该文件用 upper，否则逐层向下找 lower，取最上层命中。
+2. **修改与新建**：首次修改 lower 文件时把它整体复制到 upper（copy-up）再改；新建文件直接落 upper。
+3. **删除与遮挡**：删除 lower 文件在 upper 建 whiteout 遮挡条目屏蔽下层的同名对象；同目录合并时有重叠冲突语义。
+4. **Android 场景**：A/B 动态分区后 system/vendor 分区运行期只读，开发与调试用 overlayfs 在只读分区上叠加可写 upper（AOSP `fs_mgr` 的 overlayfs remount，需内核 `CONFIG_OVERLAY_FS`）；对生产系统它不是可写的持久化方案——upper 通常落在临时或调试专用空间，重启即按配置回收。

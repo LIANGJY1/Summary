@@ -1,6 +1,6 @@
 # 序列化
 
-> Java 对象序列化学习资料（2026-10-05 重构，自 exceptions-io-and-files.md 拆出）：对象图编码与字节流的本质差别、Serializable 与 Externalizable 的控制粒度、序列化与持久化的概念边界。Android 侧 Parcelable/Serializable 选型与 Parcel 契约归 `../../01-android/02-app-framework/03-parcel.md`，本文只写 Java 标准库语义。结论按 Java 序列化规范口径（JDK 8+ 为基线）。Q 序列即结构，供 atlas 同源直读。
+> Java 对象序列化学习资料（2026-10-05 重构，自 exceptions-io-and-files.md 拆出；2026-10-06 按 OpenJDK JEP 290/415 官方文档口径扩充过滤与 record 两题）：对象图编码与字节流的本质差别、Serializable 与 Externalizable 的控制粒度、序列化与持久化的概念边界。Android 侧 Parcelable/Serializable 选型与 Parcel 契约归 `../../01-android/02-app-framework/03-parcel.md`，本文只写 Java 标准库语义。结论按 Java 序列化规范口径（JDK 8+ 为基线）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 用 ObjectOutputStream 写对象和逐字节写文件差在哪里？反序列化不可信数据为什么危险？**
 
@@ -26,3 +26,19 @@
 1. **概念关系**：序列化是编码动作，持久化是存储目标；完成序列化不保证任何字节落盘，数据库也可以直接持久化字段而不保存 Java 序列化流。
 2. **可靠恢复的条件**：要跨进程重启或应用版本保存数据，还需明确写入位置、事务与格式兼容策略，不能只因对象实现了 Serializable 就假设状态可靠落盘。
 3. **Android 侧提醒**：Parcel 虽同为序列化容器，但编码绑定平台实现，不能当持久化格式（机制与选型见 Android 侧 Parcel 册）。
+
+**Q4: [learning] Java 反序列化漏洞为什么成立？JEP 290 的反序列化过滤怎么用？**
+
+漏洞成立的根源在于反序列化会执行"攻击者选择、受害者类路径提供"的代码：流的类描述符指定要还原的类型，`readObject()` 等定制钩子在还原过程中运行，攻击者把若干无害类的钩子串成链条（gadget chain）就能在没有任何业务入口的情况下触发副作用。过滤的思路是在还原发生前对流入数据做白名单校验：
+
+1. **JEP 290（JDK 9，另有 8u121 反向移植）**：`ObjectInputFilter` 可在三个层面生效——进程级 `jdk.serialFilter` 系统属性、容器级、单流 `ObjectInputStream.setObjectInputFilter()`；按类名、包名、数组维度与流深度、对象图大小放行或拒绝。
+2. **JEP 415（JDK 17）**：补充上下文相关过滤，让同一 JVM 内不同调用场景持有不同过滤器，解决进程级单过滤器难以适配多组件的问题。
+3. **边界**：过滤是纵深防御而非完整解——白名单维护有成本，绕过案例持续存在；不可信数据的首选仍是"不用 Java 原生反序列化"（见上一题的信任边界），过滤只用于必须兼容原生协议的边界。
+
+**Q5: [learning] record 的序列化与普通类有什么不同？为什么说它对序列化更安全？**
+
+record 的反序列化不走"不调构造器、直接按流填充字段"的常规路径，而是调用它的规范构造器（canonical constructor）完成还原——构造器里的参数校验、防御性拷贝在反序列化时照常执行，普通类绕过构造器导致的"非法状态对象"问题在 record 上天然不存在。
+
+1. **不可变性保留**：record 字段是 final 的，反序列化只能经规范构造器整体构造，无法先造空对象再逐字段赋值。
+2. **机制差异的根源**：普通类的反序列化由 `ObjectInputStream` 直接分配实例并按流填充字段，构造器被完全绕过；record 的语言规则强制还原必须经规范构造器，序列化机制没有旁路它的入口。
+3. **边界**：serialVersionUID 机制对 record 依旧适用（版本比对仍然发生）；record 也不改变"原生序列化格式绑定 Java 机制、不可信输入仍需过滤"的结论。
