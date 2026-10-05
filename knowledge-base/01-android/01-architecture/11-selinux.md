@@ -48,7 +48,7 @@ SELinux 用独立于 UID/GID 的域与类型标签细化访问判定；内核对
 3. **对象管理器检查**：`frameworks/native/cmds/servicemanager/Access.cpp` 展示 `service_manager` 类 add/find/list 检查；其他对象管理器各自执行对应 userspace 类检查。
 4. **编译产物装载**：分区中的策略源或预编译产物由 init 选择，最终经 selinuxfs 装入内核；具体产物路径依 Android 分支和设备配置而定。
 
-**Q4: [done] 作为上层应用开发者，SELinux的实际应用场景都是什么？**
+**Q4: [done] 作为上层应用开发者，SELinux 的实际应用场景都是什么？**
 
 应用开发者通常"被 SELinux 约束"而不是配置它：能做的是识别拒绝、改走合规通道，改 sepolicy 不是应用侧的选项。应用无法自行选择域；平台按 seapp_contexts 中的匹配条件确定域，输入不止签名或 targetSdkVersion。
 
@@ -78,7 +78,7 @@ SELinux 用独立于 UID/GID 的域与类型标签细化访问判定；内核对
 2. 使用 `logcat -b all` 收集 AVC 记录，再按拒绝字段定位访问。
 3. 将确有必要的能力需求提交给平台团队，由系统侧评估合规接口。
 
-**Q5: 作为framework开发者，SELinux的实际应用场景都是什么？**
+**Q5: [learning] 作为 framework 开发者，SELinux 的实际应用场景都是什么？**
 
 framework/系统开发者的常见工作是新增进程、服务、属性、设备节点或 HAL 时，把对应域、标签映射和最小权限配置齐。
 

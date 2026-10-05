@@ -1,6 +1,6 @@
 # Java 并发与 Stream
 
-> Java 并发与流式处理学习资料。Q 序列即结构。
+> Java 并发与流式处理学习资料。主线：volatile 与原子性边界、双重检查锁定、Thread/Runnable/Callable/ExecutorService 的角色分工、平台线程与虚拟线程、Stream 的惰性与归约、ThreadLocal 与线程状态。结论按 Java 语言与标准库口径（JDK 8+ 为基线，虚拟线程自 JDK 21）；Android 主线程模型与 Handler 归 ../../01-android/02-app-framework/02-handler-looper.md。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] volatile 能保证线程看到最新值吗？它能让 i++ 变成原子操作吗？**
 

@@ -1,6 +1,6 @@
 # Java 注解
 
-> Java 注解与元注解学习资料。Q 序列即结构。
+> Java 注解与元注解学习资料。主线：注解的元数据本质、元注解（Retention/Target/Inherited）三个控制维度、@interface 声明与元素规则、保留级别的消费者区分、注解处理器与运行时反射的边界。结论按 Java 语言规范口径（JDK 8+ 为基线，涉及版本处单独标注）；Android 侧 SOURCE 级注解（@IntDef/@DrawableRes）归 ../../01-android/02-app-framework/05-collections-annotations.md。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Java 注解声明了什么？注解会自动改变程序行为吗？**
 

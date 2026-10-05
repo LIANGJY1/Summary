@@ -46,30 +46,6 @@ Drawable 的 intrinsic 尺寸是该 Drawable 自身报告的推荐固有尺寸�
 
 选择时依据需要表达的是图像内容、可拉伸区域、简单形状还是多层组合。复杂照片仍适合位图资源。
 
-**Q24: [learning] 把 PNG 直接放进 drawable 目录和用 <bitmap> 标签包装有什么区别？BitmapDrawable 的绘制属性各改变什么效果？**
-
-直接放进资源目录的位图会被包装成默认配置的 BitmapDrawable；要调整抗锯齿、过滤、平铺这些绘制行为，必须用 `<bitmap>` 标签写 XML 显式包装，属性逐项决定绘制效果：
-
-1. **android:src**：要显示的位图资源，缺省则没有可绘制内容。
-2. **android:antialias**：对位图边缘做抗锯齿，斜线与曲线边缘更平滑，代价是轻微的清晰度损失；默认关闭。
-3. **android:dither**：在颜色深度低于位图的屏幕上用抖动模拟中间色，渐变过渡更自然；默认关闭，面向低色深显示时建议开启。
-4. **android:filter**：位图被缩放时启用双线性过滤，放大缩小过渡更平滑；会被拉伸显示的位图建议开启，默认关闭。
-5. **android:gravity**：位图尺寸小于容器时的对齐与填充策略（如居中、整体填充）；默认按填充处理。
-6. **android:tileMode**：平铺模式，默认 disabled 不平铺；clamp 拉伸边缘像素补满、repeat 重复平铺、mirror 镜像交替平铺。一旦设置平铺模式，gravity 的对齐策略即被取代。
-
-这些属性都是绘制期行为，不改变原始位图数据；同一张位图可以在不同 Drawable 资源里用不同属性组合复用。
-
-**Q25: [learning] 用 <shape> 标签声明的 Drawable 实际是什么类型？它的子标签之间有哪些约束？**
-
-`<shape>` 标签在加载时实际生成的是 GradientDrawable 实例——这个类统一承载纯色、渐变、描边等几何外观，android:shape 属性（rectangle、oval、line、ring）决定几何轮廓。它的子标签不是自由组合，存在几条会改变结果或直接失效的约束：
-
-1. **<solid> 与 <gradient> 互斥**：二者都描述填充方式，GradientDrawable 同一时刻只采用一种填充，同写时以实际生效的一方为准，不要指望叠加。
-2. **<corners> 只对 rectangle 生效**：圆角半径描述的是矩形四角，oval 本身无直角，line 与 ring 也不适用，设置后不产生效果。
-3. **<size> 只是固有尺寸建议**：它决定 Drawable 报告的 intrinsic 宽高，最终显示大小仍由使用它的 View 尺寸与缩放策略决定，不是强制边界。
-4. **<stroke> 与 <padding>**：描边声明宽度与颜色；padding 声明内容留白，影响它作为容器或背景时内容的摆放。
-
-判断规则：需要纯色或线性渐变的简单几何外观用 `<shape>`（即 GradientDrawable）即可；渐变形式之外的复杂效果（多层、状态切换）应改用 layer-list、selector 等组合方式，而不是继续往 shape 上堆属性。
-
 **Q5: 切回默认语言时因资源缺失崩溃，限定符变体应该怎样提供兜底？**
 
 回落到同类型资源的默认目录（不含任何配置限定符的那一份），不是"找最接近的一个"。官方文档明确警告：如果一个资源只提供了带限定符的变体而没有默认变体，当设备配置不匹配时会得到 Resources.NotFoundException，典型案例是字符串只放在 values-en 而默认语言目录缺这一条，用户切回默认语言就崩（官方文档口径）。
@@ -225,3 +201,27 @@ Android 13 的 mResourceImpls 以 ResourcesKey 映射到 ResourcesImpl 的弱引
 2. **追踪 Java 引用**：对可调试进程抓取堆快照，沿 GC Root 检查存活的 Resources、Context 和旧 Activity 引用。静态持有 Activity Context 或长期缓存覆盖配置 Context 是常见风险。
 3. **检查原生资源**：AssetManager 与资源表会占用原生内存，Java HPROF 不能覆盖全部原生成本，应结合原生堆分析工具。
 4. **解释合理多实例**：多个显示、窗口、覆盖配置或资源加载器组合可以要求不同 ResourcesImpl。只有伴随无法释放的对象或持续内存增长证据，才能进一步判断泄漏。
+
+**Q24: [learning] 把 PNG 直接放进 drawable 目录和用 <bitmap> 标签包装有什么区别？BitmapDrawable 的绘制属性各改变什么效果？**
+
+直接放进资源目录的位图会被包装成默认配置的 BitmapDrawable；要调整抗锯齿、过滤、平铺这些绘制行为，必须用 `<bitmap>` 标签写 XML 显式包装，属性逐项决定绘制效果：
+
+1. **android:src**：要显示的位图资源，缺省则没有可绘制内容。
+2. **android:antialias**：对位图边缘做抗锯齿，斜线与曲线边缘更平滑，代价是轻微的清晰度损失；默认关闭。
+3. **android:dither**：在颜色深度低于位图的屏幕上用抖动模拟中间色，渐变过渡更自然；默认关闭，面向低色深显示时建议开启。
+4. **android:filter**：位图被缩放时启用双线性过滤，放大缩小过渡更平滑；会被拉伸显示的位图建议开启，默认关闭。
+5. **android:gravity**：位图尺寸小于容器时的对齐与填充策略（如居中、整体填充）；默认按填充处理。
+6. **android:tileMode**：平铺模式，默认 disabled 不平铺；clamp 拉伸边缘像素补满、repeat 重复平铺、mirror 镜像交替平铺。一旦设置平铺模式，gravity 的对齐策略即被取代。
+
+这些属性都是绘制期行为，不改变原始位图数据；同一张位图可以在不同 Drawable 资源里用不同属性组合复用。
+
+**Q25: [learning] 用 <shape> 标签声明的 Drawable 实际是什么类型？它的子标签之间有哪些约束？**
+
+`<shape>` 标签在加载时实际生成的是 GradientDrawable 实例——这个类统一承载纯色、渐变、描边等几何外观，android:shape 属性（rectangle、oval、line、ring）决定几何轮廓。它的子标签不是自由组合，存在几条会改变结果或直接失效的约束：
+
+1. **<solid> 与 <gradient> 互斥**：二者都描述填充方式，GradientDrawable 同一时刻只采用一种填充，同写时以实际生效的一方为准，不要指望叠加。
+2. **<corners> 只对 rectangle 生效**：圆角半径描述的是矩形四角，oval 本身无直角，line 与 ring 也不适用，设置后不产生效果。
+3. **<size> 只是固有尺寸建议**：它决定 Drawable 报告的 intrinsic 宽高，最终显示大小仍由使用它的 View 尺寸与缩放策略决定，不是强制边界。
+4. **<stroke> 与 <padding>**：描边声明宽度与颜色；padding 声明内容留白，影响它作为容器或背景时内容的摆放。
+
+判断规则：需要纯色或线性渐变的简单几何外观用 `<shape>`（即 GradientDrawable）即可；渐变形式之外的复杂效果（多层、状态切换）应改用 layer-list、selector 等组合方式，而不是继续往 shape 上堆属性。
