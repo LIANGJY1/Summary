@@ -102,7 +102,7 @@
 
 ## 06-memory-storage/
 
-- **资源域：内存治理（GC、lmkd/Freezer、回收压缩、泄漏治理）与存储（分区、存储 I/O、文件/数据库实践）**（7 册 182 题）：
+- **资源域：内存治理（GC、lmkd/Freezer、回收压缩、泄漏治理）与存储（分区、存储 I/O、文件/数据库实践）**（7 册 181 题）：
   - [01-memory-management.md](06-memory-storage/01-memory-management.md)（33 题）
   - [02-reclaim-compression.md](06-memory-storage/02-reclaim-compression.md)（26 题）
   - [03-app-memory-stability.md](06-memory-storage/03-app-memory-stability.md)（25 题）
@@ -274,7 +274,7 @@
 | [06-memory-storage/04-app-memory-practice.md](06-memory-storage/04-app-memory-practice.md) | 内存实践：堆预算、泄漏治理、Native 排查与线上监控 | 32 |
 | [06-memory-storage/05-partitions.md](06-memory-storage/05-partitions.md) | 运行时分区与挂载 | 4 |
 | [06-memory-storage/06-storage-io.md](06-memory-storage/06-storage-io.md) | 存储与 I/O：架构分层、文件系统调度与配置持久化 | 23 |
-| [06-memory-storage/07-app-io-storage-practice.md](06-memory-storage/07-app-io-storage-practice.md) | I/O 与存储实践：文件、数据库、缓存、媒体与网络 | 39 |
+| [06-memory-storage/07-app-io-storage-practice.md](06-memory-storage/07-app-io-storage-practice.md) | I/O 与存储实践：文件、数据库、缓存、媒体与网络 | 38 |
 | [07-network/01-network-framework.md](07-network/01-network-framework.md) | Android 网络框架 | 22 |
 | [07-network/02-cellular-wireless.md](07-network/02-cellular-wireless.md) | 蜂窝数据与无线连接 | 26 |
 | [07-network/03-transport-protocols.md](07-network/03-transport-protocols.md) | 传输细节与协议设计 | 16 |

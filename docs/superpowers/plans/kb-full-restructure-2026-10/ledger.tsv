@@ -14,3 +14,4 @@ merge-book	02-os/01-file 八册 → 六册（files-and-directories 6 / operation
 annotate	04-language/kotlin/kotlin-learning-notes-complete.md（300 题）	存档标注（原始题库，规范笔记见 01–04）
 sync	AGENTS.md、ROUTING.md、CONTEXT.md、Summary/README.md、01-android/README（12 章重写+速览 136 册）、高频索引、02-os/README、atlas settings.properties（kotlin 直读路径）	全库互链 405+18 条改写，断链 0
 verify	题数守恒 2967=2965+2；跨册同名题 0；check_kb 724（基线 741，余量为既有结构节/AAOS13 绝对路径噪音）	通过
+move-q	06-memory-storage/07-app-io-storage-practice Q32（HTTPDNS，与 07-network/09 Q3–Q6 同内核）	唯一独立内核“递归与引导”并入 07-network/09 Q31；重复题删除，storage 39→38 题顺延
