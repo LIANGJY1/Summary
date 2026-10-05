@@ -1,6 +1,6 @@
 # 车机交互安全与驾驶分心
 
-> 学习资料（文章模式沉淀）。主线：驾驶分心约束的来源与建模、驾驶状态判定、UX 限制映射表与自动提升规则、restriction mode 与持久化、应用侧消费限制的正确姿势、模板应用的"分心优化"声明、限制读取失败的全限制兜底、设置类界面的行驶态放行、乘员屏触控锁定、限制变化时的界面处理、视频与长文本等通用限制、语音优先与物理控件定位、分心场景的验证方法、车机 UI 的其他安全约束。CarService 实现按本地 AAOS13 源码（Android 13）核对（CarUxRestrictionsManagerService.java、CarDrivingStateService.java、CarUxRestrictionsConfigurationXmlParser.java、`car-lib/src/android/car/`），规则与配置格式按官方文档口径（2026-09 检索）。架构上下文见 [06-aaos-ui.md](06-aaos-ui.md)，UI 定制与防护见 [11-ui-debugging.md](11-ui-debugging.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：驾驶分心约束的来源与建模、驾驶状态判定、UX 限制映射表与自动提升规则、restriction mode 与持久化、应用侧消费限制的正确姿势、模板应用的"分心优化"声明、限制读取失败的全限制兜底、设置类界面的行驶态放行、乘员屏触控锁定、限制变化时的界面处理、视频与长文本等通用限制、语音优先与物理控件定位、分心场景的验证方法、车机 UI 的其他安全约束。CarService 实现按本地 AAOS13 源码（Android 13）核对（CarUxRestrictionsManagerService.java、CarDrivingStateService.java、CarUxRestrictionsConfigurationXmlParser.java、`car-lib/src/android/car/`），规则与配置格式按官方文档口径（2026-09 检索）。架构上下文见 [06-aaos-ui.md](06-aaos-ui.md)，UI 定制与防护见 [11-ui-debugging.md](./09-ui-debugging.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 车速刚超过零就锁死所有界面，为什么应用不能自行硬编码驾驶限制？**
 
@@ -125,13 +125,13 @@ Restriction mode 选择同一驾驶状态下要使用的规则集合，DrivingSt
 
 留证据的原则是"每次判定都对应一条可复查的记录"，否则这类合规性功能在回归时最先失效。
 
-**Q15: 倒车影像、车速显示和音量限制同时影响页面时，如何纳入 UI 安全设计？**
+**Q15: [learning] 倒车影像、车速显示和音量限制同时影响页面时，如何纳入 UI 安全设计？**
 
 设计阶段应纳入三类常见约束：
 
 1. **覆盖型安全界面**：倒车影像、驻车辅助可能需要临时获得全屏与更高显示优先级。它们与 UX 限制并行，最终优先级由系统产品策略确定。
 2. **车速相关的显示限制**：车辆信号达到阈值时隐藏特定信息或提示。
-3. **音量与提示音约束**：音量上限会影响 UI 提示音设计，音量焦点与 duck/mute 机制见 [AAOS 车机音频](../09-audio/03-aaos-audio.md)。
+3. **音量与提示音约束**：音量上限会影响 UI 提示音设计，音量焦点与 duck/mute 机制见 [AAOS 车机音频](../05-audio/03-aaos-audio.md)。
 
 把这些约束统一到一处管理（配置加服务加应用三层各司其职）是比逐页面打补丁更可持续的做法，因为它们都属于"安全要求而非功能需求"，最容易在功能迭代中被挤掉。
 

@@ -586,9 +586,9 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 
 
 
-**Q38: [tags:系统启动] FBE 设备重启后、用户还没输锁屏密码，闹钟类应用怎么才能正常响？LOCKED_BOOT_COMPLETED 和 BOOT_COMPLETED 是什么关系？**
+**Q38: [learning] [tags:系统启动] FBE 设备重启后、用户还没输锁屏密码，闹钟类应用怎么才能正常响？LOCKED_BOOT_COMPLETED 和 BOOT_COMPLETED 是什么关系？**
 
-`directBootAware="true"` 的组件在用户解锁前就能被系统拉起并收到 `LOCKED_BOOT_COMPLETED`，但此时只能访问设备加密（DE）存储；用户输完锁屏收到 `ACTION_USER_UNLOCKED` 后，凭据加密（CE）存储才可用——FBE 的 DE/CE 密钥机制见 [../06-storage/02-storage-io.md](../06-storage/02-storage-io.md)。
+`directBootAware="true"` 的组件在用户解锁前就能被系统拉起并收到 `LOCKED_BOOT_COMPLETED`，但此时只能访问设备加密（DE）存储；用户输完锁屏收到 `ACTION_USER_UNLOCKED` 后，凭据加密（CE）存储才可用——FBE 的 DE/CE 密钥机制见 [../06-memory-storage/06-storage-io.md](../06-memory-storage/06-storage-io.md)。
 
 1. **接收解锁前事件**：在 manifest 为需解锁前运行的组件声明 `directBootAware="true"`。省略该属性时组件默认不参与 Direct Boot 阶段的启动和广播处理。接收器应监听 `LOCKED_BOOT_COMPLETED`，此时只能访问 DE 存储。
 2. **区分用户状态**：`UserManager.isUserUnlocked()`（API 24+）用于判断目标用户是否已解锁，不能用设备已开机替代用户解锁状态。

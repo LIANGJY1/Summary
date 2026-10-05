@@ -1,0 +1,107 @@
+# 蜂窝数据与无线连接
+
+> 学习资料（文章模式沉淀）。主线：APN 配置来源与类型、Android 12+ 蜂窝数据栈模型、数据开关与豁免、蜂窝可用性验证、热点与网络共享、Wi-Fi 编程面、Network Security Config、网络库实践（连接池与 DNS 切换坑）。Telephony data 层类名与 apns 样例按本地 AAOS13 源码核对（部分同步树，Wi-Fi/Tethering 模块不在本地）；官方规则与社区经验口径随题标注（2026-09 检索）。多 APN 拓扑见 [05-multi-apn-veth.md](./05-multi-apn-veth.md)。Q 序列即结构，供 atlas 同源直读。
+
+**Q1: [learning] APN 配置从哪里来？类型有哪些、各干什么用？**
+
+APN 配置的来源链：平台内置全量表（TelephonyProvider 的 apns-conf.xml，本地模拟器样例核对）→ 运营商/载波配置（CarrierConfig）→ OEM 定制叠加；建卡时按 MCC/MNC/IMSI 匹配出可用 APN 列表。类型决定用途与路由归属（本地样例含 default/mms/supl，全集为官方文档口径）：`default`（普通上网）、`mms`（彩信）、`supl`（辅助定位）、`dun`（网络共享）、`cbs`（小区广播）、`ims`（VoLTE）、`ia`（IMS 初始附著）、`emergency`（紧急呼叫）等——modem 按 type 分别激活 PDN，各 type 一张网卡。车机多 APN（02 册）就是在标准类型之外/之上，为私网业务拉起专用 default 型 APN 并做路由隔离。
+
+**Q2: [learning] Android 12 起蜂窝数据栈重写后的模型是什么？**
+
+新栈把"一条数据承载"建模为 `DataNetwork`，由 DataNetworkController 统一编排，配置来自 DataProfileManager（三个类均在本地 AAOS13 源码树核对）。每条成功激活的 DataNetwork 对应一张内核网卡、一个 Network 与独立路由表，生命周期（建/切/释放）由控制器按 DataProfile 与网络环境驱动，替代了旧版 DcTracker 的散落状态机（演进背景为官方口径）。对排查的意义：看蜂窝数据问题先 `dumpsys telephony.registry` 与 telephony 数据服务日志对出"哪条 DataNetwork 在什么状态"，再对照 02 册的五段定位法看内核侧。
+
+**Q3: [learning] 数据开关有哪几层？"某个应用被禁网"是怎么回事？**
+
+三层叠加：设备总开关（TelephonyManager.setDataEnabled 按 subId）、用户在设置里对单张 SIM 的开关、以及按应用的豁免/禁用覆盖（`DataEnabledOverride`，本地源码文件核对——系统可声明"某应用在特定条件下可绕过数据关闭"，典型是 MMS 在数据关时仍可发）。另一独立维度是流量策略（NetPolicy/流量节省与配额警告），策略禁的是"后台访问"而不是链路。排查"应用没网但浏览器有网"按此分层：SIM 开关 → Data Saver → 应用级网络限制（厂商管控另算，见 OEM 册）。
+
+**Q4: [learning] "信号满格但没网"怎么验证到系统层？**
+
+分段验证：注册与数据状态看 `dumpsys telephony.registry`（DATA_REG 状态与 networkType）；框架层看该蜂窝 Network 是否拿到 `NET_CAPABILITY_VALIDATED`（01 册口径）；系统提供了专门的验证器 CellularNetworkValidator（本地源码文件核对）用于"验证某张蜂窝网能否上外网"的场景（如双卡默认数据切换前的预检）。应用侧不要拿"信号格数"当可用性——格数是射频指标，可用性以 VALIDATED 或自己的探测为准。
+
+**Q5: [learning] 热点与网络共享在车机上怎么做？有哪些配额问题？**
+
+共享有三条出口：Wi-Fi AP（SoftAp，乘员设备连车机热点）、USB tether（连开发机/中控分系统）、蓝牙 PAN（老旧）。框架侧 Tethering 负责给客户端分配地址、做 NAT 与转发，并按上游网络的 uplink/downlink 配置限速与配额（Wi-Fi/Tethering 在 Android 13 为 mainline 模块，本地树未含，官方口径）。车机场景要点：热点上游优先选不限量公网 APN，与私网业务隔离（02 册拓扑下热点客户端不可能摸到 TSP 私网——转换规则白名单外无通路）；计费卡要接流量配额与超限降速策略，防止乘员设备把专网卡跑满。
+
+**Q6: [learning] Wi-Fi 的编程面有哪些？扫描节流是什么坑？**
+
+应用层三入口：`WifiNetworkSuggestion`（向系统建议网络，连接权在系统）、`WifiNetworkRequest`（按 NetworkSpecification 申请系统拉起匹配网络，配网场景用）、传统 `WifiManager.addNetwork`（需定位权限且逐渐受限）。连接后统一走 Connectivity 层（01 册）。坑：后台扫描有节流（每应用次数受限，前台四小时窗口限次，官方口径），轮询 `startScan()` 的配网方案在后台会失效——应改为事件驱动（CallbackManager 的扫描结果回调）或引导用户手动。多网并存时 Wi-Fi 与蜂窝的切换完全交给评分系统，应用绑定逻辑见 01 册 Q3。
+
+**Q7: [learning] Network Security Config 管什么？"cleartext 被禁"怎么按域放行？**
+
+NSC 决定应用内 HTTPS 证书信任与明文策略：Android 9（API 28）起**默认禁止 cleartext HTTP**（官方文档口径），自建服务的车机应用第一次连 `http://` 会直接失败。放行用 XML 配置：`base-config`/`domain-config` 按 `cleartextTrafficPermitted` 控制全域或按域，调试期可用 `debug-overrides` 放行用户证书。纪律：按域最小放行（只给确定走 HTTP 的内网服务开），不要全局开回明文；证书校验永远不要为绕过故障而 hook 掉——有中间人代理需求走 NSC 的自定义信任锚。
+
+**Q8: [learning] 网络切换后请求批量失败，网络库层面怎么治理？**
+
+根因是连接池里的旧连接：池化 TCP 连接绑定在旧网络/旧 IP 上，切换后静默失效，复用时才爆（OkHttp 连接池默认 keep-alive 5 分钟，社区经验口径）。治理组合：监听 `NetworkCallback.onLost()` 时 `connectionPool.evictAll()` 清池并触发重解析；DNS 用 OkHttp `Dns` 接口对接 HTTPDNS，URL 保持域名以保住 SNI 与证书校验（IP 直连方案在 HTTPS 证书域校验上坑多，美图实践口径）；DNS 结果做 TTL 管理加 stale-while-revalidate（先用旧值、后台刷新，腾讯云 DNS 实战口径）；业务层短超时快速失败加一次重连兜底。车机多 APN 下额外注意：绑定 veth/专网的请求别进公共连接池（02 册绑定机制），避免被清池逻辑误伤或跨网复用。
+
+**Q9: [learning] QUIC/HTTP3 在 Android 上怎么落地？什么场景值得上？**
+
+两条落地路径：Cronet（Chromium 网络栈，支持 QUIC/HTTP3，经 Google Play Services 或打包分发）与 OkHttp 5 的实验性 HTTP/3（官方仓库口径）。QUIC 的收益场景：弱网/高丢包下的握手与迁移（0-RTT 恢复、连接随 IP 迁移不断——对 Wi-Fi/蜂窝切换场景天然契合）、队头阻塞比 TCP+H2 轻。代价与坑：UDP 在部分运营商/企业网络被限速甚至拦截，必须保留 TCP 回退并在指标里看 QUIC 竞速成功率；Cronet 引入体积与版本管理，与自研 DNS/代理栈的集成要重新对齐（Cronet 接管后 OkHttp 拦截器逻辑不生效）。车机建议：常驻大流量下载（地图/媒体包）与跨网切换敏感的业务先试点，指标对比 RTT、失败率、首字节三项再放量。
+
+**Q10: [learning] 证书校验与 pinning 在"十年生命周期"的车机上有什么特殊的坑？**
+
+车机比手机多两个约束：证书会在车辆寿命内轮换（服务端换证书/CA 换中间件），系统时间可能不准（断网+断 RTC 后时钟回跳）。pinning 的对应纪律：pin 到中间 CA 的 SPKI 而不是叶子证书（叶子轮换不至于全断）；pin-set 配置过期时间与备用 pin（NSC 的 pin-set expiration，官方文档口径），到期前完成 OTA 更新——过期后系统忽略 pin 而不是永久断连，这是保护不是漏洞；不要 hook 掉校验来"修复"断连，时间回跳问题修时钟源（05 册时间同步三层）而不是关校验。普通校验链的坑同样适用：IP 直连导致的域名不匹配、自签证书只该进 debug-overrides 与测试构建。上线前用真实轮换演练一次"服务端换证书不断车"，pinning 方案才算闭环。
+
+**Q11: [learning] 双卡设备的默认数据卡（DDS）切换，应用会感知到什么？**
+
+标准 Android 双卡里只有一张卡是默认数据订阅（DDS），另一张卡的数据默认关闭、最多保留语音/短信能力；切换 DDS 时旧卡的 PDN 去激活、新卡重新拨号建立 DataNetwork——期间数据**必然短暂中断**，默认网络随之切换（框架机制，官方文档口径；TelephonyManager 不在本地部分同步树，API 名以官方为准）。应用感知与处置：订阅切换有系统广播/回调可监听；切换窗口内的请求会失败，长连接按清空连接池再重连处置；绑定到旧卡 Network 的流量（01 册绑定机制）在旧卡数据关闭后失效，绑定策略要跟 DDS 走而不是写死。与车机"双卡双通"区分：02 册 Q7 的双公网主备是厂商让两张卡同时有数据能力的增强方案，标准 Android 上双卡数据是"切换型"——设计方案前先确认目标平台是哪种。
+
+**Q12: [learning] 车机信号图标"5G"怎么判？为什么显示 5G 时查数据制式还是 LTE？**
+
+图标判断不查数据制式本身，而是查 `TelephonyDisplayInfo` 的 `networkType` 加 `nrState` 组合（社区源码分析多例核对）：`networkType` 在 NSA（非独立组网）下仍是 LTE——5G 只是锚点辅助的附加载波；是否显示 5G 由 `nrState` 决定：`NR_STATE_NOT_RESTRICTED`（非受限 NR 可用，NSA 典型态）显示 5G，`NR_STATE_SA` 是独立组网，`NR_STATE_RESTRICTED`（如仅用于定位的受限 NR）与 `NR_STATE_NONE` 不显示（Android 10 起官方支持 NSA 图标，官方文档口径）。常见误判两例：Android 14+ 上普通应用仅持 `READ_PHONE_STATE` 时拿到的信息受限，把 LTE 误判成 NSA 5G（社区文章口径），系统应用/车机特权应用要用对 API 层级；把"运营商开通了 5G"当成"当前驻留 5G"——图标跟随实时驻留状态。车机 UI 消费链路：Telephony 回调更新 TelephonyDisplayInfo → SystemUI/车机状态栏按配置映射图标，图标异常排查沿这条链打 log 对时序。
+
+**Q13: [learning] 车机怎么接车厂/企业级 Wi-Fi（802.1X）？证书怎么下发与续期？**
+
+企业级接入用 `WifiEnterpriseConfig` 配 EAP 方案（车厂内网最常见 EAP-TLS：设备证书 + CA 双向校验；也有 PEAP/TTLS 用户名密码式，官方 API 口径；Wi-Fi 模块不在本地部分同步树）。与家用 PSK 的本质差别是"每设备一份身份"：EAP-TLS 的设备证书要由车厂 PKI 签发并经安全通道下发到设备密钥库（配合 07 册证书体系），过期前要有续期流程——车辆寿命内 CA 轮换或证书到期，内网接入整体失效，是量产隐患。编程要点：加入企业网络建议走 `WifiNetworkSuggestion` 交给系统连接决策（`WifiNetworkSuggestion` 建议机制），EAP 方法、Phase2 与 CA/客户端证书引用进 EnterpriseConfig；接入失败按"证书链是否完整 → 时间是否正确（时钟漂移会让全部证书"未生效"）→ RADIUS 侧账号/设备证书是否吊销"三层走。
+
+**Q14: [learning] modem/RIL 崩溃重启后，数据连接会怎样？应用怎么表现？**
+
+modem 崩溃重启会一次性带走所有 PDN：数据网卡全部失效、框架侧 DataNetwork 全部拆除，注册与拨号在 modem 恢复后按 DataProfile 逐步重建（数据栈恢复机制为官方与社区口径，重建细节不在本地部分同步树核对范围）。应用侧的表现是一次"彻底的网络丢失再恢复"：全部 Network lost → 数秒到数十秒后 available，比单网络切换更像断网。处置原则：按彻底丢失处理——立即冻结网络操作、退避等待 available，不做无谓重试打爆重建中的栈；恢复后清空连接池再重连。诊断侧：这类事件在 radio logcat 与 `dumpsys telephony.registry` 有明确轨迹，"全断又全好"的时间窗对齐 modem 重启日志即可归因，不要误查应用与服务器。
+
+**Q15: [learning] 信号强度怎么量化？业务自适应（如视频降码率）该拿什么做依据？**
+
+信号格数是映射结果不是原始值：LTE 的信号格由运营商配置的 RSRP 阈值数组决定（SignalStrengthController 按 `KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY` 把 RSRP 映射成格数，本地 AAOS13 源码核对），不同厂商阈值不同——格数跨设备不可比。业务自适应的依据链：`SignalStrength` 取绝对指标（LTE 用 RSRP、NR 用 SS-RSRP，getDbm 系方法），按业务分级（如 RSRP 好/中/差对应高/中/低码率与预取深度），配合滞回（信号抖动附近防来回切换）与最短保持时间；跨制式（LTE↔NR）阈值语义不同，绝对值不能直接比较。与 01 册的区分：VALIDATED/计费位是"可用性/成本"语义，信号量化是"质量"语义——三者组合才构成完整的业务自适应输入（弱信号+已验证：降码率继续；未验证：探活优先）。
+
+**Q16: [learning] 车辆驶过园区多个 Wi-Fi AP 之间漫游，应用会感知到什么？**
+
+同 ESS（同一 SSID/同一网络）内 AP 间漫游是链路层行为：Network 对象不变、不触发 NetworkCallback 的 lost/available，IP 也通常保持——应用框架层面"什么都没发生"。但漫游瞬间仍有几十到几百毫秒的转发中断（新旧 AP 交接、可能的认证交互），在途 TCP 包丢失、UDP 流卡顿，表现为"状态没变但请求偶发失败"（官方与社区漫游分析口径）。应用兜底：请求层短超时+一次重试覆盖漫游毛刺；对丢包敏感的业务（实时流）靠传输层自身重传/前向纠错；不要试图通过监听回调感知漫游——事件不存在，指标层可用成功率/耗时分布的毛刺统计事后识别。与跨网络切换（Wi-Fi↔蜂窝，01 册评分语义）是两类事件，治理策略分开。
+
+**Q17: [learning] 5G 网络切片（S-NSSAI）在 Android 上怎么用？车机 TSP 能靠它保障吗？**
+
+Android 12 起支持 5G 网络切片、Android 14 完善 `NetworkSliceInfo` 等 API（官方 5G 切片文档口径；本地 13 树无对应类）：切片由 S-NSSAI 标识（SST 切片类型 + SD 区分符），签约信息经运营商 URSP 规则下发，终端据此把匹配流量的 PDU 会话建到指定切片上——uRLLC 切片可提供低时延高可靠的传输保障（切片技术资料口径）。企业/受管设备的简化入口是管理 API：按配置把应用流量路由到指定切片，应用无需改造。车机价值与现实约束：TSP 控制类流量走专用切片是行业方向，但落地需要运营商网络开通切片、卡与签约支持 URSP、系统版本具备 API、以及 DataProfile 携带切片信息——四层都到位才有保障，任何一层缺失就退化为普通 best-effort 流量；设计与合同评审时把"切片是否真生效"列为验收项（观测：切片路由的时延/抖动对比普通通道）。
+
+**Q18: [learning] TelephonyManager 这类"同步"查询 API 背后跨了哪些进程？RemoteException 能说明 Modem 坏了吗？**
+
+TelephonyManager 是应用侧客户端入口，不保存完整蜂窝状态：查询与控制经 ITelephony Binder 进入 com.android.phone 进程的 PhoneInterfaceManager，回调注册则走 ITelephonyRegistry 到 system_server 的 TelephonyRegistry；短信（ISms 到 SmsController/IccSmsInterfaceManager）与订阅（ISub 到 SubscriptionManagerService）各有独立 Binder 服务，呼叫界面与 PhoneAccount 由 Telecom 协调——不能画成一条 TelephonyManager → RIL → Modem 的直线。RemoteException 通常表示 Phone 进程正在重启或 Binder 已死亡，与 Modem 无关；Modem 故障表现为 RADIO_NOT_AVAILABLE 之类的 radio 错误。诊断时先定位调用属于哪个 Binder 服务、状态在哪个进程停止传播，再谈"Telephony 慢"。
+
+**Q19: [learning] RIL 发出一条 radio 请求后怎么把响应对回原调用？Android 13 连 Radio HAL 用 AIDL 还是 HIDL？**
+
+框架创建 RILRequest 分配 serial，放入 mRequestList 并持有 wakelock，然后调用分域 AIDL IRadio* 的 oneway 方法；Vendor HAL/Modem 异步处理后经对应的 IRadio*Response 携带同一 serial 返回，RIL 用 serial 找回原请求完成 Message——异步配对靠 serial 而不是线程栈。AAOS13 源码核对：RIL 按 data、messaging、modem、network、sim、voice、ims 域维护 RadioServiceProxy 并优先获取分域 AIDL 服务（android.hardware.radio.data.IRadioData 等），AIDL 不可用时依次尝试 HIDL IRadio 1.6 及更低版本，所以"已全面迁移、不再有 HIDL"不成立（分域 AIDL 自 Android 13 起）。Modem 主动上报走 IRadio*Indication，没有等待中的请求与之一一对应；wakelock timeout 不等于取消请求，迟到的响应仍会按 mRequestList 处理。Vendor HAL 到 Modem 的传输由厂商实现决定，不能假设一定有 AT 命令或名为 rild 的进程。
+
+**Q20: [learning] 同样是 Telephony 查询 API，为什么 getAllCellInfo 几乎瞬时、requestCellInfoUpdate 慢且限频、部分特权 API 还可能长时间阻塞？**
+
+三种服务端实现不同。其一，读缓存：targetSdk Q 及以上的 getAllCellInfo 直接返回缓存（AAOS13 源码核对 getCachedCellInfo 分支），新鲜度要看 CellInfo.getTimestampMillis（elapsed realtime 基准、不受校时影响，应与同基准当前值比较），反复调用不会触发更频繁的 radio 扫描。其二，异步刷新：requestCellInfoUpdate 经 ICellInfoCallback 回传，系统限制请求频率且不保证每次都有新数据，应用要处理 ERROR_TIMEOUT、Modem 错误、空列表与旧时间戳。其三，Phone 主 Looper 同步桥接：部分特权 API 进入 PhoneInterfaceManager.sendRequest，Binder 线程把命令投给主 Looper 后 wait 结果，队列长时等待不可控，且明确禁止从主 Looper 自身调用以免线程等自己处理消息而死锁；这里没有覆盖全部 API 的"默认 5–10 秒超时"，Binder 也没有通用事务超时。通用做法：无法确认服务端是否阻塞的调用不放进主线程关键路径，能带 callback 的用 callback，不轮询同步 getter。
+
+**Q21: [learning] 一次信号强度变化经 TelephonyRegistry 怎样扇出到应用？同一 callback 反复注册会怎样？**
+
+链路是 Modem → Vendor HAL → IRadioNetworkIndication.currentSignalStrength → RIL registrant → SignalStrengthController（比较 SignalStrength 对象与 subId，变化才继续）→ Phone.notifySignalStrength → DefaultPhoneNotifier → TelephonyRegistry → 遍历 mRecords → oneway IPhoneStateListener.onSignalStrengthsChanged → 应用 Binder Stub → 注册时指定的 Executor。TelephonyRegistry 在 synchronized(mRecords) 内按事件、subId、phoneId 与权限筛选记录（AAOS13 源码核对，ArrayList 线性扫描，成本 O(N)），每条匹配记录收到一份 SignalStrength 新副本；notifyNow=true 的注册会立即回调已有缓存，一次注册可能触发多个初始回调，成本不只是"追加一条记录"。应用侧 callback 不在 system_server 执行，但 Executor 太慢会在应用内积压回调、读到过期状态；framework 只保存 callback 的弱引用，应用须持有强引用并成对注册注销。版本边界：按 PID 限制监听数量、超限抛 IllegalStateException 属 Android 17 语境，13 源码未见此限制，但线性扇出的成本结论在 13 同样成立；未注销重复注册在 13 上旧 stub 可能暂留、初始回调再次触发，应用不应依赖该行为。
+
+**Q22: [learning] "蜂窝有信号但应用无网"时，Telephony 与 Connectivity 各管哪一段？DATA_CONNECTED 能说明能上互联网吗？**
+
+不能。DATA_* 状态只是框架对内部 DataNetwork 的概括：DataNetwork 继承 StateMachine（Connecting/Connected/Handover/Disconnecting/Disconnected，AAOS13 源码核对），进入 Connecting 时创建并注册 TelephonyNetworkAgent，把 NetworkCapabilities、LinkProperties 和 score 交给 Connectivity，连接建立后再 markConnected；Connectivity 负责跨 transport 的网络选择与 validation，验证结果经 onValidationStatus 反向通知 Telephony。排查按序确认：ServiceState 已注册到网络 → DataNetwork 处于 connected → NetworkAgent 已向 Connectivity 注册 → NetworkCapabilities 含目标能力 → Connectivity 的 validation、默认网络选择、DNS 与路由完成——任何一段断开都表现成"有信号无网"。默认数据 subId 变化会触发整条链重建，但具体是否走完整的 DISCONNECTED → CONNECTING → CONNECTED 取决于 Modem 并发能力、网络请求与 handover 方式，不是固定序列。
+
+**Q23: [learning] 多卡代码里的 physical slot、phoneId、eSIM port、subscriptionId 是一回事吗？DSDS 设备"另一张卡一定周期性掉信号"吗？**
+
+不是一回事，四层不可互换：physical slot index 是设备上的物理卡槽；logical slot（phoneId）是 framework 当前管理的逻辑 phone 实例，随多 SIM 配置变化；eSIM port index 是 eUICC 上可启用 profile 的逻辑端口；subscriptionId 是 subscription 记录的 framework ID，SIM 更换、eSIM profile 切换或记录重建都可能改变，不应持久化当作永久身份（公开 API 返回 SubscriptionInfo，Phone 进程内部由 SubscriptionManagerService 与 SubscriptionDatabaseManager 管理）。DSDS 与 DSDA 描述的是 radio 并发能力档位：DSDS 允许多卡待机，但并发通话与射频资源仍受 Modem 能力和运营商配置约束；DSDA 并发更强，但"通话时另一卡能否保持数据"仍要读设备公开能力——Android 13 提供 PhoneCapability 与 active modem count，应读取这些能力而不是按卡槽数量或名字推断。subId、phoneId 与 slot 的映射在热插拔和 eSIM 切换后会更新，异步任务执行前要重新校验。
+
+**Q24: [learning] 车机怎么在城市运营商热点间自动切换？Passpoint 是什么？**
+
+Passpoint（WFA Hotspot 2.0，Android 11 起强制要求支持，官方文档口径）解决"运营商热点免手动认证"：设备通过 ANQP 查询获知 AP 的漫游联盟与域名信息，自动匹配本地凭据（EAP-TLS/SIM 凭据）完成认证——车主在城市热点覆盖间移动时无需逐个输密码，与面向车厂内网的 802.1X 企业接入是两套身份体系——Passpoint 面向运营商漫游生态，802.1X 面向企业内网的设备身份。编程入口：`WifiNetworkSuggestion` 携带 `PasspointConfiguration`（FQDN、Realm、EAP 凭据）提交系统，由自动选网评分决定连接（建议 API 口径）。落地前提是 AP 侧部署了 ANQP 能力并与 RADIUS/漫游协议联动——部署不全时 Passpoint 退化为不可发现，仍是手动连接；验收要在真实 Passpoint 热点实测发现与认证全流程。
+
+**Q25: [learning] 蜂窝空闲时第一个包为什么慢？频繁小包上报的电量代价怎么算？**
+
+蜂窝有无线资源管理：终端空闲态（RRC IDLE）没有专用信道，首个数据包要先走 RRC 建立流程（信令往返，典型几十到上百毫秒，弱信号更长，3GPP 通识口径），进入连接态后才正常收发；连接态短暂空闲后又会释放回 IDLE。两个工程推论：**交互延迟**——低频触发的请求（打开应用首包）比持续传输多出一次建链级延迟，车机"点击到出图"的耗时里要计入；**电量**——每次发小包都把 radio 从休眠唤醒并保持一段时间，高频零散小包的电量代价远超其数据量（蜂窝通识口径）。应用对策：高频遥测合并成批（周期聚合代替逐条即时发）、心跳间隔与保活需求权衡（05 册 Q9）、后台突发上报错峰。RRC 状态应用不可直接控制，能设计的只有流量节奏。
+
+**Q26: [learning] 无地面网络的区域怎么办？卫星直连（NTN）在 Android 上什么形态？**
+
+Android 15 起平台级支持卫星连接（NTN，非地面网络，官方文档口径）：地面蜂窝与 Wi-Fi 均不可用时设备可经卫星收发消息，蜂窝信号衰减时可自动切换。定位与约束要认清：现阶段是**应急通信**形态——窄带、高延迟、数据量极有限（短信类消息起步），不是通用上网通道；官方为开发者提供"卫星优化型应用"的适配指引（按受限网络管理行为，开发者文档口径）。车机方向：无覆盖区域（无人区、地库外远郊）的紧急求援与基础状态上报可由此兜底，控车与娱乐业务不适用。应用要点：识别卫星态并降级（极小数据量、超长超时、明确告知用户）、不假设常态可用、与地面网络恢复后的回落衔接。

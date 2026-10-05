@@ -1,6 +1,6 @@
 # View 测量、布局与绘制
 
-> 学习资料（文章模式沉淀）。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。AOSP 机制按本地 AAOS13 源码（Android 13）核对（View.java、ViewRootImpl.java、Choreographer.java、`libs/hwui/`），加速与绘制模型按官方文档口径（2026-09 检索），经验性结论标注社区口径。帧调度见 [../05-rendering/01-render-pipeline-vsync.md](../05-rendering/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](08-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../15-performance/05-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。AOSP 机制按本地 AAOS13 源码（Android 13）核对（View.java、ViewRootImpl.java、Choreographer.java、`libs/hwui/`），加速与绘制模型按官方文档口径（2026-09 检索），经验性结论标注社区口径。帧调度见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](../04-graphics/12-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../12-performance/05-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android View 与 ViewGroup 分别表示什么？**
 
@@ -156,13 +156,13 @@ Layer 类型决定 View 绘制结果是否进入离屏缓存，选择依据是�
 
 两种 View 的性能取舍受设备、格式、合成器与具体内容影响，应以目标设备 trace 和功耗数据验证。
 
-**Q16: 只想移动一个 View 却触发复杂动画，`ViewPropertyAnimator` 与 `ObjectAnimator` 适用场景是什么？**
+**Q16: [learning] 只想移动一个 View 却触发复杂动画，`ViewPropertyAnimator` 与 `ObjectAnimator` 适用场景是什么？**
 
 两者都属于属性动画。`ViewPropertyAnimator` 面向单个 View 的常见属性，调用更简洁。`ObjectAnimator` 可对任意对象的属性执行动画，控制能力更通用。
 
 1. **`ViewPropertyAnimator`**：通过 `View.animate()` 对 View 的 alpha、translation、rotation 等属性开动画，适合简洁调用和同时驱动多个 View 属性。它从 API 12 起提供。多个属性一起动画时可合并失效请求，减少重复 invalidation。
 2. **`ObjectAnimator`**：指定目标对象和属性，通过属性读取/写入驱动值变化，适合非 View 对象或需要对通用属性建动画的场景。属性动画框架从 API 11 起提供。复杂动画还要配置时长、插值器及必要的 evaluator。
-3. **帧调度**：AnimationHandler 根据帧回调推进当前值，Android 实现将其接入 Choreographer 帧节奏。若应用错过帧截止时间，动画会跳过显示帧，不会自动延长该帧的显示时间。帧调度细节见 [渲染管线与 VSync 调度](../05-rendering/01-render-pipeline-vsync.md)。
+3. **帧调度**：AnimationHandler 根据帧回调推进当前值，Android 实现将其接入 Choreographer 帧节奏。若应用错过帧截止时间，动画会跳过显示帧，不会自动延长该帧的显示时间。帧调度细节见 [渲染管线与 VSync 调度](../04-graphics/01-render-pipeline-vsync.md)。
 4. **动画时长缩放**：`Settings.Global.ANIMATOR_DURATION_SCALE` 是 API 17 起提供的 Animator 动画时长倍率，会同时影响 start delay 与 duration。默认值为 `1.0`，`0.0` 会让动画立即结束。它是系统全局设置，不是逐 Activity 默认值。调试时确认目标系统当前设置，不能把动画被立即结束误判为绘制性能问题。
 
 **Q17: 改变布局参数后界面瞬间跳变，`LayoutAnimation` 与 `TransitionManager` 哪个能动画化尺寸变化？**

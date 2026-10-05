@@ -1,6 +1,6 @@
 # Compose 运行期与 View 互操作
 
-> 学习资料（文章模式沉淀）。主线：组合/布局/绘制三阶段与"读状态即订阅"、组合期写状态的无限重组、remember 与 rememberSaveable 的持有边界、derivedStateOf 与延迟读取、稳定性推断与 strong skipping、列表键与重组范围、LaunchedEffect/SideEffect/DisposableEffect 分工、ComposeView 嵌入与组合策略、AndroidView 的代价、自定义宿主与帧时钟、重组与掉帧的归因工具、View 迁移的高频坑。Compose 属 AndroidX、不在 AOSP 源码树内，本册结论按官方文档与 AndroidX 源码口径（2026-09 检索）。渲染侧的帧调度与掉帧度量见 [../05-rendering/01-render-pipeline-vsync.md](../05-rendering/01-render-pipeline-vsync.md)，View 侧绘制机制见 [02-view.md](02-view.md)，应用实践见 [Compose 渲染实战](09-app-compose-advanced-practice.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：组合/布局/绘制三阶段与"读状态即订阅"、组合期写状态的无限重组、remember 与 rememberSaveable 的持有边界、derivedStateOf 与延迟读取、稳定性推断与 strong skipping、列表键与重组范围、LaunchedEffect/SideEffect/DisposableEffect 分工、ComposeView 嵌入与组合策略、AndroidView 的代价、自定义宿主与帧时钟、重组与掉帧的归因工具、View 迁移的高频坑。Compose 属 AndroidX、不在 AOSP 源码树内，本册结论按官方文档与 AndroidX 源码口径（2026-09 检索）。渲染侧的帧调度与掉帧度量见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，View 侧绘制机制见 [02-view.md](02-view.md)，应用实践见 [Compose 渲染实战](../04-graphics/13-app-compose-advanced-practice.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 滚动列表时任意状态变化都让整页重组，Compose 的组合、布局、绘制各阶段怎样响应？**
 
@@ -113,11 +113,11 @@ AndroidView 将一棵传统 View 子树纳入 Compose 的布局与绘制，因�
 2. **重组职责**：Recomposer 处理 invalidation、recomposition 与 applyChanges。它不替代 ViewRootImpl 的窗口测量、布局、绘制和 HWUI 提交。
 3. **生命周期**：Composition 离开窗口或宿主生命周期结束时应 dispose。选择 detach 或 ViewTreeLifecycleOwner 销毁取决于宿主是否会复用。
 
-**Q13: Compose 页面滚动掉帧，应先用哪些工具区分重组、布局和绘制瓶颈？**
+**Q13: [learning] Compose 页面滚动掉帧，应先用哪些工具区分重组、布局和绘制瓶颈？**
 
 按工具证据区分重组、布局和绘制阶段，再选择优化方向：
 
-1. **观察范围**：Layout Inspector 查看重组次数和具体 composable。Compose trace API 标出自定义慢逻辑耗时。帧时间线/帧指标判断是否超过目标刷新率对应的预算，度量口径见 [流畅性度量](../15-performance/05-smoothness.md)。
+1. **观察范围**：Layout Inspector 查看重组次数和具体 composable。Compose trace API 标出自定义慢逻辑耗时。帧时间线/帧指标判断是否超过目标刷新率对应的预算，度量口径见 [流畅性度量](../12-performance/05-smoothness.md)。
 2. **重组次数高**：检查不稳定参数、状态读取位置和无稳定 key 的列表。
 3. **单次组合耗时高**：检查组合期重计算、列表筛选和排序。
 4. **布局或绘制耗时高**：布局检查测量复杂度和深层结构。绘制检查重复记录、绘制期分配和大面积渐变/模糊。

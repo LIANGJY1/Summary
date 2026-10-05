@@ -1,0 +1,16 @@
+动作	对象	去向/结果
+delete	04-virtualization/ 05-linux-boot/ 07-net/ 06-security/（根级空壳）	已删除（真实内容在 02-os 内部子目录）
+move	08-though/work.md（2 题，非声明性知识）	issue/work-experience-notes.md
+rename-dir	05-rendering → 04-graphics（11 册 222 题）	图形管线域
+move	03-ui/08,09 两册渲染实战 → 04-graphics/12,13	应用渲染实战归图形域
+move	04-input 七册 → 03-ui/10–16（130 题）	UI 与输入合并章
+merge-dir	07-memory（4 册）+ 06-storage（3 册）→ 06-memory-storage/01–07（182 题）	资源域
+rename-dir	08-network → 07-network；09-audio → 05-audio；10-platform-services → 08-platform-services；11-platform-native → 09-platform-native；12-build-system → 10-build-system；13-aaos → 11-aaos；15-performance → 12-performance	12 章顺延
+move	14-cpu-power/01,02,04 → 12-performance/20,21,23	性能横切章
+analyze	14-cpu-power/03 vs 15/10-power	内容互补（模型归因 vs 治理场景），撤销硬合：保留两册并写明分工，22 更名 app-power-governance
+split	04-graphics/03-multi-window-foldable（28 题）→ 窗口语义 18 题迁 03-ui/04-window-system（Q21–38）+ 显示形态 10 题留 04-graphics/03-display-service-foldable
+rename-top	05-os→02-os；网络→03-network；03-language→04-language；08-though→05-design；02-testing→06-testing；09-devtools→07-devtools；04-exp→08-exp	顶层书目录序：主线→地基→语言→设计→工程→经验
+merge-book	02-os/01-file 八册 → 六册（files-and-directories 6 / operations-model 4 / storage-space 3 / sharing-protection 2 / vfs-mounting 3 / filesystem-layout 3）+ 命令实操 3 题迁 05-linux-boot（Q10–12）	主题驱动合并，全部补 H1/引言
+annotate	04-language/kotlin/kotlin-learning-notes-complete.md（300 题）	存档标注（原始题库，规范笔记见 01–04）
+sync	AGENTS.md、ROUTING.md、CONTEXT.md、Summary/README.md、01-android/README（12 章重写+速览 136 册）、高频索引、02-os/README、atlas settings.properties（kotlin 直读路径）	全库互链 405+18 条改写，断链 0
+verify	题数守恒 2967=2965+2；跨册同名题 0；check_kb 724（基线 741，余量为既有结构节/AAOS13 绝对路径噪音）	通过

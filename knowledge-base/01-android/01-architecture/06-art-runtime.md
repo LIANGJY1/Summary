@@ -1,6 +1,6 @@
 # ART
 
-> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../07-memory/01-memory-management.md](../07-memory/01-memory-management.md)；类加载与 JNI 链接由本册对应主题覆盖；2026-09-25 增补实用调试题（Q2–Q5，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)；类加载与 JNI 链接由本册对应主题覆盖；2026-09-25 增补实用调试题（Q2–Q5，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android 中的 ART 如何理解？**
 
