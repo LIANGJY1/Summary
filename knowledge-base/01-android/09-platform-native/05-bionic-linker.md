@@ -1,6 +1,6 @@
 # Bionic 动态链接器：命名空间隔离与符号解析
 
-> 学习资料（文章模式沉淀，证据等级：二手）。主线：Android 动态链接器为什么需要命名空间隔离、命名空间的可达性判定为何有"路径"与"符号"两套语义、`dlopen` 的三段查找流程，以及 `ld.config` 运行时配置如何把 Treble 的隔离策略落地。源文档：Android 官方《链接器命名空间》文档（`source.android.com/docs/core/architecture/vndk/linker-namespace`）、AOSP `platform/bionic` 的 `linker/linker.cpp`、`linker/linker_namespaces.cpp`、`linker/linker.h`、`linker/dlfcn.cpp`、`linker/linker_main.cpp` 源码，以及中文社区对 `do_dlopen` 调用链的源码分析。本册结论未逐条核对本地 AOSP 源码，字段与枚举以官方文档与 AOSP 源码为准；版本差异已标注。已有 01 册的 Binder 与 JNI 册覆盖的是框架层调用与 JNI 桥接，本册是其加载底座，不重复。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀，证据等级：二手）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：Android 动态链接器为什么需要命名空间隔离、命名空间的可达性判定为何有"路径"与"符号"两套语义、`dlopen` 的三段查找流程，以及 `ld.config` 运行时配置如何把 Treble 的隔离策略落地。本册结论未逐条核对本地 AOSP 源码，字段与枚举以官方文档与 AOSP 源码为准；版本差异已标注。已有 01 册的 Binder 与 JNI 册覆盖的是框架层调用与 JNI 桥接，本册是其加载底座，不重复。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 动态链接器为什么需要"命名空间"这种机制，glibc 的同名机制解决了什么不同的问题？**
 

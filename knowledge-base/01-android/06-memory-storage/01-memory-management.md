@@ -1,6 +1,6 @@
 # Android 内存管理与压力治理
 
-> 学习资料（文章模式沉淀）。主线：进程内存口径与内核页管理、ART 堆与 GC 调度、lmkd/缓存进程冻结器/MemoryLimiter 的压力治理分层、App 内存优化诊断、16 KB Page Size 的兼容与性能。源文档：android-internals-wiki §4.1《Android 与 Linux 内存管理全景》、§4.2《ART Heap、GC 与后台维护调度》、§4.3《lmkd、Cached App Freezer 与内存压力治理》、§4.4《App 内存优化与诊断》、§4.5《16 KB Page Size 与 Android 性能》；机制按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异（如 MemoryLimiter/PMGD、分代 CMC、整理级别收窄）已标注；16 KB Page Size 的 Play 要求已与官方文档核对。ART 的角色与演进总览见 [../01-architecture/06-art-runtime.md](../01-architecture/06-art-runtime.md)；输入延迟与内存压力的关联见 [10-input-system.md](../03-ui/10-input-system.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：进程内存口径与内核页管理、ART 堆与 GC 调度、lmkd/缓存进程冻结器/MemoryLimiter 的压力治理分层、App 内存优化诊断、16 KB Page Size 的兼容与性能。ART 的角色与演进总览见 [../01-architecture/06-art-runtime.md](../01-architecture/06-art-runtime.md)；输入延迟与内存压力的关联见 [10-input-system.md](../03-ui/10-input-system.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 进程的"内存"由哪些域组成？为什么"Java 堆没满，所以不会 OOM"不成立？**
 

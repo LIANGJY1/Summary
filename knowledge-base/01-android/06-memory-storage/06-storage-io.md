@@ -1,6 +1,6 @@
 # 存储与 I/O：架构分层、文件系统调度与配置持久化
 
-> 学习资料（文章模式沉淀）。主线：Android 存储问题要沿"API → 文件系统 → 块层与调度 → 加密与映射 → 共享存储 FUSE → 器件"定位等待层级，而 SharedPreferences/DataStore 的 ANR 风险来自写盘被框架组件收尾点带回主线程。源文档：android-internals-wiki §6.1《Android 存储架构》、§6.2《文件系统与 I/O 调度》、§6.3《SharedPreferences 与 DataStore：I/O、ANR 与多进程一致性》、§6.4《vold、MediaProvider 与 FUSE：共享存储 I/O 路径》；SharedPreferencesImpl、QueuedWork、ActivityThread、BroadcastReceiver 与 blkio task profiles 已按本地 AAOS13 源码（Android 13）核对，SP 加载线程实现与材料 Android 17 语境的差异已标注；`apply()` 的 ANR 警告已与 developer.android.com《SharedPreferences.Editor》核对；vold、MediaProvider、SQLite 与文件系统内核实现不在本地核对范围，相关结论转写自源材料并标注版本。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：Android 存储问题要沿"API → 文件系统 → 块层与调度 → 加密与映射 → 共享存储 FUSE → 器件"定位等待层级，而 SharedPreferences/DataStore 的 ANR 风险来自写盘被框架组件收尾点带回主线程。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一次应用文件 I/O 从 API 到闪存要经过哪些层，应用私有目录与共享存储的路径有什么区别？**
 

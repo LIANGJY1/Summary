@@ -1,6 +1,6 @@
 # View 测量、布局与绘制
 
-> 学习资料（文章模式沉淀）。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。AOSP 机制按本地 AAOS13 源码（Android 13）核对（View.java、ViewRootImpl.java、Choreographer.java、`libs/hwui/`），加速与绘制模型按官方文档口径（2026-09 检索），经验性结论标注社区口径。帧调度见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](../04-graphics/12-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../12-performance/05-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：measure/layout/draw 三趟的职责边界、MeasureSpec 与自定义 View 的尺寸契约、layout 与 onLayout、requestLayout 与 invalidate 的分工、硬件加速下的 display list 模型与"不 invalidate 就不重绘"、绘制顺序与裁剪、掉帧的结构性来源、图层类型与 Surface/TextureView 取舍、属性动画与布局动画的差别。帧调度见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，实践侧的渲染优化见 [View 与 Compose 渲染实战](../04-graphics/12-app-view-compose-practice.md)，掉帧度量方法见[流畅性度量](../12-performance/05-smoothness.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: Android View 与 ViewGroup 分别表示什么？**
 

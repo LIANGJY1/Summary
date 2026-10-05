@@ -1,6 +1,6 @@
 # GPU 合成与显示管线
 
-> 学习资料（文章模式沉淀）。主线：以 Android 17（API 37）为语境，把"GPU 生产 buffer → BufferQueue/Gralloc/fence 交接 → SurfaceFlinger FrontEnd 与事务队列合成 → HDR 与色彩输出 → 帧节奏控制与 FrameTimeline 归因"串成一条可逐段定位的显示管线。源文档：android-internals-wiki §2.7《GPU 渲染与图形 API 选型》、§2.8《BufferQueue、Gralloc 与 Sync Fence》、§2.9《SurfaceFlinger 合成、FrontEnd 与事务队列》、§2.10《HDR 显示管线与色彩管理性能》、§2.11《Frame Pacing Library 与帧节奏控制》、§2.12《Android 17 FrameTimeline、FrameTracer 与合成边界》（Android 17 语境）；SystemHealthManager 的 GPU Headroom（API 36）、`VK_EXT_present_timing`（Android 17 引入）、AutoSingleLayer 的 unsignaled buffer latch（Android 13 默认模式）与 `Window.setDesiredHdrHeadroom` 的生效边界已于 2026-09-25 与官方资料核对。Android 13 语境的全链路基础与 VSync 调度见 [../framework/Android13渲染架构全链路硬核解析.md](../../../docs/others/framework/Android13渲染架构全链路硬核解析.md) 与 [../framework/Android显示系统/Vsync流程.md](../../../docs/others/framework/Android显示系统/Vsync流程.md)，本篇不与其重复出题。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）为语境，把"GPU 生产 buffer → BufferQueue/Gralloc/fence 交接 → SurfaceFlinger FrontEnd 与事务队列合成 → HDR 与色彩输出 → 帧节奏控制与 FrameTimeline 归因"串成一条可逐段定位的显示管线。Android 13 语境的全链路基础与 VSync 调度见 [../framework/Android13渲染架构全链路硬核解析.md](../../../docs/others/framework/Android13渲染架构全链路硬核解析.md) 与 [../framework/Android显示系统/Vsync流程.md](../../../docs/others/framework/Android显示系统/Vsync流程.md)，本篇不与其重复出题。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一帧从 UI 线程结束到屏幕显示要经过哪些彼此独立的完成边界？看到 GPU busy 升高时第一步应该确认什么？**
 

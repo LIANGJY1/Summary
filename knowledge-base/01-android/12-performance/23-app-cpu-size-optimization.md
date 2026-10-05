@@ -1,6 +1,6 @@
 # CPU 与体积优化
 
-> 学习资料（文章模式沉淀）。主线：应用侧 CPU 适配（线程池、进程采样、周期任务、过量 CPU 终止）、ADPF 能效验证、热节流降载与包体积治理（DEX、Native SO、资源、App Bundle 分发）的工程方法与版本边界。源文档：android-internals-wiki §25.7《应用层 CPU 优化实战指南》、§25.8《PerformanceHintManager 与 ADPF 能效验证》、§25.9《热节流适配与性能退化治理》、§25.10《应用体积分析与优化：DEX、Native SO 与资源》、§25.11《App Bundle 与按需分发》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（`setThreads`/`setPreferPowerEfficiency`/PowerMonitor 为 API 34/35 才有，AAOS13 上不存在；`ScheduledThreadPoolExecutor` 的错过周期最多补跑一次为 Android 16 起；`ThermalManagerService` 在 AAOS13 位于旧路径 `power/` 下），工程实践按材料口径转写、不确定处已弱化；16 KB 页对齐的 Google Play 要求（面向 API 35+ 的 64 位应用、2027-02-01 起强制、NDK r28 默认对齐）已与官方文档核对。调度器、DVFS 与 ADPF 机制层见 [../12-performance/20-scheduler-power-framework.md](./20-scheduler-power-framework.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：应用侧 CPU 适配（线程池、进程采样、周期任务、过量 CPU 终止）、ADPF 能效验证、热节流降载与包体积治理（DEX、Native SO、资源、App Bundle 分发）的工程方法与版本边界。调度器、DVFS 与 ADPF 机制层见 [../12-performance/20-scheduler-power-framework.md](./20-scheduler-power-framework.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 应用层做 CPU 优化时，为什么"CPU 高"不能直接指向改法？墙钟时间与线程 CPU 时间、Runnable 与 Blocked 各回答什么问题？**
 

@@ -1,6 +1,6 @@
 # 能效专项：LLM DVFS、传感器批处理与 CPU Cache
 
-> 学习资料（文章模式沉淀）。主线：LLM 推理 DVFS、传感器批处理、CPU Cache 布局三类能效问题共用同一套方法——先拆测量口径与执行路径，再分清应用可控的负载参数与系统专属的频率策略。源文档：android-internals-wiki §5.6《移动端 LLM 推理的 DVFS 与能效边界》、§5.7《SensorService 与传感器批处理功耗模型》、§5.8《CPU Cache 友好代码与数据布局优化》；ADPF、SensorService 批处理与高采样率限制已按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异已标注，内核调度与芯片相关机制不在本地核对范围、按材料 Android 17 语境转写并标注版本；ADPF 性能提示 API 已与 source.android.com《Performance Hint API》核对。原 Q18–Q22（LE Audio 五题）已于 2026-09-28 移至 [../05-audio/05-bluetooth-audio.md](../05-audio/05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：LLM 推理 DVFS、传感器批处理、CPU Cache 布局三类能效问题共用同一套方法——先拆测量口径与执行路径，再分清应用可控的负载参数与系统专属的频率策略。原 Q18–Q22（LE Audio 五题）已于 2026-09-28 移至 [../05-audio/05-bluetooth-audio.md](../05-audio/05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 端侧 LLM 推理的 TTFT 和 TPOT 应该怎么定义与测量，为什么平均 TPOT 不足以描述生成体验？**
 

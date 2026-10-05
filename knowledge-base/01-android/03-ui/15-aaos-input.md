@@ -1,6 +1,6 @@
 # AAOS 车机输入：VHAL 按键链路、CarInputService 与旋钮
 
-> 学习资料（文章模式沉淀）。主线：车机物理按键从 VHAL 到应用的完整上行链路、三个 VHAL 输入属性的语义、InputHalService 的转换与防御、CarInputService 的分发顺序与语音/通话键长按、CustomInputEvent 的 OEM 约定、按键捕获（capture）的栈仲裁、旋钮的两条独立链路、RotaryService 的焦点导航模型与 FocusArea 契约、仪表按键路由、车机输入法、注入调试命令与"旋钮失灵"分层排查。机制按本地 AAOS13 源码（Android 13，`packages/services/Car/`、`packages/apps/Car/RotaryController/`、`hardware/interfaces/automotive/vehicle/`）核对；Rotary 交互模型与 FocusArea 属性按官方文档口径（source.android.com，2026-09 检索）。2026-10-04 复核：重新确认“首次旋钮动作可能只用于进入旋转模式”的交互规则与 OEM 定制输入权限边界。CarService 与 car-lib 总览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)；HID/uinput 接入路线与唤醒键见 [13-key-mapping.md](./13-key-mapping.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：车机物理按键从 VHAL 到应用的完整上行链路、三个 VHAL 输入属性的语义、InputHalService 的转换与防御、CarInputService 的分发顺序与语音/通话键长按、CustomInputEvent 的 OEM 约定、按键捕获（capture）的栈仲裁、旋钮的两条独立链路、RotaryService 的焦点导航模型与 FocusArea 契约、仪表按键路由、车机输入法、注入调试命令与"旋钮失灵"分层排查。2026-10-04 复核：重新确认“首次旋钮动作可能只用于进入旋转模式”的交互规则与 OEM 定制输入权限边界。CarService 与 car-lib 总览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)；HID/uinput 接入路线与唤醒键见 [13-key-mapping.md](./13-key-mapping.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 车机物理按键从按下到应用响应的完整链路是什么？**
 

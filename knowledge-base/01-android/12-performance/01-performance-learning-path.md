@@ -1,6 +1,6 @@
 # 学习方法与检查清单
 
-> 学习资料（文章模式沉淀）。主线：把附录中通过"复习者测试"的方法性知识——以实验为中心的学习循环、双 tag 版本坐标纪律、排查前的条件固定与分域排查顺序、案例报告标准——沉淀为可复述的 Q&A。源文档：android-internals-wiki 附录 D《性能分析 Checklist》、附录 G《Android 性能学习路线》、附录 F《推荐阅读与资源》；纯链接清单、可重建的命令速查与术语表不收，ANR 超时阈值、FrameTimeline 读法、采集丢包排查等已覆盖命题不重复出题；方法与工程实践按材料口径转写，前台服务时限等官方口径按材料标注的核对日期转写，本次未新增上网核对。性能方法论主线见 [02-performance-methodology.md](./02-performance-methodology.md)；流畅性机制见 [../12-performance/05-smoothness.md](./05-smoothness.md)；内存专题见 [../12-performance/09-memory-performance.md](./09-memory-performance.md)；功耗专题见 [../12-performance/10-power.md](./10-power.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把附录中通过"复习者测试"的方法性知识——以实验为中心的学习循环、双 tag 版本坐标纪律、排查前的条件固定与分域排查顺序、案例报告标准——沉淀为可复述的 Q&A。性能方法论主线见 [02-performance-methodology.md](./02-performance-methodology.md)；流畅性机制见 [../12-performance/05-smoothness.md](./05-smoothness.md)；内存专题见 [../12-performance/09-memory-performance.md](./09-memory-performance.md)；功耗专题见 [../12-performance/10-power.md](./10-power.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 性能学习路线为什么围绕"记录现象、采集证据、解释机制、验证修改"四个动作组织，而不是按目录通读？**
 

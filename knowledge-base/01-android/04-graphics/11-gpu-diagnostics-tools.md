@@ -1,6 +1,6 @@
 # GPU 与专项工具
 
-> 学习资料（文章模式沉淀）。主线：GPU、Camera、窗口与布局、构建产物和内核观测各有独立的证据通道——先按问题选证据形态（帧捕获、GPU counter、Camera trace、窗口状态、BPF 记账、keep 规则报告），再按 Android 版本核对平台侧实现与工具边界。源文档：android-internals-wiki §15.10《三方性能库、Hook 与可观测性基础设施》、§15.11《GPU 调试与 AGI 单帧分析》、§15.12《GPU Counter、内存与 GpuService 可观测性》、§15.13《Android Performance Analyzer 与 GAPS：性能追踪与目标可达性》、§15.14《Camera 性能分析工具：Perfetto、SQL 与 GFXReconstruct》、§15.15《Winscope、Layout Inspector 与 UI 状态调试》、§15.16《Android eBPF 架构与性能观测》、§15.17《R8 Configuration Analyzer 与 keep 规则体积归因》；材料按 Android 17（API 37）撰写，系统侧机制按本地 AAOS13 源码（Android 13）核对并标注版本差异，AGI、GFXReconstruct、APA、GAPS、Layout Inspector、R8 等外部工具不在本地树、按材料口径转写，GPU counter 协议细节按材料标注的 AOSP `external/perfetto` 口径转写，无法支撑的断言已弱化。Perfetto 采集、轨道与 SQL 基础见 [04-perfetto-analysis.md](../12-performance/04-perfetto-analysis.md)；Profiler、Simpleperf、dumpsys、statsd 等通用工具见 [03-performance-tools.md](../12-performance/03-performance-tools.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：GPU、Camera、窗口与布局、构建产物和内核观测各有独立的证据通道——先按问题选证据形态（帧捕获、GPU counter、Camera trace、窗口状态、BPF 记账、keep 规则报告），再按 Android 版本核对平台侧实现与工具边界。Perfetto 采集、轨道与 SQL 基础见 [04-perfetto-analysis.md](../12-performance/04-perfetto-analysis.md)；Profiler、Simpleperf、dumpsys、statsd 等通用工具见 [03-performance-tools.md](../12-performance/03-performance-tools.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 想统计自有应用进程内 `libc.so` 的 `malloc` 被谁调用，PLT/GOT Hook 改写的是什么位置？为什么它注定覆盖不了所有 `malloc` 调用？**
 

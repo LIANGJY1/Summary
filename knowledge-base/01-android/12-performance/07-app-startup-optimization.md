@@ -1,6 +1,6 @@
 # 启动优化：应用侧启动治理
 
-> 学习资料（文章模式沉淀）。主线：应用侧启动治理——按 TTID/TTFD 给任务分级并先删任务，用任务图与有界执行器收敛初始化并发，治理 Provider 与多进程，用 Baseline/Startup/Cloud Profile 改善编译状态，再覆盖 Splash 交接、广告 SDK、ART GC 分配、DI 框架与 Compose 首次组合的专项开销。源文档：android-internals-wiki 第 21 章《启动优化》§21.1–§21.9；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（`ApplicationStartInfo` 为 Android 15+ 新增、MessageQueue DeliQueue 为 Android 17 新增，AAOS13 均无；post-fork 堆策略在 AAOS13 已存在并按本地实现核对；SDK Sandbox 相关模块不在本地树，按材料口径转写），工程实践按材料口径转写、不确定处已弱化；Android Vitals 启动告警阈值等官方文档口径沿用源材料标注转写、本地未联网复核。冷启动链路、TTID/TTFD 基线与启动优化总策略的既有沉淀见 [../12-performance/06-responsiveness.md](./06-responsiveness.md)；安装期 dexopt 与 PMS 链路见 [../01-architecture/08-package-management.md](../01-architecture/08-package-management.md)；ART 堆、GC 与内存压力的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：应用侧启动治理——按 TTID/TTFD 给任务分级并先删任务，用任务图与有界执行器收敛初始化并发，治理 Provider 与多进程，用 Baseline/Startup/Cloud Profile 改善编译状态，再覆盖 Splash 交接、广告 SDK、ART GC 分配、DI 框架与 Compose 首次组合的专项开销。冷启动链路、TTID/TTFD 基线与启动优化总策略的既有沉淀见 [../12-performance/06-responsiveness.md](./06-responsiveness.md)；安装期 dexopt 与 PMS 链路见 [../01-architecture/08-package-management.md](../01-architecture/08-package-management.md)；ART 堆、GC 与内存压力的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 启动监控为什么不能只上报 `Application.onCreate()` 的出入口耗时，为更早拿到时间点新增自动初始化 Provider 错在哪？**
 

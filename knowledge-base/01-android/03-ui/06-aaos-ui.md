@@ -1,6 +1,6 @@
 # AAOS 车机 UI 架构与 CarService
 
-> 学习资料（文章模式沉淀）。主线：车机 UI 的分层与定制点、CarService 与 car-lib 的分工、车机 Launcher 与投影共存、Car App Library 模板应用与 AAOS 原生 Activity 两条路线、CarAppService 注册契约与 Car App API level、车机 SystemUI 的独立实现、应用焦点、occupant zone 的座位-显示-用户映射、多用户模型、`CarPowerManager` 与 power policy 对屏幕的接管、日夜模式、旋钮与自定义输入、仪表通道、调试与特性开关。CarService 实现与 car-lib API 按本地 AAOS13 源码（Android 13）核对（`packages/services/Car/service/src/com/android/car/`、`car-lib/src/android/car/`、`packages/apps/Car/`），Car App Library 与 Power/Car Occupant Zone 文档结论按官方文档口径（2026-09 检索）。交互安全与驾驶分心见 [07-driving-safety.md](07-driving-safety.md)，配置资源适配见 [03-resources.md](03-resources.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：车机 UI 的分层与定制点、CarService 与 car-lib 的分工、车机 Launcher 与投影共存、Car App Library 模板应用与 AAOS 原生 Activity 两条路线、CarAppService 注册契约与 Car App API level、车机 SystemUI 的独立实现、应用焦点、occupant zone 的座位-显示-用户映射、多用户模型、`CarPowerManager` 与 power policy 对屏幕的接管、日夜模式、旋钮与自定义输入、仪表通道、调试与特性开关。交互安全与驾驶分心见 [07-driving-safety.md](07-driving-safety.md)，配置资源适配见 [03-resources.md](03-resources.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 收到“车机页面改不动”的需求后，如何判断应改应用、SystemUI、CarService 还是车辆层？**
 

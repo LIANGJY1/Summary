@@ -1,6 +1,6 @@
 # 按键系统与键值映射：扫描码、键值定制与物理按键接入
 
-> 学习资料（文章模式沉淀）。主线：KeyEvent 携带的字段与"扫描码 → 按键码 → 字符/行为"三层映射、`.kl`/`.kcm`/`.idc` 三类配置文件的分工、语法与查找链、新增物理按键的端到端定制流程、黑屏唤醒键的框架裁决、方向盘按键的两条接入路线取舍、uinput 虚拟设备、媒体键与 HOME 等系统键的特殊路由、方向键焦点导航、fallback 合成键与按键排查路径。机制按本地 AAOS13 源码（Android 13，`frameworks/native/libs/input/`、`frameworks/base/services/core/java/com/android/server/policy/`）核对；内核驱动侧（gpio-keys、rotary-encoder、adc-keys）为官方内核文档口径（2026-09 检索，本地树未含内核源码）。2026-10-04 复核：澄清 `getevent` 只能验证 Linux 事件码、不能证明 Android `KEYCODE` 映射结果；补记 `ACTION_MULTIPLE` 的 API 29 弃用边界。按键分发的 InputStage 顺序与 key repeat 合成机制见 [10-input-system.md](./10-input-system.md)；车机按键与旋钮的系统侧链路见 [15-aaos-input.md](./15-aaos-input.md)，CarService 层概览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：KeyEvent 携带的字段与"扫描码 → 按键码 → 字符/行为"三层映射、`.kl`/`.kcm`/`.idc` 三类配置文件的分工、语法与查找链、新增物理按键的端到端定制流程、黑屏唤醒键的框架裁决、方向盘按键的两条接入路线取舍、uinput 虚拟设备、媒体键与 HOME 等系统键的特殊路由、方向键焦点导航、fallback 合成键与按键排查路径。2026-10-04 复核：澄清 `getevent` 只能验证 Linux 事件码、不能证明 Android `KEYCODE` 映射结果；补记 `ACTION_MULTIPLE` 的 API 29 弃用边界。按键分发的 InputStage 顺序与 key repeat 合成机制见 [10-input-system.md](./10-input-system.md)；车机按键与旋钮的系统侧链路见 [15-aaos-input.md](./15-aaos-input.md)，CarService 层概览见 [../03-ui/06-aaos-ui.md](../03-ui/06-aaos-ui.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一条 KeyEvent 里 downTime、eventTime、scanCode、keyCode、metaState、repeatCount 分别是什么？为什么说按键信息有三层？**
 

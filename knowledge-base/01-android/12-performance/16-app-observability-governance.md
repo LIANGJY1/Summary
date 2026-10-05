@@ -1,6 +1,6 @@
 # 可观测性体系与治理
 
-> 学习资料（文章模式沉淀）。主线：从指标/日志/追踪的事件模型与端侧采集，到采样与隐私、Crash/ANR 治理、线上排障与诊断通道、A/B 回归防护、发版质量门禁，再到 `ApplicationExitInfo`/`ApplicationStartInfo` 等平台 API 的版本化诊断能力。源文档：android-internals-wiki §26.1《App 可观测性架构与性能数据采集》、§26.2《Crash 与 ANR 监控体系》、§26.3《线上排障、诊断通道与非 Play ROM 适配》、§26.4《A/B Test 与性能回归防护》、§26.5《性能评分与发版质量门禁》、§26.6《ApplicationExitInfo 与版本化线上诊断》、§26.7《ApplicationStartInfo 与启动归因上报》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异（`ApplicationExitInfo` 与 `REASON_FREEZER` AAOS13 已具备，`AnrInfo`/`ProfilingManager`/`ApplicationStartInfo` 分别为 API 37/35/35 才有；AAOS13 的 `CachedAppOptimizer` 默认 Freezer 开、Compaction 关），工程实践按材料口径转写、不确定处已弱化；`ApplicationExitInfo` 各 `REASON` 常量与 trace 类型的 API 级别已与官方文档核对。APM 生态、SDK 实现与工具选型见 [../12-performance/18-apm-platform.md](./18-apm-platform.md)；稳定性度量指标与崩溃捕获机制见 [13-app-stability.md](./13-app-stability.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：从指标/日志/追踪的事件模型与端侧采集，到采样与隐私、Crash/ANR 治理、线上排障与诊断通道、A/B 回归防护、发版质量门禁，再到 `ApplicationExitInfo`/`ApplicationStartInfo` 等平台 API 的版本化诊断能力。APM 生态、SDK 实现与工具选型见 [../12-performance/18-apm-platform.md](./18-apm-platform.md)；稳定性度量指标与崩溃捕获机制见 [13-app-stability.md](./13-app-stability.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 指标、日志、追踪三类可观测性信号分别回答什么问题？为什么不能共用同一套存储、标签和采样规则？**
 

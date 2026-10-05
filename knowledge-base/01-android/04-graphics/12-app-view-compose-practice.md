@@ -1,6 +1,6 @@
 # 渲染实战：View 与 Compose 基础
 
-> 学习资料（文章模式沉淀）。主线：应用侧渲染优化的第一层——把布局失效与绘制失效分开，用列表复用与细粒度更新控制滚动帧成本，把 Compose 的重组、测量与文本排版归因到责任阶段后再动手。源文档：android-internals-wiki §22.1《View 布局与自定义绘制优化》§22.2《RecyclerView 与 Compose LazyList 性能》§22.3《Compose 性能、Compiler 与 Modifier.Node 诊断》§22.4《Compose 布局、测量与文字渲染》（材料按 Android 17 撰写）。requestLayout 的传播合并与"两轮封顶"、measureChildren 跳过 GONE、invalidate(Rect) 脏区自 API 21 起忽略、LayoutInflater 的 Factory 链与 merge 约束、ViewStub 替换语义、Canvas.drawRenderNode 的软件画布限制、ViewTreeObserver 分发条件等平台机制已按 AAOS 13 源码（Android 13）核对并标注版本差异，RecyclerView 1.4.0、Compose BOM 2026.08.00（Runtime/Foundation/UI 1.12.0）、AsyncLayoutInflater 与 ConstraintLayout 等 AndroidX 外部库实践按材料口径转写、未本地核对、不确定处已弱化。官方文档口径沿用源材料标注转写、本次。View/HWUI 管线与出图分型的机制层见 [../04-graphics/04-graphics-api.md](./04-graphics-api.md)，本文专注应用侧优化实战视角。VSync/Choreographer 调度、硬件层与 View 文本引擎的机制层见 [../04-graphics/01-render-pipeline-vsync.md](./01-render-pipeline-vsync.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：应用侧渲染优化的第一层——把布局失效与绘制失效分开，用列表复用与细粒度更新控制滚动帧成本，把 Compose 的重组、测量与文本排版归因到责任阶段后再动手。官方文档口径沿用源材料标注转写、本次。View/HWUI 管线与出图分型的机制层见 [../04-graphics/04-graphics-api.md](./04-graphics-api.md)，本文专注应用侧优化实战视角。VSync/Choreographer 调度、硬件层与 View 文本引擎的机制层见 [../04-graphics/01-render-pipeline-vsync.md](./01-render-pipeline-vsync.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 列表 item 里的一个 TextView 改文字并调用 requestLayout()，为什么一次调用不等于一帧只做一轮完整测量布局，ViewRootImpl 是怎么合并和二次调度的？**
 

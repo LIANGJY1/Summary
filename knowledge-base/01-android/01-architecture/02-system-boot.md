@@ -1,6 +1,6 @@
 # Android 系统启动流程
 
-> 学习资料（文章模式沉淀）。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》的启动章节（init 三阶段、Zygote 与 SystemServer 路径按 AOSP `android-17.0.0_r1` 核对）；Boot ROM/Bootloader/内核阶段与 GKI 概览已于 2026-09-23 与官方资料核对；2026-09-23 并入 AAOS13_study《Android 系统启动全流程 源码分析》的机制细节与 AAOS 挂点（init 接力与调度、Service Reap、SELinux 策略装载、Zygote 约束、SystemServer 看护、CarService/CarSystemUI/CarLauncher；源码锚点 commit `abec84ef9`，Android 13 / Automotive）；2026-09-24 并入地基概念深讲（内核与进程、/init 与 execve 变身、fstab、GKI 与 vendor ramdisk、伪文件系统）；2026-09-25 增补工程实战题（Watchdog 阈值与日志定位、pstore 早期日志、BOOT_COMPLETED 送达条件、Direct Boot 启动视角），关键数字经 AOSP 源码与官方文档核对。配套架构主题见 [01-system-architecture.md](01-system-architecture.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：从按下开机键到 Launcher 上屏的完整启动链，以及 init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制。配套架构主题见 [01-system-architecture.md](01-system-architecture.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] [tags:系统启动] Android 设备从上电到桌面可交互，启动链经过哪些阶段？**
 

@@ -1,6 +1,6 @@
 # 设备接入与 InputReader：内核 input 事件、设备分类与触摸适配
 
-> 学习资料（文章模式沉淀）。主线：内核 input 子系统与 evdev、`input_event` 的事件语义、多点触控协议 Type A/B、EventHub 的设备发现与热插拔、能力位推断设备分类、mapper 族分派、触摸屏与显示器的绑定、触摸坐标的校准与旋转变换、虚拟按键、旋钮编码器接入、内核重复与 Android 重复的关系、SYN_DROPPED 缓冲溢出、鬼触摸与断触的成因对策、触控 IC 调试入口与热力图管道。机制按本地 AAOS13 源码（Android 13，`frameworks/native/services/inputflinger/reader/`、`bionic/libc/kernel/uapi/linux/`）核对；多点触控协议与内核驱动（gpio-keys、rotary-encoder、adc-keys）为 kernel.org 官方文档口径（2026-09 检索，本地树未含内核源码）；触控 IC 实战一节为厂商驱动与社区资料结论，证据等级低于其余条目。2026-10-04 复核：重申 Type A/Type B 的内核协议边界，统一有序支持点格式。按键映射文件见 [13-key-mapping.md](./13-key-mapping.md)；分发链路总览见 [10-input-system.md](./10-input-system.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：内核 input 子系统与 evdev、`input_event` 的事件语义、多点触控协议 Type A/B、EventHub 的设备发现与热插拔、能力位推断设备分类、mapper 族分派、触摸屏与显示器的绑定、触摸坐标的校准与旋转变换、虚拟按键、旋钮编码器接入、内核重复与 Android 重复的关系、SYN_DROPPED 缓冲溢出、鬼触摸与断触的成因对策、触控 IC 调试入口与热力图管道。2026-10-04 复核：重申 Type A/Type B 的内核协议边界，统一有序支持点格式。按键映射文件见 [13-key-mapping.md](./13-key-mapping.md)；分发链路总览见 [10-input-system.md](./10-input-system.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一个触摸/按键事件从硬件到 InputReader 经过内核哪些环节？**
 

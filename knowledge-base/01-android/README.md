@@ -1,6 +1,6 @@
 # Android 学习资料目录
 
-> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。2026-10-03 目录重构；2026-10-04 全局审查拆分混合册；2026-10-06 完成 12 章重排：04-input 并入 03-ui，06-storage 与 07-memory 合并为 06-memory-storage，14-cpu-power 并入 12-performance，05-rendering 改名 04-graphics，其余章顺延重编号；03-ui 的两册渲染实战迁 04-graphics，multi-window 册按“窗口语义/显示形态”拆分为 window-system 与 display-service-foldable。**册的存废只看主题边界、不看题数**——薄册是该主题尚未扩展学习，标注扩写方向而非合并；新建册须先确认无既有主题册可归并。章的分工规则：11-aaos 只收跨域集成，单域车机纵深册留各功能域；12-performance 只收横切度量与方法，域机制归各域。迁移明细见 `docs/superpowers/plans/kb-full-restructure-2026-10/`。维护者：session-to-knowledge。
+> 学习资料目录（不参与 `ROUTING.md` 大类路由，见知识库 CONTEXT「学习资料目录」）。2026-10-06 定稿 12 章制：03-ui 含输入全链路，04-graphics 为图形管线域，06-memory-storage 合并内存与存储，12-performance 含原 CPU/功耗内容，其余章按"平台→框架→交互域→资源域→系统能力→产品→横切"排列。**册的存废只看主题边界、不看题数**——薄册是主题尚未扩展学习，标注扩写方向而非合并；新建册须先确认无既有主题册可归并。章的分工规则：11-aaos 只收跨域集成，单域车机纵深册留各功能域；12-performance 只收横切度量与方法，域机制归各域。历次重构明细见 `docs/superpowers/plans/`（android-kb-restructure、kb-full-restructure-2026-10）。维护者：session-to-knowledge。
 
 ## 面试冲刺
 

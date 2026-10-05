@@ -1,6 +1,6 @@
 # Compose 运行期与 View 互操作
 
-> 学习资料（文章模式沉淀）。主线：组合/布局/绘制三阶段与"读状态即订阅"、组合期写状态的无限重组、remember 与 rememberSaveable 的持有边界、derivedStateOf 与延迟读取、稳定性推断与 strong skipping、列表键与重组范围、LaunchedEffect/SideEffect/DisposableEffect 分工、ComposeView 嵌入与组合策略、AndroidView 的代价、自定义宿主与帧时钟、重组与掉帧的归因工具、View 迁移的高频坑。Compose 属 AndroidX、不在 AOSP 源码树内，本册结论按官方文档与 AndroidX 源码口径（2026-09 检索）。渲染侧的帧调度与掉帧度量见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，View 侧绘制机制见 [02-view.md](02-view.md)，应用实践见 [Compose 渲染实战](../04-graphics/13-app-compose-advanced-practice.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：组合/布局/绘制三阶段与"读状态即订阅"、组合期写状态的无限重组、remember 与 rememberSaveable 的持有边界、derivedStateOf 与延迟读取、稳定性推断与 strong skipping、列表键与重组范围、LaunchedEffect/SideEffect/DisposableEffect 分工、ComposeView 嵌入与组合策略、AndroidView 的代价、自定义宿主与帧时钟、重组与掉帧的归因工具、View 迁移的高频坑。渲染侧的帧调度与掉帧度量见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，View 侧绘制机制见 [02-view.md](02-view.md)，应用实践见 [Compose 渲染实战](../04-graphics/13-app-compose-advanced-practice.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 滚动列表时任意状态变化都让整页重组，Compose 的组合、布局、绘制各阶段怎样响应？**
 

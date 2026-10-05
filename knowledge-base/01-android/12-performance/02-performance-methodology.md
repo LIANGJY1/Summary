@@ -1,6 +1,6 @@
 # 性能方法论
 
-> 学习资料（文章模式沉淀）。主线：把一次性能工作从现象定义、证据采集、责任归因、指标监控、实验与竞品验证走到源码阅读、AI 评测解读与团队治理的完整判断流程。源文档：android-internals-wiki 第 16 章《方法论》§16.1–§16.8；方法与工程实践按材料口径转写（材料平台结论以 Android 17 / API 37 为上限），可本地核对的部分按 AAOS13 源码（Android 13）核对：`am start -W` 输出字段与 LaunchState 枚举、Choreographer 跳帧日志阈值与 `Choreographer#doFrame <vsyncId>` slice 名、SurfaceFlinger 的 ATRACE_* 宏（SFTRACE_* 为 Android 17 引入）、FrameMetrics 的 DEADLINE/GPU_DURATION 字段与 `TOTAL_DURATION < DEADLINE` 语义、lmkd 读取 PSI、`ActivityManager.MemoryInfo` 字段集合；文档级核对项：Play Vitals 阈值与 TTID/TTFD 等官方口径按材料标注的 2026-08-14 核对日期转写，本次未新增上网核对（环境不可达）。Perfetto 采集与 SQL 分析见 [04-perfetto-analysis.md](./04-perfetto-analysis.md)；Perfetto 进阶、FrameTimeline 与 SDK 见 [15-perfetto-advanced.md](./15-perfetto-advanced.md)；ANR 超时契约见 [../12-performance/08-anr.md](./08-anr.md)；学习方法与检查清单见 [01-performance-learning-path.md](./01-performance-learning-path.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把一次性能工作从现象定义、证据采集、责任归因、指标监控、实验与竞品验证走到源码阅读、AI 评测解读与团队治理的完整判断流程。Perfetto 采集与 SQL 分析见 [04-perfetto-analysis.md](./04-perfetto-analysis.md)；Perfetto 进阶、FrameTimeline 与 SDK 见 [15-perfetto-advanced.md](./15-perfetto-advanced.md)；ANR 超时契约见 [../12-performance/08-anr.md](./08-anr.md)；学习方法与检查清单见 [01-performance-learning-path.md](./01-performance-learning-path.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 性能优化中"道、术、器"各承担什么工作？为什么"应用很慢"这类反馈必须先改写成关键用户旅程才能开工？**
 

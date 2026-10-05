@@ -1,6 +1,6 @@
 # APM 专项原理与架构
 
-> 学习资料（文章模式沉淀）。主线：APM 专项工具链的原理与工程边界——实验室测试与设备 Benchmark 的口径纪律，网络、崩溃与 ANR、耗电与发热、混合栈四条捕获链路的能力上限，以及千万级 DAU 下的端侧采集架构。源文档：android-internals-wiki §17.7《实验室测试工具与设备 Benchmark》、§17.8《网络 APM 底层捕获原理》、§17.9《崩溃与 ANR 捕获机制》、§17.10《耗电与发热监控 (Battery & Thermal)》、§17.11《混合栈与跨平台 APM (WebView / Flutter)》、§17.12《千万级 DAU 的 APM 端侧架构》；可本地核对的平台侧机制按 AAOS13 源码（Android 13）核对并标注版本差异（Recoverable GWP-ASan、ApplicationExitInfo.getAnrInfo、Thermal headroom 阈值 API、thermal HAL 的 AIDL 优先连接等均为 Android 14–17 能力，AAOS13 树中不存在或实现不同），第三方 SDK 与工具（PerfDog、SoloPi、OkHttp、Cronet、Flutter 等）与架构实践按材料口径转写、不确定处已弱化；GWP-ASan 默认参数、WakeLock 与 BatteryManager 语义、WebView 渲染进程回调、/data/anr 目录权限等已按 AAOS13 源码核对，官方文档级数值沿用材料注明的官方核对结果、本文未重复上网核对。ANR 超时契约与 trace 诊断见 [../12-performance/08-anr.md](./08-anr.md)，BatteryStats 归因管线与功耗优化见 [../12-performance/10-power.md](./10-power.md)；APM 平台选型与采集 SDK 见 [18-apm-platform.md](./18-apm-platform.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：APM 专项工具链的原理与工程边界——实验室测试与设备 Benchmark 的口径纪律，网络、崩溃与 ANR、耗电与发热、混合栈四条捕获链路的能力上限，以及千万级 DAU 下的端侧采集架构。ANR 超时契约与 trace 诊断见 [../12-performance/08-anr.md](./08-anr.md)，BatteryStats 归因管线与功耗优化见 [../12-performance/10-power.md](./10-power.md)；APM 平台选型与采集 SDK 见 [18-apm-platform.md](./18-apm-platform.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] PerfDog 不要求被测 App 接入 SDK 也不要求设备 root，为什么仍不能用它代替线上 APM 和系统 trace 做根因定位？**
 

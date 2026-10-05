@@ -1,6 +1,6 @@
 # 内存性能：增长归因、低内存影响与抖动诊断
 
-> 学习资料（文章模式沉淀）。主线：先按内存域分离指标，再用对应工具把增长归因到持有者，并回答低内存、内存抖动与图形内存在性能上的影响与诊断方法。源文档：android-internals-wiki 第 10 章《内存性能》§10.1–§10.4；机制按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异已标注（libmemevents、MemoryLimiter、分代 CMC、TRIM_MEMORY_RUNNING_* 停投与 ProfilingTrigger 为 Android 14–17 能力）；getProcessMemoryInfo 自 Android Q 起仅返回调用 UID 进程并限频缓存已与官方文档核对。内存口径、lmkd 选择策略与 Freezer 的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)；低内存拖慢前台与 ANR 的联合取证见 [08-anr.md](./08-anr.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：先按内存域分离指标，再用对应工具把增长归因到持有者，并回答低内存、内存抖动与图形内存在性能上的影响与诊断方法。内存口径、lmkd 选择策略与 Freezer 的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)；低内存拖慢前台与 ANR 的联合取证见 [08-anr.md](./08-anr.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Debug.MemoryInfo 的 App Summary 口径是什么？为什么 getProcessMemoryInfo() 不能高频调用？**
 

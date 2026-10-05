@@ -1,6 +1,6 @@
 # 稳定性治理：Native 检测、Hook、动态库与 SDK
 
-> 学习资料（文章模式沉淀）。主线：MTE 与 GWP-ASan 的检测实战边界（请求不等于生效、抽样决定覆盖、可恢复不等于安全），Native Hook 从命中路径出发的选型与实现风险，Native 动态库的可信发布、只读装载与回滚事务，第三方 SDK 的测量归因与退出治理。源文档：android-internals-wiki §20.11《MTE 与 GWP-ASan Native 内存安全检测》、§20.12《Native Hook 技术选型与实现》、§20.13《Native 动态库安全发布、装载与回滚》、§20.14《第三方 SDK 性能影响评估与治理实战》；可本地核对的机制按 AAOS13 源码（Android 13）核对并标注版本差异，工程实践按材料口径转写、不确定处已弱化；GWP-ASan 的 manifest 模式与 Recoverable 行为已与官方文档核对。MTE 标签机制、SYNC/ASYNC 报告差异与 memtagMode 决策链的机制层见 [../06-memory-storage/02-reclaim-compression.md](../06-memory-storage/02-reclaim-compression.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：MTE 与 GWP-ASan 的检测实战边界（请求不等于生效、抽样决定覆盖、可恢复不等于安全），Native Hook 从命中路径出发的选型与实现风险，Native 动态库的可信发布、只读装载与回滚事务，第三方 SDK 的测量归因与退出治理。MTE 标签机制、SYNC/ASYNC 报告差异与 memtagMode 决策链的机制层见 [../06-memory-storage/02-reclaim-compression.md](../06-memory-storage/02-reclaim-compression.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] `android:memtagMode` 的四个值在记录口径上有什么区别？为什么事件记录里不能把 `default` 写成 `off`？**
 

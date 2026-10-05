@@ -1,6 +1,6 @@
 # Android 功耗：模型、归因与 App 优化
 
-> 学习资料（文章模式沉淀）。主线：从功耗数据的口径与归因管线出发，落到 WakeLock、后台限制、BLE 扫描/连接、显示与用户设置四类 App 侧优化与取证方法。源文档：android-internals-wiki 第 11 章《功耗》§11.1–§11.5；机制按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异（归因管线从 `*PowerCalculator` 到 `PowerAttributor`/processor、`setWakeLockDisabledStateLocked` 增加 frozen 检查、shortService/限时 FGS、BLE 自动批量与 `BluetoothGattConnectionSettings`、ARR 相关 API）已标注；DeviceIdleController、AlarmManager、JobScheduler、蓝牙模块与 LocationManager 源码不在本地树，按材料 Android 17 语境转写。DVFS/Thermal/后台任务机制层与 WakeLock 基础持锁姿势见 [../12-performance/20-scheduler-power-framework.md](./20-scheduler-power-framework.md)，传感器批处理与 LE Audio 能效见 [../12-performance/21-energy-efficiency.md](./21-energy-efficiency.md)，本文专注功耗模型、归因口径与 BLE/屏幕专项；后台任务评审、前台服务边界与定位传感器等治理实践见 [22-app-power-governance.md](22-app-power-governance.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：从功耗数据的口径与归因管线出发，落到 WakeLock、后台限制、BLE 扫描/连接、显示与用户设置四类 App 侧优化与取证方法。DVFS/Thermal/后台任务机制层与 WakeLock 基础持锁姿势见 [../12-performance/20-scheduler-power-framework.md](./20-scheduler-power-framework.md)，传感器批处理与 LE Audio 能效见 [../12-performance/21-energy-efficiency.md](./21-energy-efficiency.md)，本文专注功耗模型、归因口径与 BLE/屏幕专项；后台任务评审、前台服务边界与定位传感器等治理实践见 [22-app-power-governance.md](22-app-power-governance.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] BatteryStats 的活动时长、PowerStats HAL 的能量读数（µWs）与设置页的应用耗电百分比，为什么不能直接换算和横向比较？**
 

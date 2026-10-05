@@ -1,6 +1,6 @@
 # 回收压缩与专项内存
 
-> 学习资料（文章模式沉淀）。主线：终结引用与 Cleaner 的兜底清理边界、物理页规整与直接回收的性能归因、ZRAM 压缩交换与写回预取、ARM MTE 内存标签、跨进程共享内存与端侧推理内存预算。源文档：android-internals-wiki §4.6《ART FinalizerDaemon、Cleaner 与 ReferenceQueue》、§4.7《内存规整与直接回收性能边界》、§4.8《ZRAM 压缩交换与应用重启延迟》、§4.9《ARM MTE 内存标签扩展实战》、§4.10《跨进程内存共享与端侧推理预算》；机制按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异（FinalizerDaemon 的 Cleanable 分支、SystemCleaner 执行线程、MMD、NpuManager 与 App Functions）已标注；`Cleaner` 与 `SystemCleaner` 自 API 33 起公开、`ApplicationExitInfo.REASON_FREEZER` 自 API 33（Android 13）可用已按本地源码 API 清单核对。内存全景、ART GC、lmkd 与缓存进程冻结见 [01-memory-management.md](./01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：终结引用与 Cleaner 的兜底清理边界、物理页规整与直接回收的性能归因、ZRAM 压缩交换与写回预取、ARM MTE 内存标签、跨进程共享内存与端侧推理内存预算。内存全景、ART GC、lmkd 与缓存进程冻结见 [01-memory-management.md](./01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 看到 FinalizerDaemon 忙或文件描述符上涨时，GC、ReferenceQueueDaemon、FinalizerDaemon 与应用代码各自负责什么？为什么不能用"GC 发生过"证明资源已释放？**
 

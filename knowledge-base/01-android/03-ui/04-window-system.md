@@ -1,6 +1,6 @@
 # 窗口系统与 WindowManagerService
 
-> 学习资料（文章模式沉淀）。主线：一个窗口的三副面孔、addWindow 与 token 契约、relayout 与遍历调度的分工、surface 层级与 z 序、Insets 体系与系统栏控制、Configuration 变更的两条路径、IME 适配、多窗口、PiP 与 TaskSnapshot 的窗口语义、窗口不显示的排查顺序。AOSP 机制按本地 AAOS13 源码（Android 13）核对（`frameworks/base/services/core/java/com/android/server/wm/`、`core/java/android/view/`），行为演进按官方文档口径（2026-09 检索）。合成与帧调度见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，显示服务与多窗口形态见 [../04-graphics/03-display-service-foldable.md](../04-graphics/03-display-service-foldable.md)，应用侧时序见 [01-activity.md](01-activity.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：一个窗口的三副面孔、addWindow 与 token 契约、relayout 与遍历调度的分工、surface 层级与 z 序、Insets 体系与系统栏控制、Configuration 变更的两条路径、IME 适配、多窗口、PiP 与 TaskSnapshot 的窗口语义、窗口不显示的排查顺序。合成与帧调度见 [../04-graphics/01-render-pipeline-vsync.md](../04-graphics/01-render-pipeline-vsync.md)，显示服务与多窗口形态见 [../04-graphics/03-display-service-foldable.md](../04-graphics/03-display-service-foldable.md)，应用侧时序见 [01-activity.md](01-activity.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 界面内容、位置或合成结果异常时，应用窗口分别由哪些层维护？**
 

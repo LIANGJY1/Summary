@@ -1,6 +1,6 @@
 # ANR：超时契约、诊断与预警
 
-> 学习资料（文章模式沉淀）。主线：按各类超时契约与系统检测分层理解 ANR，用 trace 快照与内核证据做联合诊断，覆盖跨边界根因、案例复盘、Notification 与 ContentProvider 专项链路，以及 Android 17 预警能力。源文档：android-internals-wiki 第 9 章《ANR》§9.1–§9.7；机制按本地 AAOS13 源码（Android 13）核对，与材料 Android 17 语境的差异已标注（TimeoutRecord、AnrTimer、ANR 预警、shortService 与分代 CMC 等为 Android 14–17 能力，AAOS13 的报告过期阈值与 Watchdog pre-dump 时机也不同）；user-perceived ANR 的 vitals 定义与 0.47%/8% 门槛已与官方文档核对。AMS 调度、广播队列与 ANR 计时总表见 [../08-platform-services/01-broadcast.md](../08-platform-services/01-broadcast.md)；lmkd/Freezer 的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：按各类超时契约与系统检测分层理解 ANR，用 trace 快照与内核证据做联合诊断，覆盖跨边界根因、案例复盘、Notification 与 ContentProvider 专项链路，以及 Android 17 预警能力。AMS 调度、广播队列与 ANR 计时总表见 [../08-platform-services/01-broadcast.md](../08-platform-services/01-broadcast.md)；lmkd/Freezer 的机制层见 [../06-memory-storage/01-memory-management.md](../06-memory-storage/01-memory-management.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 的 ANR 有哪几套独立计时器？"主线程卡 5 秒就会 ANR"对吗？**
 
