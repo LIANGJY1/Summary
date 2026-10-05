@@ -49,6 +49,19 @@ init 是内核启动的第一个用户态进程（PID 1）、所有用户态进�
 
 **Q4: [learning] [tags:init] init 进程 first_stage_init 详解？**
 
+first_stage_init 是第一阶段的执行体：`first_stage_main.cpp` 的 `main()` 直接调用 `FirstStageMain()`（AAOS 13 `system/core/init/first_stage_init.cpp` 本地核对），职责是在"还没有文件系统、设备节点和日志设施"的裸环境里，准备好挂载 system 分区所需的最小运行环境，最后 exec 系统分区的 init 进入第二阶段。它不解析 rc、不启动任何服务、不加载 SELinux 策略——那些都发生在之后。
+
+按 `FirstStageMain()` 的执行顺序：
+
+1. **环境与错误基建**：`umask(0)` 保证后续 `mkdir`/`mknod` 的权限位不被缩小；`clearenv()` 清掉内核传来的环境后只设 `PATH`。此阶段还没有日志设施，`CHECKCALL` 宏把每个失败系统调用的表达式文字与 errno 暂存进 errors 向量，而不是失败即退——等 `/dev/kmsg` 建好、日志初始化完成后再逐条报告并终止启动。
+2. **基础文件系统**：把 tmpfs 挂到 `/dev`（`MS_NOSUID`，并建 pts/socket/dm-user 目录），挂 devpts、proc（`hidepid=2` 并把 `/proc/cmdline` chmod 为 0440，防普通进程读内核命令行）、sysfs 与 selinuxfs；随后 `mknod` 创建 kmsg、random、urandom、ptmx、null 等基础设备节点。
+3. **辅助挂载与控制台决策**：挂 `/mnt`（含 vendor/product 目录）、`/debug_ramdisk` 等辅助 tmpfs；`FirstStageConsole()` 依编译开关与 cmdline/bootconfig 决定首阶段失败时是否进入控制台（`CONSOLE_ON_FAILURE` 才会 `StartConsole()`）。
+4. **加载内核模块**：fstab 指向的块设备可能依赖 vendor 内核模块，`LoadKernelModules()` 先加载驱动，后续 device-mapper 映射与挂载才有目标；模块加载耗时写入环境变量供第二阶段度量。
+5. **早期挂载**：`DoFirstStageMount()` 读取 fstab（来自设备树或 cmdline 指定路径），由 fs_mgr 完成 AVB 校验与 dm 映射并早期挂载 system/vendor 等分区——挂载成功后 `/system/bin/init` 才存在。
+6. **切根与接力**：`ForceNormalBoot`（如 recovery ramdisk 被要求正常启动）时先 `PrepareSwitchRoot()` 再 `SwitchRoot("/first_stage_ramdisk")`；收尾把首阶段起点计时写入环境（exec 不清环境，第二阶段可读），最后 `execv("/system/bin/init", "selinux_setup")`——同一 PID 1 替换映像进入 `main()` 的阶段分发，接力机制本身在上一题已展开。
+
+两个边界：其一，system-as-root 布局没有独立 ramdisk，`/init` 直接指向 `/system/bin/init`，无阶段参数时同样进入 `FirstStageMain()`，但入口 ELF 不同；其二，这一阶段的失败除控制台模式外都是终态——此刻既没有服务可重启，也没有文件系统可供回退。
+
 
 
 **Q5: [tags:系统启动] verified boot（AVB）是怎么保证"启动运行的代码没有被篡改"的？**
