@@ -1,6 +1,6 @@
 # 焦点分发与多屏输入：窗口命中、每屏焦点与分发管线组件
 
-> 学习资料（文章模式沉淀）。主线：按键焦点窗口的每屏计算与焦点请求语义、触摸目标的窗口命中测试（touchable region、遮挡校验、spy 窗口）、slippery 出界换窗、窗口级触摸拆分、监视窗口的三个真实用户、窗口级指针捕获、拖放会话、触摸模式、分发链上的旁路组件（误触抑制、事件分类、版本演进）、车机多屏的输入路由。"点不到/抢事件"的应用侧排查见 [02-app-event-dispatch.md](./11-app-event-dispatch.md)。机制按本地 AAOS13 源码（Android 13，`frameworks/native/services/inputflinger/dispatcher/`、`frameworks/base/services/core/java/com/android/server/policy/`）核对；屏下指纹示例按 SystemUI 源码核对。2026-10-04 复核：将 pointer capture 双模式边界更正为 API 37，并统一列表格式。队列与 ANR 机制见 [01-input-system.md](./10-input-system.md)；多屏窗口架构见 [../03-ui/04-window-system.md](../03-ui/04-window-system.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：按键焦点窗口的每屏计算与焦点请求语义、触摸目标的窗口命中测试（touchable region、遮挡校验、spy 窗口）、slippery 出界换窗、窗口级触摸拆分、监视窗口的三个真实用户、窗口级指针捕获、拖放会话、触摸模式、分发链上的旁路组件（误触抑制、事件分类、版本演进）、车机多屏的输入路由。"点不到/抢事件"的应用侧排查见 [11-app-event-dispatch.md](./11-app-event-dispatch.md)。机制按本地 AAOS13 源码（Android 13，`frameworks/native/services/inputflinger/dispatcher/`、`frameworks/base/services/core/java/com/android/server/policy/`）核对；屏下指纹示例按 SystemUI 源码核对。2026-10-04 复核：将 pointer capture 双模式边界更正为 API 37，并统一列表格式。队列与 ANR 机制见 [10-input-system.md](./10-input-system.md)；多屏窗口架构见 [../03-ui/04-window-system.md](../03-ui/04-window-system.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 按键事件的目标窗口怎么确定？焦点的记账单位为什么是令牌而不是窗口句柄？**
 

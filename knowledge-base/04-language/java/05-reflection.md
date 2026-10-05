@@ -14,8 +14,8 @@
 
 两组 API 的搜索范围不同，不能仅凭返回空值就判断整个继承层次都没有该成员：
 
-1. **`getField` / `getMethod`**：查找符合公共访问规则的成员，并可返回继承的公共成员。
-2. **`getDeclaredField` / `getDeclaredMethod`**：只查当前声明类，不限访问级别，也不自动包含父类声明。
+1. `getField` / `getMethod`：查找符合公共访问规则的成员，并可返回继承的公共成员。
+2. `getDeclaredField` / `getDeclaredMethod`：只查当前声明类，不限访问级别，也不自动包含父类声明。
 3. **重载区分**：方法查询必须提供参数类型才能区分重载；省略参数列表的通用查询没有对应入口。
 
 查询不到会抛 `NoSuchFieldException` 或 `NoSuchMethodException`。处理时应明确需要哪种范围：查继承体系要自己沿类层次逐级 getDeclared 并合并，而非把“未找到”当作“不存在”的唯一解释。

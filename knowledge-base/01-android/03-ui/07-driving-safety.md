@@ -1,6 +1,6 @@
 # 车机交互安全与驾驶分心
 
-> 学习资料（文章模式沉淀）。主线：驾驶分心约束的来源与建模、驾驶状态判定、UX 限制映射表与自动提升规则、restriction mode 与持久化、应用侧消费限制的正确姿势、模板应用的"分心优化"声明、限制读取失败的全限制兜底、设置类界面的行驶态放行、乘员屏触控锁定、限制变化时的界面处理、视频与长文本等通用限制、语音优先与物理控件定位、分心场景的验证方法、车机 UI 的其他安全约束。CarService 实现按本地 AAOS13 源码（Android 13）核对（CarUxRestrictionsManagerService.java、CarDrivingStateService.java、CarUxRestrictionsConfigurationXmlParser.java、`car-lib/src/android/car/`），规则与配置格式按官方文档口径（2026-09 检索）。架构上下文见 [06-aaos-ui.md](06-aaos-ui.md)，UI 定制与防护见 [11-ui-debugging.md](./09-ui-debugging.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：驾驶分心约束的来源与建模、驾驶状态判定、UX 限制映射表与自动提升规则、restriction mode 与持久化、应用侧消费限制的正确姿势、模板应用的"分心优化"声明、限制读取失败的全限制兜底、设置类界面的行驶态放行、乘员屏触控锁定、限制变化时的界面处理、视频与长文本等通用限制、语音优先与物理控件定位、分心场景的验证方法、车机 UI 的其他安全约束。CarService 实现按本地 AAOS13 源码（Android 13）核对（CarUxRestrictionsManagerService.java、CarDrivingStateService.java、CarUxRestrictionsConfigurationXmlParser.java、`car-lib/src/android/car/`），规则与配置格式按官方文档口径（2026-09 检索）。架构上下文见 [06-aaos-ui.md](06-aaos-ui.md)，UI 定制与防护见 [09-ui-debugging.md](./09-ui-debugging.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: 车速刚超过零就锁死所有界面，为什么应用不能自行硬编码驾驶限制？**
 

@@ -1,6 +1,6 @@
 # 输入排查工具与实战：命令族、队列字段与现场决策树
 
-> 学习资料（文章模式沉淀）。主线：getevent 全参数与上报率测量、`/proc/bus/input/devices` 与 sysfs 取证、`dumpsys input` 的分段结构与队列字段语义、`adb shell input` 命令族与注入工具对比、uinput 自动化、Perfetto 的输入轨道、输入 ANR 的输入侧证据链、整机触摸无响应的分层决策树、乱跳误触的取证方法、防误触机制面、自动化注入的稳定性坑、输入 ANR 根因的快速识别与现场采集清单。机制按本地 AAOS13 源码（Android 13，`system/core/toolbox/getevent.c`、`frameworks/base/services/core/java/com/android/server/input/InputShellCommand.java`、`frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp`）核对；社区案例（ANR 根因、防误触）为公开技术文章口径（2026-09 检索），证据等级低于源码核对条目。分发与 ANR 机制见 [01-input-system.md](./10-input-system.md)；ANR 报告解读见 [../12-performance/08-anr.md](../12-performance/08-anr.md)；车机输入排查见 [06-aaos-input.md](./15-aaos-input.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：getevent 全参数与上报率测量、`/proc/bus/input/devices` 与 sysfs 取证、`dumpsys input` 的分段结构与队列字段语义、`adb shell input` 命令族与注入工具对比、uinput 自动化、Perfetto 的输入轨道、输入 ANR 的输入侧证据链、整机触摸无响应的分层决策树、乱跳误触的取证方法、防误触机制面、自动化注入的稳定性坑、输入 ANR 根因的快速识别与现场采集清单。机制按本地 AAOS13 源码（Android 13，`system/core/toolbox/getevent.c`、`frameworks/base/services/core/java/com/android/server/input/InputShellCommand.java`、`frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp`）核对；社区案例（ANR 根因、防误触）为公开技术文章口径（2026-09 检索），证据等级低于源码核对条目。分发与 ANR 机制见 [10-input-system.md](./10-input-system.md)；ANR 报告解读见 [../12-performance/08-anr.md](../12-performance/08-anr.md)；车机输入排查见 [15-aaos-input.md](./15-aaos-input.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] `getevent` 有哪些参数？测触控上报率用哪个组合？**
 

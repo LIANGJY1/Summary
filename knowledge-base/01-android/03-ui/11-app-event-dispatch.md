@@ -1,6 +1,6 @@
 # 应用层事件分发：方法链、返回值语义与多点触控
 
-> 学习资料（文章模式沉淀）。主线：一次触摸在 Activity → Window → DecorView → ViewGroup → View 的方法调用链与各方法返回值语义、onTouch/onTouchEvent/onClick/onLongClick 的触发时序与互斥关系、onInterceptTouchEvent 的调用时机、多指场景的 action 编码与 pointer id/index、触摸拆分、滑动冲突的两类拦截策略、scrollTo 滑动模型、ACTION_CANCEL 的清理义务、触摸遮挡过滤、滚轮悬停等通用运动事件、软键盘文本的 InputConnection 路径、返回键默认行为与"点击无效"排查清单。机制按本地 AAOS13 源码（Android 13，`frameworks/base/core/java/android/view/`）核对。输入全链路总览见 [01-input-system.md](./10-input-system.md)；系统侧焦点与触摸目标裁决见 [05-focus-multi-display.md](./14-focus-multi-display.md)，车机按键与旋钮的系统侧链路见 [06-aaos-input.md](./15-aaos-input.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：一次触摸在 Activity → Window → DecorView → ViewGroup → View 的方法调用链与各方法返回值语义、onTouch/onTouchEvent/onClick/onLongClick 的触发时序与互斥关系、onInterceptTouchEvent 的调用时机、多指场景的 action 编码与 pointer id/index、触摸拆分、滑动冲突的两类拦截策略、scrollTo 滑动模型、ACTION_CANCEL 的清理义务、触摸遮挡过滤、滚轮悬停等通用运动事件、软键盘文本的 InputConnection 路径、返回键默认行为与"点击无效"排查清单。机制按本地 AAOS13 源码（Android 13，`frameworks/base/core/java/android/view/`）核对。输入全链路总览见 [10-input-system.md](./10-input-system.md)；系统侧焦点与触摸目标裁决见 [14-focus-multi-display.md](./14-focus-multi-display.md)，车机按键与旋钮的系统侧链路见 [15-aaos-input.md](./15-aaos-input.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一次点击在应用内的完整方法调用链是什么？Activity、Window、DecorView、ViewGroup、View 各自负责什么？**
 
