@@ -14,15 +14,43 @@
 
 
 
-**Q2: [done] 用 QEMU 启动最小 initramfs 时，`/init`、`/dev/console` 和内核参数 `console=` 各自负责什么？**
 
-三者职责不同：`/init` 是内核启动的第一个用户态程序，`/dev/console` 是用户态访问控制台的设备节点，内核参数 `console=` 则选择内核日志输出到哪个控制台。项目里的 `rootfs/` 只是打包输入目录；内核解开 initramfs 后，才把其中的文件放进运行时的初始根目录 `/`。
 
-1. **`/init`：**需要是内核能执行的文件，内核找到它后以 PID 1 启动。最小根文件还可包含 `/proc`、`/sys` 等挂载点；只有启用了相应文件系统支持还不够，init 需要时仍要负责挂载。`/tmp`、`/etc` 等内容按启动需要添加。
-2. **`/dev/console`：**它必须是真正的字符设备节点，普通空文件或目录不能代替。内核未启用 devtmpfs 时，不会靠 devtmpfs 自动填充设备节点，因此打包时要包含该节点，或由 init 在使用前创建；设备号和权限应对照目标内核与实现核实。
-3. **`console=` 与 QEMU 串口：**内核需内建对应串口控制台驱动，启动参数选择匹配的串口设备和通信参数；QEMU 也要把对应的模拟串口连接到宿主终端。`console=` 决定内核日志去哪里，`/dev/console` 提供 init 等用户态程序访问控制台的入口，二者不能互相替代。
 
-**Q3: Android 17 的内核一定是 6.18 吗？KMI 稳定到底稳定了什么？**
+
+
+
+**Q2: [done] 制作并用 QEMU 启动 initramfs 时，`rootfs/` 要准备什么，`/init`、`/dev/console` 和 `console=` 如何配合？**
+
+`rootfs/` 是 initramfs 的打包目录。内核解包后，其内容成为运行时根目录 `/`，并执行其中的 `/init` 作为 PID 1。要让用户态和内核日志都能通过 QEMU 串口显示，还需准备控制台设备节点、匹配的内核参数和 QEMU 串口连接。
+
+1. **`/init`：**打包目录中的 `rootfs/init` 必须是目标内核可执行的文件。解包后它位于 `/init`，由内核作为第一个用户态程序启动。`/proc`、`/sys` 可作为挂载点，由 init 按需挂载；`/tmp`、`/etc` 等目录按启动需要准备。
+2. **`/dev/console`：**它是 init 等用户态程序访问系统控制台的字符设备节点，普通文件或目录不能代替。未启用 devtmpfs 时，initramfs 应包含该节点；设备号和权限须与目标内核匹配。
+3. **`console=` 与 QEMU 串口：**内核需内建对应的串口控制台驱动，`console=` 选择匹配的串口设备及通信参数，QEMU 再把该虚拟串口接到宿主终端。`console=` 决定内核日志的输出端，`/dev/console` 提供用户态访问入口，两者职责不同。
+
+
+
+
+
+
+
+**Q3: [done] Linux 中 `std::cout` 的输出如何到达 QEMU 宿主机终端？**
+
+在 Linux 上，`std::cout` 写入标准输出；内核启动 initramfs 中的 `/init` 前，会尝试打开 `/dev/console`，并把它接到标准输入、标准输出和标准错误。之后还要由内核控制台参数选择串口控制台，并由 QEMU 把虚拟串口连接到宿主机终端，整条链路才会显示日志。
+
+输出路径依次是：`std::cout` → 标准输出 → `/dev/console` → Linux 选定的控制台 → QEMU 虚拟串口 → 宿主机终端。`/dev/console` 只提供用户态访问控制台的入口，不会替代内核控制台参数或 QEMU 串口配置。
+
+
+
+
+
+**Q4: [done] `CONFIG_DEVTMPFS` 未启用时，为什么 initramfs 要预置 `/dev/console`？**
+
+Mini_Android 实验内核未启用 `CONFIG_DEVTMPFS`，因此不能依靠 devtmpfs 提供 `/dev/console`。内核在运行 initramfs 中的 `/init` 前会尝试打开该节点，并将其接到早期用户态的标准输入、标准输出和标准错误；节点缺失时，内核无法按预期建立这条控制台通路。
+
+因此要在打包目录中创建真正的字符设备节点，并确保 initramfs 归档保留其设备类型和设备号。只创建 `rootfs/dev/` 目录或普通空文件都不能代替 `/dev/console`。
+
+**Q5: Android 17 的内核一定是 6.18 吗？KMI 稳定到底稳定了什么？**
 
 不一定。Android 17 对应的官方 GKI 发布分支是 android17-6.18（已与 source.android.com 的 GKI release builds 列表核对），但 GKI 的设计目标就是内核与平台 release 解绑，设备可以运行较早 KMI 分支的认证内核。
 
@@ -30,7 +58,13 @@
 
 
 
-**Q4: "系统是 Android 17"能推出内核一定是 6.18 吗？内核版本边界怎么确认？**
+
+
+
+
+
+
+**Q6: "系统是 Android 17"能推出内核一定是 6.18 吗？内核版本边界怎么确认？**
 
 不能。Android 17 的新 ACK 是 `android17-6.18`，但兼容表同时列出多条可用于 Android 17 的较早 GKI 内核：`android16-6.12`、`android15-6.6`、`android14-6.1`、`android14-5.15`、`android13-5.15` 等（`android12-5.10`、`android13-5.10` 自 Android 17 QPR1 起不再支持）。反方向同样要谨慎：在 `android17-6.18-2026-06_r6` 中确认存在的 Arena 或 `sched_ext`，不能写成所有 Android 17 设备都有。
 
@@ -44,7 +78,13 @@ adb shell uname -r
 
 
 
-**Q5: 内核有“进程”这个概念吗？内核为什么能运行？**
+
+
+
+
+
+
+**Q7: 内核有“进程”这个概念吗？内核为什么能运行？**
 
 进程是内核管理的对象，不是内核存在的前提。 在 Linux 里，所谓进程，本质是内核里的一块数据结构（task_struct：记录 PID、地址空间、打开的文件、调度信息……）加上一份地址空间。内核创建进程，就是在内存里建这样一个结构；销毁进程，就是释放它。
 
@@ -62,7 +102,13 @@ adb shell uname -r
 
 
 
-**Q6: 怎么确认一台设备的内核版本、KMI 和功能开关？**
+
+
+
+
+
+
+**Q8: 怎么确认一台设备的内核版本、KMI 和功能开关？**
 
 1. **版本与 KMI**：`uname -r` 与 `cat /proc/version`——GKI 设备的 KMI 直接体现在版本串里（形如 `5.15.78-android13-8-g…`，即"内核版本-android 平台发布"）；
 2. **功能开关**：启用 CONFIG_IKCONFIG_PROC 的内核把完整 config 挂在 `/proc/config.gz`——`su 0 zcat /proc/config.gz | grep CONFIG_PSI=` 即可验证某功能是否编入；无该节点时到对应 GKI release 页下载 config 比对；
@@ -70,7 +116,13 @@ adb shell uname -r
 
 
 
-**Q7: 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
+
+
+
+
+
+
+**Q9: 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
 
 vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用 ftrace 的可用事件列表验证：`su 0 cat /sys/kernel/tracing/available_events | grep android_vh`，再向 `events/vendor_hooks/<名>/enable` 写 1 即可观测。
 
@@ -79,7 +131,13 @@ vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用
 
 
 
-**Q8: PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
+
+
+
+
+
+
+**Q10: PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
 
 每个 `/proc/pressure/{cpu,memory,io}` 文件两行：`some` 与 `full`，各带 avg10/avg60/avg300（窗口内停顿时间占比）与 total（累计微秒）。`some` = 至少部分任务处于停顿的时间占比；`full` = 所有非空闲任务同时停顿的占比（CPU 的 full 在系统级无意义）。
 
@@ -89,7 +147,13 @@ vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用
 
 
 
-**Q9: ramdisk、initramfs 和 rootfs 是什么关系？内核启动为什么需要它？**
+
+
+
+
+
+
+**Q11: ramdisk、initramfs 和 rootfs 是什么关系？内核启动为什么需要它？**
 
 ramdisk 是启动时提供给内核的一份最小文件归档；内核将它展开为初始根文件系统（rootfs），再从中启动 `/init`。它解决了系统分区尚未挂载、但挂载所需程序和配置又必须先运行的依赖问题。
 
@@ -101,7 +165,13 @@ ramdisk 是启动时提供给内核的一份最小文件归档；内核将它展
 
 
 
-**Q10: Kernel 的 GKI 边界到底划在哪，"内核可升级"具体指什么？**
+
+
+
+
+
+
+**Q12: Kernel 的 GKI 边界到底划在哪，"内核可升级"具体指什么？**
 
 GKI 把内核代码分成"稳定 ABI 的通用内核"与"随产品编译的供应商内核"两层：设备可替换的只有供应商模块与内核镜像，而稳定的通用内核片段通过 KMI（Kernel Module Interface）冻结，保证不同厂商的模块能在同一个通用内核上互操作。Android 12 引入的 GKI 2.0 进一步支持把模块按 `vendor_boot` 启动、通用内核与供应商内核解耦部署。
 
@@ -109,7 +179,13 @@ GKI 把内核代码分成"稳定 ABI 的通用内核"与"随产品编译的供�
 
 
 
-**Q11: 内核里某个机制"存在"就能说明设备启用了吗？评估 Android 17 GKI 6.18 的调度与内存改动要满足哪三个条件？**
+
+
+
+
+
+
+**Q13: 内核里某个机制"存在"就能说明设备启用了吗？评估 Android 17 GKI 6.18 的调度与内存改动要满足哪三个条件？**
 
 不能。Kconfig 的 default y 只说明依赖满足且无其他配置覆盖时取 y；设备结论要同时满足三个条件：构建条件（最终 .config 含所需选项、编译器支持相应插桩）、硬件与固件条件（CPU 实现架构特性或固件提供所需调用）、运行时条件（启动参数未关闭，用户态机制还需进程显式启用）。源码 tag 中存在某个功能，无法单独证明设备已经启用它。
 
@@ -119,11 +195,19 @@ GKI 把内核代码分成"稳定 ABI 的通用内核"与"随产品编译的供�
 
 
 
-**Q12: ARM64 的 KASLR、KPTI 与 Spectre 缓解各自保护什么？为什么 KPTI 是否生效不能靠 CPU 型号推断？**
+
+
+
+
+
+
+**Q14: ARM64 的 KASLR、KPTI 与 Spectre 缓解各自保护什么？为什么 KPTI 是否生效不能靠 CPU 型号推断？**
 
 三者保护对象不同。KASLR 在启动阶段随机化内核与模块基地址，依赖 CONFIG_RANDOMIZE_BASE、bootloader 经设备树 /chosen/kaslr-seed 提供的熵，且未传 nokaslr；它不会给每次间接调用附加固定成本。KPTI 隔离 EL0 与内核页表，热点在系统调用、缺页与中断等用户态/内核态往返路径，纯用户态计算的结果代表不了 Binder 或存储负载。Spectre v1 用 array_index_nospec() 加架构屏障做局部边界修复；Spectre v2/BHB 由内核按 CPU capability、MIDR 匹配、架构特性与勘误信息，在固件调用、CPU 专用回调或内核指令序列（如分支序列覆盖分支历史）中选择缓解，实现不固定为"入口插一条 SB"。
 
 KPTI 不能按 CPU 产品名或上市年份编"必定启用/跳过"表：6.18 对 kpti= 的定义是默认只在需要缓解的核心上启用，kpti=0/1 才是强制开关，同一 SoC 还可能包含多种核心。同一条逻辑贯穿整个控制流防线：PAC（返回地址/指针认证）、BTI（限制间接分支落点，与 Spectre v2 缓解不互替）、SCS（内核影子调用栈）、KCFI（间接调用类型检查）、MTE、GCS 在 arch/arm64/Kconfig 多为 default y，是否生效仍受构建、硬件固件与运行时三条件约束——例如 GCS 配置只让内核在硬件存在时提供用户态 ABI，进程还要经 prctl(PR_SET_SHADOW_STACK_STATUS) 启用，exec() 会清除该状态。
 
 性能归因上，关闭缓解的对照只适用于隔离实验室的可丢弃工程镜像，测试设备不得承载账号密钥；量产结论以 /sys/devices/system/cpu/vulnerabilities/* 状态节点、/proc/cmdline 与最终 .config 建立证据链，量产设备常用 kptr_restrict 把 kallsyms 地址显示为全零，不能据此判断 KASLR 失效。
+
+
 
