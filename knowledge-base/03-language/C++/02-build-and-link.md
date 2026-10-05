@@ -24,7 +24,21 @@ g++ -std=c++17 -Wall -Wextra -g -static src/init.cpp -o build/init-static
 
 
 
-**Q2: [learning] C++ 源代码如何经过构建阶段变成可执行文件？**
+
+
+**Q2: [done] 如何用 g++ 编译 C++ 程序，并运行生成的可执行文件？**
+
+先用 `g++` 编译源文件，并通过 `-o` 指定生成文件的位置。编译成功后，执行该文件的路径即可运行程序：
+
+```bash
+g++ -std=c++17 -Wall -Wextra -g -static src/init.cpp -o build/init-static
+./build/init-static
+```
+
+1. **编译：**`g++` 是 C++ 编译器命令。它读取 `src/init.cpp`，并将编译结果写到 `-o` 指定的 `build/init-static`。
+2. **运行：**在路径 `./build/init-static` 中，`.` 表示当前工作目录，`/` 是目录分隔符，因此整条路径表示从当前目录进入 `build/`，再运行 `init-static`。这一步运行已生成的程序，不会再次调用 `g++`。
+
+**Q3: [learning] C++ 源代码如何经过构建阶段变成可执行文件？**
 
 常见构建流程由预处理、编译、汇编和链接组成。`g++` 是驱动程序，会按配置协调这些工具。
 
@@ -37,7 +51,9 @@ g++ -std=c++17 -Wall -Wextra -g -static src/init.cpp -o build/init-static
 
 
 
-**Q3: [learning] C++ 预处理器由谁运行，`#include <iostream>` 会做什么？**
+
+
+**Q4: [learning] C++ 预处理器由谁运行，`#include <iostream>` 会做什么？**
 
 预处理器是构建工具链的一部分。执行 `g++ main.cpp` 时，`g++` 驱动通常会自动调用预处理阶段，无需手动运行预处理器。
 
@@ -49,13 +65,17 @@ g++ -std=c++17 -Wall -Wextra -g -static src/init.cpp -o build/init-static
 
 
 
-**Q4: [learning] C++ 的 `#include` 与 Java 的 `import` 有什么区别？**
+
+
+**Q5: [learning] C++ 的 `#include` 与 Java 的 `import` 有什么区别？**
 
 `#include` 是 C++ 预处理指令，会把头文件内容纳入当前翻译单元。Java 的 `import` 用于简化类型名称的引用，不会把被导入类的源码文本复制进当前源文件。
 
 
 
-**Q5: [learning] C++ 源文件扩展名有什么约定，“编译清单”是什么？**
+
+
+**Q6: [learning] C++ 源文件扩展名有什么约定，“编译清单”是什么？**
 
 C++ 标准不规定源码文件必须使用哪种扩展名。扩展名主要帮助构建工具判断如何处理文件。
 
@@ -65,7 +85,9 @@ C++ 标准不规定源码文件必须使用哪种扩展名。扩展名主要帮�
 
 
 
-**Q6: [learning] `file` 和 `ldd` 能否证明程序可作为 initramfs 的 `/init` 启动？**
+
+
+**Q7: [learning] `file` 和 `ldd` 能否证明程序可作为 initramfs 的 `/init` 启动？**
 
 不能。它们能帮助检查文件格式、架构和动态依赖，不能验证内核、initramfs 布局及 PID 1 行为。
 
@@ -74,14 +96,3 @@ C++ 标准不规定源码文件必须使用哪种扩展名。扩展名主要帮�
 3. **启动条件：**还要确认文件位于初始 RAM 文件系统（initramfs）根目录并命名为 `/init`，应用二进制接口（ABI，Application Binary Interface）和运行库适配目标环境，而且程序能持续履行进程标识符 1（PID 1，Process ID 1）的职责。打印后退出的示例程序不是可用的系统 init。
 
 
-**Q7: [done] 如何用 g++ 编译 C++ 程序，并运行生成的可执行文件？**
-
-先用 `g++` 编译源文件，并通过 `-o` 指定生成文件的位置。编译成功后，执行该文件的路径即可运行程序：
-
-```bash
-g++ -std=c++17 -Wall -Wextra -g -static src/init.cpp -o build/init-static
-./build/init-static
-```
-
-1. **编译：**`g++` 是 C++ 编译器命令。它读取 `src/init.cpp`，并将编译结果写到 `-o` 指定的 `build/init-static`。
-2. **运行：**在路径 `./build/init-static` 中，`.` 表示当前工作目录，`/` 是目录分隔符，因此整条路径表示从当前目录进入 `build/`，再运行 `init-static`。这一步运行已生成的程序，不会再次调用 `g++`。

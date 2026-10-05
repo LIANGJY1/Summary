@@ -146,8 +146,8 @@
 
 ## 11-platform-native/
 
-- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 105 题）：
-  - [01-kernel-gki.md](11-platform-native/01-kernel-gki.md)（12 题）
+- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 103 题）：
+  - [01-kernel-gki.md](11-platform-native/01-kernel-gki.md)（10 题）
   - [02-driver-runtime.md](11-platform-native/02-driver-runtime.md)（12 题）
   - [03-binder-driver.md](11-platform-native/03-binder-driver.md)（11 题）
   - [04-shared-memory.md](11-platform-native/04-shared-memory.md)（10 题）
@@ -308,7 +308,7 @@
 | [10-platform-services/05-aconfig-runtime.md](10-platform-services/05-aconfig-runtime.md) | aconfig 运行时：存储与 aflags | 5 |
 | [10-platform-services/06-avf-virtualization.md](10-platform-services/06-avf-virtualization.md) | AVF 虚拟化 | 4 |
 | [10-platform-services/07-ai-services.md](10-platform-services/07-ai-services.md) | 平台 AI 服务 | 4 |
-| [11-platform-native/01-kernel-gki.md](11-platform-native/01-kernel-gki.md) | 内核与 GKI | 12 |
+| [11-platform-native/01-kernel-gki.md](11-platform-native/01-kernel-gki.md) | 内核与 GKI | 10 |
 | [11-platform-native/02-driver-runtime.md](11-platform-native/02-driver-runtime.md) | 内核驱动运行时 | 12 |
 | [11-platform-native/03-binder-driver.md](11-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 11 |
 | [11-platform-native/04-shared-memory.md](11-platform-native/04-shared-memory.md) | 共享内存：ashmem、ION 与 DMA-BUF | 10 |
