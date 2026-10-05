@@ -208,3 +208,13 @@ static int binder_open(struct inode *inode, struct file *filp)
 内核侧观测点回答"事务在哪个阶段停住"，用户态工具回答"调用方是谁"。两者要配合用——只看其中一个会得出错误归因。
 
 内核侧可看：`/sys/kernel/debug/binder`（`binder_debugfs_dir_entry_root` 随 `binder_init` 创建）下的 `proc/<pid>`、`thread/<tid>`、`stats`，以及 `binder_trace.h` 定义的 trace 点（`trace_binder_transaction` 系列，含 `trace_binder_transaction_fd`）。它们能回答：目标 node 是谁、缓冲区落在哪个进程、fd 是否被正确翻译、事务在哪一环被拒绝。用户态侧回答"这个调用是谁发起的"——`dumpsys` 各服务的 binder 接口统计、`BinderProxy` 关联关系。判断规则：遇到"调用不返回"类问题，先用 `binder_watchdog`/trace 确认事务是否进了目标进程的 `todo` 队列——进了说明是目标侧处理慢，没进说明卡在发送方或驱动；这一步能把搜索范围从整个系统缩到两个进程。
+
+**Q11: Binder 驱动收到事务后，怎样把工作交给服务端线程？**
+
+驱动负责把事务工作排入目标线程或目标进程的队列并唤醒等待者。用户态 libbinder 读出事务后，再调用 Stub 分派服务方法。驱动不直接执行服务代码。
+
+1. **定位目标**：驱动根据 Binder 引用找到目标 node、进程及可处理事务的线程，并为目标进程分配接收缓冲区。
+2. **安排工作**：事务进入目标线程队列，或在没有合适线程时进入进程级队列。驱动唤醒等待中的服务线程。线程数未达配置上限且需要扩容时，驱动可向用户态请求创建 Binder 线程。
+3. **用户态分派**：线程通过读侧 `BINDER_WRITE_READ` 取出 `BR_TRANSACTION`。libbinder 解码事务，再由 AIDL Stub 按事务码调用服务实现。
+
+同步与 `oneway` 事务在排队、等待回复和缓冲区释放上的行为不同。具体线程选择和唤醒细节随目标内核实现变化。

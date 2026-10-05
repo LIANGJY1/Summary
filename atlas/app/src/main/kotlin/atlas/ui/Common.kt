@@ -42,7 +42,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
@@ -694,7 +694,7 @@ private fun ReaderMarkdownText(
     followingLine: String? = null,
 ) {
     val ui = atlasUiTokens()
-    val compactReading = LocalConfiguration.current.screenWidthDp < 600
+    val compactReading = LocalWindowInfo.current.containerDpSize.width < 600.dp
     val readingColors = LocalMarkdownReadingColors.current
     // 渐进渲染按块调用时传 [lineOffset]：把原文坐标的脏行集合平移成块内局部坐标
     val answerDirty = remember(dirtyLines, lineOffset) {

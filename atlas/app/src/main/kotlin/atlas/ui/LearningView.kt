@@ -59,8 +59,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -631,6 +631,13 @@ private enum class QuestionSearchScope(val label: String) {
     ALL("整个目录树"),
 }
 
+private enum class QuestionStatusFilter(val label: String, val status: QuestionStatus?) {
+    ALL("全部", null),
+    TODO("待学习", QuestionStatus.TODO),
+    LEARNING("学习中", QuestionStatus.LEARNING),
+    DONE("已完成", QuestionStatus.DONE),
+}
+
 internal enum class QuestionLeadingSlot {
     STATUS,
     BATCH_SELECTION,
@@ -689,7 +696,7 @@ internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, tota
 fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
     val cardHorizontal = questionCardHorizontalMetrics()
-    val compact = LocalConfiguration.current.screenWidthDp < 600
+    val compact = LocalWindowInfo.current.containerDpSize.width < 600.dp
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
@@ -702,6 +709,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var showMoreActions by remember { mutableStateOf(false) }
     var statusMenuTarget by remember { mutableStateOf<String?>(null) }
     var searchScope by remember { mutableStateOf(QuestionSearchScope.ALL) }
+    var statusFilter by remember { mutableStateOf(QuestionStatusFilter.ALL) }
     var sidebarExpanded by remember { mutableStateOf(true) }
     var sidebarWidth by remember { mutableStateOf(320.dp) }
     var sidebarDragging by remember { mutableStateOf(false) }
@@ -728,6 +736,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         } else {
             query = ""
             searchScope = QuestionSearchScope.ALL
+            statusFilter = QuestionStatusFilter.ALL
             // 收起可能来自键盘、点击外部等多条路径，但都汇到这一个状态：无论哪条都要把焦点
             // 交还根节点——焦点悬空后后续按键到不了任何处理层，搜索快捷键会"失灵"
             runCatching { rootFocus.requestFocus() }
@@ -775,16 +784,19 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val searchPool = if (searchScope == QuestionSearchScope.ALL) {
         if (compact) store.allKnowledgeQuestions else store.allSourceQuestions
     } else sourceQuestionsSnapshot
-    val visible = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
+    val searchResults = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
         entry.question.contains(query.trim(), ignoreCase = true) ||
             entry.tags.any { it.contains(query.trim(), ignoreCase = true) }
+    }
+    val visible = searchResults.filter { entry ->
+        statusFilter.status == null || entry.status == statusFilter.status
     }
     // layoutInfo 的下标是 documentItems 的下标，其中夹着章节行，与题目下标并不一致；
     // 一律经 key 换算，避免「非排序模式下多出章节行」导致位次整体错位。
     val questionIndexByKey = remember(sourceQuestionsSnapshot) {
         sourceQuestionsSnapshot.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
     }
-    val canReorderList = reorderMode && query.isBlank() && visible.size == sourceQuestionsSnapshot.size
+    val canReorderList = reorderMode && query.isBlank() && statusFilter == QuestionStatusFilter.ALL && visible.size == sourceQuestionsSnapshot.size
     val selectedEntries = sourceQuestionsSnapshot.filter { sourceQuestionKey(it) in selectedQuestionKeys }
 
     fun toggleBatchSelection(key: String) {
@@ -792,7 +804,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     }
     val allVisibleQuestionsSelected = visible.isNotEmpty() &&
         visible.all { sourceQuestionKey(it) in selectedQuestionKeys }
-    val dragging = reorderMode && draggingKey != null && query.isBlank()
+    val dragging = reorderMode && draggingKey != null && query.isBlank() && statusFilter == QuestionStatusFilter.ALL
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
         val to = dragTargetIndex
@@ -802,7 +814,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     } else visible
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
-        if (query.isBlank() && !dragging) {
+        if (query.isBlank() && statusFilter == QuestionStatusFilter.ALL && !dragging) {
             sourceSectionsSnapshot.forEach { add(SourceDocumentItem.Section(it)) }
         }
     }
@@ -1030,7 +1042,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         if (compact) {
             MobileReaderHeader(
                 title = "题库",
-                count = if (query.isNotBlank()) "${visible.size} 题" else if (sourceQuestionsSnapshot.isEmpty()) "文档" else "${sourceQuestionsSnapshot.size} 题",
+                count = if (query.isNotBlank() || statusFilter != QuestionStatusFilter.ALL) "${visible.size} 题" else if (sourceQuestionsSnapshot.isEmpty()) "文档" else "${sourceQuestionsSnapshot.size} 题",
                 path = store.selectedSourcePath,
                 onSearch = { store.questionSearchVisible.value = !store.questionSearchVisible.value },
                 onTree = { showMobileTree = true },
@@ -1061,6 +1073,35 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             scope.label,
                             Modifier
                                 .clickable { searchScope = scope }
+                                .background(if (active) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            fontSize = ui.typography.secondary.fontSize,
+                            color = if (active) Theme.Accent else Theme.Muted,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("题目状态", style = ui.typography.secondary, color = Theme.Muted)
+                    QuestionStatusFilter.entries.forEach { filter ->
+                        val active = statusFilter == filter
+                        Text(
+                            filter.label,
+                            Modifier
+                                .clickable {
+                                    if (statusFilter != filter) {
+                                        statusFilter = filter
+                                        batchTagMode = false
+                                        selectedQuestionKeys = emptySet()
+                                        showBatchTagDialog = false
+                                        if (filter != QuestionStatusFilter.ALL) {
+                                            reorderMode = false
+                                            draggingKey = null
+                                            dragTargetIndex = null
+                                        }
+                                    }
+                                }
                                 .background(if (active) Theme.Selected else androidx.compose.ui.graphics.Color.Transparent, MaterialTheme.shapes.small)
                                 .padding(horizontal = 9.dp, vertical = 4.dp),
                             fontSize = ui.typography.secondary.fontSize,
@@ -1102,7 +1143,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
-            Text("${if (query.isBlank()) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
+            Text("${if (query.isBlank() && statusFilter == QuestionStatusFilter.ALL) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
             if (query.isBlank() && !batchTagMode) {
                 OutlinedButton(
@@ -1319,7 +1360,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 val isBatchSelected = entryKey in selectedQuestionKeys
                 val isDragging = draggingKey == entryKey
                 val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
-                // 内容相对 git HEAD 的字符/行差异只用于行内定位；改动态由 learning 状态统一表达。
+                // 内容相对 git HEAD 的字符/行差异独立于学习状态显示；状态图标始终表达显式状态。
                 val gitDiff = store.sourceQuestionGitDiffs[sourceQuestionGitKey(entry)]
                 val cardElevation by animateDpAsState(
                     targetValue = if (isDragging) 12.dp else 0.dp,

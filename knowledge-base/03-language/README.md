@@ -53,6 +53,6 @@
 
 | 子目录 | 语言 | 现状 |
 |---|---|---|
-| `C++/` | C++ | 学习笔记、Binder 源码笔记、练习项目 |
+| `C++/` | C++ | 编号主题笔记见 `C++/README.md`：语言基础、编译链接、POSIX、函数与类型、数组与字符串、自定义类型、指针与内存；另含练习项目 |
 | `java/` | Java | 语言与标准库主题笔记（core types and collections, concurrency and streams, exceptions and I/O, annotations, reflection, generics, JVM runtime） |
 | `kotlin/` | Kotlin | 四篇主题笔记：01-syntax-basics / 02-objects-and-types / 03-functional-and-concurrency / 04-ecosystem-and-android；另保留 [Kotlin 学习笔记完整版](kotlin/kotlin-learning-notes-complete.md)（300 题）。原 `kotlin_study_notes.md` 与该完整版重复，已去重，题目以完整版为唯一保留副本 |

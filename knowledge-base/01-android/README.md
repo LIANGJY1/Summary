@@ -20,10 +20,10 @@
 
 ## 01-architecture/
 
-- **跨层架构与系统服务：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 180 题）：
-  - [01-system-architecture.md](01-architecture/01-system-architecture.md)（18 题）
+- **跨层架构与系统服务：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 184 题）：
+  - [01-system-architecture.md](01-architecture/01-system-architecture.md)（19 题）
   - [02-system-boot.md](01-architecture/02-system-boot.md)（45 题）
-  - [03-binder.md](01-architecture/03-binder.md)（19 题）
+  - [03-binder.md](01-architecture/03-binder.md)（22 题）
   - [04-system-server.md](01-architecture/04-system-server.md)（11 题）
   - [05-hal.md](01-architecture/05-hal.md)（3 题）
   - [06-art-runtime.md](01-architecture/06-art-runtime.md)（20 题）
@@ -35,9 +35,9 @@
 
 ## 02-app-framework/
 
-- **应用框架与应用架构实践：四大组件、Handler/Looper 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 83 题）：
+- **应用框架与应用架构实践：四大组件、Handler/Looper、Messenger 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 84 题）：
   - [01-four-components.md](02-app-framework/01-four-components.md)（6 题）
-  - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（11 题）
+  - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（12 题）
   - [03-parcel.md](02-app-framework/03-parcel.md)（2 题）
   - [04-content-provider.md](02-app-framework/04-content-provider.md)（4 题）
   - [05-collections-annotations.md](02-app-framework/05-collections-annotations.md)（3 题）
@@ -146,10 +146,10 @@
 
 ## 11-platform-native/
 
-- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 102 题）：
-  - [01-kernel-gki.md](11-platform-native/01-kernel-gki.md)（11 题）
-  - [02-driver-runtime.md](11-platform-native/02-driver-runtime.md)（11 题）
-  - [03-binder-driver.md](11-platform-native/03-binder-driver.md)（10 题）
+- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 105 题）：
+  - [01-kernel-gki.md](11-platform-native/01-kernel-gki.md)（12 题）
+  - [02-driver-runtime.md](11-platform-native/02-driver-runtime.md)（12 题）
+  - [03-binder-driver.md](11-platform-native/03-binder-driver.md)（11 题）
   - [04-shared-memory.md](11-platform-native/04-shared-memory.md)（10 题）
   - [05-bionic-linker.md](11-platform-native/05-bionic-linker.md)（21 题）
   - [06-logd.md](11-platform-native/06-logd.md)（3 题）
@@ -224,7 +224,7 @@
 | --- | --- | ---: |
 | [01-architecture/01-system-architecture.md](01-architecture/01-system-architecture.md) | Android 系统架构 | 18 |
 | [01-architecture/02-system-boot.md](01-architecture/02-system-boot.md) | Android 系统启动流程 | 45 |
-| [01-architecture/03-binder.md](01-architecture/03-binder.md) | Binder | 19 |
+| [01-architecture/03-binder.md](01-architecture/03-binder.md) | Binder | 21 |
 | [01-architecture/04-system-server.md](01-architecture/04-system-server.md) | SystemServer | 11 |
 | [01-architecture/05-hal.md](01-architecture/05-hal.md) | HAL | 3 |
 | [01-architecture/06-art-runtime.md](01-architecture/06-art-runtime.md) | ART | 20 |
@@ -308,9 +308,9 @@
 | [10-platform-services/05-aconfig-runtime.md](10-platform-services/05-aconfig-runtime.md) | aconfig 运行时：存储与 aflags | 5 |
 | [10-platform-services/06-avf-virtualization.md](10-platform-services/06-avf-virtualization.md) | AVF 虚拟化 | 4 |
 | [10-platform-services/07-ai-services.md](10-platform-services/07-ai-services.md) | 平台 AI 服务 | 4 |
-| [11-platform-native/01-kernel-gki.md](11-platform-native/01-kernel-gki.md) | 内核与 GKI | 11 |
-| [11-platform-native/02-driver-runtime.md](11-platform-native/02-driver-runtime.md) | 内核驱动运行时 | 11 |
-| [11-platform-native/03-binder-driver.md](11-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 10 |
+| [11-platform-native/01-kernel-gki.md](11-platform-native/01-kernel-gki.md) | 内核与 GKI | 12 |
+| [11-platform-native/02-driver-runtime.md](11-platform-native/02-driver-runtime.md) | 内核驱动运行时 | 12 |
+| [11-platform-native/03-binder-driver.md](11-platform-native/03-binder-driver.md) | Binder 驱动（内核层） | 11 |
 | [11-platform-native/04-shared-memory.md](11-platform-native/04-shared-memory.md) | 共享内存：ashmem、ION 与 DMA-BUF | 10 |
 | [11-platform-native/05-bionic-linker.md](11-platform-native/05-bionic-linker.md) | Bionic 动态链接器：命名空间隔离与符号解析 | 21 |
 | [11-platform-native/06-logd.md](11-platform-native/06-logd.md) | Android 日志调用、丢弃与 logcat 过滤边界 | 3 |

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答"字符设备/VFS 分发、file/inode/fops、设备号与 /dev 节点、copy_from_user、MMIO、ioctl/mmap、内核数据结构"；模块构建与部署归 [../12-build-system/06-kernel-modules.md](../12-build-system/06-kernel-modules.md)。材料中的固定物理地址与宿主机裸 gcc 命令不是生产做法。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 应用开发中，常说的串口是什么，与 USB 传输有什么区别，通常用在什么场景？**
+**Q1: [done] 应用开发中，常说的串口是什么，与 USB 传输有什么区别，通常用在什么场景？**
 
 日常硬件开发里说的“串口”通常指 UART（Universal Asynchronous Receiver/Transmitter，通用异步收发器）：设备通过发送和接收线逐位交换数据。USB 本身也是串行总线，但它有独立的总线协议；这里比较的是 UART 串口与 USB。
 
@@ -13,7 +13,6 @@
 实际连接前要确认设备使用的是 UART 逻辑电平还是经过 RS-232/RS-485 收发器转换的线路接口，并核对接线和通信参数；这些接口不能因为都叫“串口”就直接互连。
 
 **Android 场景的本质区别：**UART 是 SoC 上的独立硬件接口，Bootloader 或内核早期控制台只要先初始化 UART 控制器和引脚，就能直接输出日志；ADB 不是 USB 本身，而是要等 USB gadget 配置出 ADB 功能、Android `init` 启动 `adbd`，并由电脑完成 USB 枚举后才能连接。因此常见启动早期会出现 UART 已能输出日志、ADB 还不可用；若板子只引出 UART 调试口，或需要观察这段启动日志且没有配置早期 USB 调试，才必须用串口。
-
 
 **Q2: AAOS 中 Linux 内核驱动位于系统栈的什么位置，应用是否通常直接读写硬件？**
 

@@ -212,7 +212,7 @@ JNI 用于同一进程地址空间内的 Java/native 互调；进程隔离时必
 
 三个具体调用：
 
-1. **图层事务**：WMS 经 JNI 进 libgui 的 SurfaceComposerClient，用 C++ Binder 把事务发给 surfaceflinger 进程的 ISurfaceComposer 接口；
+1. **图层事务**：system_server 中的 WMS 经 JNI 进入 libgui 的 SurfaceComposerClient，再用 C++ Binder 调用 surfaceflinger 进程的 ISurfaceComposer 接口；
 2. **音频通路**：AudioTrack 的 native 半截与 audioserver 进程的 AudioFlinger 之间，经 IAudioFlinger、IAudioTrack 这些 C++ Binder 接口传控制命令与 PCM 数据；
 3. **installd**：system_server 的原生部分经 IInstalld（AIDL 的 C++ 后端）跨进程调 installd 守护进程做 dexopt 与目录操作。
 
@@ -279,3 +279,11 @@ adb shell su -c 'cat /proc/$(pidof system_server)/maps' | grep '\.so' | awk '{pr
 该命令是设备上的即时采样，不是完整、永久的依赖清单：按需加载库可能尚未出现，匿名映射也不会被 `.so` 过滤器列出；路径中包含空格时按固定字段取值也可能失准。源码侧可用 `frameworks/base/services/core/jni/` 查 libandroid_servers 的源文件，并全局搜索 `loadLibrary` 查显式加载点。需要解释某库为何出现时，应结合采样时机、进程映射和该设备源码追踪。
 
 `libhwbinder` 自 Android 11 起并入 `libbinder`，新版本中通常看不到独立的同名库。Mainline 模块化会把部分能力移出 `system_server`，车机产品也可能增加 CarService 相关依赖，因此网上的库清单只能视为特定版本快照。核对设备时结合 maps 采样与对应源码。
+
+**Q19: 只有 Linux 内核能构成 Android 或桌面 Linux 吗？**
+
+不能。Linux 内核负责进程、内存、调度和驱动等底层资源管理，不包含启动后提供日常功能所需的完整用户空间。
+
+1. **Android**：还需要 init、Bionic、系统服务、Android Runtime、Framework 和应用等用户空间组件。
+2. **桌面 Linux**：还需要 shell、常用命令、运行库和桌面图形环境。
+3. `ls` 通常是用户空间程序，`cd` 通常由 shell 内建。只保留内核不会自动提供这些命令或环境。
