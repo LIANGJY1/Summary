@@ -35,23 +35,23 @@
 
 ## 02-app-framework/
 
-- **应用框架与应用架构实践：四大组件、Handler/Looper、Messenger 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 84 题）：
+- **应用框架与应用架构实践：四大组件、Handler/Looper、Messenger 与 DeliQueue、ContentProvider、Parcel、集合注解、MVP、线程与 IPC 稳定性、主线程缺陷**（9 册 93 题）：
   - [01-four-components.md](02-app-framework/01-four-components.md)（6 题）
   - [02-handler-looper.md](02-app-framework/02-handler-looper.md)（12 题）
-  - [03-parcel.md](02-app-framework/03-parcel.md)（2 题）
+  - [03-parcel.md](02-app-framework/03-parcel.md)（8 题）
   - [04-content-provider.md](02-app-framework/04-content-provider.md)（4 题）
   - [05-collections-annotations.md](02-app-framework/05-collections-annotations.md)（3 题）
   - [06-private-space.md](02-app-framework/06-private-space.md)（3 题）
-  - [07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md)（6 题）
-  - [08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md)（21 题）
+  - [07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md)（7 题）
+  - [08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md)（23 题）
   - [09-defect-main-thread-async.md](02-app-framework/09-defect-main-thread-async.md)（27 题）
 
 ## 03-ui/
 
-- **UI 专题：Activity、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 250 题）：
-  - [01-activity.md](03-ui/01-activity.md)（27 题）
+- **UI 专题：Activity、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、应用渲染实战与主题还原缺陷**（11 册 261 题）：
+  - [01-activity.md](03-ui/01-activity.md)（36 题）
   - [02-view.md](03-ui/02-view.md)（27 题）
-  - [03-resources.md](03-ui/03-resources.md)（23 题）
+  - [03-resources.md](03-ui/03-resources.md)（25 题）
   - [04-window-system.md](03-ui/04-window-system.md)（20 题）
   - [05-compose.md](03-ui/05-compose.md)（19 题）
   - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（18 题）
@@ -235,16 +235,16 @@
 | [01-architecture/11-selinux.md](01-architecture/11-selinux.md) | Android SELinux | 28 |
 | [02-app-framework/01-four-components.md](02-app-framework/01-four-components.md) | Android 四大组件：职责、启动方式与生命周期 | 6 |
 | [02-app-framework/02-handler-looper.md](02-app-framework/02-handler-looper.md) | Handler 消息机制与 MessageQueue 实现 | 11 |
-| [02-app-framework/03-parcel.md](02-app-framework/03-parcel.md) | Parcel 与序列化契约 | 2 |
+| [02-app-framework/03-parcel.md](02-app-framework/03-parcel.md) | Parcel 与序列化契约 | 8 |
 | [02-app-framework/04-content-provider.md](02-app-framework/04-content-provider.md) | ContentProvider 服务链路 | 4 |
 | [02-app-framework/05-collections-annotations.md](02-app-framework/05-collections-annotations.md) | 集合与注解的框架契约 | 3 |
 | [02-app-framework/06-private-space.md](02-app-framework/06-private-space.md) | Private Space 与应用可见性 | 3 |
-| [02-app-framework/07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md) | Android MVP 架构 | 6 |
-| [02-app-framework/08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md) | 稳定性治理：线程、协程与 IPC | 21 |
+| [02-app-framework/07-mvp-architecture.md](02-app-framework/07-mvp-architecture.md) | Android MVP 架构 | 7 |
+| [02-app-framework/08-app-thread-ipc-stability.md](02-app-framework/08-app-thread-ipc-stability.md) | 稳定性治理：线程、协程与 IPC | 23 |
 | [02-app-framework/09-defect-main-thread-async.md](02-app-framework/09-defect-main-thread-async.md) | 主线程与异步时序：缺陷模式与修复范式 | 27 |
-| [03-ui/01-activity.md](03-ui/01-activity.md) | Activity 与窗口生命周期 | 27 |
+| [03-ui/01-activity.md](03-ui/01-activity.md) | Activity 与窗口生命周期 | 36 |
 | [03-ui/02-view.md](03-ui/02-view.md) | View 测量、布局与绘制 | 27 |
-| [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 23 |
+| [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 25 |
 | [03-ui/04-window-system.md](03-ui/04-window-system.md) | 窗口系统与 WindowManagerService | 20 |
 | [03-ui/05-compose.md](03-ui/05-compose.md) | Compose 运行期与 View 互操作 | 19 |
 | [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 18 |

@@ -54,13 +54,13 @@
 
 具体 Android 版本决定内部实现。`startActivityInner()` 等方法名和分支会变化，不是稳定 SDK 契约。
 
-**Q5: `FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？**
+**Q5: [learning] `FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？**
 
 这三个 Intent flag 分别影响目标任务选择与目标实例所在栈的处理，效果还要和目标 Activity 的 launchMode、启动方及现有任务一起判断。
 
 1. **`FLAG_ACTIVITY_NEW_TASK`**：要求系统在任务上下文中启动 Activity。系统会尝试选择合适的已有任务。没有可复用任务时才创建新任务。
 2. **`FLAG_ACTIVITY_SINGLE_TOP`**：目标实例已位于所选任务栈顶时复用它，并向 `onNewIntent()` 交付新 Intent。目标实例不在栈顶时通常创建新实例。
-3. **`FLAG_ACTIVITY_CLEAR_TOP`**：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。
+3. **`FLAG_ACTIVITY_CLEAR_TOP`**：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。对 `standard` 目标且未加 `SINGLE_TOP` 时，目标实例自身也随上方页面一起出栈销毁并重建新实例；加上 `SINGLE_TOP` 才改为通过 `onNewIntent()` 复用现有实例。
 
 判断结果时分别确认所选任务、目标实例在栈中的位置和最终回调。不能只依据单个 flag 名称推断完整返回栈。
 
@@ -72,11 +72,11 @@
 2. **category**：声明 `android.intent.category.LAUNCHER`，让启动器将组件作为应用图标入口展示。
 3. **组件可启动条件**：目标 Activity 必须允许启动器从外部访问。对 targetSdk 31 及以上且声明了 Intent Filter 的组件，必须显式设置 `android:exported`。Launcher 入口通常需设为 `true`，否则其他应用无法启动它。还要满足组件权限等限制。
 
-**Q7: Intent Filter 中的 action、category 与 data 分别匹配什么？**
+**Q7: [learning] Intent Filter 中的 action、category 与 data 分别匹配什么？**
 
 Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三组约束共同决定候选组件，不能彼此替代。
 
-1. **action**：表达请求执行的操作。Intent 指定 action 时，filter 必须包含相同 action 才能匹配。若 Intent 没有 action，filter 也必须没有 action 才通过这一维度。
+1. **action**：表达请求执行的操作。Intent 指定 action 时，filter 必须包含相同 action 才能匹配，比较是精确字符串匹配、区分大小写。Intent 未指定 action 时框架跳过 action 维度比对（Android 13 的 `IntentFilter.match` 对 action 为 null 不做 action 测试），能否命中由 category 与 data 维度决定。
 2. **category**：表达候选组件需要满足的类别。Intent 实际携带的每个 category 都必须在 filter 中声明。filter 中额外声明的 category 不要求 Intent 全部携带。
 3. **data**：按 URI 与 MIME type 条件匹配。检查 scheme、host、path 和 MIME type。filter 如何声明这些条件会决定可匹配范围。
 
@@ -121,11 +121,11 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 1. **布局完成后读取**：在根 View 上注册 `OnLayoutChangeListener`，首次布局回调中读取宽高。只需读取一次时，在回调里移除监听器。
 2. **绘制前读取**：使用 `doOnPreDraw` 等一次性预绘制回调，在首帧绘制前读取已经确定的布局尺寸。
 
-**Q12: 旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？**
+**Q12: [learning] 旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？**
 
 系统根据 Activity 是否声明自行处理某类配置变化，决定调用 `onConfigurationChanged()` 还是销毁并重建 Activity。未在 `android:configChanges` 中覆盖的变化通常会触发重建。该属性只应列出 Activity 确实能自行适配的配置类型。
 
-1. **声明处理的变化**：例如 `orientation` 表示屏幕方向变化，`screenSize` 表示可用屏幕尺寸变化，`uiMode` 可包含夜间模式变化。当 targetSdk 达到 API 13 时，方向变化通常还需同时处理 `screenSize`。
+1. **声明处理的变化**：例如 `orientation` 表示屏幕方向变化，`screenSize` 表示可用屏幕尺寸变化，`uiMode` 可包含夜间模式变化。当 targetSdk 达到 API 13 时，方向变化通常还需同时处理 `screenSize`。走该路径时 Activity 实例继续存活、不发生重建，因此不触发 `onSaveInstanceState()` 与 `onRestoreInstanceState()`。
 2. **未声明的变化**：若清单没有声明相应配置，系统通常通过 Activity relaunch 让新实例加载新资源与配置。AAOS 13 源码路径经过 `ActivityThread.handleRelaunchActivity()` 与 `handleRelaunchActivityInner()`。
 3. **进程边界**：系统配置 relaunch 和应用调用 `Activity.recreate()` 都会创建新的 Activity 实例，但它们本身不等于重启应用进程。不要依赖 Activity 实例字段保留状态，也不要以异步任务是否存活来区分两种路径。
 
@@ -278,3 +278,90 @@ ViewModel 的 `ViewModelStoreOwner` 决定数据实例存活与共享范围，�
 2. **Activity 状态**：系统依据目标任务、Activity 实例、`launchMode` 和 Intent flag 决定复用现有实例、调用 `onNewIntent()`，或创建新的 Activity 实例。
 
 AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分支：目标进程可用时调用 `realStartActivityLocked()`。否则走异步进程启动路径。排查启动后“回到旧页面”“新建了 Activity”或“没有看到新进程”时，应把任务复用、Activity 实例复用和进程启动分开判断。
+
+**Q28: [learning] `onStart()`/`onStop()` 与 `onResume()`/`onPause()` 两对回调分别以什么维度划分 Activity 状态，为什么要拆成两对？**
+
+两对回调对应两个正交维度：`onStart()` 与 `onStop()` 以“是否在屏幕上可见”划界，`onResume()` 与 `onPause()` 以“是否位于前台、持有输入焦点可交互”划界。拆成两对是为了让“可见但不可交互”的状态有独立表达，把资源管理代码挂到正确的粒度上。
+
+1. **可见维度**：`onStart()` 之后 Activity 已经出现在屏幕上，`onStop()` 之后完全不可见。需要“看得见就工作”的资源挂在这一对里，例如界面刷新、地图渲染、动画播放。
+2. **前台可交互维度**：`onResume()` 之后 Activity 位于前台并持有输入焦点，`onPause()` 表示失去前台交互。需要独占用户注意力的资源挂在这一对里，例如相机取景、高精度传感器监听。
+3. **正交组合的实证**：被对话框样式或透明 Activity 覆盖时，以及 Android 7.0 起的多窗口中，非焦点 Activity 处于 paused 但仍可见，只回调 `onPause()` 而不回调 `onStop()`。若把“暂停视频”“停止刷新”写进 `onPause()`，多窗口里仍然可见的页面会被错误冻结。
+4. **多显示补充**：多显示与桌面形态下系统还可能让多个 Activity 同时处于 resumed 状态，“位于前台”与“可见”因此更不能互相替代。
+
+实践中按资源归属落位：需要持续展示的内容与可见性回调绑定，需要独占用户注意力的资源与前台回调绑定。
+
+**Q29: [learning] 从 Activity A 启动 B 时，A 的 `onPause()` 与 B 的 `onResume()` 谁先执行，这对 `onPause()` 中的代码有什么约束？**
+
+A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创建与恢复，因此 `onPause()` 里的耗时操作会直接推迟 B 的 `onResume()` 与首帧呈现。
+
+1. **顺序的来源**：切换时系统先向 A 发送暂停事务，等应用上报暂停完成后才恢复下一个 Activity。Android 13 的 `TaskFragment.startPausing()` 注释明确返回时系统正等待客户端上报暂停完成，`completePause()` 收尾后才触发恢复逻辑；B 的 `onCreate()`、`onStart()`、`onResume()` 都排在这个完成点之后。
+2. **耗时后果**：`onPause()` 中的同步 I/O、大对象释放或复杂计算占用的是两页切换的关键路径，B 的首帧随之延后，用户感知为切换卡顿。
+3. **正确做法**：`onPause()` 只做轻量工作，例如停止动画、保存轻量临时状态。较重的资源释放推迟到 `onStop()`，此时 A 已完全不可见，不再阻塞 B 的显示。
+
+**Q30: [learning] 配置变更或低内存导致 Activity 重建时，`onSaveInstanceState()` 的调用时机随 targetSdk 如何变化，状态应在 `onCreate()` 还是 `onRestoreInstanceState()` 中恢复？**
+
+保存时机以 targetSdk 的 API 28（Android 9.0）为分界：达到 28 时固定在 `onStop()` 之后调用，低于 28 时在 `onStop()` 之前、与 `onPause()` 的先后没有保证。恢复推荐 `onRestoreInstanceState()`，它只在确有状态可恢复时回调，参数 Bundle 必有值。
+
+1. **保存时机的版本分界**：targetSdk 达到 API 28 后，`onSaveInstanceState()` 固定在 `onStop()` 之后，应用可以安全地在 `onStop()` 里提交 Fragment 事务。低于 28 时发生在 `onStop()` 之前，无法保证与 `onPause()` 的先后（`Activity.onSaveInstanceState()` 注释口径，已按 Android 13 本地源码核对）。
+2. **`onCreate()` 恢复**：正常启动时传入的 Bundle 为 null，必须判空后才能使用；适合恢复不依赖 View 树的业务数据。
+3. **`onRestoreInstanceState()` 恢复**：系统只在携带了保存状态时才回调（`ActivityThread.handleStartActivity()` 中 `r.state` 非空才调用），位于 `onStart()` 之后、`onResume()` 之前。无需判空，适合恢复界面相关状态。
+
+需要区分“从未保存”与“有保存状态”时走 `onCreate()` 判空路径。界面状态统一放 `onRestoreInstanceState()` 可以省掉判空样板。
+
+**Q31: [learning] View 层次结构的状态为什么会随 `onSaveInstanceState()` 自动保存，从 Activity 到单个 View 的保存与恢复链路是怎样的？**
+
+Activity 的默认实现把窗口内 View 的状态沿“Activity → Window → 内容容器 → 逐级子 View”的委托链收集，每个设置了 `android:id` 的 View 以 id 为键存入一个 SparseArray，没有 id 的 View 不会被自动保存。
+
+1. **保存链**：`onSaveInstanceState()` 默认实现调用 `mWindow.saveHierarchyState()` 并把结果存入 Bundle（Android 13 `Activity.java` 本地核对）。`PhoneWindow.saveHierarchyState()` 让内容容器执行 `saveHierarchyState()`，另外记录当前焦点 View 的 id 用于恢复焦点。
+2. **逐级分发**：`ViewGroup.dispatchSaveInstanceState()` 先保存自身状态，再递归通知每个子 View。`View.dispatchSaveInstanceState()` 只在设置了有效 id 且未通过 `android:saveEnabled` 关闭保存时回调 `onSaveInstanceState()`，以 id 为键写入 SparseArray，子类覆写时不调用父类实现会抛 `IllegalStateException`。
+3. **恢复链**：`onRestoreInstanceState()` 的默认实现调用 `mWindow.restoreHierarchyState()`，按同样顺序逐级分发，各 View 用自身 id 从 SparseArray 取回状态。这也决定了恢复必须发生在 View 树构建完成之后，也就是 `onStart()` 之后。
+
+**Q32: [learning] 在 Application 或 Service 等 Context 里调用 `startActivity()` 为什么抛 `AndroidRuntimeException`，应该怎么改？**
+
+非 Activity 上下文不属于任何任务，框架无法决定新 Activity 的落点，因此要求 Intent 显式携带 `FLAG_ACTIVITY_NEW_TASK`，让系统按 taskAffinity 选择目标任务，找不到再新建。
+
+1. **报错条件**：Android 13 的 `ContextImpl.startActivity()` 在 Intent 未带 `FLAG_ACTIVITY_NEW_TASK`、`ActivityOptions` 也未指定目标任务 id 时抛出 `AndroidRuntimeException`，文案即 "Calling startActivity() from outside of an Activity context requires the FLAG_ACTIVITY_NEW_TASK flag"。
+2. **版本豁免**：targetSdk 介于 Android N 与 O MR1 之间时不抛出，源码注释说明这是为兼容该区间已存在的历史 bug 而保留；其余 targetSdk 均受此检查约束。
+3. **加上 flag 后的行为**：系统按目标 Activity 的 taskAffinity 查找可复用任务，复用规则与从 Activity 发起时相同。但新页面不在调用方的返回栈里，评估按返回的行为时要按任务归属单独判断。
+4. **Activity 为何不受限**：Activity 重写了 `startActivity()`，经 `Instrumentation` 发起启动并携带自身所属任务信息，不需要额外 flag。
+
+**Q33: [learning] 为 Activity 指定启动行为时，清单里的 `android:launchMode` 与 Intent flag 各能表达什么，两者同时设置时如何生效？**
+
+两种方式可以并用，系统解析启动请求时把清单的静态声明与本次 Intent 携带的 flag 一起判断：launchMode 描述该 Activity 的固定归属规则，flag 描述这一次启动的动态行为。
+
+1. **清单 `android:launchMode`**：取值覆盖 `standard`、`singleTop`、`singleTask`、`singleInstance`，API 31 起增加 `singleInstancePerTask`，作用于该 Activity 的每一次启动。它表达不了 `FLAG_ACTIVITY_CLEAR_TOP` 这类清栈动作，没有对应的取值。
+2. **Intent flag**：如 `FLAG_ACTIVITY_NEW_TASK`、`FLAG_ACTIVITY_SINGLE_TOP`、`FLAG_ACTIVITY_CLEAR_TOP`，只在本次启动生效，可以组合。它表达不了 `singleInstance` 这类模式，没有对应的 flag。
+3. **同时设置的生效方式**：两者叠加解析而非二选一，清单为 `standard` 的 Activity 加上 `FLAG_ACTIVITY_SINGLE_TOP` 同样获得栈顶复用。“flag 优先级更高”的常见说法应理解为动态行为叠加在静态模式之上，但 flag 改变不了 `singleInstance` 的独占任务语义。
+4. **选择**：要求所有入口都遵循同一模式时写清单。只想对特定路径（如通知跳转）改变行为时用 flag。
+
+**Q34: [learning] 前台任务栈为 A、B，后台任务栈为 C、D（C、D 均为 `singleTask` 且声明了与包名不同的同一 `taskAffinity`），从 B 启动已存在的 D 后连续按返回，回退顺序是什么？**
+
+D 所需的任务已经存在，系统把整个后台任务连同 C 一起带到前台，而不是把 D 压入当前任务。合并后的回退顺序是 D → C → B → A，最后回到桌面。
+
+1. **任务整体切换**：D 为 `singleTask`，其 `taskAffinity` 对应的后台任务已存在，启动时系统按 affinity 在全区查找可复用任务（AAOS 13 的 `ActivityStarter` 即此逻辑），把它整体移到前台，C 仍留在 D 下方。
+2. **跨任务返回**：按返回先在当前任务内逐级出栈，当前任务清空后才回落到上一个任务，所以 D、C 依次出栈后才回到 B、A。
+3. **边界**：若 D 尚不存在，系统按该 affinity 新建任务并以 D 为根，任务里只有 D，返回一次就直接回到 B。
+
+判断规则：`singleTask` 启动的复用粒度是任务——先按 affinity 定位并前置整个任务，再谈实例复用与新 Intent 交付。
+
+**Q35: [learning] 同一应用内 A 为 `standard`，B、C 均为 `singleTask` 且未修改 `taskAffinity`，依次执行 A 启动 B、B 启动 C、C 启动 A、A 再次启动 B，返回栈如何变化，连按两次返回停在哪个界面？**
+
+默认 `taskAffinity` 就是应用包名，B、C 所需的任务与 A 所在任务相同，因此全部进入同一个任务而不新建任务。A 再次启动 B 时复用栈内实例并清除其上方页面，连按两次返回先回到 A，再回到桌面。
+
+1. **A 启动 B**：B 所需任务已存在，B 直接进入当前任务，栈变为 A、B。
+2. **B 启动 C**：同理 C 入当前任务，栈变为 A、B、C。
+3. **C 启动 A**：A 是 `standard`，进入启动者所在的任务，栈变为 A、B、C、A。
+4. **A 再次启动 B**：B 已在栈内，`singleTask` 复用该实例并销毁其上方页面，C 与第二个 A 出栈，B 通过 `onNewIntent()` 收到新 Intent，栈回到 A、B。
+5. **两次返回**：第一次出栈 B 回到 A，第二次出栈 A 后任务清空，回到桌面。
+
+该场景的判断规则：`singleTask` 是否新建任务取决于 affinity 对应任务是否已存在，复用栈内实例时默认顺带清除其上方页面。
+
+**Q36: [learning] Fragment 的实例生命周期与视图生命周期为什么分成两段？onCreateView 与 onViewCreated 的职责应怎样划分？**
+
+Fragment 与 Activity 的关键差异是“实例存活”与“视图存在”属于两个独立区间：完整回调序列为 onAttach → onCreate → onCreateView → onViewCreated → onStart → onResume → onPause → onStop → onDestroyView → onDestroy → onDetach，其中视图只在 onCreateView 创建、在 onDestroyView 销毁，而实例可以活得比视图久——返回栈回退、ViewPager 换页、放入 back stack 后被系统回收视图等场景都只走 onDestroyView 而不销毁实例。一切 View 相关工作都要以这个两段式为准：
+
+1. **onCreateView**：只负责构建并返回视图层次。把数据加载、监听注册等逻辑塞进这里，会在“视图刚创建、尚未完成绑定”的时点执行复杂 UI 操作，是空指针与状态不生效的常见来源。
+2. **onViewCreated**：视图已完整构建，是 findViewById、绑定点击事件、初始化列表和开始观察数据的正确位置。
+3. **onDestroyView**：解除对视图及其内部对象的引用（清空 binding、移除回调）。跨越视图销毁持有旧视图引用，是 Fragment 内存泄漏的主要来源，因为宿主实例可能被容器复用而重建视图。
+
+观察数据的边界随之确定：订阅应挂在视图生命周期的所有者（viewLifecycleOwner）上，而不是实例的生命周期所有者——挂在实例上的观察在视图销毁后仍会回调，更新的是一个已不存在的视图。

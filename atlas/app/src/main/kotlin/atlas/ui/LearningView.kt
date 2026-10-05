@@ -784,7 +784,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val searchPool = if (searchScope == QuestionSearchScope.ALL) {
         if (compact) store.allKnowledgeQuestions else store.allSourceQuestions
     } else sourceQuestionsSnapshot
-    val searchResults = if (query.isBlank()) sourceQuestionsSnapshot else searchPool.filter { entry ->
+    val searchResults = if (query.isBlank()) searchPool else searchPool.filter { entry ->
         entry.question.contains(query.trim(), ignoreCase = true) ||
             entry.tags.any { it.contains(query.trim(), ignoreCase = true) }
     }
@@ -796,7 +796,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val questionIndexByKey = remember(sourceQuestionsSnapshot) {
         sourceQuestionsSnapshot.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
     }
-    val canReorderList = reorderMode && query.isBlank() && statusFilter == QuestionStatusFilter.ALL && visible.size == sourceQuestionsSnapshot.size
+    val canReorderList = reorderMode && searchScope == QuestionSearchScope.CURRENT && query.isBlank() &&
+        statusFilter == QuestionStatusFilter.ALL && visible.size == sourceQuestionsSnapshot.size
     val selectedEntries = sourceQuestionsSnapshot.filter { sourceQuestionKey(it) in selectedQuestionKeys }
 
     fun toggleBatchSelection(key: String) {
@@ -804,7 +805,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     }
     val allVisibleQuestionsSelected = visible.isNotEmpty() &&
         visible.all { sourceQuestionKey(it) in selectedQuestionKeys }
-    val dragging = reorderMode && draggingKey != null && query.isBlank() && statusFilter == QuestionStatusFilter.ALL
+    val dragging = reorderMode && searchScope == QuestionSearchScope.CURRENT && draggingKey != null &&
+        query.isBlank() && statusFilter == QuestionStatusFilter.ALL
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
         val to = dragTargetIndex
@@ -814,7 +816,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     } else visible
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
-        if (query.isBlank() && statusFilter == QuestionStatusFilter.ALL && !dragging) {
+        if (query.isBlank() && searchScope == QuestionSearchScope.CURRENT && statusFilter == QuestionStatusFilter.ALL && !dragging) {
             sourceSectionsSnapshot.forEach { add(SourceDocumentItem.Section(it)) }
         }
     }
@@ -1425,6 +1427,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             if (isDragging) Theme.Accent
                             else if (isBatchSelected) Theme.Accent.copy(alpha = 0.78f)
                             else if (reorderMode) Theme.Accent.copy(alpha = 0.42f)
+                            else if (gitDiff?.changed == true) Theme.WarnOrange.copy(alpha = 0.72f)
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isExpanded) 0.42f else 0.24f),
                             MaterialTheme.shapes.small,
                         )

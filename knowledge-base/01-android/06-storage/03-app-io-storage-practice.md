@@ -62,11 +62,13 @@ URI 是 Provider 授权的访问入口而非路径：`DocumentsContract.Document
 
 `transferTo()` 只在两个描述符确认对应本机可随机访问的普通文件时基准测试；它不适用管道、转码流与云 Provider，也不能直接套用于带起始偏移的 `AssetFileDescriptor`。
 
-**Q7: SQLiteOpenHelper 负责什么，数据库版本升级应在哪里处理？**
+**Q7: [learning] SQLiteOpenHelper 负责什么，数据库版本升级应在哪里处理？**
 
-`SQLiteOpenHelper` 管理 SQLite 数据库的创建与版本回调：首次创建数据库时调用 `onCreate()`，已存在数据库版本低于目标版本时调用 `onUpgrade()`，版本回退则可能调用 `onDowngrade()`。数据库首次打开通常发生在请求可读或可写数据库时，而不只是 helper 对象构造时。
+`SQLiteOpenHelper` 管理 SQLite 数据库的创建与版本回调：首次创建数据库时调用 `onCreate()`，已存在数据库版本低于目标版本时调用 `onUpgrade()`，版本回退则可能调用 `onDowngrade()`。数据库首次打开通常发生在请求可读或可写数据库时，而不只是 helper 对象构造时；构造传入的版本号必须大于等于 1，否则构造函数直接抛出 `IllegalArgumentException`（按 AAOS13 源码核对）。
 
-表结构变更应通过递增数据库版本并实现迁移回调完成；生产升级不能照搬会删除并重建表的开发期策略，否则会丢失用户数据。数据库文件应由 SQLite 与事务/journal 机制管理，不要手动替换打开中的数据库文件。
+打开边界：`getWritableDatabase()` 在磁盘满等不可写场景会抛出 `SQLiteException`；`getReadableDatabase()` 先按可写打开，失败后回退为只读打开——但只读连接不能执行版本迁移，版本不一致时仍会抛出异常，后续写入同样会失败，不能把"可读数据库"当作磁盘满时的万能兜底。
+
+表结构变更应通过递增数据库版本并实现迁移回调完成；`onCreate()`、`onUpgrade()` 与 `onDowngrade()` 都在框架开启的事务内执行，回调抛出异常时整次变更回滚、版本号不会更新。生产升级不能照搬会删除并重建表的开发期策略，否则会丢失用户数据。`onDowngrade()` 的默认实现直接抛出 `SQLiteException`，需要支持版本回退的应用必须显式覆写它。数据库文件应由 SQLite 与事务/journal 机制管理，不要手动替换打开中的数据库文件。
 
 **Q8: SQLite CRUD 查询如何避免把输入拼进 SQL 语句？**
 
