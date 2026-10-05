@@ -48,7 +48,7 @@
 
 ## 四场景动线（agent 接到任务后怎么走）
 
-- **学习与源码研读**：`knowledge-base/path/` 总纲定顺序 → `knowledge-base/` 查已有理解 → source-annotator 精读标注 → 可迁移结论按 `knowledge-base/ROUTING.md` 沉淀
+- **学习与源码研读**：`docs/path/` 总纲定顺序 → `knowledge-base/` 查已有理解 → source-annotator 精读标注 → 可迁移结论按 `knowledge-base/ROUTING.md` 沉淀
 - **写作与发布**：`juejin-articles-index.md` 查已有 → 笔记与 knowledge-base 找素材 → 成文（成文流待建）
 - **问题排查与复盘**：knowledge-base 与 `issue/` 先查同类 → 解决后复盘结论入库（复盘流待建）
 - **工作流与项目上下文**：`ai/` 工具手册 → `project/` 对应项目资料 → `tools/` 源码
