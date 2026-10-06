@@ -1,6 +1,6 @@
 # 虚拟机与虚拟化
 
-> 学习资料。主线：虚拟机监控程序的类型与信任边界、pKVM 的受保护内存模型、全虚拟化与半虚拟化（virtio）的取舍。Q2–Q3 按 kernel.org 与 source.android.com 官方文档口径（2026-10 检索）撰写；Android 专属集成归 ../../01-android/08-platform-services/06-avf-virtualization.md。题序即文档结构。
+> 学习资料。主线：虚拟机监控程序的类型与信任边界、QEMU 的模拟与虚拟化方式、pKVM 的受保护内存模型、全虚拟化与半虚拟化（virtio）的取舍。Q2–Q3 按 kernel.org 与 source.android.com 官方文档口径（2026-10 检索），Q4 按 QEMU 官方文档撰写；Android 专属集成归 ../../01-android/08-platform-services/06-avf-virtualization.md。题序即文档结构。
 
 **Q1: [learning] 第一类和第二类虚拟机监控程序在资源访问路径上有什么区别？**
 
@@ -26,3 +26,15 @@ pKVM（protected KVM）在 Linux KVM 上扩展了"受保护虚拟机"模式：�
 1. **全虚拟化 I/O 的开销**：guest 每次设备访问陷入 hypervisor，由软件模拟真实硬件的寄存器语义，一次磁盘读写可能引发多次退出（VM exit）。
 2. **virtio 的做法**：guest 前端驱动（virtio-blk、virtio-net 等）把请求描述符写入共享环（virtqueue），hypervisor 侧后端直接消费；退出次数压缩到"整批请求"粒度，数据路径走共享内存而非寄存器模拟。
 3. **取舍**：半虚拟化要求 guest 侧配合（驱动随宿主平台分发），换取显著更低的 I/O 虚拟化开销；云主机与嵌入式 hypervisor（含 Android 模拟器与 Crosvm）默认提供 virtio 系列设备。
+
+**Q4: [done] QEMU 是什么？系统模拟、用户态模拟与 KVM 加速分别做什么？**
+
+QEMU 是一个开源的机器模拟器和虚拟化工具，能模拟整台机器以运行 Guest OS，也能在不同 CPU 架构之间运行单个用户态程序。系统模拟时，QEMU 提供虚拟机的机器模型和设备；CPU 指令可以由 QEMU 的 TCG 翻译执行，也可以借助 KVM 等 hypervisor 让客体代码直接运行在宿主 CPU 上。
+
+理解 QEMU 时要区分两种模拟范围，以及系统模拟中的 CPU 执行方式：
+
+1. **系统模拟：**为 Guest OS 提供一台由 CPU、内存和设备组成的虚拟机器。它适合启动完整操作系统，也可用于和实际机器架构不同的客体。
+2. **用户态模拟：**在宿主操作系统中运行一个为另一种 CPU 架构编译的程序，只模拟该程序需要的指令与用户态环境，不提供完整的客体机器或 Guest OS。
+3. **系统模拟配合 KVM：**这不是第三种模拟范围，而是系统模拟的一种 CPU 执行方式。QEMU 仍负责虚拟机机器模型和设备，KVM 利用宿主硬件虚拟化能力执行客体 CPU 指令；在支持的构建与目标上，QEMU 也可使用 TCG 翻译执行客体指令，通常慢于硬件辅助路径。
+
+因此，QEMU 不等同于 KVM：QEMU 提供模拟与虚拟机设备模型，KVM 是 Linux 内核提供的硬件虚拟化加速接口；具体可用的加速器取决于宿主操作系统和硬件。以上区分依据 QEMU 官方文档的 About QEMU、System Emulation 与 Virtualisation Accelerators 说明。

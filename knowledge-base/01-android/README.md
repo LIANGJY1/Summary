@@ -18,7 +18,7 @@
 
 ## 01-architecture/
 
-- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 185 题）：
+- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 235 题）：
   - [01-system-architecture.md](01-architecture/01-system-architecture.md)（19 题）
   - [02-system-boot.md](01-architecture/02-system-boot.md)（46 题）
   - [03-binder.md](01-architecture/03-binder.md)（22 题）
