@@ -832,6 +832,8 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
     var technicalCase by remember { mutableStateOf<Int?>(null) }
     var pendingAction by remember { mutableStateOf<PetDebugTools.QuickAction?>(null) }
     var pendingScenario by remember { mutableStateOf<PetDebugTools.Scenario?>(null) }
+    var pendingWeatherCase by remember { mutableStateOf<PetDebugTools.WeatherCase?>(null) }
+    var weatherTemplatePath by remember { mutableStateOf("/home/liang/Downloads/tianQ_pull/weather_new1.json") }
     var commandPreview by remember { mutableStateOf<Pair<PetDebugTools.QuickAction, List<String>>?>(null) }
 
     LaunchedEffect(Unit) { store.refreshToolboxDevices() }
@@ -930,13 +932,55 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
 
             item { PetSectionTitle("单事件控制台", "点击即发；生日和节日使用 PetIpcTest 正式 IPC") }
             item { PetActionGroups(
-                actions = PetDebugTools.quickActions.filterNot { it.group in setOf("环境", "构建安装") },
+                actions = PetDebugTools.quickActions.filterNot { it.group in setOf("环境", "构建安装", "天气服务") },
                 enabled = !running,
                 onAction = ::requestAction,
                 onShowCommand = { action ->
                     commandPreview = action to store.petQuickActionTechnicalCommands(action)
                 },
             ) }
+
+            item { PetSectionTitle("天气服务联调", "走天气 App 后门 JSON → 天气 SDK → Launcher；与上方状态机直注分开") }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = weatherTemplatePath,
+                            onValueChange = { weatherTemplatePath = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("天气 JSON 模板") },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedButton(onClick = {
+                            choosePath(directory = false, title = "选择天气 JSON 模板")?.let { weatherTemplatePath = it }
+                        }, enabled = !running) { Text("选择文件") }
+                    }
+                    Text(
+                        "运行前可开启「萌宠日志」观察结果。只改 data.live.weather_code / weather_CN；雨码 3–12、19、21–25、301，雪码 13–17、26–28、302，其余不触发。",
+                        fontSize = 11.sp, lineHeight = 15.sp, color = Theme.Muted,
+                    )
+                    Text(
+                        "执行方法：停止天气 App → adb push → run-as 写入私有 JSON → 校验 → -S 启动后门 Activity → 清理临时文件。",
+                        fontSize = 11.sp, lineHeight = 15.sp, color = Theme.Muted,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PetDebugTools.weatherServiceCases.forEach { weatherCase ->
+                            OutlinedButton(
+                                onClick = { pendingWeatherCase = weatherCase },
+                                enabled = !running,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            ) { Text(weatherCase.label, fontSize = 11.sp) }
+                        }
+                    }
+                    PetActionGroups(
+                        actions = PetDebugTools.quickActions.filter { it.group == "天气服务" },
+                        enabled = !running,
+                        onAction = ::requestAction,
+                        onShowCommand = { action -> commandPreview = action to store.petQuickActionTechnicalCommands(action) },
+                    )
+                }
+            }
 
             if (run.target != null) item {
                 Surface(shape = RoundedCornerShape(10.dp), color = Theme.CodeBlock) {
@@ -1042,28 +1086,38 @@ private fun PetDebugCard(store: AppStore, modifier: Modifier = Modifier) {
 
     val confirmAction = pendingAction
     val confirmScenario = pendingScenario
-    if (confirmAction != null || confirmScenario != null) {
+    val confirmWeatherCase = pendingWeatherCase
+    if (confirmAction != null || confirmScenario != null || confirmWeatherCase != null) {
         AlertDialog(
-            onDismissRequest = { pendingAction = null; pendingScenario = null },
-            title = { Text(if (confirmScenario != null) "运行：${confirmScenario.titleZh}" else "确认执行") },
+            onDismissRequest = { pendingAction = null; pendingScenario = null; pendingWeatherCase = null },
+            title = {
+                Text(when {
+                    confirmScenario != null -> "运行：${confirmScenario.titleZh}"
+                    confirmWeatherCase != null -> "天气服务联调：${confirmWeatherCase.label}"
+                    else -> "确认执行"
+                })
+            },
             text = {
                 Text(
                     confirmScenario?.let {
                         "将对 ${store.toolboxSerial ?: "当前设备"} 执行此场景：先重启 Launcher 清理进程状态，再依次发送事件。预期结果：${it.expected}" +
                             (it.limitation?.let { note -> "\n\n设备限制：$note" } ?: "")
-                    }
-                        ?: confirmAction?.confirmation.orEmpty(),
+                    } ?: confirmWeatherCase?.let {
+                        "将使用 ${store.toolboxSerial ?: "当前设备"} 注入模板文件中的 live.weather_code=${it.weatherCode}（${it.weatherName}）。预期：${it.expected}\n\n此流程会停止天气 App、覆盖其私有测试 JSON 并启动后门 Activity；不会清除 App 数据。"
+                    } ?: confirmAction?.confirmation.orEmpty(),
                 )
             },
             confirmButton = {
                 Button(onClick = {
                     confirmScenario?.let(store::runPetScenario)
+                    confirmWeatherCase?.let { store.runPetWeatherServiceCase(it, weatherTemplatePath) }
                     confirmAction?.let(store::runPetQuickAction)
                     pendingAction = null
                     pendingScenario = null
+                    pendingWeatherCase = null
                 }) { Text("执行") }
             },
-            dismissButton = { TextButton(onClick = { pendingAction = null; pendingScenario = null }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { pendingAction = null; pendingScenario = null; pendingWeatherCase = null }) { Text("取消") } },
         )
     }
 

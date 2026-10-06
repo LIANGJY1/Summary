@@ -781,7 +781,19 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             selectedQuestionKeys = emptySet()
         }
     }
-    val searchPool = if (searchScope == QuestionSearchScope.ALL) {
+    // 全目录结果只在搜索栏可见时占用题库主列表；收起搜索后主列表必须回到侧栏选中的文档。
+    val directorySearchActive = store.questionSearchVisible.value && searchScope == QuestionSearchScope.ALL
+    LaunchedEffect(directorySearchActive) {
+        if (directorySearchActive) {
+            batchTagMode = false
+            selectedQuestionKeys = emptySet()
+            showBatchTagDialog = false
+            reorderMode = false
+            draggingKey = null
+            dragTargetIndex = null
+        }
+    }
+    val searchPool = if (directorySearchActive) {
         if (compact) store.allKnowledgeQuestions else store.allSourceQuestions
     } else sourceQuestionsSnapshot
     val searchResults = if (query.isBlank()) searchPool else searchPool.filter { entry ->
@@ -796,7 +808,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val questionIndexByKey = remember(sourceQuestionsSnapshot) {
         sourceQuestionsSnapshot.mapIndexed { index, entry -> sourceQuestionKey(entry) to index }.toMap()
     }
-    val canReorderList = reorderMode && searchScope == QuestionSearchScope.CURRENT && query.isBlank() &&
+    val canReorderList = reorderMode && !directorySearchActive && query.isBlank() &&
         statusFilter == QuestionStatusFilter.ALL && visible.size == sourceQuestionsSnapshot.size
     val selectedEntries = sourceQuestionsSnapshot.filter { sourceQuestionKey(it) in selectedQuestionKeys }
 
@@ -805,7 +817,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     }
     val allVisibleQuestionsSelected = visible.isNotEmpty() &&
         visible.all { sourceQuestionKey(it) in selectedQuestionKeys }
-    val dragging = reorderMode && searchScope == QuestionSearchScope.CURRENT && draggingKey != null &&
+    val dragging = reorderMode && !directorySearchActive && draggingKey != null &&
         query.isBlank() && statusFilter == QuestionStatusFilter.ALL
     val renderedQuestions = if (dragging) {
         val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
@@ -816,7 +828,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     } else visible
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
-        if (query.isBlank() && searchScope == QuestionSearchScope.CURRENT && statusFilter == QuestionStatusFilter.ALL && !dragging) {
+        if (query.isBlank() && !directorySearchActive && statusFilter == QuestionStatusFilter.ALL && !dragging) {
             sourceSectionsSnapshot.forEach { add(SourceDocumentItem.Section(it)) }
         }
     }
@@ -829,8 +841,19 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         }
         .let { items ->
             // 拖拽中必须保持实时渲染顺序；按 startOffset 排序会把顺序打回文档序，其他卡片永远不动
-            if (dragging) items else items.sortedBy { it.startOffset }
-    }
+            when {
+                dragging -> items
+                directorySearchActive -> items.sortedWith(
+                    compareBy<SourceDocumentItem> {
+                        when (it) {
+                            is SourceDocumentItem.Question -> it.entry.sourcePath
+                            is SourceDocumentItem.Section -> ""
+                        }
+                    }.thenBy { it.startOffset },
+                )
+                else -> items.sortedBy { it.startOffset }
+            }
+        }
     val mappedDocuments = remember(store.knowledgeDocuments.toList(), store.settings.sourceQuestionPaths) {
         SourceQuestions.supportedDocuments(store.knowledgeDocuments, store.settings.sourceQuestionPaths)
     }
@@ -846,7 +869,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         KnowledgeTree.build(treeDocuments, directorySnapshot)
     }
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
-    val canBatchTag = selectedMappedDocument.isNotBlank() && !reorderMode && query.isBlank() &&
+    val canBatchTag = selectedMappedDocument.isNotBlank() && !directorySearchActive && !reorderMode && query.isBlank() &&
+        statusFilter == QuestionStatusFilter.ALL &&
         SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)
     val selectedReadmeDocument = store.selectedSourcePath.takeIf { it in mappedReadmeDocuments }
     LaunchedEffect(selectedReadmeDocument) {
@@ -1044,8 +1068,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         if (compact) {
             MobileReaderHeader(
                 title = "题库",
-                count = if (query.isNotBlank() || statusFilter != QuestionStatusFilter.ALL) "${visible.size} 题" else if (sourceQuestionsSnapshot.isEmpty()) "文档" else "${sourceQuestionsSnapshot.size} 题",
-                path = store.selectedSourcePath,
+                count = if (directorySearchActive || query.isNotBlank() || statusFilter != QuestionStatusFilter.ALL) "${visible.size} 题" else if (sourceQuestionsSnapshot.isEmpty()) "文档" else "${sourceQuestionsSnapshot.size} 题",
+                path = if (directorySearchActive) "整个目录树" else store.selectedSourcePath,
                 onSearch = { store.questionSearchVisible.value = !store.questionSearchVisible.value },
                 onTree = { showMobileTree = true },
             )
@@ -1126,7 +1150,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
                 )
             }
-        } else if (selectedReadmeDocument != null && (!compact || query.isBlank())) {
+        } else if (selectedReadmeDocument != null && !directorySearchActive && (!compact || query.isBlank())) {
             key(selectedReadmeDocument) {
                 ReadmeDocumentView(
                     store = store,
@@ -1144,10 +1168,10 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             }
         } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
-            Text("${if (query.isBlank() && statusFilter == QuestionStatusFilter.ALL) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
+            Text(if (directorySearchActive) "目录树搜索结果" else "同源题库", style = ui.typography.sectionTitle, color = Theme.MdH1)
+            Text("${if (!directorySearchActive && query.isBlank() && statusFilter == QuestionStatusFilter.ALL) store.sourceQuestions.size else visible.size} 题", style = ui.typography.caption, color = Theme.Muted)
             Spacer(Modifier.weight(1f))
-            if (query.isBlank() && !batchTagMode) {
+            if (!directorySearchActive && query.isBlank() && statusFilter == QuestionStatusFilter.ALL && !batchTagMode) {
                 OutlinedButton(
                     onClick = {
                         reorderMode = !reorderMode
@@ -1162,7 +1186,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text(if (reorderMode) "完成排序" else "调整顺序", fontSize = 12.sp)
                 }
             }
-            if (batchTagMode) {
+            if (!directorySearchActive && batchTagMode) {
                 Text("已选 ${selectedQuestionKeys.size} 道", fontSize = 12.sp, color = Theme.Muted)
                 TextButton(
                     onClick = {
@@ -1205,7 +1229,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text("批量标签", fontSize = 12.sp)
                 }
             }
-            PlatformTooltip(
+            if (!directorySearchActive) PlatformTooltip(
                 tooltip = {
                     Surface(color = Theme.Elevated, shape = MaterialTheme.shapes.small) {
                         Text(
@@ -1226,7 +1250,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     Text(if (store.libraryUpdateRunning) "更新中…" else "Update", fontSize = 12.sp)
                 }
             }
-            Box {
+            if (!directorySearchActive) Box {
                 OutlinedButton(
                     onClick = { showMoreActions = true },
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
@@ -1248,7 +1272,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             Spacer(Modifier.width(12.dp))
             SelectionContainer {
                 Text(
-                    store.selectedSourcePath,
+                    if (directorySearchActive) "整个目录树" else store.selectedSourcePath,
                     style = ui.typography.caption,
                     color = Theme.Muted,
                     maxLines = 1,
@@ -1256,7 +1280,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 )
             }
             Spacer(Modifier.width(10.dp))
-            Text(
+            if (!directorySearchActive) Text(
                 "复制",
                 style = ui.typography.caption,
                 color = Theme.Accent,
@@ -1270,7 +1294,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         }
         }
         Spacer(Modifier.height(6.dp))
-        if (!compact && !SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
+        if (!directorySearchActive && !compact && !SourceQuestions.isSupportedPath(store.selectedSourcePath, store.settings.sourceQuestionPaths)) {
             Text("该文档已纳入目录映射，但当前版本暂未接入 Q 题目解析。", fontSize = 11.sp, color = Theme.WarnOrange)
         }
         Spacer(Modifier.height(8.dp))
@@ -1577,7 +1601,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                 }
                                             }
                                         }
-                                        if (searchScope == QuestionSearchScope.ALL && query.isNotBlank()) {
+                                        if (directorySearchActive) {
                                             Text(entry.sourcePath, fontSize = 10.sp, color = Theme.Accent, maxLines = 1)
                                         }
                                     }
