@@ -577,6 +577,13 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         }
     }
 
+    fun runPetWeatherServiceCase(weatherCase: PetDebugTools.WeatherCase, templatePath: String) {
+        runPetDebug("天气服务：${weatherCase.label}") { adb, serial ->
+            val prepared = PetDebugTools.prepareWeatherCaseFile(templatePath, weatherCase)
+            PetDebugTools.weatherServiceSteps(adb, serial, prepared)
+        }
+    }
+
     fun petScenarioTechnicalCommands(scenario: PetDebugTools.Scenario): List<String> {
         val adbPath = FeishuCheckin.findAdb() ?: return listOf("未找到 adb")
         val serial = toolboxSerial ?: return listOf("尚未选择目标设备")
@@ -605,7 +612,12 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             showToast("未检测到在线设备：请先刷新并选择目标")
             return
         }
-        val allSteps = steps(adbPath, serial)
+        val allSteps = try {
+            steps(adbPath, serial)
+        } catch (error: Exception) {
+            showToast(error.message ?: "无法准备萌宠调试步骤")
+            return
+        }
         val generation = ++petDebugGeneration
         val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             val lines = mutableListOf<String>()
@@ -642,6 +654,10 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                                 break
                             }
                         }
+                        is PetDebugTools.Step.CleanupLocalFile -> {
+                            step.file.delete()
+                            update(index + 1, "已清理本机临时天气 JSON")
+                        }
                     }
                 }
                 if (exit == 0) {
@@ -664,6 +680,9 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 update(petDebugRun.value.step, "执行未能启动：${error.message ?: error.javaClass.simpleName}", exitCode = -1, running = false)
                 if (generation == petDebugGeneration) showToast("萌宠调试执行失败，请检查 adb、设备连接和本地构建环境")
             } finally {
+                allSteps.filterIsInstance<PetDebugTools.Step.CleanupLocalFile>().forEach { cleanup ->
+                    runCatching { cleanup.file.delete() }
+                }
                 synchronized(petProcessLock) {
                     if (generation == petDebugGeneration) petDebugJob = null
                 }
