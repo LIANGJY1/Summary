@@ -85,3 +85,23 @@
 3. **提示文件不存在但文件可见：**检查 `readelf -l` 中的解释器路径；动态 ELF 所需的 Android 动态链接器不存在时，也可能出现此现象。
 4. **动态库加载失败：**根据链接器错误检查 `readelf -d` 的依赖项，以及对应 `.so` 是否安装、架构和分区是否匹配。
 5. **权限被拒绝：**检查文件权限、挂载属性和 SELinux 拒绝日志；仅增加执行位不能绕过 SELinux 策略。
+
+
+**Q8: [learning] ELF 解析？**
+
+ELF（Executable and Linkable Format，可执行与可链接格式）是 Linux 与 Android 描述本机二进制的文件格式：可执行程序、共享库 `.so`、可重定位目标文件和核心转储都用它。ELF 只是格式规范，规定字节如何组织；一个文件能否启动，取决于它的 ELF 类型、CPU 架构和依赖，而不是“是不是 ELF”。
+
+1. **格式承载的角色：**ELF 头部的文件类型字段区分用途：`ET_REL` 是可重定位目标文件（编译中间产物，链接器输入），`ET_EXEC` 是传统可执行文件，`ET_DYN` 是共享库或位置无关可执行文件（PIE），`ET_CORE` 是崩溃转储。同一种格式服务多个角色，不能据扩展名判断用途。
+2. **两种视图是理解关键：**ELF 同时描述两套结构。节（section）是链接视图，`.text`、`.data`、`.bss` 等按内容划分，供链接器和调试器使用；段（segment）是运行视图，program header 把节按访问权限分组为可加载段。内核与动态链接器只认段，不认节——`strip` 去掉的是符号和调试节，不影响运行段，因此体积变小而运行不变。
+3. **谁消费 ELF：**内核执行 `execve` 时按 program header 把可加载段映射进进程地址空间，再从 ELF 头记录的入口地址开始执行；动态文件的 `PT_INTERP` 指定动态链接器路径（Android 为 `/system/bin/linker64`），由它解析依赖共享库。静态可执行文件不经过这一步。
+4. **怎么读一个 ELF：**`file` 给出类型、架构和链接方式；`readelf -h` 读头部（类型、架构、入口地址）；`readelf -l` 读段与解释器；`readelf -d` 读动态依赖。例如 AArch64 与 x86-64 的 ELF 不能互换执行，`file` 输出里的架构就是第一道检查。
+5. **Android 语境：**`/init`、`linker` 和各 `.so` 都是 ELF；Soong 产出的本机二进制默认是 ELF，现代版本要求可执行文件为 PIE（同样归类为 `ET_DYN`）。APK 与 DEX 不是 ELF，由 ART 在应用进程中加载执行。
+
+例如，在主机上确认一个构建产物的身份：
+
+```console
+$ file out/target/product/<产品名>/system/bin/init
+$ readelf -h out/target/product/<产品名>/system/bin/init | grep -E 'Type|Machine|Entry'
+```
+
+`file` 输出形如 `ELF 64-bit LSB pie executable, ARM aarch64`；`readelf -h` 的 `Type` 字段给出文件类型，`Machine` 给出目标架构，`Entry` 给出入口地址——三者共同回答“这是什么格式、跑在哪种 CPU、从哪里开始执行”。

@@ -17,22 +17,12 @@
 
 **Q2: [learning] android 中的 system-as-root 怎么理解？**
 
-system-as-root（SAR）指根文件系统由 system 分区承担：system 的内容直接构成 `/`，不再有“ramdisk 提供根、system 挂载到 `/system`”的两段结构。该布局 Android 9 引入，Android 10 起成为新发布设备的要求。
+system-as-root（SAR）指根文件系统就是 system 分区本身：挂载后 system 镜像根部的内容直接出现在 `/` 下。init 二进制在镜像里位于 `system/bin/init`，成为根之后它在设备上的路径就是 `/system/bin/init`；构建时由 rootdir 模块（`system/core/rootdir`）在镜像根部创建指向它的符号链接，于是挂载后 `/init` 指向 `/system/bin/init`。内核启动第一个用户态进程的入口就是根下的 `/init`，保留这条路径使内核、既有工具和脚本都无需改动。该布局 Android 9 引入，Android 10 起成为新发布设备的要求；ramdisk 仍然存在，但只负责 first-stage 启动，不再提供根文件系统。
 
-1. **是什么：**挂载后 system 分区的内容出现在根路径下，`/init` 是指向 `/system/bin/init` 的符号链接而不是实体文件。ramdisk 仍然存在，但只承担 first-stage 启动职责，不再提供根文件系统。
-2. **与旧布局的区别：**旧布局由 ramdisk 提供初始根文件系统，`/init` 是 ramdisk 内的实体文件，system 作为普通分区挂载到 `/system`。SAR 下 system 同时承担根，init 把根绑定到 `/system` 路径，使按 `/system` 开头的旧访问方式继续可用。
-3. **Android 10 起为什么必须采用：**动态分区下 system 是 `super` 内的逻辑分区。内核按 fstab 挂载物理块设备，无法直接把逻辑分区挂为根，因此由 ramdisk 中的 first-stage init 解析 `super` 元数据、创建设备映射，再把 system 挂为根。SAR 与 first-stage init 承担根挂载是同一变化的两面。
-4. **如何验证：**`ls -l /init` 显示指向 `/system/bin/init` 的符号链接；`findmnt /` 显示根文件系统来自 system 逻辑分区。
-5. **边界：**升级设备保留原有启动布局，非 SAR 设备上 `/init` 是实体文件；recovery 的根布局可能与正常启动不同；判断以设备 fstab 和分区表为准，不能按 Android 版本反推。
-
-例如，在设备上确认根布局：
-
-```bash
-ls -l /init
-findmnt /
-```
-
-符号链接指向 `/system/bin/init`、根的挂载源为 system 逻辑分区，即可判定设备采用 SAR。
+1. **和旧布局比：**旧布局由 ramdisk 提供初始根文件系统，`/init` 是 ramdisk 内的实体文件，system 作为普通分区挂载到 `/system`。SAR 下 system 同时承担根，init 再把根绑定到 `/system` 路径，按 `/system` 开头的旧访问方式继续可用。
+2. **为什么 Android 10 起必须采用：**动态分区下 system 是 `super` 内的逻辑分区，内核只挂载物理块设备，无法把它挂为根；必须由 ramdisk 中的 first-stage init 解析 `super` 元数据、创建设备映射后再挂载。根从 ramdisk 换成 system，与 first-stage init 承担根挂载是同一变化的两面。
+3. **怎么确认：**`ls -l /init` 第一列为 `l`，输出形如 `init -> /system/bin/init`——符号链接是一种内容为路径的特殊文件，访问它等于访问目标文件；`findmnt /` 应显示根来自 system 逻辑分区。两者同时成立即可判定设备采用 SAR。
+4. **注意：**升级设备保留原有启动布局，非 SAR 设备上 `/init` 是实体文件；recovery 的根布局可能与正常启动不同。判断以设备 fstab 和分区表为准，不按 Android 版本反推。
 
 
 **Q3: [learning] Android 动态分区怎样把 `system`、`vendor` 等逻辑分区放进 `super`？它解决了什么容量问题？**

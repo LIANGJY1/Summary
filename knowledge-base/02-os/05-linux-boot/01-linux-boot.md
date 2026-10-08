@@ -20,9 +20,9 @@
 
 `/dev/console` 提供用户态访问入口，`console=` 选择内核日志输出端，两者不能互相替代。
 
-**Q3: [done] `CONFIG_DEVTMPFS` 未启用时，为什么 initramfs 要预置 `/dev/console`？**
+**Q3: [done] 为什么 initramfs 要预置 `/dev/console`，等 `/init` 挂好 devtmpfs 不行吗？**
 
-Mini_Android 实验内核未启用 `CONFIG_DEVTMPFS`，不能依靠 devtmpfs 提供 `/dev/console`。内核启动 initramfs 中的 `/init` 前会尝试打开该节点，并将其接到早期用户态的标准输入、输出和错误。节点缺失时，这条控制台通路无法按预期建立。
+不能等。devtmpfs 要由 `/init` 运行后执行挂载才会生成节点，而内核在启动 `/init` 前就要打开 `/dev/console`，把它接到早期用户态的标准输入、输出和错误——时序上 devtmpfs 帮不上忙，与本内核是否编译 devtmpfs 无关。节点缺失时，这条控制台通路无法按预期建立。
 
 因此要在打包目录中创建真正的字符设备节点。initramfs 归档还须保留其设备类型和设备号。只创建 `rootfs/dev/` 目录或普通空文件不能代替 `/dev/console`。
 
@@ -171,3 +171,60 @@ mount("sysfs", "/sys", "sysfs", 0, nullptr);
 5. 文件系统参数 `data`：`nullptr` 表示不传递额外的文件系统专用选项。
 
 init 通常以 root 身份执行挂载。任一调用返回 `-1` 时，示例只打印通用错误；检查 `errno` 才能知道具体原因，例如权限不足或挂载点不存在。
+
+
+**Q14: [learning] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
+
+QEMU 在模拟一台完整的电脑，每条参数都是往虚拟机上焊硬件或规定行为：`-m` 插内存条，`-kernel` 与 `-initrd` 绕过硬盘引导、直接把内核和初始内存盘交给这台机器，`-append` 写内核启动参数，`-drive` 焊一块盘片为宿主机 system.img 文件的硬盘，其余参数规定输出与退出行为。
+
+例如，Mini_Android 的完整启动命令：
+
+```bash
+cd /home/liang/Project/MyProject/Mini_Android
+qemu-system-x86_64 \
+    -m 1024 \
+    -kernel /home/liang/Project/AAOS13_kernel/common/arch/x86/boot/bzImage \
+    -initrd /home/liang/Project/MyProject/Mini_Android/build/initramfs.cpio.gz \
+    -drive file=/home/liang/Project/MyProject/Mini_Android/build/system.img,format=raw,if=virtio \
+    -append "earlycon=uart8250,io,0x3f8,115200n8 8250.nr_uarts=1 console=ttyS0,115200n8 rdinit=/init loglevel=8" \
+    -display none \
+    -serial stdio \
+    -monitor none \
+    -no-reboot
+```
+
+命令的效果分三层看：磁盘怎么接上、guest 侧怎么发现、节点与内容怎么到位。
+
+1. **`-drive` 的三个字段：**
+
+    1. `file=`：盘片。虚拟机读磁盘第 0 扇区，QEMU 就返回文件的第 0–511 字节；虚拟机写盘，QEMU 就写回这个文件。同一份字节，在宿主机是文件，在虚拟机里是硬盘。
+    2. `format=raw`：声明文件是裸字节、没有包装，字节内容即磁盘内容；qcow2 等格式另带元数据层（快照、压缩），mkfs 造出的是裸镜像，与盘 1:1 对应。
+    3. `if=virtio`：interface，即盘插在哪种总线上。virtio 是半虚拟化接口，前端驱动与 QEMU 约定协作，不逐位模仿真实硬件；省略时默认挂到 IDE，guest 看到的是 sd 盘而不是 vd 盘。
+
+2. **guest 侧的落地链：**
+
+    ```text
+    QEMU 把盘挂上 virtio 总线
+      → 内核 VIRTIO_PCI 驱动发现总线上的设备
+      → 内核 VIRTIO_BLK 驱动认领"这是一块盘"
+      → 内核给它登记为块设备,起名 vda
+      → 打出你确认过的那行日志
+    ```
+
+    编内核时开 VIRTIO_PCI 与 VIRTIO_BLK 两个选项，正是为了这条链。vda 即 virtio disk a，第二块是 vdb；SATA 盘叫 sda、老式 IDE 叫 hda，前缀暴露接口类型。
+
+3. **日志行对账：**`virtio_blk virtio0: [vda] 131072 512-byte logical blocks (67.1 MB/64.0 MiB)` 中，131072×512 字节 = 64MiB，正是 mkfs 时分配的容量；67.1MB 与 64.0MiB 是十进制与二进制两种数法，是同一容量不是两块盘。
+4. **启动方式参数：**
+
+    1. `-m 1024`：虚拟机内存 1GB；省略时用 QEMU 默认值（常见 128MB），可能不足以启动系统。
+    2. `-kernel` 与 `-initrd`：分别指定内核镜像与 initramfs，绕过磁盘引导直接加载；省略则 QEMU 按默认引导顺序从磁盘启动。
+    3. `-append`：传给内核的命令行。`earlycon` 与 `console=ttyS0` 决定日志输出去向；`rdinit=/init` 显式指定 initramfs 里第一个用户态程序，省略时内核默认执行 `/init`。
+
+5. **输出控制参数：**
+
+    1. `-display none`：关闭图形显示窗口；本场景只靠串口观察输出。
+    2. `-serial stdio`：把虚拟机串口绑定到当前终端，日志才能显示在宿主终端上。
+    3. `-monitor none`：关闭 QEMU 监视器界面，避免它与串口争抢同一终端。
+    4. `-no-reboot`：guest 请求重启时直接退出而不是重新启动，便于判断实验结束。
+
+6. **硬件在册不等于名字在册：**[vda] 日志只代表内核已注册块设备；`/dev/vda` 节点要等 devtmpfs 挂到 /dev 后由内核生成，读出内容还要再挂载。本内核 CONFIG_DEVTMPFS=y 但 CONFIG_DEVTMPFS_MOUNT 未设置，initramfs 场景也不会自动挂载，必须由 init 执行 `mount("devtmpfs", "/dev", ...)`，节点才出现。
