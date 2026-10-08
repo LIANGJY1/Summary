@@ -12,14 +12,14 @@
 2. **defconfig——起点层：**arch/*/configs/ 下的 defconfig 是精简预填模板，只写与默认值不同的少数关键行；没写的项不是"关"，是"待定"。
 3. **.config——实例层：**起点套用 Kconfig 规则（补默认值、满足依赖）展开后的完整结果。问"这次构建有什么功能"，只有它说得清。
 
-协作关系按发生时刻分四步：
+协作按"写入 → 校验 → 消费 → 回流"四个时刻发生：
 
-1. **配置阶段（生产）：**`make defconfig`、menuconfig 等配置工具读全部 Kconfig 建立选项全集与联动规则，盖上 defconfig 写过的少数行，再按规则补默认值、解依赖，写出完整 .config——规则和起点是输入，实例是输出。在 menuconfig 里把某项改成 =y 时，工具同时查 Kconfig 依赖，把它的依赖项一并打开写回。
-2. **构建阶段（消费）：**Kconfig 在配置阶段完成后即退场；make 时 syncconfig 把 .config 转成 include/config/auto.conf（供 Makefile 做条件编译判断）与 include/generated/autoconf.h（供 C 源码 include 出 CONFIG_X 宏）。.config 本身不直接参与编译，源码里的宏都来自派生文件。
-3. **沉淀回流（savedefconfig）：**`make savedefconfig` 拿当前 .config 与 Kconfig 默认值逐项对比，倒推出只含差异行的精简 defconfig；产品内核要固化自己的默认配置，走的就是这条从实例回到起点的路。
-4. **跨版本演进（olddefconfig）：**内核升级后，由新版本的 Kconfig 解释旧 .config：新增选项按新默认值补行，已删除选项的行被当无效行丢弃，依赖变化的项被修正。离开 Kconfig，.config 只是一堆无法跟着源码演进的多余文本。
+1. **写入（生成与修改）：**`make defconfig` 读全部 Kconfig 建立选项全集与联动规则，从 defconfig 起点补默认值、解依赖，展开写出完整 .config。之后的修改入口多样——menuconfig 交互式勾选、源码自带的 scripts/config 脚本纯文本改行、手工编辑也合法——但写入动作一律不做校验（scripts/config 连拼错的选项名都照写不误）；在 menuconfig 里把某项设为 =y 时，工具会查 Kconfig 依赖、连带打开其依赖项。
+2. **校验（olddefconfig）：**`make olddefconfig` 拿 Kconfig 定义逐项核对 .config：名字不存在的行删除（兜住拼错名）、依赖不满足的项强制关闭、没填的新项按默认值补上、已填的项一律保留——old 的含义就是"保留旧答案，缺的按默认补齐"；要整套扔掉换成默认配置，用的是 `make defconfig`。
+3. **消费（构建）：**校验完成 Kconfig 即退场；make 时 syncconfig 把 .config 转成 include/config/auto.conf（供 Makefile 做条件编译判断）与 include/generated/autoconf.h（供 C 源码 include 出 CONFIG_X 宏）。.config 本身不直接参与编译——配置改完必须重新编译，新开关才会进入 bzImage。
+4. **回流（沉淀与跨版本）：**`make savedefconfig` 拿当前 .config 与 Kconfig 默认值逐项对比，倒推出只含差异行的精简 defconfig，产品内核借此固化自己的默认配置；内核升级后重跑 olddefconfig，等于用新版本的规则解释旧实例——无效行丢弃、缺项补默认、已填保留，.config 因此能跟着源码演进。
 
-判断规则：三个文件单独拿出来都残缺——Kconfig 不含你的任何选择，defconfig 不是完整清单，.config 离开 Kconfig 无法跨版本演进。.config 回答"这次构建是什么样"，Kconfig 回答"允许配成什么样"，defconfig 回答"推荐从什么样开始"；纯文本形态让 .config 能提交进版本库、能逐行 diff 厂商基准与现场配置。
+判断规则：三个文件单独拿出来都残缺——Kconfig 不含你的任何选择，defconfig 不是完整清单，.config 没有校验就可能留着拼错名或依赖失效的行。改完开关要验收，可直接利用记录形态：关闭项行首是 #，因此 grep 行首 `^CONFIG_<选项名>=` 只会打印开启状态的行，打印出几行就确认几个开关开启。.config 回答"这次构建是什么样"，Kconfig 回答"允许配成什么样"，defconfig 回答"推荐从什么样开始"；纯文本形态让 .config 能提交进版本库、能逐行 diff 厂商基准与现场配置。
 
 **Q2: 用 menuconfig 配内核时看到的选项（CONFIG_VIRTIO_PCI、CONFIG_DEVTMPFS 这些）怎么理解？=y、=m、=n 分别是什么意思，在 .config 里长什么样？**
 

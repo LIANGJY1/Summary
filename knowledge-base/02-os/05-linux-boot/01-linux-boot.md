@@ -1,6 +1,6 @@
 # Linux 启动与 initramfs
 
-> 通用 Linux 内核早期启动、initramfs 组成、控制台链路、归档操作，以及制作 rootfs 的文件实操命令（创建、权限与挂载，自 02-os/01-file 迁入）。Android 专属的内核/GKI、启动镜像与分区布局归 Android 专题。
+> 通用 Linux 内核早期启动、initramfs 组成、控制台链路、归档操作，以及制作 rootfs 的文件实操命令（创建、权限与挂载，自 02-os/01-file 迁入）。内核配置选项两题（Kconfig/.config 机制与 virtio 启动链路口径）于 2026-10-08 迁往 ../06-linux-build/02-kernel-config.md；bzImage、zImage 两题迁往 ../06-linux-build/01-image.md。Android 专属的内核/GKI、启动镜像与分区布局归 Android 专题。
 
 **Q1: [done] 制作并用 QEMU 启动 initramfs 时，`rootfs/` 要准备什么，`/init`、`/dev/console` 和 `console=` 如何配合？**
 

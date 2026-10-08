@@ -151,7 +151,7 @@
 
 ## 10-build-system/
 
-- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块与 aconfig**（7 册 83 题）：
+- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 84 题）：
   - [01-product-config.md](10-build-system/01-product-config.md)（15 题）
   - [02-soong-modules.md](10-build-system/02-soong-modules.md)（26 题）
   - [03-android-executables.md](10-build-system/03-android-executables.md)（7 题）
@@ -159,6 +159,7 @@
   - [05-android-kernel-build.md](10-build-system/05-android-kernel-build.md)（14 题）
   - [06-kernel-modules.md](10-build-system/06-kernel-modules.md)（4 题）
   - [07-aconfig.md](10-build-system/07-aconfig.md)（9 题）
+  - [08-ota-packages.md](10-build-system/08-ota-packages.md)（1 题）
 
 ## 11-aaos/
 
@@ -308,6 +309,7 @@
 | [10-build-system/05-android-kernel-build.md](10-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
 | [10-build-system/06-kernel-modules.md](10-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |
 | [10-build-system/07-aconfig.md](10-build-system/07-aconfig.md) | aconfig：声明与构建期代码生成 | 9 |
+| [10-build-system/08-ota-packages.md](10-build-system/08-ota-packages.md) | Android OTA 与升级包：整包与差分（patch 包） | 1 |
 | [11-aaos/01-vehicle-links.md](11-aaos/01-vehicle-links.md) | Android 车机九类端到端链路、通信边界与排查方法 | 3 |
 | [11-aaos/02-car-services.md](11-aaos/02-car-services.md) | CarService 服务速览 | 12 |
 | [11-aaos/03-vhal-integration.md](11-aaos/03-vhal-integration.md) | VHAL 集成与契约 | 4 |
