@@ -166,3 +166,25 @@ auto count = a / b;
 ```
 
 `quotient` 是浮点除法结果，`count` 推导为 `int` 并保存整数除法结果。`static_cast` 不能替代运行期类型检查，也不代表转换一定没有信息损失。
+
+**Q22: [learning] `int FirstStageMain(int argc, char **argv)` 的第二个参数为什么要写两级指针，它和 `char *argv[]` 是同一类型吗？**
+
+`char **argv` 表示 `argv` 指向 `char*`：解引用一次得到一个参数字符串，再解引用一次得到一个字符。在函数形参声明中，数组形式 `char *argv[]` 会按元素类型调整为指针形式，因此它与 `char **argv` 是同一类型，两种写法等价。
+
+1. **两级指针对应的数据结构：**每个命令行参数都是独立的、以空字符结尾的字符串，字符串本身用 `char*` 寻址；`argv` 再指向这些指针组成的序列。于是 `argv[i]` 是第 i 个参数，`argv[i][j]` 是它的第 j 个字符，`argv[0]` 按约定是程序名。
+2. **长度为什么单列：**序列的元素个数写不进这个类型，因此用 `argc` 单独传递，访问范围是 `argv[0]` 到 `argv[argc - 1]`。标准还保证 `argv[argc]` 为空指针，也可据此判断结束。
+3. **两种写法为什么等价：**函数形参的数组声明会调整为指针声明，且调整只看元素类型。`char *argv[]` 的元素是 `char*`，调整结果就是 `char **`。
+4. **边界：**这条调整只发生在形参声明，作为独立对象的数组仍不是指针，`sizeof` 结果不同。元素类型也决定调整结果：`char argv[][16]` 的元素是 `char[16]`，调整后是指向整个数组的指针，与 `char **` 不是同一类型。
+
+例如：
+
+```cpp
+void parse_args(int argc, char *argv[]);
+
+int FirstStageMain(int argc, char **argv) {
+    parse_args(argc, argv);
+    return 0;
+}
+```
+
+形参写作 `char *argv[]` 的函数可以直接接收 `char **argv` 实参，无需转换，因为两个声明调整后是同一类型。
