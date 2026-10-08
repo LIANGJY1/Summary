@@ -125,8 +125,37 @@ Android 的 system.img 也是这么造的：构建系统把编译产物目录灌
 一句话：镜像 = 装好系统的盘整个装进文件；挂载它和挂载真盘是一回事。
 
 
+**Q10: [learning] mkfs.ext4 全解析**
 
-**Q10: [learning] 镜像一般怎么存储、存在哪？**
+`mkfs.ext4` 在块设备或镜像文件上创建 ext4 文件系统，调用形式为 `mkfs.ext4 [选项] 设备 [块数]`。设备必须是已存在的分区、loop 设备或普通镜像文件；省略块数时文件系统使用整个设备。它是 e2fsprogs 里 mke2fs 的别名，`mke2fs -t ext4 设备` 与 `mkfs.ext4 设备` 等价，调用名只决定默认文件系统类型。
+
+以 `mkfs.ext4 -d system_root -L system build/system.img 64M` 为例，命令行分四段：`-d system_root` 指定从哪个目录灌内容，`-L system` 写卷标，`build/system.img` 是输出文件，`64M` 是文件系统总容量。
+
+1. **前置条件：**镜像文件要先建好再格式化，例如 `truncate -s 64M build/system.img` 生成空文件；目标不能处于已挂载状态。对真实分区执行会销毁原有数据，不可恢复。
+2. **常用选项：**选项按职责分四类。
+
+    1. `-d 目录`：把目录树连同文件内容和权限位一起写进新文件系统，制作 rootfs 或 system 镜像时直接灌入，不必先挂载再拷贝——`system/bin/init` 的可执行权限就是这样住进镜像的。省略时只得到空文件系统，内容需挂载后自行拷入。
+    2. `-L 卷标`：把卷标写进超级块，`blkid`、`lsblk` 都能看到，挂载和 fstab 可按 `LABEL=system` 引用。省略时标签为空。
+    3. `-b 块大小`：指定块大小，如 1024 或 4096，影响单文件大小上限和空间利用率。省略时由 mke2fs 按设备大小从 /etc/mke2fs.conf 取默认值，可用 `-n` 先查看将要使用的参数。
+    4. `-O 特性` 与 `-n`：`-O` 启用或禁用文件系统特性，缺省按 mke2fs.conf 的特性集合创建；`-n` 不真正创建，只打印计算出的参数，用于确认布局后再执行。
+
+3. **容量与块账：**mkfs 必须预先知道规划多大的地盘：把容量按块大小切成块，管理结构也按块记账，例如 64M 配 4096 字节块大小就是 16384 个块。ext4 还有与内容无关的固定开销——超级块、组描述符、inode 表和位图加起来通常一两 MB，日志（journal）也要数 MB，默认大小由实现按容量选择。因此镜像不要贴着内容大小建：一次留足开销和后续增长空间，比事后再 `truncate` 加 `resize2fs` 扩容省一道工序。
+4. **创建后验证：**`dumpe2fs -h 设备` 查看超级块中的块数、块大小、卷标、特性和 inode 数；`debugfs -R "ls -l /" 设备` 不挂载直接读目录内容；确认无误再 `mount -o loop` 挂载检查。
+5. **平台边界：**选项行为按 e2fsprogs 1.46 核验，不同版本选项集略有差异，以 man mke2fs 为准。Android 构建中的 system.img 由构建系统封装的 mke2fs 生成，与手工命令行的等价路径不同，以对应源码和构建配置为准。
+
+例如，从空文件造一个带卷标并灌入目录内容的镜像：
+
+```console
+$ truncate -s 64M build/system.img
+$ mkfs.ext4 -d system_root -L system build/system.img 64M
+$ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
+```
+
+`-d system_root` 连权限位一起灌入目录树，`-L system` 把卷标写进超级块，末尾的 `64M` 与块大小共同决定 `Block count`——4096 字节块下为 16384。`dumpe2fs` 输出中的块数、块大小与卷标和这笔账一致，即说明命令按预期执行。
+
+
+
+**Q11: [learning] 镜像一般怎么存储、存在哪？**
 
 存在哪？宿主的文件系统里，一个普通文件——Android 编译出的 system.img 躺在 out 目录，虚拟机的磁盘就是宿主某个目录下的 .img 或 .qcow2。怎么存，常见三种装箱方式：
 
@@ -140,7 +169,7 @@ Docker 镜像稍有不同：平时放在 registry（镜像仓库），拉到本�
 
 
 
-**Q11: [learning] 自编 x86_64 内核得到的 bzImage 是什么？它和 vmlinux 是什么关系？**
+**Q12: [learning] 自编 x86_64 内核得到的 bzImage 是什么？它和 vmlinux 是什么关系？**
 
 bzImage 是 x86 内核编译的最终启动镜像（arch/x86/boot/bzImage），QEMU -kernel 加载的就是它。名字里的 bz = big zImage——比早期的 zImage 装得多，跟压缩算法无关。
 
@@ -158,7 +187,7 @@ bzImage 是 x86 内核编译的最终启动镜像（arch/x86/boot/bzImage），Q
 
 
 
-**Q12: [learning] zImage 是什么？它和 bzImage 是什么关系？**
+**Q13: [learning] zImage 是什么？它和 bzImage 是什么关系？**
 
 zImage 就是"压缩的内核启动镜像"这个名字——z = compressed。关键要分清三个语境：
 
@@ -170,7 +199,7 @@ zImage 就是"压缩的内核启动镜像"这个名字——z = compressed。关
 
 
 
-**Q13: [learning] vmlinux 和 objcopy 是什么？它们在内核构建流水线里干什么？**
+**Q14: [learning] vmlinux 和 objcopy 是什么？它们在内核构建流水线里干什么？**
 
 vmlinux 是内核编译出的"原始成品"：一个 ELF 格式、未压缩的完整内核——代码、数据、符号表、调试信息全在里面。objcopy 是 GNU 工具箱（binutils）里的格式转换工具，在内核构建里干一件事：把 vmlinux 剥成纯二进制——`objcopy -O binary vmlinux vmlinux.bin`，格式头、符号表、调试信息全部丢弃，只留能被加载执行的代码和数据。
 

@@ -51,3 +51,39 @@ int prepare() {
 ```
 
 `== -1` 先确认失败，`&&` 短路后 `errno` 只在失败时被读取；条件为真即“失败且不是已存在”，这才是需要调用方处理的错误。
+
+**Q5: [learning] C++ 中 exec 怎么使用全解析**
+
+`exec` 家族函数用新程序替换当前进程映像：调用成功时不返回，调用点之后的代码永远不再执行；失败时返回 `-1` 并设置 `errno`。C++ 中经 `<unistd.h>` 调用，Linux 上由系统 C 库提供，不需要额外链接库；共 6 个成员，按参数形式和是否搜索 PATH 选择。
+
+1. **六个成员与命名规则：**`exec` 之后的第一段表示参数形式：`l`（list）用可变参数逐个传递，以 `(char *)nullptr` 结束；`v`（vector）用字符指针数组传递，数组末元素同样必须是空指针。后缀 `p` 表示按 PATH 搜索可执行文件名，`e` 表示传入自定义环境变量数组。组合后为 execl、execlp、execle、execv、execvp、execvpe，其中 execvpe 是 glibc 扩展，POSIX 未规定。
+2. **参数约定：**可执行文件参数之后的第一项按约定是 argv[0]，通常放程序名，再接实际参数。漏写 `(char *)nullptr` 或数组成员的空指针结尾，exec 会继续越界读取参数。
+3. **返回值与 errno：**成功时不返回；失败返回 `-1`，调用方继续执行。常见 errno：`ENOENT` 找不到文件或 PATH 中无匹配、`EACCES` 没有执行权限、`ENOEXEC` 不是可识别的可执行格式。
+4. **路径形式的选择：**带 `p` 的 execlp、execvp 只写程序名，由 exec 按 PATH 查找；execl、execv、execle 要求给出路径。init 等系统程序通常直接使用绝对路径。
+5. **典型模式 fork 后 exec：**因为成功后自身映像被替换，想在运行其他程序后继续原流程，就先 `fork()`，在子进程中调用 exec，父进程用 `waitpid()` 等待回收。exec 成功后 PID 不变，已打开的文件描述符继续保留（未设置 close-on-exec 时）。
+
+例如，可变参数形式与失败处理：
+
+```cpp
+#include <cerrno>
+#include <cstdio>
+#include <unistd.h>
+
+int run_echo() {
+    execl("/bin/echo", "echo", "hello", (char *)nullptr);
+    // 只有 exec 失败才会执行到这里
+    std::printf("exec failed, errno = %d\n", errno);
+    return -1;
+}
+```
+
+数组形式单独写，两种形式不能在同一个执行流里先后调用——前者成功就替换了进程映像：
+
+```cpp
+char arg0[] = "echo";
+char arg1[] = "hello";
+char *const argv[] = {arg0, arg1, nullptr};
+execv("/bin/echo", argv);  // 成功则后续代码不再执行
+```
+
+第一个例子中 `(char *)nullptr` 结束可变参数列表；第二个例子里 `argv` 末元素必须是空指针，用字符数组而不是字符串字面量，避免 C++ 不允许字面量到 `char*` 的转换。

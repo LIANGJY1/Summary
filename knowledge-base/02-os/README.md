@@ -1,6 +1,6 @@
 # 操作系统学习资料
 
-> 收录 7 节 14 篇 95 道通用操作系统题，按基础机制、文件系统、内存、进程、虚拟化、Linux 启动和镜像组织。2026-10-06 自原 05-os 目录迁入并重整：`01-file/` 八册按主题合并为六册（三道命令实操题随 initramfs 语境移入 `05-linux-boot/`），全部补齐规范格式；本目录改名 `02-os/`。册的存废只看主题边界、不看题数——薄册在索引中标注扩写方向。Android 专属实现归 `../01-android/`；Java/JVM 语言与运行时知识按知识路由归 `../04-language/`。
+> 收录 7 节 14 篇 97 道通用操作系统题，按基础机制、文件系统、内存、进程、虚拟化、Linux 启动和镜像组织。2026-10-06 自原 05-os 目录迁入并重整：`01-file/` 八册按主题合并为六册（三道命令实操题随 initramfs 语境移入 `05-linux-boot/`），全部补齐规范格式；本目录改名 `02-os/`。册的存废只看主题边界、不看题数——薄册在索引中标注扩写方向。Android 专属实现归 `../01-android/`；Java/JVM 语言与运行时知识按知识路由归 `../04-language/`。
 
 ## 推荐阅读顺序
 
@@ -38,13 +38,13 @@
 
 - `01-virtualization.md`（7 题）：第一类与第二类虚拟机监控程序的运行位置和资源访问路径、QEMU 的模拟方式与 KVM 加速、pKVM 内存保护、全虚拟化与 virtio、virtio 虚拟磁盘（virtio-blk）的形态与宿主承载、读写请求经 virtqueue 的前后端流转、virtio-pci 从虚拟 PCI 总线到 /dev/vda 的呈现链路。扩写方向：Android AVF 的通用机制侧。
 
-### `05-linux-boot/`：Linux 启动与早期用户态（1 篇，12 题）
+### `05-linux-boot/`：Linux 启动与早期用户态（1 篇，13 题）
 
-- `01-linux-boot.md`（12 题）：initramfs 的组成、`/init` 与控制台输出链路、QEMU 串口排查、initramfs 归档检查，制作 rootfs 的文件实操命令（创建、权限、`mknod` 与 `mount()`，2026-10-06 自 01-file 迁入）。（内核配置选项两题、bzImage/zImage 两题 2026-10-08 迁往 `06-linux-build/`）
+- `01-linux-boot.md`（13 题）：initramfs 的组成、`/init` 与控制台输出链路、QEMU 串口排查、initramfs 归档检查，制作 rootfs 的文件实操命令（创建、权限、`mknod` 与 `mount()`，2026-10-06 自 01-file 迁入）。（内核配置选项两题、bzImage/zImage 两题 2026-10-08 迁往 `06-linux-build/`）
 
-### `06-linux-build/`：Linux 内核编译与镜像（2 篇，16 题）
+### `06-linux-build/`：Linux 内核编译与镜像（2 篇，17 题）
 
-- `01-image.md`（13 题）：按学习顺序排列——镜像与归档的概念及两者边界、家族成员逐个辨析（磁盘/分区镜像 system.img、ISO、内存镜像 core dump、固件与固件镜像 .bin）、ext4 system 镜像实操与挂载原理、镜像的存储形态（raw/稀疏/压缩包）与位置、内核镜像 bzImage/zImage 与构建流水线（vmlinux、objcopy）、Ubuntu ISO 装机全流程与原理。（2026-10-08 自 01-file 与 05-linux-boot 迁入成册，同日全册重排）
+- `01-image.md`（14 题）：按学习顺序排列——镜像与归档的概念及两者边界、家族成员逐个辨析（磁盘/分区镜像 system.img、ISO、内存镜像 core dump、固件与固件镜像 .bin）、ext4 system 镜像实操与挂载原理、镜像的存储形态（raw/稀疏/压缩包）与位置、内核镜像 bzImage/zImage 与构建流水线（vmlinux、objcopy）、Ubuntu ISO 装机全流程与原理。（2026-10-08 自 01-file 与 05-linux-boot 迁入成册，同日全册重排）
 - `02-kernel-config.md`（3 题）：内核配置选项机制（=y/=m/=n、Kconfig 与 .config 记录形态）、.config 文件本体及其与 Kconfig/defconfig 的分工协作、virtio 磁盘启动链路（VIRTIO_PCI/VIRTIO_BLK/DEVTMPFS 的职责与缺失现象）。（2026-10-08 自 05-linux-boot 迁入，同日增补 .config 文件本体一题）
 
 ## 内容边界
