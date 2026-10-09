@@ -102,12 +102,12 @@
 
 ## 06-memory-storage/
 
-- **资源域：内存治理（GC、lmkd/Freezer、回收压缩、泄漏治理）与存储（分区、存储 I/O、文件/数据库实践）**（7 册 182 题）：
+- **资源域：内存治理（GC、lmkd/Freezer、回收压缩、泄漏治理）与存储（分区、存储 I/O、文件/数据库实践）**（7 册 183 题）：
   - [01-memory-management.md](06-memory-storage/01-memory-management.md)（33 题）
   - [02-reclaim-compression.md](06-memory-storage/02-reclaim-compression.md)（26 题）
   - [03-app-memory-stability.md](06-memory-storage/03-app-memory-stability.md)（25 题）
   - [04-app-memory-practice.md](06-memory-storage/04-app-memory-practice.md)（32 题）
-  - [05-partitions.md](06-memory-storage/05-partitions.md)（5 题）
+  - [05-partitions.md](06-memory-storage/05-partitions.md)（6 题）
   - [06-storage-io.md](06-memory-storage/06-storage-io.md)（23 题）
   - [07-app-io-storage-practice.md](06-memory-storage/07-app-io-storage-practice.md)（39 题）
 
@@ -151,10 +151,10 @@
 
 ## 10-build-system/
 
-- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 84 题）：
+- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 85 题）：
   - [01-product-config.md](10-build-system/01-product-config.md)（15 题）
   - [02-soong-modules.md](10-build-system/02-soong-modules.md)（26 题）
-  - [03-android-executables.md](10-build-system/03-android-executables.md)（7 题）
+  - [03-android-executables.md](10-build-system/03-android-executables.md)（8 题）
   - [04-android-system-images.md](10-build-system/04-android-system-images.md)（8 题）
   - [05-android-kernel-build.md](10-build-system/05-android-kernel-build.md)（14 题）
   - [06-kernel-modules.md](10-build-system/06-kernel-modules.md)（4 题）
@@ -273,7 +273,7 @@
 | [06-memory-storage/02-reclaim-compression.md](06-memory-storage/02-reclaim-compression.md) | 回收压缩与专项内存 | 26 |
 | [06-memory-storage/03-app-memory-stability.md](06-memory-storage/03-app-memory-stability.md) | 稳定性治理：资源泄漏与进程恢复 | 25 |
 | [06-memory-storage/04-app-memory-practice.md](06-memory-storage/04-app-memory-practice.md) | 内存实践：堆预算、泄漏治理、Native 排查与线上监控 | 32 |
-| [06-memory-storage/05-partitions.md](06-memory-storage/05-partitions.md) | 运行时分区与挂载 | 5 |
+| [06-memory-storage/05-partitions.md](06-memory-storage/05-partitions.md) | 运行时分区与挂载 | 6 |
 | [06-memory-storage/06-storage-io.md](06-memory-storage/06-storage-io.md) | 存储与 I/O：架构分层、文件系统调度与配置持久化 | 23 |
 | [06-memory-storage/07-app-io-storage-practice.md](06-memory-storage/07-app-io-storage-practice.md) | I/O 与存储实践：文件、数据库、缓存、媒体与网络 | 38 |
 | [07-network/01-network-framework.md](07-network/01-network-framework.md) | Android 网络框架 | 22 |
@@ -304,7 +304,7 @@
 | [09-platform-native/09-app-native-stability.md](09-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
 | [10-build-system/01-product-config.md](10-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
 | [10-build-system/02-soong-modules.md](10-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |
-| [10-build-system/03-android-executables.md](10-build-system/03-android-executables.md) | Android 可执行文件 | 7 |
+| [10-build-system/03-android-executables.md](10-build-system/03-android-executables.md) | Android 可执行文件 | 8 |
 | [10-build-system/04-android-system-images.md](10-build-system/04-android-system-images.md) | Android 系统镜像 | 8 |
 | [10-build-system/05-android-kernel-build.md](10-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
 | [10-build-system/06-kernel-modules.md](10-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |

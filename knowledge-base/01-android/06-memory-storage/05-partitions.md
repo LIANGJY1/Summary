@@ -1,6 +1,6 @@
 # 运行时分区与挂载
 
-> 学习资料（文章模式沉淀）。边界：本文回答设备分区的职责、动态分区与 `super` 的容量关系、Virtual A/B 的 OTA 数据路径，system-as-root 根布局，以及启动时逻辑分区和 `/data` 的挂载职责。镜像如何构建、打包与刷写归 [../10-build-system/04-android-system-images.md](../10-build-system/04-android-system-images.md)。具体分区名与布局随设备、启动模式和 Android 版本变化，最终以设备 fstab、分区表与构建配置为准。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答设备分区的职责、动态分区与 `super` 的容量关系、Virtual A/B 的 OTA 数据路径，system-as-root 根布局，以及启动时逻辑分区和 `/data` 的挂载职责、系统分区内的目录约定（/system/etc）。镜像如何构建、打包与刷写归 [../10-build-system/04-android-system-images.md](../10-build-system/04-android-system-images.md)。具体分区名与布局随设备、启动模式和 Android 版本变化，最终以设备 fstab、分区表与构建配置为准。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 设备常见分区分别保存什么？哪些属于系统、引导、动态容器和用户数据？**
 
@@ -58,3 +58,13 @@ bootloader 负责加载启动所需的物理镜像并启动内核，不负责解
 5. **文件系统安全层：**只读系统分区通常可在 block device 上叠加 dm-verity 校验。`/data` 可配置 dm-default-key 等 metadata encryption 机制。Android 9 的 system-as-root 布局把 root 文件系统并入 `system.img`，由内核将 `system` 挂载为根文件系统。Android 10 起，逻辑 `system` 分区不能再由内核直接挂载，系统分区映射和早期挂载由 ramdisk 中的 first-stage init 处理。升级设备会保留其原有启动布局，不能只按运行的 Android 版本推断分区形态。
 
 
+
+
+**Q6: [learning] Android 的配置文件为什么放在 /system/etc，根目录下为什么没有独立的 /etc？**
+
+两层原因叠加。/etc 是 Unix 世界放配置文件的传统位置，名字来自 et cetera（其他杂项），约定的意义在于任何程序找配置都有一个人人皆知的固定位置；而 Android 的根目录被各分区挂载点占满，没有独立的 /etc，于是把这个角色交给系统分区里的 /system/etc。
+
+1. **/etc 的传统：**早期 Unix 把不方便归类的文件都放进 /etc，久而久之演变成配置文件目录的约定——fstab、hosts、passwd 都在那里。约定省去每个程序自创路径：程序知道去哪儿找，管理员知道东西放哪。
+2. **Android 为什么没有独立 /etc：**根目录被 /system、/vendor、/data 等分区挂载点占满，只读与可写内容按分区组织。出厂自带的配置文件随系统分区走，/etc 的角色由 /system/etc 承担——init 的 rc 文件、权限 XML、音频策略都在这里；早期版本还用 /etc 到 /system/etc 的软链接兼容旧习惯。
+3. **路径是契约：**现代 Android 的 init.rc 位于 /system/etc/init/hw/init.rc，各服务自己的 rc 文件在 /system/etc/init/ 下。init 的代码写死了这个约定路径，配置文件必须放在那里等它来读——放置位置不是可选建议。
+4. **暂存目录到运行时的映射：**制作系统镜像时，暂存目录（如 system_root）里那一层 system/ 对应运行时挂载到 /system 的目录树。因此暂存区中的 system_root/system/etc/init.rc，打包开机后就是 /system/etc/init.rc；bin/init 对应 /system/bin/init。镜像树整体复刻真机布局，路径学到的知识才能直接迁移。

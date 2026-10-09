@@ -173,7 +173,7 @@ mount("sysfs", "/sys", "sysfs", 0, nullptr);
 init 通常以 root 身份执行挂载。任一调用返回 `-1` 时，示例只打印通用错误；检查 `errno` 才能知道具体原因，例如权限不足或挂载点不存在。
 
 
-**Q14: [learning] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
+**Q14: [done] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
 
 QEMU 在模拟一台完整的电脑，每条参数都是往虚拟机上焊硬件或规定行为：`-m` 插内存条，`-kernel` 与 `-initrd` 绕过硬盘引导、直接把内核和初始内存盘交给这台机器，`-append` 写内核启动参数，`-drive` 焊一块盘片为宿主机 system.img 文件的硬盘，其余参数规定输出与退出行为。
 
@@ -228,3 +228,43 @@ qemu-system-x86_64 \
     4. `-no-reboot`：guest 请求重启时直接退出而不是重新启动，便于判断实验结束。
 
 6. **硬件在册不等于名字在册：**[vda] 日志只代表内核已注册块设备；`/dev/vda` 节点要等 devtmpfs 挂到 /dev 后由内核生成，读出内容还要再挂载。本内核 CONFIG_DEVTMPFS=y 但 CONFIG_DEVTMPFS_MOUNT 未设置，initramfs 场景也不会自动挂载，必须由 init 执行 `mount("devtmpfs", "/dev", ...)`，节点才出现。
+
+**Q15: [learning] vda 是什么，为什么内核已经认出这块盘，挂载时还是会找不到 `/dev/vda`？**
+
+vda 是内核 virtio_blk 驱动给 QEMU 虚拟磁盘起的注册名，取 virtio disk a 之意。“内核认得这块盘”和“用户态能通过 /dev/vda 访问它”是两层：驱动只完成设备登记，/dev/vda 这个节点文件要另有人创建；mount() 按路径字符串找节点，找不到就以 ENOENT 失败，根本走不到磁盘那一步。
+
+1. **名字怎么来的：**v、d、a 分别是 virtio、disk 和第一块，第二块是 vdb。这不是配置文件里起的名字，而是驱动发现硬件后的注册名。各驱动的命名习惯：
+
+    1. virtio_blk 驱动管理 QEMU 虚拟磁盘，命名为 vda、vdb。
+    2. sd 驱动管理 SATA、USB、SCSI 盘，命名为 sda、sdb。
+    3. nvme 驱动管理 NVMe 固态盘，命名为 nvme0n1。
+    4. 老式 IDE 驱动命名为 hda、hdb。
+
+    日志行 `virtio_blk virtio0: [vda] 131072 512-byte logical blocks (67.1 MB/64.0 MiB)` 就是起名现场：virtio_blk 驱动在 virtio 总线上发现一块盘，起名 vda，大小 131072×512 字节 = 64MiB，正是 mkfs 做出的那张盘。
+
+2. **设备与节点是两层：**
+
+    1. 第一层在内核里，已就绪：驱动向内核登记一块块设备，名字 vda，设备号 254:0（主设备号:次设备号）。到这里硬件已经能干活。
+    2. 第二层在用户态，还不存在：mount() 的参数是路径字符串 /dev/vda，它像找普通文件一样解析路径，去 /dev 目录里找名为 vda 的文件；找不到就立刻返回 -1，且 errno 为 2（ENOENT）。
+    3. 设备节点就是这个文件：本身不存数据，存的是一对设备号。手工创建的 console 节点正是如此，`ls -l` 显示 `crw------- root root 5, 1`——c 表示字符设备，5, 1 是主、次设备号。vda 无法提前创建：盘是 QEMU 运行时才插进来的，设备号运行时才知道。
+
+3. **宿主机的对照：**宿主机自己的 NVMe 盘同样是一个节点，`ls -l /dev/nvme0n1` 输出 `brw-rw---- 1 root disk 259, 5`——b 表示块设备，259, 5 是它的设备号。整机硬盘和 QEMU 里的 vda 在 Linux 眼里是同一类东西，区别只在节点由谁创建。
+
+4. **devtmpfs 负责自动建节点：**devtmpfs 是一种伪文件系统：挂载后里面看起来有文件，内容却由内核实时生成——驱动每登记一个设备，内核就在已挂载的 devtmpfs 里建出对应节点，所以挂上它之后 /dev/vda 会自己出现。内核配置里两个开关分管“会不会”和“替不替你做”（AAOS13 源码树 .config 第 1709–1710 行实测）：
+
+    ```text
+    CONFIG_DEVTMPFS=y                    # 内核会挂这个文件系统
+    # CONFIG_DEVTMPFS_MOUNT is not set   # 内核不会替你自动挂
+    ```
+
+    因此必须由 init 亲自动手：`mount("devtmpfs", "/dev", "devtmpfs", 0, nullptr)`。这就是启动流程里挂 devtmpfs 那一行的全部意义。
+
+5. **真 Android 的做法：**AAOS 13 的 first_stage_init 挂的是 tmpfs，再靠 uevent 机制建节点——用户态监听内核发出的新设备事件，再调用 mknod 创建，比 devtmpfs 复杂但更灵活。Mini 版用 devtmpfs 一行简化，思路同源：都是挂一个东西到 /dev，让节点出现。
+
+6. **挂载成功的三个条件：**`mount("/dev/vda", "/system", "ext4", 0, nullptr)` 要成功，三条缺一不可：
+
+    1. 盘已登记：virtio_blk 的 [vda] 日志即铁证，已满足。
+    2. /dev/vda 节点存在：挂 devtmpfs 就是为了它；缺节点时 errno 为 2。
+    3. 内容是合法 ext4：mkfs 已经做好；节点在但内核认不出文件系统时 errno 为 22。
+
+    由此可以自己推出：挂载报 errno 2 时先查 /dev/vda 是否存在，而不是先怀疑盘或镜像。

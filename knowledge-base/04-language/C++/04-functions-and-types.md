@@ -230,3 +230,24 @@ auto count = a / b;
 
 `quotient` 是浮点除法结果，`count` 推导为 `int` 并保存整数除法结果。`static_cast` 不能替代运行期类型检查，也不代表转换一定没有信息损失。
 
+
+
+**Q23: [learning] 给 execv 准备参数时，`char* next_argv[] = {(char*)"/system/bin/init", (char*)"selinux_setup", nullptr}` 的每一部分怎么理解？**
+
+这个声明创建一个元素类型为 `char*` 的数组，长度由初始化列表的项数推导（这里是 3）。每个命令行参数是一整个字符串，C 语言用指向首字符的指针寻址字符串，所以一个参数占一个 `char*`，多个参数排成数组；`(char*)` 强转让字符串字面量匹配这个元素类型，末尾 `nullptr` 是 argv 的空指针结尾约定。
+
+1. **为什么元素是 char* 而不是 char：**一个 `char` 只能存一个字符，而 `/system/bin/init` 这样的参数是 16 个字符组成的序列。C 语言用“指向首字符的指针”表示整个字符串，所以一个参数对应一个 `char*`；两个参数加一个结尾空指针，就需要能放 3 个 `char*` 的数组。若写成 `char next_argv[]`，只能按字符逐个存放，存不下参数列表。
+2. **为什么不用 std::string 数组：**execv 是 C 接口，签名 `char *const argv[]` 只认 C 字符串；std::string 是 C++ 类对象，带着自己的长度与内存管理信息，过不了 C 的应用程序二进制接口。要用 std::string 也得先 `c_str()` 转成 `const char*`、再强转成 `char*` 逐个组进 `char*[]`，比直接写更繁。std::string 适合在自己代码里拼装修改字符串，到 C 接口边界再转。
+3. **`char* next_argv[]` 部分：**声明元素为 `char*` 的数组但不写长度，编译器按初始化列表项数定长，等价于显式写 `char *next_argv[3]`。数组名在传给函数时退化为指向首元素的指针，即 `char **`——正是 execv 第二个参数要求的类型。
+4. **`(char*)` 强转的作用：**C++ 中字符串字面量的类型是 `const char[N]`（C 中才是 `char[N]`），直接用来初始化 `char*` 元素会因丢弃 `const` 限定而编译失败。execv 的签名是 C 时代定下的 `char *const argv[]`，它只读取字符串、不修改内容，因此用 `(char*)` 显式丢掉 `const` 后类型匹配。边界：这样得到的指针仍不应被写入，修改字符串字面量是未定义行为。
+5. **`nullptr` 结尾：**argv 约定以空指针结束，即 `argv[argc]` 为空指针，execv 据此判断参数到哪结束；漏写会让它越界读取后续内存。
+6. **第一项的约定：**按惯例 `argv[0]` 放程序名，这里写 `/system/bin/init`，与 execv 第一个参数的路径一致；第二项起才是传给新程序的参数。
+
+例如，声明后直接交给 execv：
+
+```cpp
+char *next_argv[] = {(char *)"/system/bin/init", (char *)"selinux_setup", nullptr};
+execv("/system/bin/init", next_argv);
+```
+
+数组推成长为 3，末元素空指针标记参数结束；execv 成功后进程映像被替换，后续代码不再执行。

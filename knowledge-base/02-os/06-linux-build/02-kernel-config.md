@@ -39,7 +39,7 @@
 
 判断规则：问"这个功能编译进去了吗"，看 .config 里该选项的值。问"启动最早期能不能用"，看它是 =y，还是模块已被打包进 initramfs。想加一个功能，本质上就是把清单里对应行从 not set 注释改成 =y，再重新编译 bzImage。
 
-**Q3: 让自编内核在 QEMU 里用 virtio 虚拟磁盘启动，CONFIG_VIRTIO_PCI、CONFIG_VIRTIO_BLK、CONFIG_DEVTMPFS 各承担什么？缺一个会怎样？**
+**Q3: [learning] 让自编内核在 QEMU 里用 virtio 虚拟磁盘启动，CONFIG_VIRTIO_PCI、CONFIG_VIRTIO_BLK、CONFIG_DEVTMPFS 各承担什么？缺一个会怎样？**
 
 三个选项各守"发现设备 → 变成块盘 → 自动出节点"这条链路的一段。QEMU 用 -drive file=rootfs.ext4,if=virtio 挂盘（file 指定镜像，if=virtio 表示以 virtio-blk 设备接入）时，guest 内核至少前两项要 =y：PCI 驱动 select 带上 VIRTIO 总线核心，块驱动依赖这个核心才能编译。三个选项的分工：
 
@@ -53,7 +53,7 @@
 
     1. 缺 CONFIG_VIRTIO_PCI：lspci 仍能看到 QEMU 挂的 virtio 设备，但没有任何驱动认领它，块盘不会出现。
     2. 缺 CONFIG_VIRTIO_BLK：传输层把设备接上 virtio 总线，但没有块驱动消费它，同样没有 /dev/vda，dmesg 里没有 virtio_blk 注册日志。
-    3. 缺 CONFIG_DEVTMPFS：盘其实已经注册，但 /dev 下没有自动生成的节点，要手工 mknod 或靠用户态守护进程建节点。没有 devtmpfs 的内核上，所有设备节点（包括 /dev/console）都得在 initramfs 里预置——initramfs 实验要手工建控制台节点就是这个原因。
+    3. 缺 CONFIG_DEVTMPFS：盘其实已经注册，但 /dev 下没有自动生成的节点，要手工 mknod 或靠用户态守护进程建节点。没有 devtmpfs 的内核上，所有设备节点（包括 /dev/console）都得在 initramfs 里预置；本实验内核虽编译了 devtmpfs，但挂载发生在 /init 运行后，而内核启动 /init 前就要打开 /dev/console，所以同样要预置。
 
 2. **配置顺序的坑：**CONFIG_VIRTIO_BLK 的菜单项在 Device Drivers → Block devices 下，但一开始找不到它——它依赖 VIRTIO 总线核心，而这个核心没有提示文本，只有先到 Device Drivers → Virtio drivers 下把 CONFIG_VIRTIO_PCI 设为 =y（select 自动带上核心），块驱动选项才出现。
 3. **devtmpfs 的两半：**CONFIG_DEVTMPFS 只是让内核"维护"节点数据。CONFIG_DEVTMPFS_MOUNT 才让内核在挂载根文件系统之后自动把 devtmpfs 挂到 /dev（行为可用内核参数 devtmpfs.mount=0|1 覆盖）。但它的 Kconfig 帮助文本明确写了不作用于 initramfs 启动——initramfs 场景必须由 /init 自己执行 mount -t devtmpfs devtmpfs /dev（-t 选择文件系统类型 devtmpfs，第一个 devtmpfs 是来源标识——这类伪文件系统没有磁盘设备，/dev 是挂载点）。CONFIG_DEVTMPFS 在 Device Drivers → Generic Driver Options 菜单下。
