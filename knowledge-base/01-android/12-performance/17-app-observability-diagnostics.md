@@ -85,7 +85,7 @@ StrictMode 能证明触发、不能测时长。AAOS13 源码核对：`BlockGuard
 
 版本边界：OkHttp 与 Cronet 都独立于 Android 平台版本发布，不能从平台 API level 推导事件语义；材料口径（2026-08）OkHttp release 为 5.4.0，`cronet-api:500.0.1` 虽被标为 release 但其 POM 说明这是指向 `org.chromium.net:cronet` 的废弃过渡空工件——事件必须记录网络库、库版本、provider、引擎版本和 `negotiated_protocol`。QUIC/HTTP/3 下 `connect_ms` 不能固定解释为 TCP 三次握手，`secure_handshake_ms` 也不一定是 TLS；字节字段同样要分清来源：`Metrics#getReceivedByteCount()` 是当前请求的传输层接收字节（不含之前的重定向），`UrlResponseInfo#getReceivedByteCount()` 从请求开始累计并包含重定向，两者不能混入同一指标序列。
 
-**Q14: [learning] TrafficStats 的字节数为什么必须按相邻差值使用？`registerDefaultNetworkCallback()` 之后应该在哪一步读网络属性？**
+**Q14: [learning] TrafficStats 的字节数为什么必须按相邻差值使用？registerDefaultNetworkCallback() 之后应该在哪一步读网络属性？**
 
 `TrafficStats` 提供的是自开机以来所有网络接口上网络层流量的累计计数器（含 TCP 与 UDP），设备重启后归零；`getUidRxBytes()`/`getUidTxBytes()` 聚合同一 UID 下的所有进程，Android 7.0 起查询其他 UID 返回 `UNSUPPORTED`，设备不支持某项统计时也返回 `UNSUPPORTED`（数值为 -1，不是有效字节数），`getTotal*` 系列是整机口径。看板必须保存 `boot_id`（或等价的开机标记）、采集时间和前后差值；发现计数变小、启动标记变化或任一端为 `UNSUPPORTED` 时丢弃该区间差值。`tagSocket()` 只能给 socket 计账加标签，不产生 DNS、握手和首包时间，不能替代网络库的逐请求事件。
 
@@ -97,7 +97,7 @@ StrictMode 能证明触发、不能测时长。AAOS13 源码核对：`BlockGuard
 
 Battery Historian 只是把 bugreport 中的 Batterystats 等记录转成可交互时间线的离线工具（官方已标注不再积极维护），它属于第一类：能帮助回答"电量下降时屏幕、CPU、Job、网络、定位和 WakeLock 处于什么状态"，不能直接证明某个事件消耗了多少能量。能量与功率也要分开：能量是窗口内累计消耗，平均功率等于能量增量除以时间增量；电池百分比经过量化与系统估算，短窗口内没有下降不能推导为"零消耗"。
 
-**Q16: [learning] API 35 的 `PowerMonitor` 读数为什么"单次累计值没有场景意义"？AAOS13 上能用吗？**
+**Q16: [learning] API 35 的 PowerMonitor 读数为什么"单次累计值没有场景意义"？AAOS13 上能用吗？**
 
 AAOS13 不可用：`SystemHealthManager` 的 `getSupportedPowerMonitors()` 与 `getPowerMonitorReadings()` 从 API 35 起公开（AAOS13 源码核对不存在这两个方法），Android 13 及更早版本没有这条公开路径。可用平台上也要按正确语义使用：`PowerMonitorReadings` 返回自开机以来的累计能量（单位微瓦秒，包含电池供电与插电阶段），重启后不连续——单次读数没有场景意义，正确用法是同一组 `PowerMonitor` 在场景前后各读一次，按各自 `timestamp`（来自 `SystemClock.elapsedRealtime()`）计算非负增量；跨重启、计数回退或 `ENERGY_UNAVAILABLE` 的样本应丢弃。
 
@@ -121,13 +121,13 @@ AAOS13 不可用：`SystemHealthManager` 的 `getSupportedPowerMonitors()` 与 `
 
 可维护的插桩方案分四层，每层有典型错误：选择规则决定哪些 variant、class、method 需要处理（release 无条件全量插桩、误改生成代码是常见错误）；字节码变换要保证控制流、操作数栈和 frame 合法（只处理正常 `return`、异常路径没有清理）；运行时桥接负责采样、限流、隐私处理并写入 Trace/APM（在热路径分配对象、同步 I/O 或递归调用）；验证发布要校验 class、D8/R8 产物与运行时成本（只看编译成功、不检查优化后产物）。"无手写埋点"仍有侵入：每条注入指令都改变 class、构建时间和运行路径，是否启用、覆盖哪些方法以及容许多少成本，都应由当前工程的测量结果决定。
 
-**Q20: [learning] Transform API 已经怎样了？用 AGP Instrumentation API 注册 `AsmClassVisitorFactory` 要遵守哪些约束？**
+**Q20: [learning] Transform API 已经怎样了？用 AGP Instrumentation API 注册 AsmClassVisitorFactory 要遵守哪些约束？**
 
 旧的 `Transform` API 在 AGP 7.2 废弃、AGP 8.0 移除，且没有覆盖所有旧用法的单一替代：逐 class 变换用 `variant.instrumentation.transformClassesWith()`；读取或变换整组 class 用 `variant.artifacts.forScope()` 与 `ScopedArtifact.CLASSES`；在编译后生成新 class 且还要读已编译 class 时用 `ScopedArtifact.POST_COMPILATION_CLASSES`（AGP 9.3.1 才加入且标 `@Incubating`，材料口径——构建侧版本不在本地源码树）。ASM 库本身也有 Core API（visitor 流式回调，适合入口/出口/调用点替换等局部操作）与 Tree API（读入 `ClassNode` 便于多次遍历与控制流分析，内存成本更高）的选择；需要全程序调用图时逐 class 信息不足，应走 Scoped Artifacts 独立 task。
 
 注册 factory 的硬约束：`isInstrumentable()` 与 `createClassVisitor()` 可能被异步、并发调用，factory 不能用可变全局集合统计结果或读写共享文件；所有配置必须声明为 Gradle `Property` 系输入，回调里临时读取未声明的文件会破坏 up-to-date 判断与 build cache 命中；ASM API 版本应取 `instrumentationContext.apiVersion`，不要把上游最新版（材料口径 2026-08 为 9.10.1）写死进 visitor。范围控制：`InstrumentationScope` 默认 `PROJECT`（自有代码），`ALL` 会处理传递依赖、可能重复插桩已插桩库并扩大兼容面；Android library 只能对本项目 class 注册。给既有方法增加控制流时用 `FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS` 让 AGP 重算 frame，只加注解可用成本更低的 `COPY_FRAMES`，`COMPUTE_FRAMES_FOR_ALL_CLASSES` 触发非增量全类计算应避免。
 
-**Q21: [learning] 给方法插 `Trace.beginSection()/endSection()` 时，为什么只检查 RETURN 和 ATHROW 两条退出路径不够？section 名称与协程有什么限制？**
+**Q21: [learning] 给方法插 Trace.beginSection()/endSection() 时，为什么只检查 RETURN 和 ATHROW 两条退出路径不够？section 名称与协程有什么限制？**
 
 `RETURN` 和 `ATHROW` 只覆盖显式出现在当前方法字节码中的退出指令：`repository.load()` 抛出的异常会沿调用栈传播，当前方法没有自己的 `ATHROW`，却在 `INVOKEVIRTUAL` 调用指令处退出——只看退出 opcode 时 `beginSection()` 无法配对，后续同线程的嵌套 section 全部错位。稳妥做法是给原方法体加 catch-all handler，语义等价 `try/finally`：正常返回前调用 `endSection()`，异常路径由 handler 调用后原样重抛；ASM 的 `AdviceAdapter` 已处理"构造方法必须等父类构造完成"的限制。注册了新增控制流后必须选择能重算 frame 的 `FramesComputationMode`，并用包含多 return、显式 throw、被调用方法抛异常、try/catch/finally 的 fixture 验证正常与异常路径 begin/end 数量相等。
 
@@ -151,7 +151,7 @@ heapprofd 只记录采集窗口内经过受支持分配器（默认 heap 为 `li
 
 三类常见误判：一是分配器缓存仍保留页面——应用已 free 但分配器保留 arena/page，存活分配估算已回落而 RSS 不变；二是增长来自 mmap 或图形内存——heapprofd 默认不看 `mmap`/`munmap` 直接建立的映射，DMA-BUF 与 GPU 内存也没有分配器调用栈语义，PSS 上升而 heapprofd 平稳时应转查匿名映射、memtrack、`dmabuf_dump`；三是 Java 引用保住 native 对象——heap profile 不提供引用关系，需要 Java heap dump 补充。参数边界：`sampling_interval_bytes` 是平均每 N 字节取一个样本（1 表示逐次），增大降低开销但漏掉小分配；`block_client` 在 buffer 满时让目标进程等待，线上测量通常关闭以免阻塞高频分配线程；daemon 的 memory/CPU guardrail 每 30 秒检查一次、命中后直接关闭对应 data source，且 `max_heapprofd_memory_kb` 限制的是 heapprofd 自身而非目标 App。
 
-**Q25: [learning] 普通应用为什么读不了 `/proc/stat` 和 `/proc/loadavg`？"CPU 使用率"的核等价口径与整机占比口径差在哪？**
+**Q25: [learning] 普通应用为什么读不了 /proc/stat 和 /proc/loadavg？"CPU 使用率"的核等价口径与整机占比口径差在哪？**
 
 AAOS13 源码核对两层限制：`system/sepolicy/private/app_neverallows.te` 用 neverallow 禁止所有 untrusted_app 域读取 `proc_stat`、`proc_loadavg` 等节点——neverallow 在策略编译期强制检查，降低 `targetSdk` 也无法恢复，且 `untrusted_app_all.te` 对读取失败做了 `dontaudit`（只抑制审计日志、不授权，应用侧失败时未必有醒目 denial）；first-stage init 以 `hidepid=2,gid=AID_READPROC` 挂载 procfs（AAOS13 `first_stage_init.cpp` 已核对），其他 UID 的进程目录被隐藏。普通应用稳定可依赖的是 `Process.getElapsedCpuTime()`（AAOS13 已核对）加 `/proc/self/stat` 与自身 `task` 节点。
 
@@ -165,7 +165,7 @@ val tail = line.substring(line.lastIndexOf(')') + 1).trim().split(Regex("\\s+"))
 
 计数回退、`starttime` 变化（PID 复用）或读取失败都要丢弃本轮差值，不能拿 -1 继续算。
 
-**Q26: [learning] `ProcessCpuTracker` 是什么、谁能用？自建采样器从它身上要避开哪些坑？**
+**Q26: [learning] ProcessCpuTracker 是什么、谁能用？自建采样器从它身上要避开哪些坑？**
 
 `ProcessCpuTracker` 位于 `com.android.internal.os`，是 Android 框架内部的全进程 CPU 采样类（AAOS13 已核对存在），不属于 SDK API。AAOS13 的 `AppProfiler` 在 `system_server` 内持有它：一次 `update()` 会读 `/proc/stat`、用 `Process.getPids("/proc", ...)` 枚举全部可见进程、对每个 PID 读 `/proc/<pid>/stat` 计算增量（含 `rel_minfaults`/`rel_majfaults` 缺页增量），可选扫描线程目录并读取 `/proc/loadavg`；结果用于 ANR 诊断输出、进程 CPU 统计与 BatteryStats 归因。普通应用同时受两层约束：类本身是隐藏 API、反射调用没有兼容性保证；即使调用成功，SELinux 与 procfs 挂载权限也不会随之绕过——第三方 APM 应使用公开 API 采集自身进程，系统级诊断交给 Perfetto、bugreport 或受控平台服务。
 
@@ -177,7 +177,7 @@ minor fault 指内核成功完成、最终不带 `VM_FAULT_MAJOR` 且处理过�
 
 换算陷阱有四个：Android 15 起存在 16 KB 页设备，页大小必须运行时查询（`Os.sysconf(OsConstants._SC_PAGE_SIZE)` 或原生 `getpagesize()`），4 KB 只是旧默认；minor fault 还包含 COW 与页缓存映射，同一虚拟区域被回收后再次访问会再 fault；分配器复用已驻留的堆页时，发生分配却没有新增 fault；readahead 和大 folio 让一次 major fault 与一页 I/O 失去一一对应。fault 计数是同步异常的次数，不等于阻塞时间；major 增长只有与关键线程等待存储在同一时间段出现，才支持"I/O 影响关键路径"的判断。改进手段按原因选：冷启动文件页查 Baseline Profile 覆盖与编译产物布局，匿名页/COW 查初始化时机与 Zygote 继承页写入，swap-in 查内存压力与 zRAM 配置；`madvise(MADV_WILLNEED)` 只是把等待前移的提示，不保证读入或保留页面。
 
-**Q28: [learning] 从系统调用层重建 Binder 调用语义为什么这么难？`BINDER_WRITE_READ` 的 ioctl 耗时能当 Binder RPC 耗时吗？**
+**Q28: [learning] 从系统调用层重建 Binder 调用语义为什么这么难？BINDER_WRITE_READ 的 ioctl 耗时能当 Binder RPC 耗时吗？**
 
 Binder 驱动只处理 transaction code、flags、目标 handle、数据缓冲区和对象 offsets，方法名与 Java/Kotlin 参数类型不在 Binder 内核 ABI 中——要还原"哪个方法被调用"需要四层证据逐级拼接：syscall 层（ioctl 参数与返回值）、Binder UAPI 层（`BINDER_WRITE_READ` 命令字、transaction code、flags、数据长度）、Parcel 层（interface token、字节序列、对象 offsets）、签名表层（descriptor + code 到方法与参数类型的映射）。签名表必须与 `Build.FINGERPRINT`、AIDL 接口版本和采集器版本绑定，同一个 transaction code 跨系统版本不保证对应同一方法；复杂 Parcelable、vendor 接口和动态注册接口都没有系统性覆盖。
 

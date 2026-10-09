@@ -24,7 +24,7 @@
 
 来源：[AAOS 焦点交互与并发条件](https://source.android.com/docs/automotive/audio/audio-focus)、[AAOS 音量与 ducking](https://source.android.com/docs/automotive/audio/volume-management)、[AAOS 13 焦点矩阵源码](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/FocusInteraction.java)。
 
-**Q3: [learning] 媒体正在播放时，一个普通 `SYSTEM_SOUND` 点击音默认会抢焦还是共存？**
+**Q3: [learning] 媒体正在播放时，一个普通 SYSTEM_SOUND 点击音默认会抢焦还是共存？**
 
 在 AAOS 13 默认矩阵中，当前持焦者为 `MUSIC`、新请求为 `SYSTEM_SOUND` 的单元格是 `CONCURRENT`。但要实际维持双持焦，音效新请求还须使用 `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`，且媒体持有者没有要求 duck 时暂停、没有要求接收车机 duck 事件。否则 CarAudioFocus 把媒体列为焦点失去者。若音效改用 `AUDIOFOCUS_GAIN`，旧媒体可能收到永久 loss，显然不适合普通点击声。目标区里还有第三个持焦者时，必须逐个比较，任何拒绝都可让请求失败。
 

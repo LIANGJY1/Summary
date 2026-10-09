@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀，证据等级：官方文档与 AOSP 源码）。边界：本文回答 aconfig 标志的运行期值来源、设备端存储初始化与 `aflags` 操作。声明、元数据字段和构建期代码生成归 [../10-build-system/07-aconfig.md](../10-build-system/07-aconfig.md)。涉及 Android 17 的行为均按对应源码版本说明。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] aconfig 标志运行时从哪里读取值，`purpose` 与 `storage` 分别代表什么？**
+**Q1: [learning] aconfig 标志运行时从哪里读取值，purpose 与 storage 分别代表什么？**
 
 运行时读取路径取决于标志生成时选定的存储后端。`purpose` 描述标志的用途，不负责选择后端，也不直接改变运行时的开关逻辑。
 
@@ -32,7 +32,7 @@ Android 17 的具体服务模块、文件路径和格式以目标分支源码为
 3. 代码访问：截至本文依据的 Android 17 AOSP 源码，整数 flag 的普通代码生成访问器链路尚未完整接通。因此，即使声明、解析或存储层支持整数，也不代表 Java/C++ 调用方已有受支持的直接读取接口。
 4. 使用判断：产品代码应只依赖目标分支实际生成并受支持的 API。`aflags` 是设备端查看和覆盖工具，不是应用代码访问整数值的替代 API。调试命令能显示某类数据，也不等于运行时业务代码可读取它。
 
-**Q4: [learning] `aflags` 是什么，如何在设备上查看或修改标志值？**
+**Q4: [learning] aflags 是什么，如何在设备上查看或修改标志值？**
 
 `aflags` 是 Android 设备端用于列举 aconfig flag 并管理可写覆盖值的命令行工具。Android 17 的 AOSP 实现由系统侧入口转交给 ConfigInfrastructure APEX 中可更新的实现。产品分支和功能开关可能改变实际调用路径。
 

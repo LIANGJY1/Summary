@@ -30,7 +30,7 @@ Looper 使用线程局部存储，一个线程不能重复准备多个 Looper。
 2. 工作不应跟随页面生命周期时，改用合适的生命周期感知组件或独立状态对象。
 3. 静态 Handler 加弱引用只能避免一条强引用。仍要清理失效消息，并处理弱引用取值后的空状态。
 
-**Q4: `HandlerThread` 与普通线程池分别适合什么消息处理需求？**
+**Q4: [learning] HandlerThread 与普通线程池分别适合什么消息处理需求？**
 
 `HandlerThread` 和普通线程池适合不同的执行模型：
 
@@ -40,7 +40,7 @@ Looper 使用线程局部存储，一个线程不能重复准备多个 Looper。
 
 所有者结束时应停止 Looper 或关闭执行器，并取消失效任务。不要把 HandlerThread 当作无限期后台任务容器，也不要仅因为它有消息队列就把耗时任务塞入其中而不评估队列阻塞。
 
-**Q5: Binder 工作线程里用 `Looper.myLooper()` 创建 Handler 会发生什么？**
+**Q5: [learning] Binder 工作线程里用 Looper.myLooper() 创建 Handler 会发生什么？**
 
 如果服务端方法正在 Binder 线程池线程上执行，且该线程没有显式准备 Looper，那么 `Looper.myLooper()` 返回 null。将它传给要求非空 Looper 的 Handler 构造函数会抛出异常。Binder 线程不是应用主线程，也不保证自带消息队列。
 
@@ -147,7 +147,7 @@ DeliQueue 路径不使用遗留私有字段 `mMessages`。官方迁移说明明�
 3. **设备端插桩测试：**使用 `TestLooperManager`。API 36 起可用 `peekWhen()` 和 `poll()`。
 4. **替代断言：**需要判断队列中是否还有待处理工作时，基于 Handler 语义、IdleHandler 或性能轨迹证据重建，而不是寻找新的内部字段。
 
-**Q12: [learning] Android `Messenger` 与 AIDL Binder 适合什么通信需求？**
+**Q12: [learning] Android Messenger 与 AIDL Binder 适合什么通信需求？**
 
 `Messenger` 把 `Message` 封装为 Binder 消息，并交给服务端关联的 Handler/Looper 处理。AIDL 则生成有类型的方法接口。选择取决于是否需要消息队列语义、接口类型约束和并发控制。
 

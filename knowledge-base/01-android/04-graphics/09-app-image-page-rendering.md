@@ -14,7 +14,7 @@
 
 `width × height × 4` 只是下限：行跨度（row stride，相邻两行像素起始位置的字节差）的对齐、色彩配置、增益图与编解码中间缓冲都会增加运行时占用。存储位置按版本演进（官方文档口径，转写）：Android 2.3.3 及以下在原生内存，3.0 至 7.1 计入 Dalvik/ART 托管堆，8.0 / API 26 起回到原生堆——AAOS13 源码核对 `Bitmap` Java 对象经 `NativeAllocationRegistry` 登记原生分配，`getAllocationByteCount()` 返回当前底层分配空间，被复用过的 Bitmap 可能出现它大于 `getByteCount()`。`Config.HARDWARE` 的像素在图形内存而非原生堆。
 
-**Q3: [learning] 用 BitmapFactory 把大文件解码到目标显示尺寸时，为什么要先 `inJustDecodeBounds` 读边界再按 2 的幂设置 `inSampleSize`？`inSampleSize` 传 3 会发生什么？**
+**Q3: [learning] 用 BitmapFactory 把大文件解码到目标显示尺寸时，为什么要先 inJustDecodeBounds 读边界再按 2 的幂设置 inSampleSize？inSampleSize 传 3 会发生什么？**
 
 直接解码会按原图尺寸分配像素内存；两阶段做法把"只读文件头拿到 `outWidth`/`outHeight`（不分配像素）"与"真正解码"分开，中间选出不超过目标尺寸的最大 2 的幂作为采样值。AAOS13 源码（`BitmapFactory.java`）核对：`inSampleSize <= 1` 按 1 处理，非 2 的幂向下取整到最近的 2 的幂——传 3 等效于 2，所以循环里只翻倍即可。
 
@@ -36,7 +36,7 @@ while (bounds.outWidth / (sampleSize * 2) >= targetWidth &&
 
 `ImageDecoder.decodeBitmap()` 是同步调用且标注 `@WorkerThread`，`OnHeaderDecodedListener` 在调用线程、方法返回之前执行，可以配置 `setTargetSize()`/`setTargetSampleSize()`，但它不是异步通知，不会把解码移出调用线程。AAOS13 javadoc 同时明确：`setCrop()` 只是裁剪解码缩放后的输出，不替代 `BitmapRegionDecoder.decodeRegion()`；`ImageDecoder` 也没有把现有 Bitmap 设为解码目标的公开入口（无 `inBitmap` 等价物），从 BitmapFactory 迁移时原有的"解码目标复用"收益要重新评估。
 
-**Q5: [learning] Hardware Bitmap 是"由 GPU 直接解码"吗？它的成本结构是什么，对它调用 `getPixel()` 会发生什么？**
+**Q5: [learning] Hardware Bitmap 是"由 GPU 直接解码"吗？它的成本结构是什么，对它调用 getPixel() 会发生什么？**
 
 不是。静态图的实际顺序（材料按 Android 17 `ImageDecoder_nDecodeBitmap` 说明，AAOS13 的 `Bitmap`/`ImageDecoder` 行为一致）：先建立 CPU 可写的 SkBitmap 由编解码器写入像素，PostProcessor 若存在也先在这块软件像素上执行，最后才调用 `Bitmap::allocateHardwareBitmap()` 创建图形缓冲并上传。所以 Hardware Bitmap 没有消除 CPU 解码与像素传输，它把图形缓冲准备提前到解码完成时，避免首次绘制时 HWUI 再建立纹理副本——成本发生的时间与存储形态变了，不是"GPU 解码"。
 
@@ -48,37 +48,37 @@ while (bounds.outWidth / (sampleSize * 2) >= targetWidth &&
 
 格式边界是版本敏感点：AAOS13 源码 javadoc 声明区域解码仅支持 JPEG、PNG、WebP、HEIF——材料标注的 AVIF 是 Android 17 才加入平台声明（AVIF 平台解码本身从 Android 12 / API 31 开始），所以向 Android 10/11 下发需平移缩放的超大图时要准备兼容格式。带 `isShareable` 的 `newInstance()` 重载已弃用；`recycle()` 后所有读取与解码都会失败。
 
-**Q7: [learning] Choreographer.FrameCallback、JankStats、FrameMetrics、SurfaceControl.JankData 四类监控入口各自覆盖渲染路径的哪一段？为什么 `queueBuffer()` 返回不能证明该帧已显示？**
+**Q7: [learning] Choreographer.FrameCallback、JankStats、FrameMetrics、SurfaceControl.JankData 四类监控入口各自覆盖渲染路径的哪一段？为什么 queueBuffer() 返回不能证明该帧已显示？**
 
 标准 App Window 的路径是 VSync → Choreographer → UI 线程 → RenderThread → BLAST/BufferQueue → SurfaceFlinger → HWC → 显示。各入口只覆盖其中一段：`FrameCallback` 只给调整后的帧时间序列，能看出成簇空档但无法区分 CPU、锁还是 I/O；JankStats 按 Window 给帧时长、jank 判定并绑定 UI 状态标签；FrameMetrics 拆 Window 帧的应用侧阶段，`TOTAL_DURATION` 结束于"应用把帧交给显示子系统"，不含面板扫描；`SurfaceControl.JankData`（API 36+ 公开）给系统合成器的逐帧卡顿分类。`queueBuffer()` 只证明生产者提交了 buffer，SurfaceFlinger 是否接收、latch、present 都是后续独立边界。
 
 页面含 SurfaceView、视频、WebView 或游戏引擎时还要画清 Surface 拓扑：宿主 App Window 指标可能很平稳，独立内容生产者却在重复显示旧缓冲，这类页面要按目标 layer 补充生产者入队、fence 与 FrameTimeline 证据，不能只凭宿主 Window 的 JankStats 完成归因。
 
-**Q8: [learning] JankStats 的 `isJank`、API 31+ 的 `frameOverrunNanos` 与"冻结帧"为什么是三套不能合并的口径？服务端要分开保存哪些指标？**
+**Q8: [learning] JankStats 的 isJank、API 31+ 的 frameOverrunNanos 与"冻结帧"为什么是三套不能合并的口径？服务端要分开保存哪些指标？**
 
 三者比较对象不同：`isJank` 是 `frameDurationUiNanos > expectedDuration × jankHeuristicMultiplier`（默认 2.0f），比较 UI 时长与放大后的预算；`frameOverrunNanos = frameDurationTotalNanos - DEADLINE` 比较 total 时长与一次预算；冻结帧是外部统计口径（Android Vitals 慢帧固定 16 ms、冻结帧 700 ms，并假定面向 60 Hz）。同一帧完全可能 `overrun > 0` 而 `isJank == false`，所以不能合成一个 `slow_rate`。
 
 服务端至少分开保存四组：JankStats jank rate（`isJank=true` 帧数 / 同窗口全部回调帧数）；deadline miss rate（API 31+ 中 `frameOverrunNanos > 0` 的占比）；冻结帧率（注明用 UI 还是 total duration）；UI、CPU、total、overrun 各自的 P50/P90/P95/P99。任何 multiplier 或阈值要带策略版本号；只上报异常帧会丢失分母、无法计算可信比例。（JankStats 属 AndroidX 外部库，以上字段语义按材料对 1.0.0 稳定版的核对转写：稳定 AAR minSdk 为 23，API 31+ 实现用 `DEADLINE` 计算 overrun，Android 17 仍走 Api31Impl。）
 
-**Q9: [learning] 在 Android 13 上 FrameMetrics 有哪些字段可用、哪些没有？`getMetric()` 读到不支持的指标返回什么，为什么各阶段时长不能相加去解释 `TOTAL_DURATION`？**
+**Q9: [learning] 在 Android 13 上 FrameMetrics 有哪些字段可用、哪些没有？getMetric() 读到不支持的指标返回什么，为什么各阶段时长不能相加去解释 TOTAL_DURATION？**
 
 按 AAOS13 源码核对：API 24+ 的 UI 阶段字段（`UNKNOWN_DELAY_DURATION`、输入、动画、`LAYOUT_MEASURE_DURATION`、`DRAW_DURATION`、`SYNC_DURATION`、`COMMAND_ISSUE_DURATION`、`SWAP_BUFFERS_DURATION`、`TOTAL_DURATION`、`FIRST_DRAW_FRAME`）与 API 31+ 的 `GPU_DURATION`、`DEADLINE` 都存在；`FRAME_TIMELINE_VSYNC_ID` 在 AAOS13 不是公开的 FrameMetrics 指标（只存在于 @hide 的 FrameInfo 时间戳索引中），公开要到 API 36。不支持的指标 ID 由 `getMetric()` 返回 `-1`（源码核对），不能补零当作 0。
 
 阶段之间可能并行，公开字段之外还有未单列的间隙，所以 `TOTAL_DURATION - sum(各阶段)` 不能命名为"其他耗时"；`GPU_DURATION` 与 swap 的定义也随 API 分桶变化（31—32 与 33+ 的 GPU 起点不同），跨桶比较原始值会把平台定义变化误判成回归。消费侧两个细节：回调中的 `FrameMetrics` 对象会被复用，必须当场复制；`OnFrameMetricsAvailableListener` 第三个参数是上次回调以来丢失的指标报告数，数值升高说明监控消费者过重、样本已有偏，它不是用户侧掉帧数。
 
-**Q10: [learning] Android 13 能用 `Choreographer.VsyncCallback` 拿到帧时间线吗？Android 17 材料描述的 buffer-stuffing recovery 在 Android 13 上存在吗？**
+**Q10: [learning] Android 13 能用 Choreographer.VsyncCallback 拿到帧时间线吗？Android 17 材料描述的 buffer-stuffing recovery 在 Android 13 上存在吗？**
 
 `VsyncCallback` 是 API 33 新增，AAOS13 源码核对存在：`postVsyncCallback()` 的 `FrameData` 提供 `preferredFrameTimeline`（含 `deadlineNanos`、`expectedPresentationTimeNanos`、vsyncId）。注意两点边界：`deadlineNanos` 是应用需完成该帧的绝对时间戳，回调刚开始时无法判定本帧是否超期，它与 `FrameMetrics.DEADLINE`（可用时长预算）不能混用；`FrameData` 只在回调期间有效，需要的基础数值要当场复制。
 
 buffer-stuffing recovery 是 Android 17 Choreographer 才有的机制：BLAST producer 等待 buffer release 超过半个刷新周期后标记 stuffed，后续 `doFrame()` 可以主动延后一帧降低队列深度——AAOS13 源码中无此逻辑，trace 中不会出现 `Buffer stuffing recovery` 切片。关联的卡顿分类也是版本敏感点：AAOS13 的 `SurfaceControl.JankData` 存在但是 @hide，分类是 `JANK_APP_DEADLINE_MISSED`、`JANK_SURFACEFLINGER_DEADLINE_MISSED`、`PREDICTION_ERROR`、`BUFFER_STUFFING` 等细分位；API 36 公开版简化为 `JANK_APPLICATION`/`JANK_COMPOSER`/`JANK_OTHER`/`JANK_NONE`，两套分类不能混着解读。
 
-**Q11: [learning] `FragmentTransaction.commit()` 返回后页面为什么常常还没开始创建 View？为什么 Fragment 切换卡顿经常"不在 doFrame 里"？**
+**Q11: [learning] FragmentTransaction.commit() 返回后页面为什么常常还没开始创建 View？为什么 Fragment 切换卡顿经常"不在 doFrame 里"？**
 
 `commit()` 只把事务加入 `FragmentManager` 的 `mPendingActions` 待执行队列，并通过宿主 Handler 投递 `mExecCommit`；View 创建、生命周期推进与动画准备都发生在随后主线程消息的 `execPendingActions()` 中，多次连续 `commit()` 还可能被同一轮批处理合并执行。AndroidX 的这条异步语义按材料固定到 Fragment 源码 commit 的口径转写（AndroidX 独立发布，版本结论不能从平台标签反推）。
 
 排查含义：事务是主线程消息队列里的普通工作，不属于 `Choreographer#doFrame` 的固定阶段。如果 `mExecCommit` 对应的消息执行 30 ms，下一次 `doFrame` 的开始时间就被推迟，Perfetto 的 FrameTimeline 可能标出该帧错过 deadline，但耗时来源在 `doFrame` 之前的 Fragment 消息里——所以要同时检查点击后的主线程消息（`onCreateView()`、ViewBinding、同步 I/O）、后续 traversal 与 RenderThread。`commitNow()` 同步执行但不进返回栈；`executePendingTransactions()` 会把队列中全部待执行事务连同强制启动的延后过渡一起处理，不适合当通用同步手段。`runOnCommit()` 只保证事务执行完成，不保证帧已绘制，也不继承 `AllowingStateLoss` 语义。
 
-**Q12: [learning] `setReorderingAllowed(true)` 为什么被官方建议用于每个事务？它开启后哪些可观察行为会变？**
+**Q12: [learning] setReorderingAllowed(true) 为什么被官方建议用于每个事务？它开启后哪些可观察行为会变？**
 
 它默认是 `false`，需要显式开启。开启后 FragmentManager 可以在一批事务中消除冗余操作（事务 A 添加 Fragment A、事务 B 随即替换它时，A 的 `add`/`remove` 可能被优化掉，A 不再经历完整的 `onCreate()`/`onDestroy()`），并调整状态推进顺序让动画与转场一致；`postponeEnterTransition()` 也要求开启重排。它不会让单个生命周期回调变快，收益在快速连续导航、`replace` 后又 `pop` 这类批量场景。
 
@@ -90,7 +90,7 @@ buffer-stuffing recovery 是 Android 17 Choreographer 才有的机制：BLAST pr
 
 平台能力是版本敏感的：Android 13 引入 `OnBackInvokedDispatcher`/`OnBackInvokedCallback` 但只提供"返回完成"分发，且为 opt-in——AAOS13 源码核对 `android:enableOnBackInvokedCallback` 经清单解析（`ParsingPackageUtils`）写入 `ApplicationInfo` 并被 `Activity`/`Dialog`/`WindowOnBackInvokedDispatcher` 消费；`OnBackAnimationCallback` 在 AAOS13 是 @hide，应用拿不到平台进度事件。AndroidX Activity 1.8.0+ 的 `handleOnBackStarted/Progressed/Cancelled/Pressed` 四段方法在低版本仍可编译运行，但只有 Android 14+ 能收到连续进度。材料口径：Android 16 起 target 36+ 应用的系统返回动画默认启用、旧的 `onBackPressed()` 不再被调用，AAOS13 无此行为，迁移期可用该清单属性临时关闭。
 
-**Q14: [learning] Fragment 的返回动画要按手势进度控制需要什么版本组合？为什么旧的 `Animation` 走不了这条路？**
+**Q14: [learning] Fragment 的返回动画要按手势进度控制需要什么版本组合？为什么旧的 Animation 走不了这条路？**
 
 材料口径的组合是：Fragment 1.7.0+ 支持应用内预测式返回，但连续按进度定位只在 Android 14+ 生效；返回事务的动画必须全部是 `Animator` 或支持进度控制的 AndroidX Transition 1.5.0+（`TransitionManager.controlDelayedTransition()` 返回 `TransitionSeekController`，把 `progress` 写入 `currentFraction`）。旧的平台 `Animation` 和平台 `Transition` 是时间驱动、不可 seek，所以无法跟随手势。
 
@@ -108,13 +108,13 @@ buffer-stuffing recovery 是 Android 17 Choreographer 才有的机制：BLAST pr
 
 成本不随类别离散化的原因：类别只在跨越 600/840/1200/1600dp 时变化，但断点内的父约束仍连续变化，文本换行、Lazy 容器可见项、Insets、图片目标尺寸都会变，`remember` 不能阻止约束变化引发的测量，`derivedStateOf` 也不是窗口调整的通用加速器。外部库版本按材料转写：Material 3 Adaptive 1.2.0 默认只算 Compact/Medium/Expanded 三档，传入 `supportLargeAndXLargeWidth = true` 才启用五档。
 
-**Q17: [learning] 自适应布局为什么要把尺寸决策集中在页面入口、`BoxWithConstraints` 只用于组件级？窗格切换时怎么保住用户状态？**
+**Q17: [learning] 自适应布局为什么要把尺寸决策集中在页面入口、BoxWithConstraints 只用于组件级？窗格切换时怎么保住用户状态？**
 
 页面入口一次计算上层指令并下发：用 `currentWindowAdaptiveInfo()` 取分类，`calculatePaneScaffoldDirective()` 生成窗格指令，同时交给导航器与 `ListDetailPaneScaffold`，列表数据和选中内容由 ViewModel 持有。`BoxWithConstraints` 基于 `SubcomposeLayout`，先拿父约束再组合内容，约束变化会使内容重新组合并再测量，页面每层都用会放大这笔二阶段成本；判断它是否必要的标准是分支是否只依赖该组件收到的约束。Compose 的强跳过与稳定参数解决的是"能否省略一次可组合函数调用"，不能取消父约束变化后的测量与布局。
 
 状态保留的原因是单窗格与双窗格往往使用不同的 Compose 调用位置，Compose 按槽位表记录组合结构，调用位置改变时原组合实例不一定可复用。做法：业务数据与选中项放 ViewModel 或业务状态容器，短期 UI 状态用 `rememberSaveable`，多个窗格的滚动位置按窗格与内容 ID 分别保存，Lazy 项 key 用不可变业务 ID，不因尺寸类别变化重新发起同一网络请求或清空导航历史。
 
-**Q18: [learning] 调整窗口大小时"窗口几何、应用 buffer、显示呈现"为什么是三个时间点？`queueBuffer()` 按时返回能证明新尺寸画面已显示吗？**
+**Q18: [learning] 调整窗口大小时"窗口几何、应用 buffer、显示呈现"为什么是三个时间点？queueBuffer() 按时返回能证明新尺寸画面已显示吗？**
 
 不能。调整大小或转场时系统同时处理三件事：WMS/WM Shell 更新任务与窗口边界、Insets、转场控制 leash 等几何状态；应用按新约束重绘并提交新尺寸的窗口 buffer，过渡期可能出现新几何配旧缓冲，系统会缩放旧内容或用任务快照填补；SurfaceFlinger 为目标显示设备选择可见图层并完成本轮呈现。`queueBuffer()` 返回只证明生产者已提交，GPU 完成栅栏可能尚未 signal，SurfaceFlinger 也可能尚未 latch，所以既不能只查 Compose 测量，也不能因应用帧按时就排除显示端。
 
@@ -144,25 +144,25 @@ ARR（Adaptive Refresh Rate）只调整显示节奏，不缩短应用生成一�
 
 触摸升帧默认开启，官方不建议关闭：`ACTION_DOWN` 后及抬起一小段时间内系统可提高渲染速率，覆盖按压态与拖动起步。`setFrameRatePowerSavingsBalanced(false)` 只关闭该窗口的 ARR 省电平衡、通常增加耗电，不能指定固定刷新率；两项都应有独立回退开关。AAOS13 边界：View 投票 API 不存在（API 35），可用的只有 Surface 级请求，投票进入 DisplayModeDirector 的 frame rate vote（该机制层见 [../04-graphics/03-display-service-foldable.md](./03-display-service-foldable.md)）。
 
-**Q23: [learning] Android 17 材料描述的 SurfaceFlinger 帧率选择链在 Android 13 上是什么形态？`setFrameRate()` 调用成功能证明屏幕切到了目标刷新率吗？**
+**Q23: [learning] Android 17 材料描述的 SurfaceFlinger 帧率选择链在 Android 13 上是什么形态？setFrameRate() 调用成功能证明屏幕切到了目标刷新率吗？**
 
 材料按 Android 17 描述的链路：`LayerHistory::summarize()` 汇总可见图层请求（类型、期望值、面积权重、焦点、目标显示设备）→ `Scheduler::chooseRefreshRateForContent()` → `RefreshRateSelector::getRankedFrameRates()` 过滤评分，再受显示策略、无缝切换、触摸、空闲与功耗约束，最后向 HWC 提交显示配置或 ARR 呈现间隔。AAOS13 源码核对：同层机制存在但类名不同——Scheduler 用的是 `RefreshRateConfigs::getBestRefreshRate()`（`RefreshRateSelector` 是其后的改名），`LayerHistory::summarize()` 同样存在；ARR 与 Composer3 `vrrConfig` 是 Android 15+ 能力，AAOS13 没有。
 
 调用成功只表示提示已提交进图层状态，最终刷新率由系统综合所有可见图层与策略决定，不保证采用请求值。验收要同时覆盖四条证据：应用输入与工作、应用 `SurfaceFrame`、SurfaceFlinger `DisplayFrame`、当前显示模式与图层请求；只看到刷新率计数器下降，无法证明是哪项应用策略触发，也无法证明交互没有受损。实验用 `settings put system peak_refresh_rate` 强制档位时，要保存原值并在脚本退出后恢复，日常基线保留一组不改系统设置的数据。
 
-**Q24: [learning] CameraX `PreviewView` 与 Media3 `PlayerView` 默认选哪种 Surface 承载？什么条件会切到 TextureView，切换后要重新验证什么？**
+**Q24: [learning] CameraX PreviewView 与 Media3 PlayerView 默认选哪种 Surface 承载？什么条件会切到 TextureView，切换后要重新验证什么？**
 
 `PreviewView` 的 `PERFORMANCE` 是默认模式，支持时使用 SurfaceView，`COMPATIBLE` 才用 TextureView；即使选了 `PERFORMANCE`，CameraX 也会在 API 24 及以下、LEGACY camera hardware，或目标旋转与 display rotation 不一致时回退 TextureView（外部库口径按材料转写）。`PlayerView` 的 `surface_type` 默认是 `surface_view`，官方建议常规视频优先 SurfaceView，理由包括功耗、帧时序、HDR、secure output 与 Android TV 全分辨率。
 
 切换条件按需求反推：需要普通 View 级旋转、缩放、alpha、clip 或把视频与贴纸统一进同一 shader/纹理变换时选 TextureView；只为让弹幕或贴纸盖在视频上不必切换——Z-below 的 SurfaceView 默认允许宿主 UI 覆盖内容。选择 TextureView 后要重新验证 HDR、DRM、功耗与宿主 GPU：它的输入必须经宿主 HWUI 采样，SurfaceFlinger 看不到独立内容层，也就失去了 HWC 单独评估的机会（管线机制层见 [../04-graphics/04-graphics-api.md](./04-graphics-api.md)）。延迟与功耗结论必须回到目标设备的 Producer、layer、fence 与合成策略证据，控件名称本身不保证低延迟或低功耗。
 
-**Q25: [learning] SurfaceView 黑屏时按什么顺序逐项排查？`setSecure(true)` 能当黑屏修复手段吗？**
+**Q25: [learning] SurfaceView 黑屏时按什么顺序逐项排查？setSecure(true) 能当黑屏修复手段吗？**
 
 不能，`setSecure(true)` 表达的是安全输出要求；protected buffer 需要端到端保护链，设备、外接显示或 HWC 不满足条件时可能拒绝显示，移除 secure 换取普通 GPU 读取会破坏 DRM/安全模型。黑屏要按对象顺序查：container、BLAST child（或 TextureLayer）是否已创建 → Producer 是否连接当前而非旧 Surface → 首个 buffer 是否已 queue → acquire fence 是否在目标 present 前 signal → layer 可见性、crop、alpha、合成层级与宿主挖洞是否正确 → HWC 是否接受 format、dataspace 与 protected 属性 → 模式切换后 layer id、BufferQueue 与 Producer 身份是否已重建。
 
 生命周期前提要分清三个独立状态：Activity 已 resumed、View 已 attached、Surface 可用（valid）互不等价，Producer 只能在 `surfaceCreated()` 之后、`surfaceDestroyed()` 返回之前使用当前 Surface（销毁协议细节由渲染管线专题覆盖）。SurfaceView 的视觉能力也是版本敏感点：AAOS13 源码核对 `setAlpha()` 需要 @hide 的 `setUseAlpha()` 启用，且 Z-below 时半透明被拒绝（只支持 0 或 1）；任意 alpha 是 Android 14 起，`setCompositionOrder()` 为 API 36、`setBlurRegions()` 为 API 37，AAOS13 均不存在。
 
-**Q26: [learning] 在 Compose 的 `AndroidView` 里包装 SurfaceView 或播放器时，哪些写法会导致重复切换 Surface 或资源泄漏？为什么重组不会自动重建 Surface？**
+**Q26: [learning] 在 Compose 的 AndroidView 里包装 SurfaceView 或播放器时，哪些写法会导致重复切换 Surface 或资源泄漏？为什么重组不会自动重建 Surface？**
 
 `AndroidView` 的 `factory` 对每个 View 实例只调用一次，随后每次重组可能执行 `update`，且 `update` 内读取的 Compose 快照状态会被观察、变化会安排新的更新——但无论哪种触发，重组都不会重建 View 或 Surface。危险写法有五类：在 `update` 中重复切换 Player surface；每次重组注册新的 `SurfaceHolder.Callback`；状态 setter 无条件触发 `requestLayout()`；Lazy 列表项没有 `onReset`/`onRelease`，导致旧 Producer 继续向已复用的 View 输出；节点离开组合后只释放 View，不停止 codec/camera/EGL。
 

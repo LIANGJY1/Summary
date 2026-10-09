@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 Kconfig/Kbuild 如何选择内建、模块或关闭，外部模块如何匹配目标内核构建，`.ko` 的设备加载条件，以及驱动修改后的验证与清理流程。驱动运行时设计归 [../09-platform-native/02-driver-runtime.md](../09-platform-native/02-driver-runtime.md)。内核分支、GKI 与产品配置会改变工具链及模块策略，应以目标分支构建脚本为准。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] Kconfig 的 `bool`/`tristate` 和 Kbuild 的 `obj-y`/`obj-m` 怎样共同决定驱动是否进入内核或生成 `.ko`？**
+**Q1: [learning] Kconfig 的 bool/tristate 和 Kbuild 的 obj-y/obj-m 怎样共同决定驱动是否进入内核或生成 .ko？**
 
 Kconfig 声明功能开关、可选值与依赖，Kbuild 根据最终配置值选择目标。`bool` 通常只能取 `y` 或 `n`，`tristate` 可以取 `y`、`m` 或 `n`，分别表示内建、模块和不构建。
 
@@ -21,7 +21,7 @@ Kconfig 声明功能开关、可选值与依赖，Kbuild 根据最终配置值�
 4. **目标工具链：**`ARCH=arm64` 一类值选择目标内核架构，不能按执行构建的主机架构默认推断。`LLVM=1` 让 Kbuild 使用 LLVM 工具链。使用 GNU 交叉工具时，`CROSS_COMPILE` 提供 GNU 工具前缀。纯 LLVM 交叉编译通常不需要它，除非还要调用非 LLVM assembler 或工具。
 5. **为何不能用主机默认值：**宿主机 GCC 可能产生错误架构或不兼容的对象文件。模块还必须匹配目标内核版本、配置、生成头文件、符号 CRC 与 ABI。Android kernel manifest 和产品构建脚本通常固定了可兼容的 Clang 版本与参数，应使用该路径，不要硬编码个人主机工具链。
 
-**Q3: [learning] 外部模块 `.ko` 已经构建成功，为什么 Android 设备仍可能拒绝加载？**
+**Q3: [learning] 外部模块 .ko 已经构建成功，为什么 Android 设备仍可能拒绝加载？**
 
 主机生成 `.ko` 只证明模块通过了该次编译，不能证明设备正在运行的内核可以接受它。加载还取决于架构、内核配置和 ABI、符号依赖、模块装载策略、权限、SELinux 与部署位置。
 

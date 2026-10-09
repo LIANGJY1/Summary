@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 Provider 初始化时序、CursorWindow 的跨进程传输、框架等待超时与批量操作的事务和线程池边界。四组件入门见 `01-four-components.md`。依据：AOSP Android 17 源码与 android-internals-wiki §1.15。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: 进程启动时 ContentProvider 为什么早于 `Application.onCreate()` 初始化？`initOrder` 能保证什么？**
+**Q1: [learning] 进程启动时 ContentProvider 为什么早于 Application.onCreate() 初始化？initOrder 能保证什么？**
 
 应用进程绑定时，Android 会先创建并附加 `Application`，再安装、发布清单中的 ContentProvider，最后调用 `Application.onCreate()`。因此 Provider 的 `onCreate()` 会阻塞同进程后续 Provider 安装和 `Application.onCreate()`。若它做磁盘扫描、数据库迁移或同步网络等待，远程调用方也可能同时等待该进程发布 Provider。
 
@@ -22,7 +22,7 @@ Provider 发布和应用初始化也不是一个原子阶段：
 3. 两条路径若争用同一数据库锁或 I/O，首次 `query()` 仍可能被间接拖慢。
 4. 有初始化依赖时应显式声明依赖或由应用统一组织，不能依赖多个库碰巧设置了不同的 `initOrder`。
 
-**Q2: 跨进程查询如何返回 Cursor？为什么 `moveToNext()` 仍可能走 Binder？大结果集该怎样分页？**
+**Q2: [learning] 跨进程查询如何返回 Cursor？为什么 moveToNext() 仍可能走 Binder？大结果集该怎样分页？**
 
 跨进程 Cursor 通过 `CursorWindow` 分批提供行数据。Binder 传递窗口文件描述符和控制元数据，而不是一次性传输整个结果集。客户端访问当前有效窗口中的列值通常不需要远程取数，但换窗或需要 Provider 响应移动事件时仍会发生 Binder 往返。
 
@@ -57,7 +57,7 @@ Provider 发布和应用初始化也不是一个原子阶段：
 4. 取消是协作式的。Provider 和数据库执行路径主动检查取消信号时，工作才会及时停止。
 5. Provider 通常在应用主线程初始化。因此，即使最终报告为输入、广播或 Service ANR，启动阶段 Provider 执行迁移或同步 I/O 仍可能是根因。
 
-**Q4: `applyBatch()` 天然是事务吗？ContentProvider 的 Binder 线程池怎样会被拖垮？**
+**Q4: [learning] applyBatch() 天然是事务吗？ContentProvider 的 Binder 线程池怎样会被拖垮？**
 
 `applyBatch()` 默认不是事务。AOSP Android 17 的默认实现逐个调用 `ContentProviderOperation.apply()`，不会自动开启 SQLite 事务，也不保证失败时回滚。若接口要求整批“全部成功或全部回滚”，Provider 必须在存储层显式用 `beginTransaction()`、`setTransactionSuccessful()` 和 `endTransaction()` 包住整批操作。
 

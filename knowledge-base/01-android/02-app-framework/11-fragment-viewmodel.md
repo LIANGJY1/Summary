@@ -22,7 +22,7 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 
 回退栈和 ViewPager2 等场景可能保留 Fragment 实例而销毁 View。具体回调取决于导航和宿主状态，不应把示例顺序当成每条路径都必须完整经过的固定序列。
 
-**Q3: [learning] 切换 Fragment 页面后状态与内存表现不同，`show/hide`、`replace`、ViewPager2 有什么差别？**
+**Q3: [learning] 切换 Fragment 页面后状态与内存表现不同，show/hide、replace、ViewPager2 有什么差别？**
 
 三种方式在视图保留、Fragment 实例保留和回退语义上不同，选型应看返回时是否要保留现有 View 树，以及可接受的内存成本。
 
@@ -31,7 +31,7 @@ Fragment 实例可能比它创建的 View 树活得更久，因此视图观察�
 3. ViewPager2 + `FragmentStateAdapter`：Adapter 管理 Fragment 实例与保存状态。离当前页面较远的项可被销毁并保存状态，回到该项时再创建 Fragment。近邻页面的保留受 offscreen page limit 和 RecyclerView 回收行为影响，不能断言所有离屏页都立即销毁 View。
 4. **选择**：高频平级切换可用 `show/hide`（接受多份 View 常驻）或 ViewPager2。需要明确导航返回语义时使用 `replace` 与 back stack。切回来状态缺失时，检查是否错误销毁了本应保留的视图或业务状态。
 
-**Q4: [learning] 网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？**
+**Q4: [learning] 网络回调在 onSaveInstanceState() 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？**
 
 `commit()` 异步排队执行，`commitNow()` 在当前调用点同步执行，`commitAllowingStateLoss()` 允许在状态已保存后提交但可能让界面状态在恢复时丢失。网络回调不应通过 allowing-state-loss 来掩盖生命周期竞态。
 

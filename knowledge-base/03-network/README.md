@@ -1,6 +1,6 @@
 # 通用网络协议学习资料
 
-> 通用网络地基机制（不分 Android/车机平台）：分层模型、DNS/TLS/TCP/IP/NAT 等协议教学。2026-10-03 自 `01-android/14-network/10-网络分层原理与地基机制.md` 迁入成立（该册内容全部为平台无关的协议教学）；Android/车机网络实现、策略与诊断归 [../01-android/07-network/](../01-android/07-network/)。Q 序列即结构，供 atlas 同源直读。
+> 通用网络地基机制（不分 Android/车机平台）：分层模型、DNS/TLS/TCP/IP/NAT 等协议教学。2026-10-03 自 `01-android/14-network/10-网络分层原理与地基机制.md` 迁入成立（该册内容全部为平台无关的协议教学）；Android/车机网络实现、策略与诊断归 [../01-android/07-network/](../01-android/07-network/)。文档结构和编号统一遵守 [WRITING-GUIDE.md](../WRITING-GUIDE.md)，题目供 atlas 同源直读。
 
 ## 册
 

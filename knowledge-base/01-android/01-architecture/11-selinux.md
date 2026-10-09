@@ -116,7 +116,7 @@ framework/系统开发者的常见工作是新增进程、服务、属性、设�
 
 修复时的用法：scontext 的域、tcontext 的类型、tclass、被拒权限四段照抄就是一条 allow 规则，`allow nsr_appstore audio_service:service_manager find;`。
 
-**Q7: 读不到 `/sys` 节点、打不开 `/dev` 设备或跨进程访问失败时，怎样确认 SELinux 拒绝并选择正确处理方式？**
+**Q7: [learning] 读不到 /sys 节点、打不开 /dev 设备或跨进程访问失败时，怎样确认 SELinux 拒绝并选择正确处理方式？**
 
 先按拒绝发生的位置检查对应日志。以下命令适用于已连接设备；访问内核日志通常需要 root 或可读权限：
 
@@ -155,7 +155,7 @@ sepolicy 目录按接口可见性分层：`public` 暴露供 vendor 策略引用
 2. **AAOS 实例**：carservice 策略组合 `app_domain(carservice_app)`、`add_service(carservice_app, carservice_service)`，并将 carservice 域关联到它调用的 vehicle、audiocontrol、evs 等 HAL 客户端属性。它展示按职责组合宏的方式，实际权限仍以目标分支策略为准。
 3. **诊断**：neverallow 报错的行号回溯规则所在 .te；不确定宏展开结果时用 m4 预展开确认。
 
-**Q10: 新设备节点仍显示 `unlabeled` 时，file_contexts 如何匹配路径并决定标签？**
+**Q10: [learning] 新设备节点仍显示 unlabeled 时，file_contexts 如何匹配路径并决定标签？**
 
 file_contexts 根据路径和可选的文件类型标记选择安全上下文；静态路径匹配先于正则项，正则优先级以构建工具生成的排序产物为准。应检查合并后的最终文件，而不能只凭某个源文件中的行号推断命中项。匹配不到时对象会落到未标记类型，针对通用类型添加 allow 并不能修正标签。
 
@@ -204,7 +204,7 @@ Android 13 中，`get_prop(coredomain, system_prop)` 可展开为 `allow coredom
 2. **hwservicemanager 服务**：HIDL HAL 映射使用 `包@版本::接口/实例` 形式的服务名，条目写入 `hwservice_contexts`。
 3. **授权与诊断**：映射只确定服务类型；服务进程仍需相应 add 权限，客户端仍需 find 权限。AOSP 的 `hal_attribute_service` 等宏可按 HAL attribute 组合服务端注册和客户端查找规则，宏体需按分支核实。用拒绝记录里的 `scontext`、`tcontext`、`tclass` 和权限名定位缺失的一侧，并用 `ps -Z` 核对进程域。
 
-**Q13: 三方应用直读自研驱动节点撞上 `neverallow` 时，怎样调整能力暴露路径？**
+**Q13: [learning] 三方应用直读自研驱动节点撞上 neverallow 时，怎样调整能力暴露路径？**
 
 不要放开 app 域：平台侧建服务、把服务类型挂 `app_api_service` 属性，应用经 Binder 调服务；确需硬件访问就 HAL 化（`hal_attribute` + `hal_client_domain`）。app_neverallows 对全部 untrusted 域禁掉了应用数据目录执行、debugfs 读、注册服务、vndbinder 等一整组权限，这些禁令是平台安全模型的编译期保证，不可绕过。
 
@@ -212,7 +212,7 @@ Android 13 中，`get_prop(coredomain, system_prop)` 可展开为 `allow coredom
 2. **例外评估**：确实需要直访硬件的，评估建专有 HAL 域，而不是修改 app 域约束；
 3. **设计判断**：把硬件访问收敛在受控服务中，服务负责参数校验、权限检查和设备操作；仅当平台架构确实要求应用直连时，才由平台安全设计重新评估专用域与最小权限。
 
-**Q14: vendor sepolicy 改动似乎未生效、同名 `.te` 顺序难判断或升级平台后 avc 暴增，怎样检查策略组织与版本兼容？**
+**Q14: [learning] vendor sepolicy 改动似乎未生效、同名 .te 顺序难判断或升级平台后 avc 暴增，怎样检查策略组织与版本兼容？**
 
 vendor 策略由 `BOARD_VENDOR_SEPOLICY_DIRS` 指定的目录参与构建；同名策略文件按目录顺序拼接，而不是后一个文件简单覆盖前一个。平台与 vendor 的兼容由 `prebuilts/api/<版本>/` 快照和 mapping 版本化文件支撑。
 
@@ -322,7 +322,7 @@ vendor 策略由 `BOARD_VENDOR_SEPOLICY_DIRS` 指定的目录参与构建；同�
 2. 临时删除可疑的 dontaudit 规则重新编译，或改用 permissive 域配合 `auditallow` 观察完整访问流。
 3. 排除缓冲因素：servicemanager 类拒绝通常需读取 logd events 缓冲，普通主缓冲未必包含它；`dmesg` 用于检查内核审计记录，不是所有 userspace AVC 的日志来源。
 
-**Q23: neverallow 与运行时拒绝是什么关系？服务落到 `default_android_service` 类型后注册失败该怎么解？**
+**Q23: [learning] neverallow 与运行时拒绝是什么关系？服务落到 default_android_service 类型后注册失败该怎么解？**
 
 `neverallow` 是构建期约束：策略构建检查发现 allow 与断言相交时，策略构建失败；它不是运行时访问规则。运行时仍由已装载策略中的 allow、属性和默认拒绝决定访问结果。
 

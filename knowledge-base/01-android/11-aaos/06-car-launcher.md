@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答"CarLauncher 与 Launcher3 的职责差异、应用发现与网格构造、点击启动链与 TaskView 嵌入"。HOME 请求的系统侧解析归 [../01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)，任务/launchMode 通用语义归 03-ui/01。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 从职责与架构看，AAOS 的 `CarLauncher` 与手机上的 AOSP `Launcher3` 有什么异同？**
+**Q1: [learning] 从职责与架构看，AAOS 的 CarLauncher 与手机上的 AOSP Launcher3 有什么异同？**
 
 两者都提供 Home 入口和应用启动入口，并沿用 Android 的应用与 Activity 模型。AAOS 主要为车内使用情境增加专用体验与平台策略。
 
@@ -13,7 +13,7 @@
 
 `CarLauncher` 中的地图卡片和 Home cards 属于 AOSP 参考实现的产品设计，不是所有 AAOS 设备的强制结构。OEM 可以替换或定制 Launcher。面试时应先说明双方共享的 Android 启动机制，再讲车载策略与交互差异，避免把 `Launcher3` 的具体实现说成 AAOS 的必经路径。
 
-**Q2: [learning] AAOS `CarLauncher` 如何构造应用网格条目？**
+**Q2: [learning] AAOS CarLauncher 如何构造应用网格条目？**
 
 Android 13 参考实现根据当前用户可启动的组件和车载策略构造应用网格。因此网格既不等于设备上全部已安装的包，也不只包含普通 `CATEGORY_LAUNCHER` Activity。
 

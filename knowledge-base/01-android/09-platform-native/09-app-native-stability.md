@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：MTE 与 GWP-ASan 的检测实战边界（请求不等于生效、抽样决定覆盖、可恢复不等于安全），Native Hook 从命中路径出发的选型与实现风险，Native 动态库的可信发布、只读装载与回滚事务，第三方 SDK 的测量归因与退出治理。MTE 标签机制、SYNC/ASYNC 报告差异与 memtagMode 决策链的机制层见 [../06-memory-storage/02-reclaim-compression.md](../06-memory-storage/02-reclaim-compression.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] `android:memtagMode` 的四个值在记录口径上有什么区别？为什么事件记录里不能把 `default` 写成 `off`？**
+**Q1: [learning] android:memtagMode 的四个值在记录口径上有什么区别？为什么事件记录里不能把 default 写成 off？**
 
 四个值的请求语义不同：`off` 明确不请求 MTE 访问检查；`default` 把决定交给兼容性开关、平台默认和设备策略继续处理；`sync` 请求同步检查，适合调试包、实验室和小范围诊断包；`async` 请求异步检查并允许设备按 CPU 首选模式增强，是充分测试后的正式发布候选。`default` 不能记成 `off`，因为设备策略仍可能为它启用 MTE，事件里写 `off` 会制造不存在的"已禁用"结论；同理，请求 `async` 的进程被逐 CPU 增强为 SYNC 时，也只能记 `requested_mode=async`，不能写成 `effective_mode=async`——普通应用没有可靠 API 读取每次访问所在 CPU 的最终模式，上报应保留原始 `tagged_addr_ctrl` 或 tombstone 证据并允许 `effective_mode=unknown`。
 
@@ -14,7 +14,7 @@
 
 可行的分批启用路径按构建与发布控制：debug 与内部测试包用 SYNC 覆盖 Native 单测、集成测试和长稳；单独制作 canary 包或通过 Play 分阶段发布请求 ASYNC；多进程应用先选 Native 风险高、业务可恢复的独立进程；观察后再扩大覆盖，出现不可接受回归时停止扩大或发布关闭 MTE 的修正版。发布前要具备：精确 Build ID 与未剥离符号归档、只负责一次 fatal signal 的采集方案、tombstone 保留解析、关键状态的进程外持久化，以及同一负载下 off/SYNC/正式配置的性能对照。一个容易漏掉的诊断边界：ASYNC 请求在某个 CPU 上被增强为 SYNC 时错误现场可能更精确，但进程并未按 SYNC 配置分配器，所以仍未必有分配/释放调用栈，归因不能套用 SYNC 报告的权重。
 
-**Q3: [learning] GWP-ASan 的两层抽样怎么理解？"应用启用了 GWP-ASan"或配置 `always` 意味着所有 `malloc` 都受保护吗？**
+**Q3: [learning] GWP-ASan 的两层抽样怎么理解？"应用启用了 GWP-ASan"或配置 always 意味着所有 malloc 都受保护吗？**
 
 不意味着。GWP-ASan 先决定某次进程启动是否启用（进程级抽样），再从该进程的内存分配中抽样（分配级抽样），只有同时通过两层选择的对象才进入由不可访问 guard page 包围的受保护槽位。分配级默认值按 AAOS13 源码核对（`bionic/libc/bionic/gwp_asan_wrappers.cpp`）：`SampleRate = 2500`（选中进程内约 1/2500 的分配进入保护）、`MaxSimultaneousAllocations = 32`（同时可占用的槽位上限）、进程级抽样率默认 128——即"启用"本身还要先过一次约 1/128 的启动命中。`android:gwpAsanMode` 支持 `never`、`default`、`always` 三种请求（已与官方文档核对）：`always` 只取消进程启动这一层抽样（每次启动都启用），仍只保护部分分配；Android 13 及以下 `default` 对普通应用关闭，Android 14+ 的 `default` 是约 1% 启动命中的 Recoverable 模式。因此不能把两种覆盖率相加成"内存安全百分比"，也不能用固定 `1/N` 推导某个缺陷的发现率。
 
@@ -26,7 +26,7 @@ Android 14 / API 34 起，manifest 未填写或使用 `default` 的普通应用�
 
 Android 13 上行为完全不同：按 AAOS13 源码核对，`SetDefaultGwpAsanOptions()` 只设置 Enabled、SampleRate、MaxSimultaneousAllocations 等字段，没有 Recoverable 选项——命中即按致命信号终止进程，且 `default` 对普通应用默认关闭，应用要显式声明 `gwpAsanMode` 才启用。无论哪个版本，都要遵守同一条规则："进程没有立刻退出"不代表状态安全——发生释放后访问或越界后官方把后续行为定义为不确定，Recoverable 事件仍应进入稳定性指标、去重、告警和高优先级修复队列，支付、写入等有副作用的操作不能因为进程继续运行就自动重试。APM 分类还要区分两条可恢复路径：Recoverable GWP-ASan 与 Permissive MTE 最终都以可恢复崩溃处理，但入口条件不同——前者是带 fault address 且地址属于 guarded pool 的 `SIGSEGV`，后者看 `SEGV_MTESERR`/`SEGV_MTEAERR`，不能把所有可恢复 `SIGSEGV` 归为同一类。
 
-**Q5: [learning] MTE 错误报告能不能靠吞掉 `SIGSEGV` 消除？应用崩溃采集器与 debuggerd 协作时要遵守什么边界？**
+**Q5: [learning] MTE 错误报告能不能靠吞掉 SIGSEGV 消除？应用崩溃采集器与 debuggerd 协作时要遵守什么边界？**
 
 不能吞。MTE 标签不匹配通常表示进程确实违反了带标签内存的访问约束，不应简单归为"误报"——看起来像误报的情况往往错在归因过程：把 ASYNC 报告点当成错误访问点、使用了不匹配的符号版本、自定义分配器没有遵循标签语义、旧代码破坏了指针高位。正确做法是修复证据指向的内存使用错误；无法更新且持续触发缺陷的第三方 `.so`，短期只能隔离进程、回到上一版本或发布关闭该进程 MTE 的新构建。
 
@@ -38,13 +38,13 @@ Android 13 上行为完全不同：按 AAOS13 源码核对，`SetDefaultGwpAsanO
 
 性能没有可引用的单一百分比：开销受 CPU 实现、检查模式、分配栈记录、分配行为和负载影响，应使用同一正式版本、相同设备电源状态和相同负载，比较启动/交互/长任务时延分布、CPU time、功耗温升、内存占用，以及 Native 崩溃、ANR、业务失败与进程重启，并按进程和设备档位分组。SYNC 测试不能只跑正常路径，要覆盖不可信输入解析、跨语言对象所有权、异步回调、取消、对象池、JNI 引用、线程退出、热更新资源和第三方 `.so`。发布报告必须同时写清进程启动覆盖与内存分配抽样（GWP-ASan 场景），避免把"没有命中"解释为"没有缺陷"。
 
-**Q7: [learning] PLT/GOT、Inline、Trap 三种 Native Hook 分别改写什么？同样是 Hook `malloc`，覆盖面差在哪？选型从哪里开始？**
+**Q7: [learning] PLT/GOT、Inline、Trap 三种 Native Hook 分别改写什么？同样是 Hook malloc，覆盖面差在哪？选型从哪里开始？**
 
 三者改写的对象不同。PLT/GOT Hook 修改某个调用方 ELF 的动态重定位槽（PLT 负责把外部函数调用引向链接结果，GOT 保存运行时地址，实践中通常改 GOT 中与动态重定位对应的槽位），能看到该调用方经动态链接发出的外部调用；Inline Hook 改写目标函数入口或函数内指令，能覆盖所有经过该指令地址的执行流；Trap Hook 用断点指令触发 `SIGTRAP`、在信号处理函数中改写寄存器与 PC，接近用户态软件断点。同样是 `malloc`：修改 `libfoo.so` 中 `malloc` 的导入槽只影响 `libfoo.so` 经该槽发出的调用；修改 `libc.so` 中 `malloc` 的入口会影响进程内更多调用者，同时放大递归和并发风险。
 
 选型从"需要命中哪条调用路径"开始，而不是"PLT 失败就换 Inline"。业务优先级是：自有模块的埋点、耗时或故障注入用显式代理或编译期插桩；观察指定 `.so` 对 libc/NDK 函数的外部调用用 PLT/GOT Hook；要拦截函数内部调用、隐藏符号或经 `dlsym` 保存的直接调用才用 Inline；分配器、线程同步等高频基础函数优先用 heapprofd、GWP-ASan、Perfetto 等平台工具——代理函数极易递归，故障影响整个进程。放入面向全部用户的路径前要逐项回答：目标调用是否被 LTO、内联或直接绑定消掉；ABI 是否稳定；安装时其他线程是否正在执行待覆盖指令；新装载和卸载的 ELF 如何进出 Hook 集合；失败、重复安装、多框架共存、远程关闭时状态是否可判定；代理函数能否在递归、信号、低内存和进程退出阶段安全运行。只要一项没有答案就不上线。
 
-**Q8: [learning] bionic linker 对 Native Hook 有哪些硬约束？PLT/GOT Hook 为什么不依赖 `RTLD_LAZY` 的延迟解析？**
+**Q8: [learning] bionic linker 对 Native Hook 有哪些硬约束？PLT/GOT Hook 为什么不依赖 RTLD_LAZY 的延迟解析？**
 
 按 AAOS13 源码核对，四条约束构成边界。其一，`RTLD_LAZY` 不受支持：linker 处理 `DT_PLTGOT` 时直接忽略（源码注释 "Ignored (because RTLD_LAZY is not supported)"），PLT 重定位在装载期间就由 `relocate()` 完成——所以 PLT/GOT Hook 修改的是 linker 已写好的重定位结果，不依赖延迟解析入口，传入 `RTLD_LAZY` 也不会得到桌面 Linux 式的首次调用再解析行为。其二，RELRO：`soinfo::link_image()` 在重定位完成后调用 `protect_relro()` 把指定内存段改为只读，落入 RELRO 的槽位加载后不可写，Hook 需按目标 ELF 和运行时映射确认页权限，`mprotect()` 可能因地址、长度、映射类型或安全策略失败，失败要有可观测的降级分支。其三，64 位 ELF 声明 `DT_TEXTREL` 或 `DF_TEXTREL` 会被 linker 直接拒绝装载（LP64 分支报 "has text relocations"）；这项检查针对 ELF 自己声明的装载期代码重定位，与 Inline Hook 的运行时 patch 是两条独立路径，互不能为对方背书。其四，`dlopen()` 成功返回后新 ELF 的重定位和构造函数已经执行完，此时安装 Hook 只能覆盖后续调用，无法补采构造函数中的调用，新装载的 ELF 有独立重定位槽、必须另行扫描。
 
@@ -68,7 +68,7 @@ Android 13 上行为完全不同：按 AAOS13 源码核对，`SetDefaultGwpAsanO
 
 生命周期上，每个 Hook 应有明确状态机（`DECLARED → RESOLVING → INSTALLING → ACTIVE`，失败进入 `FAILED` 并保留错误阶段证据，停用走 `DISABLING → DISABLED`）。关闭时优先逻辑停用：保留稳定入口，用原子开关让 proxy 直接调用原函数——恢复 GOT 指针不等于旧 proxy 已无人执行，恢复函数入口也不等于 trampoline 可以立刻释放，线程可能仍在其间。物理 unhook 需要活动调用计数、宽限期或暂停线程协议，并确认目标 ELF 尚未卸载、槽或指令仍属于本框架。兼容判断上，API level 只能作第一层筛选：对 `libart.so` 等私有函数 Hook 在某台 Android 13/17 设备成功，不能推导到同 API level 的其他设备——ART 等 Mainline 模块可独立升级，厂商构建会改变符号与函数序言；私有符号必须按设备 API、ABI、Build ID、符号名和入口指令摘要建允许列表，任一不匹配就停用，研究用偏移与线上允许列表分开维护。安装记录（目标 ELF 路径、Build ID、load bias、符号、原地址与 proxy 地址、relocation type 或原指令、页大小与权限变更）随崩溃事件上传，否则无法判断崩溃在业务代码、proxy、trampoline 还是多框架冲突。
 
-**Q12: [learning] Android 17 对 `System.load()` 加了什么约束？覆盖哪些加载入口？Android 13 上行为有何不同？**
+**Q12: [learning] Android 17 对 System.load() 加了什么约束？覆盖哪些加载入口？Android 13 上行为有何不同？**
 
 Android 17 上、以 API 37 及更高版本为目标的应用调用 `System.load()` 时，如果目标文件仍然可写，会在进入 native linker 前抛出带 "Attempt to load writable file" 的 `UnsatisfiedLinkError`。按材料对 `android-17.0.0_r1` 源码的核对，检查只挂在 `Runtime.load0()` 这条路径上：`System.load("/abs/libx.so")` 走它；`System.loadLibrary("x")` 经 `loadLibrary0()` 由 `ClassLoader.findLibrary()` 解析文件后直接调 `nativeLoad()`，当前源码未经同一段检查；自定义 `ClassLoader.findLibrary()` 配合 `loadLibrary()` 同样不经过；原生代码直接 `dlopen()` 更不会回到 Java 层。但改用 `dlopen()` 只会绕开这段 Java 检查，不会让下载的代码变可信——原生库仍受 linker namespace、ELF 格式、`DT_NEEDED` 依赖、符号解析、进程位数和 16 KB 页约束，远程 DCL 还可能违反 Google Play 政策；确需保留 DCL 时，所有入口都应执行同一套只读发布与来源验证。
 
@@ -80,19 +80,19 @@ Android 17 上、以 API 37 及更高版本为目标的应用调用 `System.load
 
 发布包之外的制度边界也要记住：官方安全指南指出许多 DCL 形式（尤其从远端获取代码）可能违反 Google Play 政策并导致应用被暂停——"系统允许加载"推不出"商店允许发布"，是否合规按实际下载内容和分发方式单独审查。
 
-**Q14: [learning] 发布状态机如何隔离半成品？`rename` 的原子性边界是什么？**
+**Q14: [learning] 发布状态机如何隔离半成品？rename 的原子性边界是什么？**
 
 用状态机把下载、验证、发布、启用分开：`STAGED`（临时文件已创建，加载线程不可选择）→ `VERIFIED`（签名清单、摘要、长度、ABI、ELF 元数据均通过）→ `PUBLISHED`（临时文件在同一文件系统内经原子 `rename` 切到唯一版本路径）→ `SELECTED`（小型选择清单经 `AtomicFile` 或等价文件事务更新）→ `LOADED`（当前进程已加载）。签名、哈希、ELF 或加载任一环节失败都把该版本标记 `BAD`；回滚只更新版本选择记录，不改写已发布文件；启动扫描只接受签名完整且状态为 `PUBLISHED` 的版本，未被引用的临时文件延迟清理。
 
 `rename` 的边界容易高估：原子 `rename` 只保证运行中的观察者不会看到半次目录项切换，不自动保证掉电后目录更新已持久化（要求掉电恢复需同步父目录），也不包含选择清单更新。`File.renameTo()` 只返回布尔、无法说明失败原因，也没有"目标存在时失败"的规则；`Os.rename()` 提供 `ErrnoException` 但同样没有"不覆盖"保证——先 `require(!finalFile.exists())` 再 `rename` 是两步操作，若威胁模型包含不遵守锁的同 UID 写入者，需要用支持原子"不覆盖"语义的接口或等价协议。发布进程应持有跨进程锁、临时文件与目标文件在同一私有文件系统；恢复逻辑分别处理"文件未发布""已发布但尚未选择""选择记录已提交"三种状态，不能根据"现在能取得锁"推测上一次操作成功。
 
-**Q15: [learning] 为什么"先 `fchmod` 设只读、再用已打开的 fd 写入"是可行的？文件设为 0400 后为什么仍可能被替换或删除？**
+**Q15: [learning] 为什么"先 fchmod 设只读、再用已打开的 fd 写入"是可行的？文件设为 0400 后为什么仍可能被替换或删除？**
 
 利用了 Linux 文件权限的检查时机：`fchmod` 影响的是后续打开文件时的权限检查，不会撤销已经成功取得的写入权限。所以正确顺序是：用 `O_CREAT | O_EXCL | O_CLOEXEC` 创建唯一临时文件并拒绝跟随符号链接 → 保持写入 fd 打开、立即 `fchmod` 为仅所有者可读 → 经该 fd 流式写入并同步计算 SHA-256 → 校验通过后 `fsync`、原子 `rename` 到唯一版本路径。这样路径先变为只读，其他进程几乎拿不到可写窗口；摘要覆盖的就是写入 fd 的同一串字节，不必把整个库读入内存。诊断时可同时记录 mode bit 与 `File.canWrite()`——`0400` 代表"仅所有者可读"，但看到它不能断定平台检查一定通过，两者含义不同。
 
 文件权限与目录权限要分开看：文件改成只读后，拥有可写父目录的进程仍可执行 `unlink` 或 `rename`——只读文件能阻止原地改写，却不能保证某个路径始终指向同一组字节。所以只读只是发布事务的一环，版本化路径、禁止覆盖、签名校验和版本选择记录必须配合使用。
 
-**Q16: [learning] 只读检查通过后，独立 `.so` 还可能因为什么加载失败？`UnsatisfiedLinkError` 应该按什么分类处理？**
+**Q16: [learning] 只读检查通过后，独立 .so 还可能因为什么加载失败？UnsatisfiedLinkError 应该按什么分类处理？**
 
 按失败来源分七类处理，不能把所有 `UnsatisfiedLinkError` 归因到 Android 17 只读规则。ABI/ELF 类：不要直接取 `Build.SUPPORTED_ABIS[0]`——应用进程可能以 32 位或 64 位运行，设备支持列表第一项不一定对应当前进程；应核对 `Process.is64Bit()` 与 ELF `EI_CLASS`、ELF `e_machine` 与清单声明的 ABI、版本与 Build ID 一致；多 ABI 复用同一版本目录会让错误文件覆盖正确文件，目录应含固定格式的模块名、ABI 和不可变版本号（如 `files/native/arm64-v8a/feature/42/libfeature.so`）。依赖与命名空间类：`DT_NEEDED` 声明的每个依赖都要能在调用方 `ClassLoader` 对应的命名空间中解析，不能依赖未向应用公开的私有平台库，也不按猜测顺序手工逐个 `dlopen()`；发布前用 `readelf -d` 列出依赖并与随包库及公共库核对。16 KB 页类：独立 `.so` 检查 ELF `PT_LOAD` 段的 `p_align`；APK ZIP 对齐只影响从 APK 直接 `mmap` 未压缩库的路径，解压到私有目录后不再是条件——两者分别检查。
 
@@ -110,7 +110,7 @@ Android 17 上、以 API 37 及更高版本为目标的应用调用 `System.load
 
 "一个应用平均有 20~40 个 SDK""SDK 代码占 30%~60%"不能当项目结论，因为它们高度依赖统计口径——按供应商、业务能力、Maven 发布单元、DEX 包名前缀还是安装字节计数结果完全不同：同一家供应商可能拆成十几个发布单元，一个基础库也可能被多个 SDK 复用；依赖声明数量推断不了最终体积，包名前缀也推断不了运行时责任。台账以准备发布的构建变体为准（`releaseRuntimeClasspath` 的依赖图与 `dependencyInsight`、合并 Manifest、APK/AAB 组成），Google Play 的 SDK 责任说明也明确：即使问题来自第三方代码，应用开发者仍对发布的应用负责。
 
-**Q19: [learning] SDK 的 `ContentProvider` 初始化发生在 `Application.onCreate()` 之前吗？Jetpack App Startup 能解决什么、不能解决什么？**
+**Q19: [learning] SDK 的 ContentProvider 初始化发生在 Application.onCreate() 之前吗？Jetpack App Startup 能解决什么、不能解决什么？**
 
 发生在之前。按 AAOS13 源码核对（`frameworks/base/core/java/android/app/ActivityThread.java` 的 `handleBindApplication`）：系统先调用 `installContentProviders(...)`，随后才经 `Instrumentation.callApplicationOnCreate(...)` 调用 `Application.onCreate()`。因此 SDK 的自动 Provider 初始化先于应用自己的初始化代码执行，常见主线程成本包括 Provider 构造、类加载与静态初始化，SharedPreferences/文件/数据库/PackageManager 查询，Binder 调用、锁等待和同步网络探测，注册监听器、创建线程池或加载原生库，以及多个 SDK 争用主线程与类加载锁——只给 `Application.onCreate()` 打点会漏掉这一整段早期成本。
 
@@ -140,7 +140,7 @@ App Startup 能做的是把多个自动初始化 Provider 合并到一个 `Initi
 
 远程开关适合阻止后续初始化、停止新请求或隐藏功能，但要满足：读取开关不依赖待禁用 SDK；冷启动早期即可得到安全默认值；禁用路径不触发无限重试或 crash loop；本地保留上次可信状态并设过期策略；隐私同意撤回能停止采集并处理待上传数据。最关键的时间边界：若 SDK 在进程创建时由 Provider 自动运行，远程开关的读取往往已经太晚——高风险 SDK 应改为显式初始化，或至少让 Provider 只做轻量登记、不执行耗时网络或磁盘操作。
 
-**Q24: [learning] Android 17 上还能为新应用接入 SDK Runtime（`SdkSandbox`）吗？Android 14~16 的遗留路径要注意什么？**
+**Q24: [learning] Android 17 上还能为新应用接入 SDK Runtime（SdkSandbox）吗？Android 14~16 的遗留路径要注意什么？**
 
 不能。Google 已于 2025 年 10 月宣布退役 SDK Runtime 等 Privacy Sandbox 技术，Android 17 / API 37 的 `SdkSandboxManager` 已废弃、API 文档明确 SDK sandbox 不再受支持，AndroidX `privacysandbox-sdkruntime` 也已废弃并停止更新（已与官方文档核对）。API 符号和系统服务类仍然存在（AOSP 保留 `SdkSandboxManagerService` 等兼容代码），但不能据此判断能力可用于新项目——面向 API 37 的接入决策应服从公开 API 的废弃契约，新项目不再围绕 runtime-enabled SDK bundle、`loadSdk()` 或旧 sandbox 生命周期设计。
 

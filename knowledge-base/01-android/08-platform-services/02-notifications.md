@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 NotificationManager 到 NMS 的提交与发布时序、限流、通知渠道与权限、RemoteViews 约束和 Live Update 提升条件。SystemUI 的完整渲染链路归 03-ui，应用侧通知构建与产品实践归对应应用实践文档。源文档：android-internals-wiki §1.23。权限和 Live Update 行为对照 Android Developers，Android 17 实现细节对照 frameworks/base 的 NotificationManager、NotificationManagerService、NotificationChannel 和 Notification。
 
-**Q1: [learning] 调用 `NotificationManager.notify()` 返回后，系统已经完成哪些工作？通知何时才算发布或显示？**
+**Q1: [learning] 调用 NotificationManager.notify() 返回后，系统已经完成哪些工作？通知何时才算发布或显示？**
 
 `notify()` 返回表示应用到 NMS 的同步提交调用结束，不等于通知已经显示。NMS 会在 Binder 调用期间做身份与参数校验、构造记录并把后续处理交给服务端工作队列，但服务端任务与调用返回之间存在并发竞态，不能把“返回后”当成所有异步处理的严格分界。
 
@@ -32,7 +32,7 @@ Android 17 AOSP 同时有客户端与 NMS 侧的更新限流。限流会丢弃�
 4. **迁移策略：**需要为实质不同的通知用途创建新渠道时，应设计新的稳定 ID，并向用户说明用途变化。不要把版本号、语言或临时业务状态编码进 channel ID 来规避用户配置。
 5. **显示边界：**渠道只提供分类和用户控制入口，不保证通知一定显示，也不绕过应用权限、勿扰模式或系统策略。小图标、正文和点击行为仍由应用为每条通知提供。
 
-**Q4: [learning] Android 13 及以上拒绝 `POST_NOTIFICATIONS` 后，还能调用 `notify()` 吗？通知会显示在哪里？**
+**Q4: [learning] Android 13 及以上拒绝 POST_NOTIFICATIONS 后，还能调用 notify() 吗？通知会显示在哪里？**
 
 `notify()` 方法本身仍可调用，但 Android 13（API 33）及以上用户拒绝 `POST_NOTIFICATIONS` 后，应用通常不能发布非豁免的用户可见通知。应用应把“调用成功”和“用户看到通知”分开处理，不要依赖内部是否创建过通知记录。
 
@@ -41,7 +41,7 @@ Android 17 AOSP 同时有客户端与 NMS 侧的更新限流。限流会丢弃�
 3. **豁免类别：**媒体会话通知属于豁免。自管电话应用在声明 `MANAGE_OWN_CALLS`、实现 `ConnectionService` 并向 Telecom 注册 `PhoneAccount` 后，可发布 `CallStyle` 通知而不要求该权限。
 4. **查询边界：**`NotificationManager.areNotificationsEnabled()` 检查应用级通知允许状态，不能替代对具体 channel importance、单个渠道阻止状态或勿扰策略的检查。参数非法、身份校验失败或其他通知约束仍可能导致 `notify()` 抛异常。
 
-**Q5: [learning] Android 17 如何限制通知自定义 `RemoteViews` 的内存？超过限制会怎样？**
+**Q5: [learning] Android 17 如何限制通知自定义 RemoteViews 的内存？超过限制会怎样？**
 
 Android 17 在 NMS 提交阶段和 SystemUI 展开阶段分别检查自定义通知视图。第一层基于 `RemoteViews` 序列化对象的估算值，第二层检查 SystemUI 实际应用后可见的 Drawable 占用。它们检查的对象不同，不能用第一层估算替代实际展开检查。
 
@@ -49,7 +49,7 @@ Android 17 在 NMS 提交阶段和 SystemUI 展开阶段分别检查自定义通
 2. **SystemUI 展开后检查：**Android 17 引入 `NotificationCustomContentMemoryVerifier`，在自定义视图应用后遍历 `ImageView`。`BitmapDrawable` 使用 `allocationByteCount` 统计像素内存，其他 Drawable 按固有宽高乘 4 估算。对于 target API 37 及以上应用，`CHECK_SIZE_OF_INFLATED_CUSTOM_VIEWS` 生效后超限的自定义视图不能按原样用于展示。具体兼容 flag 和 OEM 行为需以目标系统镜像验证，较低 target 的兼容处理以迁移警告为主。
 3. **适配：**优先用 `BigTextStyle`、`MessagingStyle`、`CallStyle`、`ProgressStyle` 或 `MetricStyle` 等系统模板。确需自定义布局时，应在解码前限制图片尺寸，并保证标准标题与正文足以作为退化内容。
 
-**Q6: [learning] Android 17 想让进行中的通知成为 Live Update（promoted ongoing），只调用 `setRequestPromotedOngoing(true)` 够吗？**
+**Q6: [learning] Android 17 想让进行中的通知成为 Live Update（promoted ongoing），只调用 setRequestPromotedOngoing(true) 够吗？**
 
 不够。应用只能请求提升，系统还会结合通知结构、权限、用户设置和渠道条件决定是否设置 `FLAG_PROMOTED_ONGOING`。适格通知需要同时满足以下结构与权限条件：
 

@@ -1,58 +1,46 @@
-# AGENTS.md — Summary 个人 AI 知识库
+# AGENTS.md — Summary 个人知识库
 
-给 coding agent 的入口说明。本仓库是 private 的个人技术知识库（Android/车载开发为主）：学习笔记、项目资料、经验条目、agent skills。人读入口见 [README.md](README.md)；本文件回答"agent 进仓后怎么查、怎么写、什么不能碰"。
+本仓库维护 Android/车载开发相关的学习资料、可迁移经验、项目档案和工具。人读入口见 [README.md](README.md)；本文说明 agent 的查阅、写入和保护规则。本仓库知识内容生成与修订的写作规范唯一来源是 [`knowledge-base/WRITING-GUIDE.md`](knowledge-base/WRITING-GUIDE.md)；其他文档可以定义主题边界、路由、术语和事实索引，不维护独立写作规则。
 
-## 这是什么（30 秒理解）
+## 知识地图
 
-按记忆类型组织的四层：
+| 路径 | 用途与查阅入口 | 写入规则 |
+|---|---|---|
+| `knowledge-base/` | 跨会话知识入口，含 `knowledge-entry` 与 `language-note` 两种 profile；检索先读 `ROUTING.md` | 内容生成和修订完整遵守 `WRITING-GUIDE.md`；写入路由按 profile 与 `ROUTING.md` 处理 |
+| `knowledge-base/01-android/`、`02-os/`、`03-network/`、`04-language/`、`05-design/`、`06-testing/`、`07-devtools/`、`08-exp/` | 学习资料目录（Q&A 或语言散文）；查阅前先读对应 README | 遵守目录边界和 `WRITING-GUIDE.md`；可迁移结论按 `ROUTING.md` 归档 |
+| `knowledge-base/01-android/` | Android 与车载平台机制、实现和实践 | Android 实现归此；通用操作系统和网络协议分别归 `knowledge-base/02-os/`、`knowledge-base/03-network/` |
+| `knowledge-base/02-os/`、`03-network/`、`04-language/` | 通用操作系统、网络协议、编程语言知识 | 按各目录 README 与 `WRITING-GUIDE.md` 维护；平台专属实现归 `knowledge-base/01-android/` |
+| `knowledge-base/06-testing/`、`07-devtools/` | 测试基础、策略、用例、自动化，以及 Git 等通用开发工具 | 按目录 README 组织；Android 测试机制归 `knowledge-base/01-android/`，项目治理经验归 `knowledge-base/08-exp/` |
+| `knowledge-base/08-exp/` | 跨项目非技术经验：阶段定位、质量投入、度量、流程和协作；Q 序列供 atlas 直读 | 技术根因归 `knowledge-base/01-android/` 等主题目录；项目事实归 `career/work-project-analysis/`；单次事件归 `issue/`。项目名按“某车机项目”惯例脱敏 |
+| `knowledge-base/career/` | Android/车载求职资料、学习计划、周练及真实项目分析 | 路线见 `plans/roadmaps/`，周练规则见 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
+| `knowledge-base/career/work-project-analysis/` | 真实工作项目分析 | 只记录可公开沉淀的项目经验，遵守脱敏要求 |
+| `knowledge-base/atlas/` | Atlas 配置协作目录，内容不入索引 | `config/settings.properties` 可手动修改并重启生效；本机配置和 PIN 位于 `~/.local/share/atlas/`；不得写入凭据 |
+| `knowledge-base/03-network/` | 平台无关的分层、DNS、TLS、TCP、NAT 等网络知识 | Android/车载网络实现归 `01-android/07-network/` |
+| `project/project-architecture/` | 带 commit 锚点的项目架构解码 | 解读前阅读对应项目文档；使用 project-decoder 增量更新 |
+| `issue/` | 问题复盘与交接 | 排查前查找同类问题；解决后归档复盘 |
+| `research/` | 仓库级通用主题调研归档，如 `skill-research/` | 新主题建立子目录并登记；Atlas 调研归 `atlas/research/` |
+| `atlas/` | Atlas 产品项目；先读 `PRD.md`。产品调研在 `research/`，桌面端代码在 `app/`，Android 端在 `app-android/` | 需求与变更日志写入 `PRD.md`；代码按工程流程维护；共享代码的平台差异收敛到 `atlas.platform` |
+| `skills/`、`tools/`、`ai/` | Skills 镜像、自用工具、AI 工具手册与工作流 | `tools/skills/` **禁止手改**；修改 `~/.agents/skills` 后同步镜像。其他内容遵守各自规则 |
+| `path/`、`excerpts/`、`juejin-articles-index.md` | 学习路径、读书摘录、文章索引 | `path/` 和索引由用户维护；`excerpts/` 遵守其 `CONTEXT.md` |
+| `project/hc`、`yadi`、`WMS Viewer`、`honda27m-appstore-tools` | 项目资料、设计文档与工具链 | 按项目内规则维护 |
+| `/home/liang/Project/MyProject/AAOS13_study` | AAOS 13 源码学习副本 | **允许修改**；不得将学习副本改动描述为量产项目成果 |
+| `/home/liang/Project/MyProject/AndroidLibs` | Glide、Retrofit、AndroidX、Corretto 17 源码学习仓库 | **允许修改**；遵守其 `CONTEXT.md`；可迁移结论沉淀到 knowledge-base，面试表达写入 `career/` |
+| `/home/liang/Project/Reachauto/YaDi/yadi_android`、`yadea_master` | Android/车载实际项目经验源 | **只读**；禁止修改源码、配置、构建脚本、生成物和提交历史。成果写回 Summary 或独立 Demo |
 
-- **Semantic（事实知识）**：`knowledge-base/`（统一承载学习资料、语言笔记和可迁移经验条目）
-- **Procedural（怎么做）**：`skills/`（agent skills 镜像）+ `tools/`（自用工具与命令行工具）+ `ai/`（工具手册与工作流）
-- **Episodic（事件与项目）**：`issue/`（问题复盘）+ `knowledge-base/career/work-project-analysis/`（真实工作项目分析）+ `project/hc` `yadi` `WMS Viewer`（其他项目资料）+ `atlas/`（AI 成长工作站产品项目，根目录）
-- **组织与索引**：`path/`（学习路径总纲）+ `research/`（调研归档）+ `juejin-articles-index.md`（文章索引）+ 本文件
+## 写入与保护规则
 
-## 知识地图（先查这里，再进目录）
+1. **按边界路由**：知识按 `knowledge-base/ROUTING.md` 分流；真实项目分析写入 `career/work-project-analysis/`；架构解读写入 `project-architecture/`；skill 先改 `~/.agents/skills` 再同步。路由不明确时先确认，不猜测。
+2. **保护文件**：不得修改 `tools/skills/`、`.gitignore` 排除的本地状态或生成物、`LICENSE`，以及明确标为只读的外部项目。
+3. **脱敏**：不得写入密钥、凭据或内网地址原文；项目名称按目录惯例脱敏。
+4. **单一事实源**：不复制子目录规则；需要细则时先读对应 `CONTEXT.md`、`ROUTING.md` 或 README。
 
-| 路径 | 是什么 | agent 何时读 | 怎么写入 |
-|---|---|---|---|
-| `knowledge-base/` | 跨会话可迁移知识的中心路由入口：普通 `knowledge-entry` 条目与 `language-note` 学习散文两种 profile；内含 `04-language/` 子目录 | 找某类问题/思想/技巧的现成结论时；检索先读其 `ROUTING.md` | 只经 session-to-knowledge / source-annotator 的共享写入契约；session-to-knowledge 调用即出题——复盘题以 `**Qn:**` 同源格式直接写入知识文档，atlas 同源直读；新内容先按 profile 与路由规则处理 |
-| `knowledge-base/08-exp/` | 项目经验（非技术）目录：项目阶段定位、质量投入、度量口径、流程治理、协作联调的跨项目判断规则，Q 序列供 atlas 直读 | 复盘或沉淀非技术项目经验、找"项目怎么跑"的现成判断时 | session-to-knowledge 文章模式写入；技术根因按主题归入 `01-android/` 对应的机制与实践册，项目事实档案归 `career/work-project-analysis/`，单次事件归 `issue/`；项目名脱敏沿用"某车机项目"惯例 |
-| `knowledge-base/06-testing/` | 跨项目测试学习资料：测试基础、策略、用例设计、执行与自动化实践 | 查测试术语、设计方法或验证策略时 | 按目录 README 的边界组织 Q&A；Android 平台机制归 `01-android/`，项目治理经验归 `08-exp/` |
-| `knowledge-base/02-os/` | 通用操作系统学习资料：运行机制、进程与调度、内存及文件系统；Android 专属实现仍归 `01-android/` | 学操作系统通用概念，先读目录 README 选择主题册 | 按 `WRITING-GUIDE.md` 写成连续 Q&A；语言运行时归 `04-language/`，Android 实现归 `01-android/` |
-| `knowledge-base/07-devtools/` | 通用开发工具学习资料（版本控制 Git 等，2026-10-05 自 QA 题库沉淀成立） | 查 Git 合并/cherry-pick/pull 协作/Gerrit 推送等工具操作语义与场景选择时 | 按 `WRITING-GUIDE.md` 写成连续 Q&A；提交纪律与流程治理归 `08-exp/` |
-| `project/project-architecture/` | 各项目架构解码文档（带 commit 锚点） | 了解某项目架构前，先读对应 `<项目>.md` | 走 project-decoder skill，增量更新 |
-| `knowledge-base/career/` | Android 车机求职统一子目录，含 `plans/`、`weekly/`、求职资产和真实工作项目分析 | 求职、源码学习、项目复盘时 | 总路线在 `plans/roadmaps/`，每日练习与作答规则在 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
-| `knowledge-base/atlas/` | Atlas 应用协作目录（内容**不入索引**）：`config/settings.properties` 是其仓库同步层配置（主题/映射等，多设备经 git 一致；本机层与 PIN 仍在 `~/.local/share/atlas/`） | 排查 Atlas 配置/多设备一致性问题时；见 atlas/PRD.md §6.4.24 | 应用自动读写，可手改重启生效；勿放任何凭据 |
-| `tools/skills/` | agent skills 镜像（与 `~/.agents/skills` 一致） | 查 skill 定义/规范时 | **绝不手改**——改 `~/.agents/skills` 后手动同步拷贝到此处（暂无自动同步脚本） |
-| `knowledge-base/01-android/`、`02-os/`、`03-network/`、`04-language/`、`05-design/`、`06-testing/`、`07-devtools/`、`08-exp/` | 学习资料目录（人读 Q&A 或语言散文，不是知识条目大类） | 被点名引用、系统学习或查找已有题目时；先读该目录 README | 依目录边界维护；可迁移结论按 `ROUTING.md` 沉淀为知识条目 |
-| `knowledge-base/03-network/` | 通用网络协议地基（Q&A，2026-10-03 自 01-android/14-network/10 迁入成立） | 查分层模型/DNS/TLS/TCP/NAT 等平台无关协议机制时 | 按 `WRITING-GUIDE.md` 写成连续 Q&A；Android/车机实现归 `01-android/07-network/` |
-| `path/` | 学习路径总纲（Binder/Framework/AMS） | 系统学某领域前，先读总纲定顺序 | 用户手动维护 |
-| `excerpts/` | 读书笔记 | 引用书中观点时 | 遵守其自己的 `CONTEXT.md` |
-| `issue/` | 问题复盘与交接 | 排查同类问题前先查 | 复盘流待建（暂手动，见 Roadmap） |
-| `research/` | 深度调研归档（库级通用主题）：`skill-research/`（Skills 生态调研 + 知识库总体建造方案）。注：atlas 项目相关调研已移至 `atlas/research/` | 需要某主题的调研结论、数据或项目盘点时 | 调研完成后整目录归档于此；新主题先建子目录并在此登记 |
-| `/home/liang/Project/MyProject/AAOS13_study` | AAOS 13 源码学习副本：源码批注、实验修改、机制验证和学习记录 | Android Framework/AAOS 源码学习时 | **允许修改**；不得把学习副本改动表述为量产项目成果 |
-| `/home/liang/Project/MyProject/AndroidLibs` | 应用层库源码标注学习仓库：glide / retrofit / androidx / corretto-17（JDK 17 java.base），规则见其 `CONTEXT.md` | 求职"源码/实践"轨道、Glide/Retrofit/androidx/JDK 面试主题、找 SDK 设计启示时 | **允许修改**（源码标注学习）；可迁移结论按其词条沉淀 knowledge-base 三文档；面试化表达写回 `career/` |
-| `/home/liang/Project/Reachauto/YaDi/yadi_android` `/home/liang/Project/Reachauto/YaDi/yadea_master` | Android/车机实际项目经验源 | 车机求职、项目复盘、源码对照时只读参考 | **严禁修改**源码、配置、构建脚本、生成物和提交历史；产出只写回 Summary 或独立 Demo |
-| `ai/` | AI 工具手册与工作流（OpenCode、部署流程）+ Claude Code/Skills 官方文档摘存（`claude-code/`） | 使用/配置 AI 工具时 | 用户手动维护 |
-| `project/hc` `yadi` `WMS Viewer` `honda27m-appstore-tools` | 项目资料与设计文档、项目工具链 | 做对应项目任务时 | 项目内沉淀 |
-| `atlas/` | AI 成长工作站产品项目（Linux 桌面端知识库+学习闭环应用，代号 atlas，**根目录级**）：单一 `PRD.md` 承载定位/需求/里程碑；`research/` 子目录存放其上游证据调研（ai-era-programmer、linux-desktop-ai-apps）；**MVP 代码在 `app/`**（Kotlin/Compose Desktop，gradle 工程，纳入本仓 git 管理）；**Android 手机端在 `app-android/`**（独立 Gradle 工程，srcDir 共享 `app/` 源码，平台差异走 `atlas.platform` 双端 facade，见其 README 与 PRD §13） | 做该产品任何工作（设计/开发/发布）前，先读其 PRD.md | 直接更新 PRD.md，变更记其变更日志；代码改动走 `atlas/app/` 与 `atlas/app-android/` 常规工程流程，共享文件的平台差异必须收敛进 atlas.platform |
-| `tools/` | 自用工具源码与命令行工具（含 `command/`） | 改工具前 | 工具内自有规则 |
-| `juejin-articles-index.md` | 博客文章总索引 | 写作找历史文章/选题时 | 发文后手动登记 |
+## 常见工作路径
 
-## 读写纪律
-
-1. **单一事实源**：各子库的边界、规则、格式以其自己的 `CONTEXT.md` / `ROUTING.md` / README 为准——本文件只指路，不复制规则。
-2. **写入分流**：可迁移经验 → knowledge-base（按其 ROUTING 路由）；真实工作项目分析 → `knowledge-base/career/work-project-analysis/`；架构理解 → project-architecture（走 project-decoder）；skill 改动 → 改 `~/.agents/skills` 再同步。分流不确定 → 问用户，不猜。
-3. **不碰**：`tools/skills/`（镜像，手改会被覆盖）、`.gitignore` 排除物（编译产物、AI 工具本地状态）、`LICENSE`。
-4. **脱敏底线**：仓库虽 private，密钥/凭据/内网地址原文仍不入库（沿用既有约定）。
-
-## 四场景动线（agent 接到任务后怎么走）
-
-- **学习与源码研读**：`docs/path/` 总纲定顺序 → `knowledge-base/` 查已有理解 → source-annotator 精读标注 → 可迁移结论按 `knowledge-base/ROUTING.md` 沉淀
-- **写作与发布**：`juejin-articles-index.md` 查已有 → 笔记与 knowledge-base 找素材 → 成文（成文流待建）
-- **问题排查与复盘**：knowledge-base 与 `issue/` 先查同类 → 解决后复盘结论入库（复盘流待建）
-- **工作流与项目上下文**：`ai/` 工具手册 → `project/` 对应项目资料 → `tools/` 源码
+- **学习与源码研读**：`path/` 定顺序 → 查 `knowledge-base/` → 使用 source-annotator → 按路由沉淀结论。
+- **写作**：查 `juejin-articles-index.md`，再从笔记和知识库整理素材。
+- **排查与复盘**：先查 `knowledge-base/` 和 `issue/`；解决后沉淀复盘。
+- **项目工作**：先查 `ai/` 与对应 `project/` 资料，再按项目规则维护代码和文档。
 
 ## 维护
 
-本文件由用户与 agent 共同维护：新子库成立必须**先在此登记再用**；目录职责变化时同步更新地图；本文件目标 <200 行，超了先删后加。
+新子库启用前先登记于本文件；目录职责变化时同步更新。保持本文少于 200 行，优先精简重复说明。

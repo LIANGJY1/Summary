@@ -28,7 +28,7 @@
 
 因此，`onResume()` 不代表首帧已显示。首帧耗时应以首帧实际呈现为终点，例如 TTID（Time to Initial Display，初始显示耗时），而不是量到 `onResume()`。调用链可在 Android 13 的 `ActivityThread.java`、`Activity.java` 和 `ViewRootImpl.java` 中核对。
 
-**Q3: [learning] 启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？**
+**Q3: [learning] 启动页该等 onWindowFocusChanged() 还是首帧回调再关闭？**
 
 `onWindowFocusChanged(true)` 只表示窗口获得输入焦点，不承诺窗口内容已经绘制或提交到显示合成链路。需要避免启动遮罩早于内容消失时，应等内容首帧对应的缓冲区提交，再移除遮罩。这仍不等于面板已经完成物理扫描显示。
 
@@ -102,7 +102,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 4. 在 `onPause()` 提交 UI 变化：Activity 已失去前台交互，此时修改的布局可能很快不可见，也可能与窗口动画竞争。将可见性相关变更放到合适的 resumed 状态。
 5. **异步结果写入旧实例**：配置重建或视图销毁后，旧回调仍可能持有旧 Activity/View。让界面观察生命周期感知的数据，并在结果应用前确认当前 owner 有效。
 
-**Q11: [learning] `onStart()`/`onStop()` 与 `onResume()`/`onPause()` 两对回调分别以什么维度划分 Activity 状态，为什么要拆成两对？**
+**Q11: [learning] onStart()/onStop() 与 onResume()/onPause() 两对回调分别以什么维度划分 Activity 状态，为什么要拆成两对？**
 
 两对回调对应两个正交维度：`onStart()` 与 `onStop()` 以“是否在屏幕上可见”划界，`onResume()` 与 `onPause()` 以“是否位于前台、持有输入焦点可交互”划界。拆成两对是为了让“可见但不可交互”的状态有独立表达，把资源管理代码挂到正确的粒度上。
 
@@ -113,7 +113,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 实践中按资源归属落位：需要持续展示的内容与可见性回调绑定，需要独占用户注意力的资源与前台回调绑定。
 
-**Q12: [learning] 从 Activity A 启动 B 时，A 的 `onPause()` 与 B 的 `onResume()` 谁先执行，这对 `onPause()` 中的代码有什么约束？**
+**Q12: [learning] 从 Activity A 启动 B 时，A 的 onPause() 与 B 的 onResume() 谁先执行，这对 onPause() 中的代码有什么约束？**
 
 A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创建与恢复，因此 `onPause()` 里的耗时操作会直接推迟 B 的 `onResume()` 与首帧呈现。
 
@@ -121,7 +121,7 @@ A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创�
 2. **耗时后果**：`onPause()` 中的同步 I/O、大对象释放或复杂计算占用的是两页切换的关键路径，B 的首帧随之延后，用户感知为切换卡顿。
 3. **正确做法**：`onPause()` 只做轻量工作，例如停止动画、保存轻量临时状态。较重的资源释放推迟到 `onStop()`，此时 A 已完全不可见，不再阻塞 B 的显示。
 
-**Q13: [learning] 配置变更或低内存导致 Activity 重建时，`onSaveInstanceState()` 的调用时机随 targetSdk 如何变化，状态应在 `onCreate()` 还是 `onRestoreInstanceState()` 中恢复？**
+**Q13: [learning] 配置变更或低内存导致 Activity 重建时，onSaveInstanceState() 的调用时机随 targetSdk 如何变化，状态应在 onCreate() 还是 onRestoreInstanceState() 中恢复？**
 
 保存时机以 targetSdk 的 API 28（Android 9.0）为分界：达到 28 时固定在 `onStop()` 之后调用，低于 28 时在 `onStop()` 之前、与 `onPause()` 的先后没有保证。恢复推荐 `onRestoreInstanceState()`，它只在确有状态可恢复时回调，参数 Bundle 必有值。
 
@@ -131,7 +131,7 @@ A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创�
 
 需要区分“从未保存”与“有保存状态”时走 `onCreate()` 判空路径。界面状态统一放 `onRestoreInstanceState()` 可以省掉判空样板。
 
-**Q14: [learning] View 层次结构的状态为什么会随 `onSaveInstanceState()` 自动保存，从 Activity 到单个 View 的保存与恢复链路是怎样的？**
+**Q14: [learning] View 层次结构的状态为什么会随 onSaveInstanceState() 自动保存，从 Activity 到单个 View 的保存与恢复链路是怎样的？**
 
 Activity 的默认实现把窗口内 View 的状态沿“Activity → Window → 内容容器 → 逐级子 View”的委托链收集，每个设置了 `android:id` 的 View 以 id 为键存入一个 SparseArray，没有 id 的 View 不会被自动保存。
 

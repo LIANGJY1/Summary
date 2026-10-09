@@ -18,15 +18,15 @@ capacity 是一段时间内可用的 CPU、GPU、I/O 与内存带宽总量：布
 
 vitals 的公开指标各管一段：Slow rendering 看传统 UI Toolkit 帧是否落入 16–700 ms 慢帧区间，Frozen frames 看 700 ms 及以上（不覆盖 Vulkan、OpenGL、Unity 等路径），TTID/TTFD 描述启动首帧与完整可用，Slow sessions 是游戏专用口径。ANR 则按响应义务分别判定：输入 dispatch 默认超时 5 秒，Service、BroadcastReceiver、ContentProvider、JobService 与前台服务各有规则；Android 14 起会按进程是否长时间得不到 CPU 在区间内调整广播超时，OEM 也可能修改默认值。因此分析响应问题要先确认 ANR 类型，再检查对应的计时起点、截止条件与责任线程；帧卡顿与 ANR 可以由同一次主线程阻塞共同引发，但结论要分别引用渲染统计与 ANR reason/系统栈。做法：组合解读多类 vitals 数据，用 FrameTimeline 的 expected deadline 判断单帧是否按时，而不是把任一固定数字当成通用公式。
 
-**Q5: [learning] 同一应用内 `startActivity()` 的成本为什么差异巨大，Fragment 的 `commit()` 与 `commitNow()` 如何选择？**
+**Q5: [learning] 同一应用内 startActivity() 的成本为什么差异巨大，Fragment 的 commit() 与 commitNow() 如何选择？**
 
 `startActivity()` 即使同进程也要经过 system_server：客户端经 `Instrumentation.execStartActivity()` 发起 `IActivityTaskManager.startActivity()` Binder 请求，ATMS/ActivityStarter 解析 Intent、权限、Task 与 launch mode，目标进程不存在时先经 Zygote 创建进程（接近冷启动），已存在时通过 `ClientTransaction` 发送 `LaunchActivityItem`/`ResumeActivityItem` 生命周期事务（AAOS13 源码核对，`ClientTransaction` 体系自 Android 9 引入）。成本形态至少三种：目标 Activity 未创建（ATMS 调度、实例与窗口、生命周期、UI 与首帧）、已在 Task 中（`onNewIntent()` 或恢复加必要重绘）、进程不存在（再加进程创建、Application、Provider 与首 Activity），因此不存在通用的单段耗时预算。Fragment 的 `commit()` 是主线程异步队列：经 `enqueueAction()` 投递，与 Choreographer 帧回调共享同一 Looper，不存在固定先后顺序；`commitNow()` 在调用线程同步执行且不能与 `addToBackStack()` 同用，会把创建、生命周期与布局工作同步放进当前消息，只为追求"更快"而使用是错误方向；`setReorderingAllowed(true)` 允许合并同批事务的中间状态，官方建议每个事务启用；`commitAllowingStateLoss()` 改变的是保存状态后的提交约束，不是性能开关。做法：页面跳转按输入、system_server 接收、ATMS 解析、目标 UI 构建、首帧五段拆开测，Fragment 切换在导航入口与目标页加 trace 标记。
 
-**Q6: [learning] ViewPager2 的 `offscreenPageLimit` 交换的是什么成本，`FragmentStateAdapter` 下数据加载应绑在哪个生命周期？**
+**Q6: [learning] ViewPager2 的 offscreenPageLimit 交换的是什么成本，FragmentStateAdapter 下数据加载应绑在哪个生命周期？**
 
 `offscreenPageLimit` 是内存与重建成本的交换：默认 `OFFSCREEN_PAGE_LIMIT_DEFAULT (-1)` 沿用 RecyclerView 缓存策略，不保证固定保留相邻页；设置为 N 后当前页两侧各 N 页保留在 View 层级中，范围外的页面被移除、需要时重建或复用。增大它减少往返滑动的 inflate 与 layout，但增加 View、图片、Compose composition 与数据订阅的内存占用；传 0 会抛 `IllegalArgumentException`，公开 API 也不允许替换内部 LayoutManager。生命周期上，`FragmentStateAdapter` 通过 `setMaxLifecycle()` 让选中页达到 RESUMED、其他已添加页停在 STARTED（旧 `setUserVisibleHint()` 已废弃）；数据加载应拆成两件事——View 在 STARTED 时用 `repeatOnLifecycle` 收集并渲染可见数据，Fragment 进入 RESUMED 时触发幂等的 `ensureLoaded()`，加载状态放 ViewModel，不能绑在 `onViewCreated()`（相邻页会提前创建导致所有 Tab 同时请求），也不要每次 `onResume()` 无条件刷新。邻页预取要有预算：绑定页面 key 与账号、设容量与 TTL、可取消、不与首请求重复；动态增删页时应实现稳定 `getItemId()`/`containsItem()`，用差分通知而不是重建 adapter。
 
-**Q7: [learning] 实时搜索的延迟由哪四段组成，debounce 与 `distinctUntilChanged` 各解决什么问题、边界在哪？**
+**Q7: [learning] 实时搜索的延迟由哪四段组成，debounce 与 distinctUntilChanged 各解决什么问题、边界在哪？**
 
 四段是：IME/TextField 写入查询状态；归一化、debounce 与重复值过滤；本地索引、数据库或网络执行；结果 Diff、列表布局与结果帧呈现。debounce 是主动增加的等待，用来减少用户仍在输入时的查询，它不属于后端执行耗时，也不应藏在"搜索总耗时"里；`distinctUntilChanged()` 只去掉相邻相同值，`foo → bar → foo` 仍会再次搜索 foo，需要缓存时应在 repository 按规范化 query、账号与数据版本建 key。`flatMapLatest` 会取消旧 Flow 的收集，但底层 Room、网络客户端要支持协作式取消，服务器已收到的请求仍可能执行完，因此每个结果应携带 query 或 generation 编号、UI 只接受当前 generation，防止旧回调覆盖新结果。空查询应立即清空结果（debounce 设 0 并返回空状态流）；`searchDebounceMs` 没有通用值，按输入到反馈延迟、请求数、取消率与用户完成率调整。本地索引与缓存不能挤进按键帧：Room 查询走索引并限制返回列，拼音/全文索引增量更新，大列表 Diff 在 worker 算但提交仍回主线程，错误、离线与空结果是不同 UI 状态。
 
@@ -38,7 +38,7 @@ vitals 的公开指标各管一段：Slow rendering 看传统 UI Toolkit 帧是�
 
 三种类型描述启动前的进程与 Activity 状态：冷启动进程不存在，需创建进程、绑定 Application、创建 Activity、生成首帧；温启动常见口径是进程存活、Activity 需要重建；热启动进程与目标 Activity 都在，只需带回前台并恢复。生命周期日志只能辅助判断，出现 `onCreate()` 或 `onResume()` 不足以推断类型——按 Home、按返回、从 Recents 恢复、点通知产生不同任务栈状态；可靠证据是 `am start -W` 输出、Macrobenchmark 的 `StartupMode`、Perfetto Android App Startups 区间，以及 API 35+（Android 15，AAOS13 无）`ApplicationStartInfo.getStartType()`。冷启动时序按 AAOS13 源码核对为：Launcher 发起 → ATMS 解析并可先显示 starting window → `Process.start` 经 Zygote fork 并 specialize → 应用 `attachApplication` → `handleBindApplication()`（其中先 `makeApplicationInner()` 创建 Application，再 `installContentProviders()`，最后 `callApplicationOnCreate()`，所以 Provider 的 `onCreate()` 早于 `Application.onCreate()`）→ `ClientTransaction` 驱动 Activity 生命周期与 UI → 首帧 buffer 提交。TTID 的平台计量边界是 `ActivityRecord.onWindowsDrawn()` 调用 `ActivityMetricsLogger.notifyWindowsDrawn()`（AAOS13 核对），它晚于生命周期回调返回、早于面板像素发光。
 
-**Q10: [learning] TTID 与 TTFD 各自的语义与阈值是什么，`reportFullyDrawn()` 报早或报晚会发生什么？**
+**Q10: [learning] TTID 与 TTFD 各自的语义与阈值是什么，reportFullyDrawn() 报早或报晚会发生什么？**
 
 TTID 统计从系统收到启动请求到目标 Activity 首帧，Logcat 的 `Displayed` 行与 vitals 启动告警以此为口径：冷启动达 5 秒、温启动 2 秒、热启动 1.5 秒归为 excessive startup（官方告警边界，官方度量指南另给出冷 500 ms/温 200 ms/热 150 ms 的建议目标，均为转写口径）；TTFD 用相同起点，终点是应用调用 `reportFullyDrawn()` 报告主内容可用，二者描述不同阶段，首帧可能只是骨架或空列表。框架侧保护：过早调用时 `ActivityMetricsLogger.notifyFullyDrawn()` 会检查窗口是否已 drawn 并推迟报告，保证 TTFD 不早于 TTID，但它无法判断业务是否真可用，就绪条件定义错误仍会失真——与首屏无关的预取、埋点不应延后 TTFD，错误状态应设计成可交互以免 TTFD 永远无法上报。测量工具分层：`am start -W -S` 适合冒烟检查（`-S` 会改变现场；`ThisTime/TotalTime/WaitTime` 覆盖范围不同）；Logcat 定位样本但缺少线程与渲染细节；Macrobenchmark 固定启动类型、`CompilationMode` 与迭代并自动保存 trace，是可复现对照的标准工具；Perfetto 的 `android.startup` 标准库可查启动类型、TTID 与 TTFD（应用未上报时 TTFD 为空）；API 35+ 的 `ApplicationStartInfo` 提供结构化的阶段时间戳（读取前先检查 startup state，`FULLY_DRAWN` 依赖应用上报）。
 
@@ -46,7 +46,7 @@ TTID 统计从系统收到启动请求到目标 Activity 首帧，Logcat 的 `Di
 
 对完成配对的同步事务用四段近似分解：`client_dur` 是调用方感受到的总等待（wall time）；`server_ts - client_ts` 是请求派发间隔（驱动传递、目标队列等待、目标线程被调度并接收）；`server_dur` 是服务端收到事务到发出 reply；`client_dur` 减去前两段是 reply 残差（reply 传递与客户端重新获得 CPU）。关键是 `client_dur` 与 `server_dur` 都是 wall time 而非 CPU time——服务端 CPU 很少但 `server_dur` 很长，常见原因是等锁、I/O、嵌套同步 Binder 或被调度出 CPU；请求派发间隔不能直接命名成线程池排队时间；多个嵌套事务区间互相包含，求和只适合排序排查对象。线程池配置按 AAOS13 源码核对：`SystemServer` 用 `BinderInternal.setMaxThreads(31)`（`sMaxBinderThreads = 31`），libbinder 普通进程默认 `DEFAULT_MAX_BINDER_THREADS = 15`；这只是上限，判断拥塞要看同一服务多笔事务同时出现长派发间隔、多客户端同时受影响、服务端 worker 集中阻塞在同一资源且负载下降后恢复。优先级继承按材料 r6 内核语境：内核选中目标 Binder 线程后综合调用方优先级、node 最低优先级与 `inherit_rt` 调整（采集 `binder_set_priority` tracepoint 观察），它能缓解调度反转，解决不了长锁、I/O 与容量不足。
 
-**Q12: [learning] 目标进程被冻结时同步与 oneway 事务的内核行为差在哪，为什么 `server_dur = 0` 查不到 frozen rejection？**
+**Q12: [learning] 目标进程被冻结时同步与 oneway 事务的内核行为差在哪，为什么 server_dur = 0 查不到 frozen rejection？**
 
 这里的 frozen 指被 Freezer 暂停的 cached process。按 AAOS13 的 UAPI（`bionic/libc/kernel/uapi/linux/android/binder.h`）核对，`BR_FROZEN_REPLY = _IO('r', 18)` 已存在：同步事务发往 frozen 目标会被驱动直接拒绝入队并返回该命令，libbinder 收到后按开关返回 `FROZEN_OBJECT` 或兼容的 `FAILED_TRANSACTION`；oneway 事务允许进入异步队列但报告 pending——材料的 `BR_TRANSACTION_PENDING_FROZEN`（`_IO('r', 20)`）与 `TF_UPDATE_TXN`（frozen 目标同 node 的 pending oneway 可被同参数新事务替换）在 13 的 UAPI 中尚不存在，属于后续内核（r6 语境）新增，引用时必须标注版本。`android_binder_txns` 依赖客户端到服务端的 flow 配对：frozen rejection 没有服务端 receive/reply slice，标准表里通常没有这一行，所以在标准表过滤 `server_dur = 0` 或把 `client_dur > 0 AND server_dur = 0` 计成 frozen 次数都无效；正确做法是保留 raw `binder_return` 事件，把十六进制 cmd 按 UAPI 映射回命令名，再与目标进程状态对齐。排查方向上，前台应用调用 system_server 一般遇不到 system_server 被冻结，更常见的是系统或前台进程访问 cached/frozen 的应用、Provider 或 Service。
 
@@ -58,7 +58,7 @@ TTID 统计从系统收到启动请求到目标 Activity 首帧，Logcat 的 `Di
 
 App Startup 用一个 `InitializationProvider` 统一接管 manifest metadata 注册的 `Initializer`，`dependencies()` 声明顺序，`AppInitializer#doInitialize()` 先递归完成依赖再 `create()`；它减少独立 Provider 的组件与发现开销、统一依赖顺序，但三个边界不变：Initializer 不会被自动并行执行；`create()` 耗时仍计入启动；自动初始化只适合耗时短、所有相关进程都需要且必须很早可用的组件。时序上 Provider 安装发生在 `handleBindApplication()` 内、早于 `Application.onCreate()`（AAOS13 源码核对），所以任何通过 Provider 的 SDK 自动初始化都直接进入冷启动路径。处置流程：从目标 variant 的合并 Manifest 找出全部 Provider 与 metadata 并追溯来源依赖；查文档是否支持关闭自动初始化；App Startup 的单个注册项可用 `<meta-data>` 加 `tools:node="remove"` 移除、保留公共 `InitializationProvider`，再在业务触发点手动 `initializeComponent()`（手动初始化仍会递归依赖树）；第三方自定义 Provider 只有文档明确支持才能 remove，否则可能破坏启动、备份或后台任务。多进程应用要逐进程计算成本：带 `android:process` 的组件所在进程也会安装可见 Provider 并创建 Application，初始化器应识别当前进程与入口需求。
 
-**Q15: [learning] 系统 SplashScreen 与自定义 Splash Activity 的差别在哪，`ViewStub` 与 `AsyncLayoutInflater` 的适用前提是什么？**
+**Q15: [learning] 系统 SplashScreen 与自定义 Splash Activity 的差别在哪，ViewStub 与 AsyncLayoutInflater 的适用前提是什么？**
 
 Android 12（API 31）起系统为冷启动和温启动提供标准 Splash（热启动通常不显示，`core-splashscreen` 兼容到 API 23），它只改善过渡不减少 CPU 消耗；专门创建透明或全屏 Splash Activity 会多一次 Activity 生命周期、窗口创建与转场，应迁移到启动主题。`installSplashScreen()` 必须在 `super.onCreate()` 之前调用；`setKeepOnScreenCondition` 的条件在绘制路径上频繁执行，函数体要快、无锁、无 I/O；保持 Splash 会推迟应用 TTID，只适合等待短暂且确定的本地前置条件，且必须有失败出口——等待网络或大型迁移应改为先绘制占位再异步更新。布局侧，`ViewStub` 适合首帧大概率不出现的可选子树：不绘制、measure 为零，`inflate()` 或设为 VISIBLE 时被目标布局替换（目标布局不能以 `<merge>` 为根，替换后原 stub 已移除）；每次启动都立即 inflate 的场景它只改变时机。`AsyncLayoutInflater` 的构造与 `inflate()` 在 UI 线程、View 在后台线程创建，要求父容器 `generateLayoutParams()` 与所有 View 构造可在后台线程安全执行（不能在构造里建 Handler 或依赖当前 Looper），不支持含 Fragment 的布局，失败会回 UI 线程重试；如果首帧必须等它完成，工作仍在关键路径上，TTID 未必缩短。
 
@@ -70,23 +70,23 @@ Baseline Profile 随应用发布热点类与方法规则，ART 在安装或后�
 
 三者层次不同：挂起/恢复是 continuation 状态变化，不一定更换 Dispatcher；dispatch 是 Dispatcher 决定直接在当前栈执行还是把 Runnable 放入目标队列；内核上下文切换是 CPU 换线程，用 `sched_switch` 观察。continuation 仍在 Dispatcher 队列中未出队的等待不会显示成线程 Runnable——Perfetto 的 Runnable 表示线程已就绪却没获得 CPU，两类等待要分开判读。"协程几十纳秒、线程 1–10 微秒"这类固定范围缺少硬件、ART、协程版本与队列状态条件，不能当结论。量化方法：在 release/profileable 构建、固定温度与电源状态下分四个数测——wall time P50/P95/P99、线程 running time、Runnable time、每次操作被切成的 Running 片段数；对照组保留相同业务工作只移除 Dispatcher 边界，并准备"空对照、短任务、真实任务"三档，报分位数不报平均值。演示算法：若某设备实测一次往返 dispatch P95 为 0.20 ms，120 Hz 一帧约 8.33 ms 内串行执行 10 次即占约 2 ms——0.20 ms 只是演示值，项目结论必须用自己的测量。
 
-**Q18: [learning] 四个标准 Dispatcher 各适合什么工作，`Dispatchers.IO.limitedParallelism(n)` 限制了什么、没限制什么？**
+**Q18: [learning] 四个标准 Dispatcher 各适合什么工作，Dispatchers.IO.limitedParallelism(n) 限制了什么、没限制什么？**
 
 `Dispatchers.Main` 是主 Looper 单线程 Dispatcher，适合 UI 状态读取与很短的主线程工作——suspend 函数仍可能阻塞，Android 17 的无全局锁 MessageQueue 只减少入队竞争（AAOS13 仍是经典单 monitor 锁实现，已按 13 源码核对），长消息与队列拥塞不会消失；`Dispatchers.Default` 面向 CPU 任务，共享 worker 加本地队列与 work stealing，有效并行度接近处理器数，阻塞 I/O 会占住计算并行度；`Dispatchers.IO` 是面向阻塞 I/O 的弹性视图，默认并行执行上限为 64 与处理器数的较大值（kotlinx.coroutines 文档契约，库可独立升级），与 Default 共享底层线程；`Dispatchers.Unconfined` 在调用栈内启动、恢复线程由挂起函数决定，仅限框架与测试等特殊场景。`IO.limitedParallelism(n)` 创建的是弹性视图：限制的是该视图内同时执行的阻塞任务数（并行度为 1 时顺序执行且有 happens-before 保证，但任务可能落到不同 worker），每个视图不受默认 IO 上限约束、仍共享底层资源——并行度 100 与 60 的两个视图峰值会叠加，团队要同时计算进程总并发。依赖 ThreadLocal、固定 TID、JNI 线程附着或 Looper 的组件需要专用线程（`Executors.newSingleThreadExecutor().asCoroutineDispatcher()` 并在 owner 关闭时 close），而不是靠视图。suspend API 的 main-safe 由实现保证：把阻塞文件读取与 CPU 解码分别 `withContext(IO)`、`withContext(Default)` 封装在 Repository 内，并注入 Dispatcher 便于测试；取消普通 `withContext(IO)` 不会强制中断所有阻塞调用，支持中断的可评估 `runInterruptible`。
 
-**Q19: [learning] 结构化并发下 Job 的失败与取消如何传播，`viewModelScope` 与 `repeatOnLifecycle` 各自解决什么、不解决什么？**
+**Q19: [learning] 结构化并发下 Job 的失败与取消如何传播，viewModelScope 与 repeatOnLifecycle 各自解决什么、不解决什么？**
 
 普通父子 Job 规则：父取消则子取消；父进入 completing 后等所有子结束；普通子以非 CancellationException 失败会取消父，进而取消兄弟；`supervisorScope`/`SupervisorJob` 隔离子失败；取消是协作式的，长 CPU 循环要主动 `ensureActive()` 或 `yield()`。Android 的 `viewModelScope` 与生命周期 scope 用 SupervisorJob 风格根作用域，顶层 `launch` 失败不自动取消兄弟，但进入普通 `coroutineScope` 后内部仍按普通规则传播，设计异常策略要区分两层。`lifecycleScope` 到 DESTROYED 才取消，页面 STOPPED 后仍存活，不可见页面可能继续收集热流——`repeatOnLifecycle(STARTED)` 在 STOPPED 取消内部子协程、回到 STARTED 重建，两个持续挂起的 `collect` 要放各自的子 `launch`；Fragment 必须用 `viewLifecycleOwner` 防止更新已销毁的 View。结构化并发不限制数量：同一 scope 启动一万个子协程照样造成队列与内存开销，并发上限要用 `limitedParallelism`、`Semaphore` 或 Channel 明确限制；常见脱离结构的写法包括 `GlobalScope`、手动 scope 不 cancel、向 `withContext` 传新 Job（官方明确不支持）、`suspendCoroutine` 包装回调不注销监听（应改 `suspendCancellableCoroutine`）、在 `NonCancellable` 里启动长期子任务。
 
-**Q20: [learning] 默认 Flow、`buffer`、`conflate`、`collectLatest` 在慢消费者面前的行为差异是什么，`flowOn` 改变了什么边界？**
+**Q20: [learning] 默认 Flow、buffer、conflate、collectLatest 在慢消费者面前的行为差异是什么，flowOn 改变了什么边界？**
 
 普通冷 Flow 的上游、中间操作与 collector 默认在同一协程顺序执行：collector 没处理完当前值时上游 `emit()` 挂起，这是基于挂起的背压，保留所有值但吞吐由最慢阶段决定。引入并发边界后行为分化：`buffer(n)`（默认容量 `Channel.BUFFERED`）让上游在独立协程运行、满后挂起，不丢值；`conflate()` 等价于容量 0、`DROP_OLDEST` 的 buffer，emitter 不因慢 collector 挂起、只保留较新值，适合可跳过中间态的 UI 快照——StateFlow 已按 `Any.equals` 合并相同值，再 conflate 无效果，且其更新会遍历活跃订阅者、成本 O(N)；`collectLatest` 在新值到来时取消前一个 action，要求 action 支持协作取消，适合搜索与预览。`flowOn(dispatcher)` 只改变其上游操作符的执行上下文、不改变下游 collector，跨 Dispatcher 会引入 Channel 与额外协程，因此同时改变缓冲与取消边界，数据层已提供 main-safe API 时不要每层叠加 `flowOn(IO)`。热流的共享上游何时停止由 `stateIn/shareIn` 的 scope 与 `SharingStarted` 策略决定，`repeatOnLifecycle` 只管当前 collector，排查后台耗电要看共享上游的 owner 与停止超时。选型按数据语义：必须全保留的事件用 `buffer`，可跳过中间态用 `conflate`，新值应取消旧工作用 `collectLatest`。
 
-**Q21: [learning] 一次 Keystore 签名实际分几段，为什么耗时埋点只包住 `sign()` 会漏掉大头，`Cipher.init()` 期间发生了什么？**
+**Q21: [learning] 一次 Keystore 签名实际分几段，为什么耗时埋点只包住 sign() 会漏掉大头，Cipher.init() 期间发生了什么？**
 
 至少五段：密钥查找（`KeyStore.getKey()`，Provider、Binder、key blob 读取）、密钥生成或导入、operation 初始化（`Cipher.init()`/`Signature.initSign()`，触发 KeyMint `begin()`、slot 分配与 challenge）、数据处理与结束（`update()`/`doFinal()`/`sign()`，数据传输与硬件计算）、以及可选的用户认证。按材料 Android 17 源码语境（keystore2 与 AndroidKeyStore Provider 源码不在 AAOS13 本地树，此链路按 A17 固定 tag 转写，架构自 Android 12 的 keystore2 + KeyMint 起生效）：`AndroidKeyStoreCipherSpiBase.engineInit()` 会调 `ensureKeystoreOperationInitialized()` 进入 `KeyStoreSecurityLevel.createOperation()`，即 init 阶段已经创建 KeyMint operation 并占用一个 slot（可同时存在的操作名额）；`engineGenerateKey()` 与多处 `init` 还被 `StrictMode.noteSlowCall()` 标记为潜在阻塞。operation 的生命周期：`finish()` 成功、`update()/finish()` 出错、显式 `abort()`、Binder 对象释放或 slot 紧张被 prune 都会结束会话，同一 operation 代理多线程并发使用会得到 `OPERATION_BUSY`。因此 `Cipher/Signature/Mac` 在 init 后应尽快完成，提前数分钟创建对象等待用户操作会白白占用 slot；官方也明确避免在主线程使用 AndroidKeyStore，应放到有界的少量线程执行器上。
 
-**Q22: [learning] `setUserAuthenticationRequired(true)` 的 per-use 与 time-based 密钥流程差在哪，`CryptoObject` 为什么必须用认证回调返回的同一对象？**
+**Q22: [learning] setUserAuthenticationRequired(true) 的 per-use 与 time-based 密钥流程差在哪，CryptoObject 为什么必须用认证回调返回的同一对象？**
 
 per-use 密钥（`setUserAuthenticationParameters(0, ...)`）每次使用都需授权：先在后台初始化 `Signature`/`Cipher`，把它包成 `BiometricPrompt.CryptoObject` 交给认证流程，认证成功回调返回的是已获本次授权的 operation，应用随后在同一对象上完成签名——若在回调前另建一个对象，它对应另一项 operation，没有绑定刚才的认证结果。time-based 密钥（timeout > 0）在有效期内可直接创建 operation；初始化抛 `UserNotAuthenticatedException` 表示当前没有有效授权，此时展示认证流程，认证成功后重新创建并初始化新对象，不再复用初始化失败的旧对象。版本边界：API 30 起 `setUserAuthenticationParameters()` 明确有效期与认证类型；Android 11+ 的 auth-per-use key 可按密钥策略允许 device credential，Android 10 及以下 crypto 与 device credential 组合受限——"允许 device credential 就不能传 CryptoObject"只适用于部分场景，不能套用到所有流程。密钥可能永久失效：关闭安全锁屏、凭据重置或 biometric enrollment 变化会触发 `KeyPermanentlyInvalidatedException`，恢复策略要区分可重建密钥与需服务端解绑的密钥，把"重建密钥"当通用重试可能让旧密钥保护的数据永远无法解密。
 
@@ -102,11 +102,11 @@ StrongBox（Android 9+，`FEATURE_STRONGBOX_KEYSTORE`）是隔离程度更高的
 
 五段是：业务服务端发出请求晚、FCM 传输晚、设备收到回调晚、应用发布通知晚、SystemUI 显示晚；链路跨越云端、Google Play services、应用进程、system_server 与 SystemUI，其中 FCM 设备端实现含闭源组件，各段只能用各自的时钟与证据。工程上至少区分六个时间点：`fcm_accepted_at`（服务端请求被 FCM 接受）、`sdk_callback_at`（进入 `onMessageReceived()`）、`notify_start/end`（同步 `notify()` 调用）、`nms_posted`（平台接受并分发通知记录）、`systemui_applied`（SystemUI 创建或复用视图）、impression（展示事件）——`notify()` 返回、FCM 记录 `MESSAGE_DELIVERED` 与用户看到通知是三个不同事件。消息形态决定应用是否参与：后台 notification message 由 FCM SDK 处理展示、不调业务回调，data message 始终进 `onMessageReceived()` 但进程启动与 `Application.onCreate()` 的耗时也计入用户等待；进程处于 cached/frozen 状态时可能先解冻，Android 不为这些状态规定固定延迟，不能套"缓存进程固定加 100 ms"的常量。观测上用同一个 `message_trace_id` 连接服务端与设备事件（不传 registration token 与 payload 原文），FCM Aggregate Delivery Data 经抽样聚合、按批次对齐，不能按单条反查设备链路。
 
-**Q26: [learning] FCM 的 high priority 承诺了什么、没承诺什么，`onMessageReceived()` 里能做多少事？**
+**Q26: [learning] FCM 的 high priority 承诺了什么、没承诺什么，onMessageReceived() 里能做多少事？**
 
 high 是传输提示：设备进入 Doze 后 normal 消息可能被延迟，high 会尝试尽快交付并在必要时唤醒设备、给应用有限处理时间，但网络离线、TTL 到期、设备限制与服务状态仍可造成等待或丢弃；FCM 会按每个 App 实例最近 7 天的行为把 high 降为 normal 或交给 Play services 代理展示，单条消息用 `getOriginalPriority()` 与 `getPriority()` 对比判断是否被降级，项目级趋势看 Aggregate Delivery Data 的 deprioritized/proxy 比例。回调窗口按 Firebase 文档为"数秒级"且 high 通常稍长但没有固定秒数：`onMessageReceived()` 在独立工作线程调用，适合校验字段、构造通知并立即发布；额外网络请求、图片下载或长事务可能让回调结束后进程不再被保证存活，结果是通知延迟或未发布。后续工作按交付优先级安排：high 需要附加工作时回调后立即安排 expedited WorkManager job（FCM 为紧邻 high callback 的这类任务提供短暂配额豁免）；normal 走普通 WorkRequest。Android 12 起交付后仍为 high 的 FCM 消息是后台启动 FGS 的短暂豁免之一，启动前必须检查 `getPriority()`——已降级时 `startForegroundService()` 可能抛 `ForegroundServiceStartNotAllowedException`。通知权限（Android 13 起 `POST_NOTIFICATIONS` 运行时权限）被拒绝后 high 消息无法形成可见通知，还会增加降级风险。
 
-**Q27: [learning] `notify()` 返回前后分别发生什么，NMS 的限速是怎么算的，SystemUI 侧的成本来自哪？**
+**Q27: [learning] notify() 返回前后分别发生什么，NMS 的限速是怎么算的，SystemUI 侧的成本来自哪？**
 
 按 AAOS13 源码核对：应用侧 `NotificationManager.notifyAsUser()` 先执行 `fixNotification()`（补 context、校验 small icon、`reduceImageSizes()` 缩图），再同步调用 `INotificationManager.enqueueNotificationWithTag()`；system_server 的 NMS 在 Binder 入口校验 UID/包名/user、处理 FGS 与 UIJ policy、查询 channel 创建 `NotificationRecord`、检查权限与拒绝条件，然后把 `EnqueueNotificationRunnable` 投递到 Handler 队列——此时 Binder 才返回。后续排序、listener 分发与 SystemUI 内容创建都不在同步等待内，所以 `notify()` 很快返回不代表已显示，SystemUI 卡顿时应用调用常常早已返回。限速按 A13 源码核对：`DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE = 5f`（`Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE` 可覆盖），但判定用 `RateEstimator` 的 EWMA（`RATE_ALPHA = 0.8`）到达率而非"最近一秒调用次数"，且只在已有同 key 通知、进度状态相同且非自动分组时检查（进度从 ongoing 变 complete 不触发）；超限时记录 over-rate、调用方既无 posted callback 也无异常。另有普通应用未清理通知数量上限 `MAX_PACKAGE_NOTIFICATIONS = 50`。SystemUI 侧成本来自 RemoteViews 的 Parcel 体积与 action 数量、图片解码与内存、inflate/measure/layout：新旧 RemoteViews 的 package 与 layout ID 相同且无禁复用标记时走 `reapplyAsync()` 复用 View，否则 `applyAsync()` 重建（A13 为 `NotificationContentInflater` 的 `AsyncInflationTask`，Android 17 类名迁移但 trace 名保留）。发布策略：稳定 tag/ID、按有意义进度合并更新、中间值 `setOnlyAlertOnce(true)`、状态变化立即发布；`timeoutAfter` 由系统用 AlarmManager 按 elapsed realtime 驱动（A13 核对），控制已入 NMS 的通知保留多久，与 FCM 的传输层 TTL 是两回事。
 
@@ -114,7 +114,7 @@ high 是传输提示：设备进入 Doze 后 normal 消息可能被延迟，high
 
 Standard 是官方建议的默认方式：先用 Cloud project number 调 `prepareIntegrityToken()` 得到存于进程内的 `StandardIntegrityTokenProvider`（异步、访问服务端、通常数秒、多数 10 秒内，官方建议超时预算放宽到约 1 分钟），受保护动作发生时再按动作计算 `requestHash` 向 provider 申请新 token（通常数百毫秒）；Classic 无 prepare，每次用一次性 `nonce` 重新计算判定（通常数秒），适合偶发高价值动作。频控与配额按官方文档：token 请求每日 10,000 次（Classic 与 Standard prepare 共享）、Google 服务端解密每日 10,000 次、单实例 prepare 最多 5 次/分钟、Classic 单实例 token 最多 5 次/分钟（转写口径）；普通 Standard token 请求不计入每日 token 生成配额，但每个送到 Google 解密的 token 都消耗解密配额。工程边界：每个动作前都 prepare 会增加延迟且触 prepare 频控；provider 失效（`INTEGRITY_TOKEN_PROVIDER_INVALID`，可能因过期或 Play 数据被清除）应丢弃旧引用重新 prepare；provider 在进程内集中管理、可提前准备但不能提前缓存业务 token——token 不可复用，Classic verdict 同样不应缓存；这些数字是官方量级而非 SLA，设备负载、网络与 Play 组件版本都会改变尾延迟。判定实现在闭源的 Play 组件与服务端，AOSP 不含 verdict 生成源码，本地只能核对 Binder/调度等承载机制。
 
-**Q29: [learning] `requestHash`（Classic 的 nonce）要满足什么条件，服务端解密后还要检查哪些项？**
+**Q29: [learning] requestHash（Classic 的 nonce）要满足什么条件，服务端解密后还要检查哪些项？**
 
 `requestHash` 让服务端确认 token 对应当前动作，流程是：定义稳定规范化格式（字段顺序、空值、编码、金额单位、版本号，长度也写入输入以区分字段边界），纳入所有影响安全决定的字段（账号 ID、action ID、订单 ID、金额、币种、动作类型），对规范化字节算 SHA-256 再 URL-safe、no-wrap Base64 编码（上限 500 字节）；服务端按同一份规范重算摘要并与 payload 的 `requestDetails.requestHash` 做常量时间比较，防时序侧信道；不放敏感明文。nonce（Classic）由服务端生成至少 128 bit、不可预测的唯一值，与业务字段一起进规范化消息，服务端解密后确认它从未被消费。解密（服务端凭关联 Cloud project 的 service account 调 `decodeIntegrityToken`，通常几十毫秒）只完成 token 层校验，业务服务端还要依次检查：包名匹配、`requestHash`/nonce 与当前动作匹配、`timestampMillis` 在有效窗口内、`appRecognitionVerdict`（`PLAY_RECOGNIZED`/`UNRECOGNIZED_VERSION`/`UNEVALUATED`）与 `appLicensingVerdict`（`LICENSED`/`UNLICENSED`/`UNEVALUATED`，注意没有 `PLAY_RETAIL` 这个值）及所需设备标签符合策略、业务幂等未被重复消费。设备标签不能简化成"root/未 root"：标签数组可能为空（API hooking、模拟环境或故障都可能），`UNEVALUATED` 不等于明确失败，Android 13 起 `MEETS_DEVICE_INTEGRITY` 还要求硬件支持的 bootloader 锁定证据、`MEETS_STRONG_INTEGRITY` 要求一年内安全更新，解释旧系统同名标签时要读 `deviceAttributes.sdkVersion`。Standard token 自带同 token 重复解密的自动缓解（结果清空或降为 UNEVALUATED），但"同一订单用不同 token 提交两次"属于业务重放，仍要靠业务幂等。最终授权决定必须由服务端作出，service account 密钥与 verdict 解析逻辑不能进 APK。
 

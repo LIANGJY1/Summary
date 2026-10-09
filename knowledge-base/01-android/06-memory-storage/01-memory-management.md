@@ -23,7 +23,7 @@
 
 PSS 上升不等于泄漏：共享映射者退出会让剩余进程的 PSS 上升而对象没变；预热、JIT、图片缓存、页面回收与交换活动也会改变 PSS。判断泄漏应在可重复的业务阶段采样，同时观察 RSS、PSS、私有脏页、`SwapPss` 的趋势与具体组成（Java 对象、原生分配、DMA-BUF），并结合共享进程的启动退出时间点；"PSS 连续上升"只是继续调查的信号。USS 也不能精确预测进程退出后 `MemAvailable` 的增量——共享页会重新分摊，私有脏页需要回收，fd 关联的内核对象各有生命周期。
 
-**Q3: [learning] `MemFree` 很小说明系统异常吗？判断压力应看哪些指标？**
+**Q3: [learning] MemFree 很小说明系统异常吗？判断压力应看哪些指标？**
 
 `MemFree` 小通常正常：Linux 会利用空闲页做文件页缓存，干净页随时可回收。判断系统余量应看 `MemAvailable`（估算在不发生交换的前提下可供新应用使用的内存）；判断压力是否已经影响任务运行，还要看内存 PSI（pressure stall information）——`/proc/pressure/memory` 中 `some` 表示至少有一个任务因等待内存停顿，`full` 表示所有非空闲任务同时停顿。短时尖峰与持续高压含义不同，应把 PSI 与 `vmstat`、页面回收、业务卡顿和进程退出记录放在同一时间线。
 
@@ -84,7 +84,7 @@ TLAB 用尽的补充路径有多个分支：尾部仍有空间可先扩展；`Re
 
 LOS 有两个排查要点：其一，`AllocObjectWithAllocator()` 在 LOS 分配失败后会清除本轮 LOS OOM 异常再尝试普通空间，所以不能只凭对象大小和最后一条 OOM 日志断定失败发生在 LOS；其二，频繁创建大 `byte[]`、`char[]`/`String` 会增加 LOS 分配、扫描和页面映射压力，但每次 LOS 分配是否触发阻塞 GC 取决于当时的堆空间，不能描述为同步 GC。
 
-**Q10: [learning] 一次 GC 有哪三种分类？`System.gc()` 是"强制全堆 GC"吗？**
+**Q10: [learning] 一次 GC 有哪三种分类？System.gc() 是"强制全堆 GC"吗？**
 
 三种分类维度不同，混用会造成误判：
 
@@ -112,7 +112,7 @@ Perfetto 上可区分两类事件：GC 运行的时间片名形如 `"<cause> <co
 
 阈值判断必须带设备与负载条件：120 Hz 帧预算约 8.33 ms，但一段 2 ms 暂停是否造成掉帧取决于它落在帧的哪个位置及同帧其他工作。固定"3 ms 黄金线""暂停超过 5 ms 异常"缺少跨设备依据，回归判断用同一场景前后差异。
 
-**Q13: [learning] `HeapTaskDaemon` 是什么？进程被冻结期间，ART 的维护任务会怎样？**
+**Q13: [learning] HeapTaskDaemon 是什么？进程被冻结期间，ART 的维护任务会怎样？**
 
 `HeapTaskDaemon` 是 libcore `Daemons` 创建的 Java 守护线程，它调用 `VMRuntime` 的隐藏接口进入原生层 `TaskProcessor` 主循环。`TaskProcessor` 用按目标时间排序的 `std::multiset` 维护 `HeapTask` 队列（按 AAOS13 源码核对，`art/runtime/gc/task_processor.cc` 存在），到期任务串行执行、用后自毁。GC 请求、堆裁剪、启动期清理、方法追踪停止都走这套机制；任务到期只表示获得执行机会，是否真的执行 GC 还取决于各任务自己的守卫条件（如 GC 序号、待处理指针）。
 
@@ -120,7 +120,7 @@ Perfetto 上可区分两类事件：GC 运行的时间片名形如 `"<cause> <co
 
 冻结期间 `HeapTaskDaemon` 拿不到 CPU，但墙钟继续前进，队列里任务的目标时间可能已过去；解冻后多个逾期任务被同一线程串行取出执行，是否触发 GC 仍由各自守卫条件决定。所以看到解冻后连续的 ART 工作，应逐项核对任务条件，不能直接归因于"冻结期间积累了多轮 GC"——积累的是已到期的队列项，不是已执行的回收。这套队列是 ART 内部设施，应用没有受支持的 API 去启动、停止或改写它。
 
-**Q14: [learning] `onTrimMemory()` 会触发 GC 或内核回收吗？Android 13 与 Android 14+ 的回调级别有什么差异？**
+**Q14: [learning] onTrimMemory() 会触发 GC 或内核回收吗？Android 13 与 Android 14+ 的回调级别有什么差异？**
 
 `onTrimMemory()` 只是系统发给应用的异步状态信号：它不调用 `VMRuntime`、不触发 ART GC、堆规整、内核直接回收或 `kswapd`。应用断开强引用后对象只是变为可回收，GC 时机仍由 ART 按分配压力与堆目标决定；GC 完成后的 `HeapTrimTask` 归页是另一条异步链。分发路径上，回调经 oneway Binder 到达应用，`ActivityThread.scheduleTrimMemory()` 优先投递到主线程 `Choreographer.CALLBACK_COMMIT` 阶段（按 AAOS13 源码核对，`ActivityThread.java` 中 `choreographer.postCallback(Choreographer.CALLBACK_COMMIT, r, null)`），以降低打断当前帧的概率，但回调仍在主线程执行，应只做快速、可重建的资源缩减。
 
@@ -147,7 +147,7 @@ MGLRU（Multi-Gen LRU）按访问时间窗口为 memcg 与 NUMA 节点维护多�
 
 手工写 `/proc/<pid>/oom_score_adj` 只改内核值，未必同步 lmkd 候选链表，AMS 下一轮调整还会覆盖。
 
-**Q17: [learning] `oom_score_adj` 的主要档位有哪些？为什么"进程有 Service 就不会被杀"不可靠？**
+**Q17: [learning] oom_score_adj 的主要档位有哪些？为什么"进程有 Service 就不会被杀"不可靠？**
 
 取值范围 -1000 到 1000，数值越大越容易成为终止候选。按 AAOS13 源码核对（`ProcessList.java`），主要档位为：`SYSTEM_ADJ(-900)`、`PERSISTENT_PROC_ADJ(-800)`、`FOREGROUND_APP_ADJ(0)`、`VISIBLE_APP_ADJ(100)`、`PERCEPTIBLE_APP_ADJ(200)`、`SERVICE_ADJ(500)`、`HOME_APP_ADJ(600)`、`PREVIOUS_APP_ADJ(700)`、`SERVICE_B_ADJ(800)`、缓存进程 `900–999`（其中 950 为 LMK 优先边界）。
 
@@ -198,7 +198,7 @@ OomAdjuster（Android 17 位于 `com.android.server.am.psc`，入口 `ProcessSta
 - lmkd 的回收触发直接订阅内核 PSI 事件，通常不会先回调 AMS 要求"加快 cached 进程老化"；API 37 的 OomAdjuster 也没有按 PSI 分支修改 cached adj 的逻辑。
 - `am_proc_start` 记录的是发起进程创建的时刻，不是用户点击时刻；`am_proc_bound` 表示 AMS 已接受新进程的 `IApplicationThread` 连接，不代表 `Application.onCreate()` 结束或首帧显示。
 
-**Q23: [learning] v2 memory controller 的 `memory.low`/`high`/`max` 各自语义是什么？与 LMKD 的边界在哪里？**
+**Q23: [learning] v2 memory controller 的 memory.low/high/max 各自语义是什么？与 LMKD 的边界在哪里？**
 
 `memory.low` 是尽力而为的回收保护（受祖先与过量承诺影响，不能写成"低于它绝不回收"）；`memory.high` 是软上限，超限后该 cgroup 进入强回收与节流，设置过低会增加 direct reclaim 与分配延迟；`memory.max` 是硬上限，回收无法满足时触发 cgroup OOM；`memory.oom.group=1` 时整个 cgroup 作为不可分割工作负载处理，可能扩大一次 OOM 的终止范围。LMKD 与内核 cgroup OOM 是两条并行路径：LMKD 根据内存 PSI、swap、thrashing 与 `oom_score_adj` 选择终止目标；`memory.max` 与 cgroup OOM 由内核执行。
 
@@ -242,7 +242,7 @@ Android 17 还引入 MMD 协作：冻结后可安排按进程 ZRAM 写回，Acti
 - oneway 不是万能解法：解冻后一次性处理大量过期回调会造成 CPU 突增与业务状态倒退。事件语义应分层——瞬时采样可丢弃、当前状态只保留最新、不可丢业务记录要有上限地排队并设计补偿。API 36 起可用 `IBinder.addFrozenStateChangeCallback()` 观察远端冻结状态（状态可能合并，不能用回调次数统计冻结次数）；`RemoteCallbackList` 提供 `FROZEN_CALLEE_POLICY_DROP`/`ENQUEUE_MOST_RECENT`/`ENQUEUE_ALL`（默认上限 1000 条）三种策略。
 - `BINDER_GET_FROZEN_INFO` 返回的 `sync_recv`/`async_recv` 是位标志（"冻结期间是否收到过"），不是事务计数。
 
-**Q28: [learning] Android 17 依据什么决定一个缓存进程能否被冻结？为什么写入 `cgroup.freeze=1` 不代表已经冻结？**
+**Q28: [learning] Android 17 依据什么决定一个缓存进程能否被冻结？为什么写入 cgroup.freeze=1 不代表已经冻结？**
 
 Android 17 用 CPU 执行资格（capability）模型决策：OomAdjuster 计算进程是否持有 `PROCESS_CAPABILITY_CPU_TIME`（顶部、可见工作、FGS、正在执行服务回调或接收广播等明确工作）或 `PROCESS_CAPABILITY_IMPLICIT_CPU_TIME`（adj 低于阈值时的兼容行为）；`getFreezePolicy()` 对两者都缺失的进程允许冻结。执行顺序是 Binder freeze 先于 cgroup freeze——先阻止新同步事务并等待在途事务排空，再暂停线程；顺序颠倒会让调用端等待一个永远不会执行的服务端。
 
@@ -268,7 +268,7 @@ Android 17 用 CPU 执行资格（capability）模型决策：OomAdjuster 计算
 
 对象池不是首选：池中对象保持可达会抬高存活集，可能把短时峰值变成长驻内存，还要付出加锁与状态清理成本；短小对象经 TLAB 分配成本很低。Android 的 `Message.obtain()`、`MotionEvent.obtain()` 有明确获取/归还合约，业务自建池只在分配剖析证明热点、所有权清晰、容量有界时才值得引入。每次优化保留可复现场景与前后数据，单次快照不作结论。
 
-**Q31: [learning] Bitmap 内存有哪些关键口径与手段？`recycle()` 该不该手动调？**
+**Q31: [learning] Bitmap 内存有哪些关键口径与手段？recycle() 该不该手动调？**
 
 关键口径先立住：解码后内存由宽、高、像素格式与行跨度决定，与压缩文件大小无关（1080×1920 的 `ARGB_8888` 约为 7.91 MiB）；Android 8.0（API 26）起像素数据在原生堆，经 `NativeAllocationRegistry` 把原生分配压力反馈给运行时，仍会增加物理内存压力、分配失败仍可能表现为 OOME，只盯 `Runtime.maxMemory()` 会漏掉这部分。
 

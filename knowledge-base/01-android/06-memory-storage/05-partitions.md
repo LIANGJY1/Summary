@@ -25,7 +25,7 @@ system-as-root（SAR）指根文件系统就是 system 分区本身：挂载后 
 4. **注意：**升级设备保留原有启动布局，非 SAR 设备上 `/init` 是实体文件；recovery 的根布局可能与正常启动不同。判断以设备 fstab 和分区表为准，不按 Android 版本反推。
 
 
-**Q3: [learning] Android 动态分区怎样把 `system`、`vendor` 等逻辑分区放进 `super`？它解决了什么容量问题？**
+**Q3: [learning] Android 动态分区怎样把 system、vendor 等逻辑分区放进 super？它解决了什么容量问题？**
 
 Android 10 引入动态分区后，设备可将 `system`、`vendor`、`product`、`odm` 等分区实现为 `super` 内的逻辑分区。OTA 可调整逻辑分区容量，而无需为每个只读分区在出厂物理分区表中永久预留增长空间。
 
@@ -47,7 +47,7 @@ Virtual A/B 保留 A/B 更新的 slot 切换能力，但不在 `super` 内完整
 
 
 
-**Q5: [learning] Android 启动时谁把 `super` 里的逻辑分区映射并挂载？bootloader 会挂载 `super` 或 `/data` 吗？**
+**Q5: [learning] Android 启动时谁把 super 里的逻辑分区映射并挂载？bootloader 会挂载 super 或 /data 吗？**
 
 bootloader 负责加载启动所需的物理镜像并启动内核，不负责解析 Android 的 `super` 元数据或挂载 `/data`。启动后由 first-stage init 根据 ramdisk 中的 fstab、动态分区元数据和设备功能创建逻辑 block device 并挂载指定系统分区。`/data` 则在后续 init 阶段完成密钥准备后挂载。
 

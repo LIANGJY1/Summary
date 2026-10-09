@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：应用侧内存实践——堆预算与 GC 友好编码、内存泄漏治理、Native 与虚拟内存排查、Bitmap 优化、大内存与多进程策略、端侧推理内存管理与线上监控的落地判断。GC、lmkd、冻结与 MemoryLimiter 的机制层见 [../06-memory-storage/01-memory-management.md](./01-memory-management.md)；OOM 分类与 Native、FD 监控视角见 [03-app-memory-stability.md](./03-app-memory-stability.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 只看 `Runtime.maxMemory()` 和一次堆曲线就判断 Java 堆健康，为什么不可靠？应该比较哪些信号？**
+**Q1: [learning] 只看 Runtime.maxMemory() 和一次堆曲线就判断 Java 堆健康，为什么不可靠？应该比较哪些信号？**
 
 堆曲线回落只说明对象具备被回收的条件，不代表页面达到了性能目标；`maxMemory()` 只描述 Java 堆上限，不覆盖原生内存、图形内存与线程栈。判断堆压力要在同一场景下比较分配速度、峰值、页面退出后的存活对象和 GC 行为，而不是读一次数值。
 
@@ -12,7 +12,7 @@
 
 边界：趋势信号不知道对象是否可回收，单次超阈值不能证明泄漏；单次快照也解释不了抖动。生产采样要限制频率、合并连续事件并记录场景。
 
-**Q2: [learning] `LruCache` 的 `sizeOf` 计量和 `trimToSize` 行为有哪些边界？Android 14 之后应响应哪些 `onTrimMemory` 等级？**
+**Q2: [learning] LruCache 的 sizeOf 计量和 trimToSize 行为有哪些边界？Android 14 之后应响应哪些 onTrimMemory 等级？**
 
 `LruCache` 按 `sizeOf` 返回值累计条目大小、超限后调用 `trimToSize` 淘汰最旧条目（按 AAOS13 `LruCache.java` 核对）；`sizeOf` 没覆盖的开销（键字符串、条目对象头）会让真实占用大于 `maxBytes`，而 `trimToSize` 只收缩当前条目、不会永久修改构造时传入的最大容量，后续写入仍会重新增长。Android 14（API 34）起应聚焦 `TRIM_MEMORY_UI_HIDDEN` 与 `TRIM_MEMORY_BACKGROUND` 两个等级。
 
@@ -22,7 +22,7 @@
 
 反例：不要在回调里调用 `System.gc()`——释放引用只是让对象可回收，GC 时机仍由 ART 决定；也不要释放播放、导航等仍在使用的资源，收缩过多会导致回前台重新加载。收到回调时还要分清两类状态的去向：能从磁盘或网络重建的 UI 缓存可以释放；跨进程死亡仍需保留的用户数据必须走持久化存储，轻量临时界面状态走 onSaveInstanceState 的实例状态机制——不能把 trim 回调当成持久化或恢复数据的时机。
 
-**Q3: [learning] 大 JSON 响应、一次性读大文件把堆峰值顶上去时，按什么顺序处理？`Sequence` 一定更省内存吗？**
+**Q3: [learning] 大 JSON 响应、一次性读大文件把堆峰值顶上去时，按什么顺序处理？Sequence 一定更省内存吗？**
 
 先让数据不一次性进内存（分页、分块、流式），再消除中间态复制，最后才考虑更换容器；`Sequence` 的收益主要来自 `take(limit)` 限制结果数量和避免完整中间列表，源数据已经完整驻留或集合很小时它还会额外创建包装对象，未必更省。
 
@@ -82,7 +82,7 @@ retained 不等于泄漏的原因：GC 可能尚未发生；测试框架、调�
 
 边界：问题不在"匿名类"这个语法形式，而在任务队列是否比被捕获对象活得更久；页面任务不要放进 `GlobalScope`；`callbackFlow` 要在 `awaitClose` 中移除 listener。
 
-**Q9: [learning] Context 引用、JNI global reference 和带 `close()` 协议的资源分别怎么避免泄漏？**
+**Q9: [learning] Context 引用、JNI global reference 和带 close() 协议的资源分别怎么避免泄漏？**
 
 三类资源的共同修复点是所有权：进程级对象只保存 `applicationContext`；每条 `NewGlobalRef()` 都要有明确持有者并在终点 `DeleteGlobalRef()`；`Cursor`、`ParcelFileDescriptor`、`MediaCodec`、`Image`、`Surface` 等带关闭协议的对象通过 `use` 或 try-with-resources 在业务终点显式释放，finalizer 与 Cleaner 只是延迟兜底。
 
@@ -110,7 +110,7 @@ Library Leak 表示路径匹配已知库或框架模式，不等于可以忽略�
 
 生产环境替代：KOOM 提供 Java（fork/COW dump）、Native、Thread 三类监控模块，接入前固定版本并覆盖目标 Android 版本、ABI 与厂商设备；自建方案不要用周期性 `System.gc()` 加弱引用宣布泄漏——低成本趋势信号只能筛选样本，泄漏结论要由 heap/native profile 支持。
 
-**Q12: [learning] `dumpsys meminfo` 的 Native Heap 增长可能来自哪几类映射？AAOS13 按什么规则归类？**
+**Q12: [learning] dumpsys meminfo 的 Native Heap 增长可能来自哪几类映射？AAOS13 按什么规则归类？**
 
 至少四类：分配器堆（`malloc`/`new`，含第三方 `.so` 与图片解码）、匿名 `mmap` 区域（分配器 arena 或业务映射）、`.so`/ELF 映射（代码段、可写数据、重定位页）、图形与硬件缓冲（Bitmap 像素、纹理、`dma-buf`）。AAOS13 的 `frameworks/base/core/jni/android_os_Debug.cpp` 按 VMA 名称归类：`[heap]`、`[anon:libc_malloc]`、`[anon:scudo:*]`、`[anon:GWP-ASan*]` 归 Native Heap，`.so`/`.jar`/`.apk`/`.odex`/`.dex` 归共享库与代码分类，`[stack]` 与 `[anon:stack_and_tls:*]` 归 Stack。
 
@@ -130,7 +130,7 @@ Library Leak 表示路径匹配已知库或框架模式，不等于可以忽略�
 
 边界：heapprofd 与 Java HPROF 是两条独立管线——材料按 Android 17 源码核对，native 用 `__SIGRTMIN + 4`、Java 用 `__SIGRTMIN + 6`，数据源、信号与权限路径都不同；一种转储命令能运行不能推出另一种数据源可用。
 
-**Q14: [learning] `.so` 库的内存要从哪三个维度拆开？各看什么指标、做什么动作？**
+**Q14: [learning] .so 库的内存要从哪三个维度拆开？各看什么指标、做什么动作？**
 
 三个维度是装载成本、运行时分配、可写脏页，分别对应"少装、晚装、按需装"、统一大块分配入口并归因调用栈、减少启动期对共享映射的写入。
 
@@ -142,7 +142,7 @@ Library Leak 表示路径匹配已知库或框架模式，不等于可以忽略�
 
 边界：第三方 `.so` 报告至少保存 SDK 版本、Build ID、ABI、输入与并发、设备页大小；缺少 Build ID 时同名 `.so` 可能来自不同二进制，聚合调用栈没有可比性。
 
-**Q15: [learning] `maps` 里的 `[anon:libwebview reservation]` 是什么？64 位进程为什么常见约 1 GiB 的 VSS 增量？**
+**Q15: [learning] maps 里的 [anon:libwebview reservation] 是什么？64 位进程为什么常见约 1 GiB 的 VSS 增量？**
 
 这是 WebView 加载器为 provider 原生库预留的地址空间：按 AAOS13 源码核对（`WebViewLibraryLoader.reserveAddressSpaceInZygote()`），64 位进程预留 1 GiB、32 位 ARM 130 MiB、其他 32 位 190 MiB，以 `PROT_NONE` 匿名映射创建，`maps` 中名称为 `[anon:libwebview reservation]`。
 
@@ -152,7 +152,7 @@ Library Leak 表示路径匹配已知库或框架模式，不等于可以忽略�
 
 边界：表中常量解释的是 A13/A17 固定标签源码，其他系统版本按对应标签核对；把 WebView Activity 放入子进程不会移除主进程继承的预留，收益只来自已提交页与故障边界的隔离。
 
-**Q16: [learning] 对 ART 的 `dalvik-*` 空间做 `munmap`、长期持有 JNI 临界区指针，这些"压内存"手段为什么不成立？**
+**Q16: [learning] 对 ART 的 dalvik-* 空间做 munmap、长期持有 JNI 临界区指针，这些"压内存"手段为什么不成立？**
 
 不成立。ART 的堆空间、card table、对象位图与引用关系构成一致状态，对任一 `dalvik-*` 区域 `munmap` 会破坏分配计数与 GC 根集合；`GetPrimitiveArrayCritical()` 取得的指针必须在 `ReleasePrimitiveArrayCritical()` 前尽快释放，长期持有可能延迟或限制 GC，增加分配等待与线程停顿。
 
@@ -162,7 +162,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 应用侧能控制的只有对象生命周期与分配形态：取消不需要的任务与回调、给缓存设容量、释放 Bitmap 与媒体缓冲、用 heap dump 与 heapprofd 找长期持有者。
 
-**Q17: [learning] Bitmap 记账该用 `getByteCount` 还是 `getAllocationByteCount`？解码前怎么避免按原始尺寸分配像素？**
+**Q17: [learning] Bitmap 记账该用 getByteCount 还是 getAllocationByteCount？解码前怎么避免按原始尺寸分配像素？**
 
 排查占用优先记录 `getAllocationByteCount()`（底层分配区大小）；当 Bitmap 被 `inBitmap` 复用或 `reconfigure()` 调整后它可能大于 `getByteCount()`（当前像素所需最小字节数），只记后者会低估复用池里的大块分配。解码前用 `inJustDecodeBounds = true` 先取 `outWidth`/`outHeight`/`outMimeType`（返回 null、不分配像素），算出 `inSampleSize` 后第二次调用才真正分配。
 
@@ -210,7 +210,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 边界：不应把主动终止子进程当常规资源释放接口——进程寿命由系统按组件活跃度决定，任务完成时应停止 Service、解除绑定并保存结果；大数据载荷用 `SharedMemory`、文件描述符或流式接口传递并明确关闭时机。
 
-**Q22: [learning] `android:largeHeap` 的作用范围和设备档位是什么关系？开启前要确认什么？**
+**Q22: [learning] android:largeHeap 的作用范围和设备档位是什么关系？开启前要确认什么？**
 
 `largeHeap` 把应用 Java 堆增长限制放宽到设备的大堆档（按 AAOS13 源码核对，`ActivityThread` 检测 `FLAG_LARGE_HEAP` 后调用 `clearGrowthLimit()`），作用于应用创建的所有进程；设备的大堆档（`largeMemoryClass`）可能与普通档相同，开启不保证增加固定容量。档位读取：`getMemoryClass()` 读 `dalvik.vm.heapgrowthlimit`，`getLargeMemoryClass()` 读 `dalvik.vm.heapsize`。
 
@@ -242,7 +242,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 边界：量化选择还要看算子是否被后端支持、是否触发 CPU 回退——强量化模型回退 CPU 后内存与时延可能更差；MediaPipe LLM Inference 已进入维护模式，新项目按材料评估 LiteRT-LM。
 
-**Q25: [learning] 权重用只读 `mmap` 加载后 RSS 远小于文件大小，这说明什么？可以一直依赖吗？**
+**Q25: [learning] 权重用只读 mmap 加载后 RSS 远小于文件大小，这说明什么？可以一直依赖吗？**
 
 说明多数文件页尚未缺页或已被内核回收——VSS 先增加、RSS/PSS 随缺页和回收变化，文件页可被内核回收也可能经页缓存与其他进程共享。但这不是零成本承诺：delegate 可能为了对齐、布局转换、量化解码或设备私有格式再分配一份缓冲区，长上下文与并发会话会把缺页、副本与工作区叠加成第二次峰值。
 
@@ -252,7 +252,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 做法：为每个模型变体建立设备档案记录这些增量；模型加载、delegate 初始化与首次编译不放在主线程，Perfetto 中区分计算 slice、缺页、大块 `memcpy` 与后端返回码。
 
-**Q26: [learning] 用 `availMem` 或"模型文件 × 1.5"判断设备能不能跑模型为什么不成立？应该用什么代替？**
+**Q26: [learning] 用 availMem 或"模型文件 × 1.5"判断设备能不能跑模型为什么不成立？应该用什么代替？**
 
 `ActivityManager.MemoryInfo` 的三个字段都不是应用额度：`availMem` 是系统层面可用内存估算（源码注释明确不能当绝对值）、`threshold` 是系统开始清理后台进程的参考阈值、`lowMemory` 是全设备当前状态；固定公式忽略了应用基线、KV 缓存、后端副本、进程优先级和并发工作集。可用预算只能来自目标设备上每个模型变体的实测档案。
 
@@ -272,7 +272,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 会话策略：能快速从文本重建时，关闭会话比长期保存 KV 稳妥；状态导出/导入是引擎能力，会话状态可能含用户敏感内容，持久化需要加密、失效与删除规则；预热模型与预热会话分开配置。
 
-**Q28: [learning] 推理各阶段采样应读哪些字段？`VmRSS` 与 `VmHWM` 能互相替代吗？**
+**Q28: [learning] 推理各阶段采样应读哪些字段？VmRSS 与 VmHWM 能互相替代吗？**
 
 不能。`VmRSS` 是当前驻留值，`VmHWM` 是进程生命周期内 RSS 的最高水位且不能重置——推理前后各读一次 RSS 取差值无法证明区间峰值。低频采样读取 `/proc/self/status` 的 `VmSize`、`VmRSS`、`VmHWM`、`RssAnon`、`RssFile`、`RssShmem`、`VmSwap` 与 `Threads`（内存字段单位 KiB）。
 
@@ -282,7 +282,7 @@ JNI 临界区的约束：ART 可能返回指向数组的直接指针或副本，
 
 频率：在阶段边界或异常触发时采样，不在每生成一个 token 时调用；同一场景保留工具版本与 build fingerprint，避免横向比较厂商字段。
 
-**Q29: [learning] 线上内存监控的 PSS、RSS、Java Heap 与 native allocator 指标各能回答什么？`getProcessMemoryInfo()` 有什么限制？**
+**Q29: [learning] 线上内存监控的 PSS、RSS、Java Heap 与 native allocator 指标各能回答什么？getProcessMemoryInfo() 有什么限制？**
 
 四个指标各管一层：PSS 回答按共享者分摊后的系统内存占用（`ActivityManager.getProcessMemoryInfo()`、`Debug.getPss()`）；RSS 回答当前驻留页总量；`Runtime.totalMemory() - freeMemory()` 与 `maxMemory()` 回答 ART 堆近似用量与上限；`Debug.getNativeHeapAllocatedSize()` 回答分配器已分配字节（按 AAOS13 源码核对，实现直接返回 `mallinfo().uordblks`）。任何一项都不能代表进程全部内存——`getNativeHeapAllocatedSize()` 不含 `mmap`、线程栈、共享库与 Graphics。
 
@@ -302,7 +302,7 @@ Java 堆上限、设备 RAM、页面资源、ABI、WebView 版本与厂商内存
 
 事件按用途拆分命名：基线回归、Java 堆压力、原生或映射增长、系统内存压力、采集请求、采集结果、历史退出记录——不同事件进入版本比较、资源降级、重启后取证或敏感文件治理等不同流程。
 
-**Q31: [learning] Android 15/17 的 `ProfilingManager` 与 OOM/anomaly 触发器是什么？Android 13 应用能用吗？产物怎么治理？**
+**Q31: [learning] Android 15/17 的 ProfilingManager 与 OOM/anomaly 触发器是什么？Android 13 应用能用吗？产物怎么治理？**
 
 `ProfilingManager` 自 Android 15（API 35）加入平台，可请求 Java heap dump、heap profile、stack sampling 与 system trace；Android 17（API 37）新增 `TRIGGER_TYPE_OOM`（抛出 `OutOfMemoryError` 时采集 Java heap dump，要求自定义 `UncaughtExceptionHandler` 在处理结束后转交默认处理器，否则触发器不生效）与 `TRIGGER_TYPE_ANOMALY`（系统识别异常资源行为时按异常类型返回产物，MemoryLimiter 命中时可取 heap dump）。Android 13 平台没有这套 API（本地核对 AAOS13 无 `ProfilingManager`），线上只能使用自建低频信号与受控工具。
 

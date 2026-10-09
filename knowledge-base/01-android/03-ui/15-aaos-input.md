@@ -20,7 +20,7 @@
 
 三个属性都只面向驾驶员的两块屏（MAIN 与 CLUSTER），乘员屏输入不走 VHAL 输入属性（走标准 Android 输入子系统）。对角线 nudge 没有专用键值，官方做法是用水平与垂直事件序列合成。自定义键的码值语义是 OEM 内部约定，必须与 VHAL 实现和消费服务同步维护，改一边不改另一边就是"按了没反应"。
 
-**Q3: [learning] `InputHalService` 在转换时做了哪些加工与防御？**
+**Q3: [learning] InputHalService 在转换时做了哪些加工与防御？**
 
 按 AAOS13 源码核对（`packages/services/Car/service/src/com/android/car/hal/InputHalService.java`）：
 
@@ -31,7 +31,7 @@
 
 加工的含义是：VHAL 侧只需要按属性契约上报原始值，重复计数、时间戳语义、合法性全部由这一层统一保证——HAL 实现偷懒（如不带时间差数组）不会崩，但会在这一层被丢弃，现象是"旋钮部分转不动"。
 
-**Q4: [learning] `CarInputService` 收到按键后的分发顺序是什么？哪一步可能"吃掉"按键？**
+**Q4: [learning] CarInputService 收到按键后的分发顺序是什么？哪一步可能"吃掉"按键？**
 
 按 AAOS13 源码核对（`CarInputService.java` 的 `onKeyEvent`），顺序固定为五步：
 
@@ -54,7 +54,7 @@
 
 工程含义：车载语音键、通话键是整车级资源，AOSP 把语义集中在 CarService 而不是交给前台应用；应用想要定制这两个键的行为，正规途径是 `CarProjectionManager` 的按键事件回调（按事件类型订阅），而不是试图在 `onKeyDown` 里拦截——原始 `VOICE_ASSIST`/`CALL` 事件根本不会被注入系统。
 
-**Q6: [learning] `CustomInputEvent` 是什么？为什么 OEM 自定义键"没人接收就直接丢弃"？**
+**Q6: [learning] CustomInputEvent 是什么？为什么 OEM 自定义键"没人接收就直接丢弃"？**
 
 `CustomInputEvent` 是车机为"Android 键值体系之外的按键"预留的通道：OEM 的 HMI 硬键（如自定义的模式切换键）不适合硬塞进标准 KEYCODE（占用系统键码有冲突风险），就通过 `HW_CUSTOM_INPUT` 上报自定义码，CarService 转成 `CustomInputEvent` 分发。官方约定的便捷码值是 F1–F10（1001–1010），实际可用任意整数，语义表由 OEM 自行维护。
 

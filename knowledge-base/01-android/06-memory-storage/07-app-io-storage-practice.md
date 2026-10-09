@@ -22,7 +22,7 @@ mmap 把小写入变成映射页修改，减少传统 `read()`/`write()` 路径�
 
 不适合的位置：大 JSON、图片、二进制包（文件膨胀与内存映射增加页缓存与地址空间压力）；需要范围查询、排序、分页的数据；要求事务与失败恢复语义的交易数据。与 DataStore 的选择基于访问行为和一致性要求，并用本应用的冷启动、尾延迟、内存与异常恢复测试决定，不引用库作者的一次基准结果。
 
-**Q3: [learning] `AtomicFile` 保护什么、不保护什么？多个写者并发写同一文件怎么办？**
+**Q3: [learning] AtomicFile 保护什么、不保护什么？多个写者并发写同一文件怎么办？**
 
 `AtomicFile` 保证"读者只会看到旧版本或完整的新版本"：按 AAOS13 源码核对，`startWrite()` 把新内容写进 `.new` 文件，`finishWrite()` 对流执行 `FileUtils.sync()` 后用 rename 原子替换目标文件，`failWrite()` 删除半成品；它不提供文件锁，源码注释要求调用方为所有并发访问建立互斥条件。
 
@@ -32,7 +32,7 @@ mmap 把小写入变成映射页修改，减少传统 `read()`/`write()` 路径�
 
 配套规则：普通 `write()` 返回时数据通常只到了内核页缓存；可重建的日志与埋点可合并写入与同步以减少频繁 `fsync()`，不可丢状态必须等待明确提交结果——合并同步的前提是业务接受对应时间窗的数据丢失。
 
-**Q4: [learning] `content://` URI 和文件路径的本质区别是什么？跨重启继续访问选中的文档要做什么？**
+**Q4: [learning] content:// URI 和文件路径的本质区别是什么？跨重启继续访问选中的文档要做什么？**
 
 URI 是 Provider 授权的访问入口而非路径：`DocumentsContract.Document.COLUMN_DOCUMENT_ID` 由 Provider 自行定义，客户端只能把它当不透明标识交回同一个 `authority`——不能从 URI 字符串截取存储路径、用显示名拼子文档 URI、假定重命名后 URI 不变，也不能用 `File(uri.path)` 打开 `content://` URI。
 
@@ -42,7 +42,7 @@ URI 是 Provider 授权的访问入口而非路径：`DocumentsContract.Document
 
 失效处理：文档被删除、移动或 Provider 撤销授权后持久化记录仍可能失效——任务开始前检查访问结果、处理 `SecurityException` 与 `FileNotFoundException`、提供重新选择入口；长期不用的授权用 `releasePersistableUriPermission()` 释放。
 
-**Q5: [learning] `DocumentFile.listFiles()` 之后的属性读取为什么是 N+1？大目录应该怎么查？**
+**Q5: [learning] DocumentFile.listFiles() 之后的属性读取为什么是 N+1？大目录应该怎么查？**
 
 `listFiles()` 本身只发起一次子项查询（只读取 `COLUMN_DOCUMENT_ID`，Java 层没有逐项调用 `query()`），但 `getName()`、`getType()`、`lastModified()`、`length()`、`exists()` 每次调用各自查询一两个字段——N 个子项就是一次列表查询加 N 次属性查询。少量低频交互可接受，文件管理器或大目录扫描应在一次子项查询中取齐全部所需字段。
 
@@ -52,7 +52,7 @@ URI 是 Provider 授权的访问入口而非路径：`DocumentsContract.Document
 
 分页边界：`QUERY_ARG_LIMIT`/`QUERY_ARG_OFFSET` 是可选能力，用 Cursor extras 的 `EXTRA_HONORED_ARGS` 确认已接受；Provider 不支持分页时，客户端分批遍历只降低自身峰值内存，无法减少 Provider 生成整个结果集的成本。
 
-**Q6: [learning] `ContentResolver` 打开大文件时 Binder 传了什么？管道描述符和普通文件描述符有什么行为差异？**
+**Q6: [learning] ContentResolver 打开大文件时 Binder 传了什么？管道描述符和普通文件描述符有什么行为差异？**
 
 `openFileDescriptor()` 经 Binder 调用 Provider 的 `openFile()`，传输 URI、打开模式、授权信息与文件描述符（控制阶段）；对普通文件，随后的内容读写直接通过文件描述符进行，不会逐块放进 Binder 事务（数据传输阶段）。大文件复制缓慢时应分段测量——打开前的 Provider 启动、鉴权与按需下载、打开到首字节、持续吞吐、刷新关闭与远端提交——不能只归因于 Binder 缓冲区。
 
@@ -85,7 +85,7 @@ Android 的 `SQLiteDatabase` 提供 `insert()`、`update()`、`delete()` 和 `qu
 事务把一组数据库修改作为一个逻辑单元：正常提交时整组变更生效，执行失败并回滚时不保留其中部分操作。SQLite 的事务语义支持 ACID 目标，但隔离与持久化的具体行为仍会受事务模式、journal/WAL 与同步配置影响。
 
 当多条写入必须共同成立时，应在同一事务中执行并确保异常路径回滚；彼此无关、可独立恢复的工作不必为了“用事务”机械合并。事务缩小部分更新状态暴露的窗口，不会自动解决 SQL 输入拼接或跨数据库一致性问题。
-**Q11: [learning] WAL 给 SQLite 带来什么并发能力？`synchronous=NORMAL` 改变了什么持久性边界？**
+**Q11: [learning] WAL 给 SQLite 带来什么并发能力？synchronous=NORMAL 改变了什么持久性边界？**
 
 WAL 把新页追加到 `-wal` 文件：读事务记录自己的 end mark，用主库与该位置之前的 WAL frame 组成一致快照，写者可以在读者读旧快照时继续追加——提供读写并发；但两种日志模式都只有一个活跃写者，WAL 不提供并行写入。Android 官方性能文档建议除使用 `ATTACH DATABASE` 的场景外启用 WAL，并在 WAL 下使用 `synchronous=NORMAL`。
 
@@ -95,7 +95,7 @@ WAL 把新页追加到 `-wal` 文件：读事务记录自己的 end mark，用�
 
 应用侧检查项：在目标设备读实际生效的日志/同步模式，不把 Builder 选项当运行结果；使用 `ATTACH DATABASE` 时重新评估 WAL；不在主线程首次打开数据库（模式校验、Migration、预置库复制都可能发生）。
 
-**Q12: [learning] `-wal` 文件持续增长是什么原因？调小自动 checkpoint 阈值为什么没用？**
+**Q12: [learning] -wal 文件持续增长是什么原因？调小自动 checkpoint 阈值为什么没用？**
 
 checkpoint 把已提交的 WAL frame 写回主库，`PASSIVE` checkpoint 只能推进到活跃读事务允许的位置——持有较老 end mark 的长读事务会让它提前停止，而后续写入仍继续追加，`-wal` 因此持续增长。调小自动 checkpoint 阈值不能结束这些读事务，正确方向是找到未结束的读事务和生命周期过长的 Cursor。
 
@@ -105,7 +105,7 @@ checkpoint 把已提交的 WAL frame 写回主库，`PASSIVE` checkpoint 只能�
 
 配套实践：大事务后观察 `-wal` 增长、读事务持续时间与 checkpoint 耗时；连接池等待出现时先查长事务、慢查询与未关闭资源，再考虑调整池大小——增加连接数不改变写串行化。
 
-**Q13: [learning] 列表查询慢时 CursorWindow 扮演什么角色？单行过宽和 `TransactionTooLargeException` 是一回事吗？**
+**Q13: [learning] 列表查询慢时 CursorWindow 扮演什么角色？单行过宽和 TransactionTooLargeException 是一回事吗？**
 
 不是一回事。CursorWindow 分批承载查询结果，游标移动到现有窗口以外的行会触发重新填充——framework 驱动下大结果集表现为多轮 SQL 步进与窗口重填；投影列越多、结果中大字符串或 BLOB 越多，窗口越容易装满。单行放不进窗口时减少总行数没有帮助，要缩小该行与投影列集合。而 `TransactionTooLargeException` 来自 Binder 事务缓冲：跨进程返回 Cursor 时，`CursorWindow::writeToParcel()` 为 ashmem 窗口传递文件描述符副本、无 ashmem 时按已用容量写 Parcel，三者是不同失败，不能都归因"2 MB Binder 限制"。
 
@@ -115,7 +115,7 @@ checkpoint 把已提交的 WAL frame 写回主库，`PASSIVE` checkpoint 只能�
 
 边界：Provider 是否利用数据库索引取决于该 `authority` 的公开契约——MediaStore 的列与查询策略不能套到任意云盘 Provider。
 
-**Q14: [learning] "按会话过滤 + 按时间倒序"的消息查询该建什么索引？`EXPLAIN QUERY PLAN` 出现 SCAN 一定错吗？**
+**Q14: [learning] "按会话过滤 + 按时间倒序"的消息查询该建什么索引？EXPLAIN QUERY PLAN 出现 SCAN 一定错吗？**
 
 建 `(conversation_id, sent_at)` 复合索引：等值过滤列放在索引前缀、排序列在后，SQLite 可以反向扫描 B-tree，因此同一索引也能服务 `sent_at DESC` 的排序。两个互不相关的单列索引通常不能同时完成过滤与排序。SCAN 不一定错——小表扫描、覆盖索引扫描或统计信息变化都可能使扫描成为合理选择，应同时检查扫描对象、是否出现临时 B-tree、返回行数与实际耗时。
 
@@ -125,7 +125,7 @@ checkpoint 把已提交的 WAL frame 写回主库，`PASSIVE` checkpoint 只能�
 
 分布边界：空库或均匀小样本不能代表线上偏斜分布，验证用接近真实分布的本地数据库。
 
-**Q15: [learning] Room 遇到大表迁移该怎么设计？`fallbackToDestructiveMigration` 什么时候能用？**
+**Q15: [learning] Room 遇到大表迁移该怎么设计？fallbackToDestructiveMigration 什么时候能用？**
 
 大表转换让新旧结构共存一段时间：版本 N 先增加可空的新列或新表，新代码兼容两种表示并维护双写，后台任务按稳定主键分批回填并记录进度位置，进程被终止后从已确认位置继续；监控确认所有受支持版本回填完成后，后续版本才加非空约束、停止写旧表示并删除旧列。回填期间的读取必须能识别"新表示尚未生成"，不能把空值当业务结果。
 
@@ -173,7 +173,7 @@ Gson 的边界：截至材料口径它处于维护模式、以 Java 为主要目
 
 基准方法：Jetpack Microbenchmark 固定输入样本与发布配置，结果校验放在计时循环外、用 `BlackHole.consume()` 防止代码被删除；首次类加载与完整用户路径交给 Macrobenchmark 与 Perfetto。
 
-**Q20: [learning] OkHttp 什么时候自动解压 gzip？手动设置 `Accept-Encoding` 之后行为怎么变？**
+**Q20: [learning] OkHttp 什么时候自动解压 gzip？手动设置 Accept-Encoding 之后行为怎么变？**
 
 默认 `BridgeInterceptor` 只在请求没有显式设置 `Accept-Encoding`、且没有 `Range` 时添加 `Accept-Encoding: gzip`，并在响应包含 `Content-Encoding: gzip`、语义允许携带响应体时流式解压，解压后移除 `Content-Encoding` 与 `Content-Length`、长度标为未知。一旦调用方手动设置 `Accept-Encoding`，透明解压不再发生，业务要自行解码；要关闭压缩可显式发送 `Accept-Encoding: identity`。
 
@@ -183,7 +183,7 @@ OkHttp 5.4.0 的扩展行为（按材料核对）：通用 `CompressionIntercept
 
 测量与防护：分别记录编码前数据大小、网络传输字节、解码后大小与编解码耗时——透明解压让应用层长度与线上传输长度不同，两者不能混用；客户端要限制解码后数据量、集合元素数与解析深度，防御压缩炸弹（传输体积很小、解压后急剧膨胀的输入）。
 
-**Q21: [learning] `no-cache`、`no-store`、`private`、`s-maxage` 分别控制什么？304 验证怎么工作？**
+**Q21: [learning] no-cache、no-store、private、s-maxage 分别控制什么？304 验证怎么工作？**
 
 四个指令回答不同问题：`no-cache` 允许存储但每次复用前必须向源站验证（表达"先验证"，不是"不要存储"）；`no-store` 要求不存储请求或响应、也不用于满足后续请求（且不能替代传输加密与访问控制）；`private` 限制 CDN、代理等共享缓存存储，不禁止私有缓存存储；`s-maxage` 只为共享缓存指定新鲜期——OkHttp 的磁盘缓存是私有缓存，会解析该值但不按它决定复用时间。
 
@@ -193,7 +193,7 @@ OkHttp 5.4.0 的扩展行为（按材料核对）：通用 `CompressionIntercept
 
 OkHttp 5.4.0 实现边界（按材料核对）：磁盘缓存只写 GET 响应、不缓存 206；`only-if-cached` 找不到条目时生成 504（不是源站错误）；条件命中同时计入 `networkCount` 与 `hitCount`。账号隔离不能只靠 `private`——同一应用的多账号要用账号级缓存目录或把账号纳入缓存键，敏感一次性数据由服务端返回 `no-store`。
 
-**Q22: [learning] 内存缓存、磁盘缓存、HTTP 缓存与权威数据源各负责什么？`cacheDir` 为什么不能当权威数据源？**
+**Q22: [learning] 内存缓存、磁盘缓存、HTTP 缓存与权威数据源各负责什么？cacheDir 为什么不能当权威数据源？**
 
 四层的淘汰语义不同：内存缓存（`LruCache`、图片库内存层）服务进程内重复访问，按容量与最近访问淘汰，占用堆并可能增加 GC；可删除磁盘文件（`cacheDir`、图片库磁盘层）允许应用重启后复用可再生数据，按配额与修改时间淘汰，系统或用户可随时删除；HTTP 缓存按协议的新鲜度与验证器复用响应；权威数据源（Room、DataStore、持久文件）保存用户可见数据与同步状态，按业务版本、账号、租户淘汰。
 
@@ -203,7 +203,7 @@ OkHttp 5.4.0 实现边界（按材料核对）：磁盘缓存只写 GET 响应�
 
 陈旧展示：界面状态区分"旧数据加刷新中""旧数据加刷新失败""无数据"；`lastSyncedAt` 只记录最近一次成功同步，失败尝试不改写它。
 
-**Q23: [learning] `cacheDir` 里的文件会被系统怎么清理？墓碑和分组行为是什么？**
+**Q23: [learning] cacheDir 里的文件会被系统怎么清理？墓碑和分组行为是什么？**
 
 系统需要回收存储空间时，按文件 `lastModified()` 从较旧文件开始清理缓存目录；应用应把用量控制在 `StorageManager.getCacheQuotaBytes()` 返回的动态配额内（该值随设备状态变化），访问自己的内部缓存目录无需额外权限。`externalCacheDir` 可能不可用，使用前检查返回值与卷状态。
 
@@ -243,7 +243,7 @@ Outbox 的关键状态：`localOperationId`（唯一索引）、`status`（PENDI
 
 版本扩展：`queryDeletedFiles()` 属于 API 37.1 / S Extension 23（材料口径，AAOS13 无此 API），返回外部卷的删除记录，内部卷与已移除卷不返回；支持时把删除查询并入增量阶段，不支持时继续 `_ID` 对账。`ContentObserver` 只负责唤醒重新查询——合并短时间重复通知、后台转成 generation 检查，回调的合并、顺序与详细程度不构成持久同步协议。
 
-**Q27: [learning] 向共享存储写媒体时 `IS_PENDING` 是干什么的？`DATA` 列为什么不能用于创建或移动？**
+**Q27: [learning] 向共享存储写媒体时 IS_PENDING 是干什么的？DATA 列为什么不能用于创建或移动？**
 
 `IS_PENDING=1` 表示记录尚未发布：其他应用通常看不到未完成媒体，调用方也不必等媒体扫描发现自己刚写入的文件；内容写完后再清除标记发布，保证其他应用看到记录时文件已经完整。失败分支要删除调用方刚创建的待发布记录，避免留下长期不可见的半成品——清理本身也可能失败，应记录待清理的 Uri 且不让清理异常覆盖原始写入异常；整段操作在负责阻塞 I/O 的后台调度器执行。
 
@@ -271,7 +271,7 @@ HDR 转 SDR 不会自动发生：Android 13 及以上通过 AndroidX `PickVisual
 
 回退边界：AndroidX 在设备不支持 Picker 时回退到 SAF 的 `ACTION_OPEN_DOCUMENT`，会忽略多选最大数量，回调后仍需数量校验；多选上限可经 `MediaStore.getPickImagesMaxLimit()` 读取（API 34 起，材料按 Android 17 核对上限 100）。
 
-**Q30: [learning] `NET_CAPABILITY_INTERNET`、`VALIDATED`、`NOT_METERED` 各证明什么？在 `onCapabilitiesChanged` 回调里重新查询有什么风险？**
+**Q30: [learning] NET_CAPABILITY_INTERNET、VALIDATED、NOT_METERED 各证明什么？在 onCapabilitiesChanged 回调里重新查询有什么风险？**
 
 三个能力都只回答自己的问题：`INTERNET` 表示网络被配置为访问一般互联网，不证明当前可达；`VALIDATED` 表示系统最近一次验证一般互联网成功，不证明业务端点此刻可达；`NOT_METERED` 表示网络不按流量计费——大传输应看它，而不是用 Wi-Fi 或蜂窝等传输类型代替计费判断。
 
@@ -301,7 +301,7 @@ HDR 转 SDR 不会自动发生：Android 13 及以上通过 AndroidX `PickVisual
 
 观测边界：EventListener 的事件可能缺席（连接池命中时 DNS 与建连事件不出现）或重复（重定向、认证、连接路径重试）；TTFB 是请求发出到响应首部的等待，不等于解析响应头耗时。验收时平均耗时下降而 P99、重试次数或后台字节上升，不能判定优化有效。
 
-**Q33: [learning] OkHttp 的 `retryOnConnectionFailure` 和业务重试有什么区别？POST 失败后能直接重发吗？**
+**Q33: [learning] OkHttp 的 retryOnConnectionFailure 和业务重试有什么区别？POST 失败后能直接重发吗？**
 
 不能直接重发。`retryOnConnectionFailure`（默认开启）只做传输恢复：从失效的池连接或可替代连接路径的故障中恢复，不代表应用可以重新提交任意业务操作；非幂等方法不能仅凭"尚未收到响应"推断服务端没有执行——支付、下单、发消息等 POST 需要服务端幂等键、状态查询或事务协议。
 
@@ -331,7 +331,7 @@ QUIC 在 UDP 上实现可靠传输、拥塞控制、TLS 1.3 集成、流复用�
 
 0-RTT：恢复会话时可在握手完成前发送早期数据、省一个往返，但缺少跨连接防重放保证——攻击者可能重放捕获的数据，登录、支付、下单等产生一次性副作用的写请求不能仅凭"使用 HTTPS"进入 0-RTT；服务端也可拒绝早期数据，指标要区分最终协议与业务总耗时，不把"启用 QUIC"记成"命中 0-RTT"。
 
-**Q36: [learning] gRPC 的 `Channel` 是什么？deadline 和 wait-for-ready 应该怎么设置？**
+**Q36: [learning] gRPC 的 Channel 是什么？deadline 和 wait-for-ready 应该怎么设置？**
 
 `Channel` 是到一个逻辑目标的通信通道：内部可持有零条、一条或多条实际连接，并参与名称解析与客户端负载均衡，不等同于一条套接字连接。官方性能建议要求复用 `Channel` 与生成的 stub——复用边界按逻辑目标、TLS、代理、名称解析与服务配置决定；用户令牌经每次调用的调用凭据或元数据提供，不因账号切换重建 Channel，也不把旧令牌固化在长生命周期拦截器中。
 
@@ -341,7 +341,7 @@ wait-for-ready：通道暂时不可用时把调用留在队列中，待连接恢
 
 流式与资源：流式 RPC 断线后未完成的逻辑流会失败，消息序号、游标、确认、去重与补发属于应用协议；一次写入只表示消息交给 gRPC、不代表字节已到网络，发送快于接收时框架等待或缓存——应用队列必须有界并保证两端持续读取。监控要记录 gRPC 状态码、服务名、方法名、deadline、取消与每次尝试，HTTP 200 不足以表示结果。
 
-**Q37: [learning] gRPC 返回 `UNAVAILABLE` 就可以直接重试吗？收到响应首部之后呢？**
+**Q37: [learning] gRPC 返回 UNAVAILABLE 就可以直接重试吗？收到响应首部之后呢？**
 
 `UNAVAILABLE` 不自动表示业务操作可重复：查询或幂等操作可以在总 deadline 内受控重试，写操作需要幂等键、版本条件或查询确认，不能只按状态码重发。两类重试机制要区分：透明重试在确认调用没有进入服务端应用逻辑时，恢复少量因并发事件先后顺序不确定产生的底层故障；更广泛的重试通过 Service Config 按方法设置尝试上限、逐次延长的等待、可重试状态码与重试总量限制。
 

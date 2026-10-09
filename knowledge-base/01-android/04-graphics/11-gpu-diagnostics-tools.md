@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：GPU、Camera、窗口与布局、构建产物和内核观测各有独立的证据通道——先按问题选证据形态（帧捕获、GPU counter、Camera trace、窗口状态、BPF 记账、keep 规则报告），再按 Android 版本核对平台侧实现与工具边界。Perfetto 采集、轨道与 SQL 基础见 [04-perfetto-analysis.md](../12-performance/04-perfetto-analysis.md)；Profiler、Simpleperf、dumpsys、statsd 等通用工具见 [03-performance-tools.md](../12-performance/03-performance-tools.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 想统计自有应用进程内 `libc.so` 的 `malloc` 被谁调用，PLT/GOT Hook 改写的是什么位置？为什么它注定覆盖不了所有 `malloc` 调用？**
+**Q1: [learning] 想统计自有应用进程内 libc.so 的 malloc 被谁调用，PLT/GOT Hook 改写的是什么位置？为什么它注定覆盖不了所有 malloc 调用？**
 
 PLT/GOT Hook 改写的是调用方共享库（DSO）自己的 GOT 重定位槽，把解析出的目标函数地址换成代理函数地址；它没有修改 `libc.so` 里的 `malloc` 实现，因此凡是绕过这个槽的调用都不会命中，"全量监控"不成立。
 
@@ -50,7 +50,7 @@ draw API 返回只说明 CPU 执行到提交点，这一帧此后还要走 GPU �
 
 两个常见误判要避开：RenderThread 很短不等于 GPU 慢——RenderThread 可能只负责异步提交，GPU 是否受限要靠 GPU stage、completion fence 与单变量实验共同指向；FrameTimeline 的 `GPU Composition` 标记只说明 SurfaceFlinger 本轮用了 GPU 合成，不说明应用内容是否 GPU 渲染——游戏 Surface 由应用 GPU 绘制后仍可被 HWC 直接扫描输出。另注意队列中可能有多帧 in-flight，抓到的 API 帧很重不代表它就是用户看到的那一帧，要用 frame id、latch 与 present 建立对应。
 
-**Q6: [learning] `profileable` 和 `debuggable` 有什么区别？帧捕获工具为什么通常要求 debuggable，性能基线又该怎么取？**
+**Q6: [learning] profileable 和 debuggable 有什么区别？帧捕获工具为什么通常要求 debuggable，性能基线又该怎么取？**
 
 `profileable` 是 API 29 引入的 manifest 元素，允许 shell 侧 profiling 工具分析 release 构建并只暴露平台允许的有限数据，对运行时序的扰动通常更小；`debuggable` 则允许调试器和图形 layer 注入。帧捕获工具（AGI、RenderDoc、Sokatoa，材料口径）通常要求 debuggable 或 root，因为它们要把 Vulkan layer 加载进目标进程记录命令、资源和内存，这是 debuggable 才开放的通道。
 
@@ -70,13 +70,13 @@ AGI 工具侧（材料口径，AGI 是独立版本化的仓库，不在 AOSP 平
 
 这个语义带来三个必须记住的边界：其一，看到的是转换后的 render pass、pipeline、shader 与 GPU 成本，ANGLE 自身的 API 转换、shader translation 和状态管理开销也进入了被测路径；其二，如果问题只在原生 GLES driver 上出现，这份 capture 已经更换了 backend，必须同时保留原生路径的 Perfetto、日志和厂商数据才能对照；其三，Android 15+ 提供按包测试 ANGLE 的入口，更新的版本还允许游戏在 manifest 里表达"优先使用 ANGLE"的请求（材料口径），但那是请求信号，系统是否选择 ANGLE 仍由设备配置与策略决定，不能认定 GLES 应用默认跑在 ANGLE 上。对照实验可用官方设置项把目标包指定到 `angle` 或 native driver，重启进程后核对 EGL vendor/renderer 与进程实际加载的库，测试结束删除这些 global 设置，避免污染后续基线。排查"选了 Vulkan 模式但 GLES 应用抓帧为空"时，先确认 API 模式选错是第一嫌疑。
 
-**Q9: [learning] `dumpsys gpu --gpumem` 显示的每个进程 GPU 内存从哪里来？AAOS13 上这条链路的实现是什么样的？**
+**Q9: [learning] dumpsys gpu --gpumem 显示的每个进程 GPU 内存从哪里来？AAOS13 上这条链路的实现是什么样的？**
 
 数据来自 GPU 驱动发出的 `gpu_mem/gpu_mem_total` tracepoint：内核里附着在该 tracepoint 的 BPF 程序把每个 `(gpu_id, pid)` 组合最近上报的总量写进 BPF map，GpuService 的 GpuMem 组件附着程序并以只读方式遍历 map，经 `dumpsys gpu --gpumem` 输出。GpuService 只是读取与展示，不拥有这些内存。
 
 AAOS13 逐项核对（本地源码）：BPF 程序在 `frameworks/native/services/gpuservice/bpfprogs/gpu_mem.c`，map 容量 `GPU_MEM_TOTAL_MAP_SIZE = 1024`，键为 `(gpu_id << 32) | pid` 的 64 位整数，值为该组合当前总字节数，`size` 为 0 时删除对应条目；GpuMem 初始化先 `bpf::waitForProgsLoaded()` 等待系统 BPF 程序加载完成，再取 pinned program 并 `bpf_attach_tracepoint(fd, "gpu_mem", "gpu_mem_total")`，失败每秒重试、累计约 30 秒（`kGpuWaitTimeout = 30`）后放弃，用来覆盖 GPU 驱动晚于 gpuservice 启动的窗口；map 以 `BpfMapRO` 只读打开。pin 路径是 `/sys/fs/bpf/prog_gpu_mem_tracepoint_gpu_mem_gpu_mem_total` 与 `/sys/fs/bpf/map_gpu_mem_gpu_mem_total_map`。版本差异要记牢：材料按 Android 17 核对时该对象已改名 `gpuMem.bpf`，pin 路径前缀随之变为 `gpuMem`——pin 路径由对象名决定、跨版本会变，排查时以 `find /sys/fs/bpf` 实际输出为准，不要写死。`dumpsys gpu` 按 Binder 服务名 `gpu` 找到 GpuService，`--gpumem`、`--gpustats`、`--gpudriverinfo`、`--gpuwork` 分别触发不同模块（AAOS13 四个选项均核对存在）。dump 输出是遍历期间的 best-effort 快照，驱动可能同时还在更新 map，不要把它当成原子一致的状态。
 
-**Q10: [learning] Perfetto 里 `android.gpu.memory` 数据源和 ftrace 的 `gpu_mem/gpu_mem_total` 事件各提供什么？只开其中一个会缺什么？**
+**Q10: [learning] Perfetto 里 android.gpu.memory 数据源和 ftrace 的 gpu_mem/gpu_mem_total 事件各提供什么？只开其中一个会缺什么？**
 
 `android.gpu.memory` 是 GpuMemTracer 注册的 Perfetto data source，在采集开始时遍历一次 BPF map，为已有条目各写一个初始 `GpuMemTotalEvent`，之后不再轮询；ftrace 的 `gpu_mem/gpu_mem_total` 事件则由驱动在 GPU 可寻址内存发生 allocate、free、import、unimport 后发出，提供会话期间的后续变化。要得到从起点开始的完整时间序列，两者必须同时启用。
 
@@ -100,7 +100,7 @@ data_sources {
 
 两个边界：这条链路由事件触发，驱动不发 tracepoint 时轨道不变——program 加载成功而 map 一直为空，常见原因是驱动没有实现或没有上报该 tracepoint；`GpuMemTotalEvent` 由 GpuService 生成、且只表达总量，不能替代厂商 GPU counter，也推不出带宽、shader 吞吐或某条命令的内存归属。
 
-**Q11: [learning] `dumpsys gpu --gpustats` 里的统计和 GpuMem 是什么关系？这条链路在 Android 13 和 Android 17 之间有什么实现差异？**
+**Q11: [learning] dumpsys gpu --gpustats 里的统计和 GpuMem 是什么关系？这条链路在 Android 13 和 Android 17 之间有什么实现差异？**
 
 GpuStats 记录的是 GL、Vulkan、ANGLE 三类图形驱动的加载次数、失败次数、加载耗时和按应用聚合的图形功能使用信息，完全不记录 GPU 内存字节数；它经 `dumpsys gpu --gpustats` 与 statsd pull atom 两个出口暴露，排查内存增长时不要到 GpuStats 找答案。
 
@@ -108,7 +108,7 @@ AAOS13 实现核对（本地源码）：每个应用的 GL/Vulkan/ANGLE 加载�
 
 版本差异有两处值得标注：其一，材料按 Android 17 核对的同名常量是 16，即每驱动每应用的加载耗时样本从 50 收窄到 16，跨版本比较加载耗时分布时样本量不同；其二，AAOS13 判定应用是否使用 ANGLE 只看 `driverPackageName == "angle"`，材料口径的 Android 17 增加了按 driver 枚举判定的分支。另外 `dumpsys gpu --gpustats` 追加 `--clear` 会清空所选统计并改变后续 dumpsys 与 statsd pull 的结果，采集证据前不要使用。
 
-**Q12: [learning] `dumpsys gpu --gpumem` 显示某进程 GPU 内存持续增长，下一步怎么定位？GpuMem、memtrack、DMA-BUF 几个数字能互相换算吗？**
+**Q12: [learning] dumpsys gpu --gpumem 显示某进程 GPU 内存持续增长，下一步怎么定位？GpuMem、memtrack、DMA-BUF 几个数字能互相换算吗？**
 
 下一步是按"进程总量 → buffer 身份 → layer 关联"逐层收窄：先用 `dmabuf_dump` 拿到该进程引用的 DMA-BUF inode 与 exporter，再用 `dumpsys SurfaceFlinger` 关联当前 layer；但 GpuMem、memtrack 与 DMA-BUF 统计的数字不能互相换算，它们覆盖的对象和共享内存分摊规则不同，只能要求"多口径同时增长/同步回落"这类定性一致。
 
@@ -147,7 +147,7 @@ APA 可在录制时注入三类 Vulkan layer（材料口径）：CPU Timing 把 
 
 HAL3 模型的形状：App 通过 `CaptureRequest` 携带控制参数与目标 `Surface`，经 Binder 进入 `cameraserver`；`Camera3Device` 维护 request、in-flight 状态与 stream，`RequestThread` 准备 buffer 和 metadata 后调 HAL 的 `processCaptureRequest` 路径；HAL 经 sensor 和 ISP 生成结果，再通过 `processCaptureResult()` 分批返回 metadata 和 output buffer——同一 frame number 的 partial metadata、final metadata 与各路 buffer 可以在不同时刻到达，callback 顺序不能当作采集顺序。接口传输上，Android 13 起 Camera HAL 新增特性只通过 AIDL 提供、HIDL 仍被支持（AAOS13 的 `libcameraservice/device3/aidl/AidlCamera3Device.cpp` 核对了这条双轨），线程名和 transport 要从目标设备确认。每个 output 映射到独立的 Camera3 stream，preview、record、analysis、still 的消费速度可以不同：预览稳定不证明录像或分析流稳定，某一路 consumer 过慢也可能通过共享的 ISP 阶段、有限 buffer 或内存带宽影响其他输出。给Camera 问题定位时，先把现象归入四类之一，再沿对应链路选 Perfetto slice、BufferQueue/fence 或内存证据，不要用单一"帧间隔阈值"跨类判断。
 
-**Q17: [learning] Perfetto 里 Camera 相关的关键 slice 有哪些？`frame capture` 和 `Stream N: first full buffer` 分别能证明什么、不能证明什么？**
+**Q17: [learning] Perfetto 里 Camera 相关的关键 slice 有哪些？frame capture 和 Stream N: first full buffer 分别能证明什么、不能证明什么？**
 
 AOSP camera 类目下的关键线索包括 `connectHelper`（CameraService 接入与 client 初始化）、`configureStreams`/`beginConfigure`/`endConfigure`（stream 配置）、`sendRequestsBatch`（RequestThread 调入 HAL 提交一批 request）、`frame capture` 与 `still capture`（以 frame number 为 cookie 的异步 request 区间）和 `Stream N: first full buffer`。AAOS13 源码逐字核对：`Camera3Device.cpp` 中 `ATRACE_ASYNC_BEGIN("frame capture", frame_number)`、`Camera3OutputStream.cpp` 中 `"Stream %d: first full buffer\n"`、`Camera3Device.cpp:3214` 的 `sendRequestsBatch()` 均存在。
 
@@ -181,13 +181,13 @@ WHERE gap_ns IS NOT NULL;
 
 `average_fps` 只在所选事件与目标 buffer 一一对应时成立；某个间隔偏长还要看下一帧是否补回、显示端是否重复上一帧，30 fps 只给出约 33.33 ms 的名义周期，没有跨设备通用的"超 N ms 即故障"阈值。
 
-**Q19: [learning] Camera 预览链路上 consumer 持有 buffer 不还，会造成什么后果？`maxBuffers`、`maxImages` 和"固定三缓冲"分别是什么关系？**
+**Q19: [learning] Camera 预览链路上 consumer 持有 buffer 不还，会造成什么后果？maxBuffers、maxImages 和"固定三缓冲"分别是什么关系？**
 
 consumer 处理慢于产帧速度时，未归还的 buffer 向上游传导形成回压（backpressure）：缓冲被占满后 producer 取不到 buffer，表现为 `dequeueBuffer`、stream buffer request 或 fence wait 变长，严重时整条 session 被拖慢。这是"谁持有 buffer"的问题，不是"buffer 太少"的问题，单纯增大队列深度只会推迟卡顿并抬高内存。
 
 buffer 数量没有固定值，三个概念要分开：HAL 对某流"同时持有且未归还"的上限由 `HalStream.maxBuffers` 在 stream 配置结果中逐流给出，不是通用常量；HAL buffer management（Android 10 起）还允许 request 先进 HAL、写入前再经 `requestStreamBuffers()` 申请 buffer，framework-managed 与 HAL-managed 模式的等待点不同；`ImageReader.maxImages` 是应用同时 acquire 且尚未 close 的图像上限，与 HAL 的 `maxBuffers` 无关。CameraX 侧 `ImageAnalysis` 的 `STRATEGY_KEEP_ONLY_LATEST` 非阻塞丢旧帧，`STRATEGY_BLOCK_PRODUCER` 在队列满时阻塞 camera device 范围内其他 use case，归还接口是 `ImageProxy.close()`。常见证据组合按持有者归类：`ImageReader`/`ImageAnalysis` acquire 后长时间不 close 是应用持有；encoder 变慢查 MediaCodec 与 muxer/storage；SurfaceView layer release fence 延迟是显示 consumer 仍在读取；多路同时恶化则查共享 ISP、带宽或 thermal。修复针对当前持有者：缩短 Image 持有、改 latest-only、稳定 session 配置、降低某一路分辨率或帧率。
 
-**Q20: [learning] Camera 拍照延迟怎么分段度量？`SENSOR_TIMESTAMP` 能直接和 `elapsedRealtimeNanos()` 相减吗？内存侧 `CameraMetadataNative` 为什么要单独看？**
+**Q20: [learning] Camera 拍照延迟怎么分段度量？SENSOR_TIMESTAMP 能直接和 elapsedRealtimeNanos() 相减吗？内存侧 CameraMetadataNative 为什么要单独看？**
 
 拍照报告至少分四段：触发到 request 提交、request 到 shutter/sensor timestamp、shutter 到 still buffer 可读、still buffer 到编码回调或文件落盘——它们分别对应控制、sensor/ISP、consumer 和 I/O，混成一个总耗时会把不同层的等待搅在一起。推荐三个量：`source_age = shutter_event_time - sensor_timestamp`（图像来自按键前多少毫秒，ZSL 命中时为正）、`callback_latency = callback_time - shutter_event_time`（含重处理与编码）、`save_latency = file_complete_time - callback_time`（应用侧文件 I/O）。
 
@@ -231,7 +231,7 @@ timeInState 回答"某 UID 在各 CPU 频点上累计运行了多久"这类累�
 
 AAOS13 核对（本地源码）：消费库 `frameworks/native/libs/cputimeinstate/cputimeinstate.cpp` 负责初始化与读取——扫描 cpufreq policy 建立 policy/CPU/频率表写入 map，然后对三个 pinned program 分别执行 attach：`sched/sched_switch`（结算被切出任务的时间）、`power/cpu_frequency`（更新频率索引）、`sched/sched_process_free`（清理退出进程的跟踪 slot），随后经 `bpf_obj_get` 打开 `map_time_in_state_uid_time_in_state_map` 等 map 读取；system_server 侧由 `KernelCpuBpfTracking` 经 JNI 调用。注意"loader 只 pin、消费者 attach"的分工：program 出现在 `/sys/fs/bpf` 不能证明它已在采集，map 长期为空还要查消费者是否执行了 attach、tracepoint 是否存在。路径差异是版本敏感点：AAOS13 的 map 路径形如 `/sys/fs/bpf/map_time_in_state_*`，材料按 Android 17 核对的路径是 `/sys/fs/bpf/cputimeinstate/map_timeInState_*`——pin 路径由对象名与元数据决定、跨版本会变，脚本与文档不要写死某一代的路径。另注意 SDK sandbox 的 UID 会同时记到对应 App 与保留的聚合 UID，framework 计算总量时要处理这份重复。
 
-**Q27: [learning] `/sys/fs/bpf` 下能看到某个 BPF program，能说明它正在采集数据吗？怎么区分"加载成功""attach 成功"和"有数据"三层？**
+**Q27: [learning] /sys/fs/bpf 下能看到某个 BPF program，能说明它正在采集数据吗？怎么区分"加载成功""attach 成功"和"有数据"三层？**
 
 不能。pin 只证明加载阶段完成——内核对象被固定到 bpffs 路径；attach 是把 program 连接到 tracepoint 等触发点的另一个动作；有数据还要求事件真的发生、消费者有权限读取 map。三层证据要分别确认。
 
@@ -249,7 +249,7 @@ root 可读而 shell 不可读不是加载失败，是 pin 对象的 owner/group
 
 Android 17 的新程序不能外推到 Android 13：材料口径下 `cyclePerUid`（x86_64 的 per-UID cycle 归因，依赖 RAPL 节点）、`dmabufIter`（DMA-BUF 四字段全局快照 iterator）、`kernelWakelockDuration`（全局 active 时间并集）、`bpfLockContention`（白名单内核锁等待聚合）均为 Android 17 tag 内容，受 aconfig flag、架构与内核版本（部分要求 6.1+）限制；UprobeStats（statsd 控制的受控 uprobe 插桩）按材料版本表属 Android 15+ 的 Mainline 模块。AAOS13 树中这些对象均不存在（本地核对），已有的等价物是：GPU 内存走 `gpu_mem.c`、GPU work period 走 `gpu_work.c` 的 `power/gpu_work_period` tracepoint（AAOS13 核对 `DEFINE_BPF_PROG("tracepoint/power/gpu_work_period", ...)`）、DMA-BUF 快照走 `dmabuf_dump` 工具。同理，内核源码里有 sched_ext（BPF 调度器框架）只证明编译能力，设备是否在用还要看 Kconfig、加载的 scheduler 与运行状态——源码、Kconfig、产品启用与活动状态是四项不同证据。
 
-**Q29: [learning] APK Analyzer 显示 `classes.dex` 变大了，为什么还要 R8 Configuration Analyzer？三类分数（shrinking/optimization/obfuscation）到底衡量什么？**
+**Q29: [learning] APK Analyzer 显示 classes.dex 变大了，为什么还要 R8 Configuration Analyzer？三类分数（shrinking/optimization/obfuscation）到底衡量什么？**
 
 APK Analyzer 回答"结果变大在哪里"（哪个 dex、包、资源、ABI 贡献了体积），回答不了"哪条 keep 规则让 R8 放弃了哪些处理"；Configuration Analyzer 补的是后者——它把最终合并配置映射到类、字段、方法，给出三类分数和规则影响清单。三类分数衡量的是"仍允许 R8 处理的比例"：shrinking score 是仍允许被删除的类/字段/方法占比，optimization score 是仍允许被内联、类合并等改写的占比，obfuscation score 是仍允许被重命名的占比——它们不是已获得的字节收益，也不预测启动耗时，绝对值不能跨 R8 版本比较。
 

@@ -23,7 +23,7 @@ Android 平台 BPF 对象由 loader 按描述信息与设备条件筛选、加�
 6. **平台启动时序：**init 挂载 bpffs，按平台启动服务顺序运行 `load-bpf-programs`。Android 17 在 Zygote 启动前加载相应平台对象，并设置 bpffs 节点的 owner、group、mode 和 SELinux 标签。启动完成日志之外仍需检查 attach 与实际 map 更新。
 7. **网络统计例外：**网络流量统计与 Tethering 的 BPF 由 `netbpfload` 等网络组件另行管理，不属于上述平台观测对象的同一加载链路。网络数据为空时应检查相应网络 loader，而不是只查平台 `bpfloader`。
 
-**Q3: [learning] BPF Arena 与普通键值 map 有什么不同？`BPF_MAP_TYPE_ARENA` 的地址和映射限制是什么？**
+**Q3: [learning] BPF Arena 与普通键值 map 有什么不同？BPF_MAP_TYPE_ARENA 的地址和映射限制是什么？**
 
 BPF Arena 是 BPF 程序与用户进程共享的稀疏内存区域，不是按 key 查询和更新 value 的普通 map。它适合在两侧共享含指针的数据结构，但创建 Arena 需要当前架构的 BPF JIT 支持，并遵守映射 flag、虚拟范围大小和地址边界限制。
 
@@ -50,7 +50,7 @@ adb shell 'cat /sys/kernel/sched_ext/enable_seq 2>/dev/null'
 4. **full 模式：**未设置 `SCX_OPS_SWITCH_PARTIAL` 时，sched_ext 接管 `SCHED_NORMAL`、`SCHED_BATCH`、`SCHED_IDLE` 和 `SCHED_EXT` 任务。因此普通应用线程的 policy 字段仍可能显示 `SCHED_NORMAL`，不能只在 `/proc/<pid>/sched` 中搜索 `SCHED_EXT` 来判断是否由 sched_ext 调度。
 5. **partial 模式：**设置 `SCX_OPS_SWITCH_PARTIAL` 后，只有显式设为 `SCHED_EXT` 的任务进入 sched_ext。`SCHED_NORMAL`、`SCHED_BATCH` 和 `SCHED_IDLE` 仍由优先级更高的 fair-class 调度器处理。
 6. **回退路径：**调度器主动退出、BPF 内部错误、runnable task 长时间停滞或触发 SysRq-S 时，内核会停用 BPF 调度器并将受管任务交回 fair-class。若调度器退出、接口报错或 watchdog 告警，应同时检查 sched_ext sysfs 状态和内核日志。
-**Q5: [learning] sched_ext 的 `select_cpu()`、`enqueue()` 和 `dispatch()` 怎样分工？任务最终从哪个 DSQ 被 CPU 执行？**
+**Q5: [learning] sched_ext 的 select_cpu()、enqueue() 和 dispatch() 怎样分工？任务最终从哪个 DSQ 被 CPU 执行？**
 
 sched_ext 的调度回调把 CPU 选择、入队和分发拆成不同阶段。`select_cpu()` 提供唤醒时的 CPU 选择提示，`enqueue()` 决定任务排入哪条队列，`dispatch()` 在本地和全局队列都没有可运行任务时补充任务。
 

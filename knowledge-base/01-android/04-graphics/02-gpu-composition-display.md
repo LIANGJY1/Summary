@@ -22,7 +22,7 @@
 
 ANGLE 把 GLES/EGL 调用翻译到 Vulkan 等 backend，应用仍提交 GLES 状态和 draw call；它是 GLES 驱动选项，不是新的应用 API，Android 15 起作为可选的 GLES-on-Vulkan 层。应用通过 manifest 元数据表达偏好：`<meta-data android:name="com.android.graphics.driver.prefer_angle" android:value="true"/>`——它只表达偏好，ANGLE 不可用时仍使用厂商 GLES driver。实际选路由 `GraphicsEnvironment` 按多级策略决定：半全局设置、每包设置、`config_angleAllowList`、denylist、游戏调试开关、再到 manifest 偏好，同时排除基础能力等级、low-RAM 及 vendor API level 低于门槛的设备；只有选路成立后，`EGL/Loader.cpp` 才优先加载 ANGLE，该阶段加载失败会触发 fatal 而非静默切回。开发期可用 `adb shell settings put global angle_gl_driver_selection_pkgs <pkg>` 与 `..._selection_values angle` 对单包强制选择，测试结束要清理全局设置；验证要看 `dumpsys gpu`、logcat 的 GraphicsEnvironment/EGL 信息与 `glGetString(GL_VENDOR/GL_RENDERER)`。性能结论必须同设备、同场景 A/B：ANGLE 增加状态翻译与 pipeline 缓存成本，也可能绕开质量较差的厂商 GLES 实现而更快，不能按 API 名称预判。
 
-**Q6: [learning] `SystemHealthManager.getGpuHeadroom()` 应该怎样正确调用？为什么不能放在 UI 线程或游戏 render loop 里？**
+**Q6: [learning] SystemHealthManager.getGpuHeadroom() 应该怎样正确调用？为什么不能放在 UI 线程或游戏 render loop 里？**
 
 它返回 `[0, 100]` 的 GPU 容量余量估计（API 36），0 表示系统无法再提供更多 GPU 资源；暂时无数据时返回 `Float.NaN`，设备不支持时抛 `UnsupportedOperationException`。官方文档说明每次有效调用至少包含一次同步 Binder transaction，可能超过 1 ms，首次调用或更换参数还可能因延迟初始化更慢，所以不能在 UI 线程、RenderThread 或关键 render loop 中调用或等待。正确做法是放到后台 executor，并用 `getGpuHeadroomMinIntervalMillis()` 读取设备声明的最小采样间隔，保证相邻查询不短于该值——调用频率高于该间隔时可能返回缓存结果。Headroom 是容量估计，不能区分片元、顶点或带宽瓶颈，也不表示某一帧的 GPU duration，应结合系统 thermal status、帧时间、GPU counter 与业务画质档位使用。
 
@@ -30,7 +30,7 @@ ANGLE 把 GLES/EGL 调用翻译到 Vulkan 等 backend，应用仍提交 GLES 状
 
 三类是按接口角色命名的同步边界：acquire fence 由 Producer 随新 buffer 提交，约束 Consumer/SF/HWC 何时可以读取；release fence 由 Consumer 释放旧 buffer 时返回，约束 Producer 何时可以复用；present fence 由 HWC present 按显示、按帧返回给 SF，是本轮显示提交的完成边界（物理屏是出现在屏幕上的完成点，虚拟显示是 output buffer 可安全读取）。名字随观察方变化：`queueBuffer()` 携带的生产完成 fence 在 `QueueBufferInput` 里叫 acquireFence，Producer 侧常称 GPU completion fence；`dequeueBuffer()` 返回的上一位 Owner fence 在 EGL/Vulkan 代码里叫 dequeue fence，站在 Producer 即将写入的视角就是 consumer release fence——描述语义时要注明观察方。边界方面：present fence 很接近显示完成但不是面板光学测量值，不能代替输入到显示延迟测试；fence signal 是单向状态变化，已 signal 不会回到 pending；`sync_file_info.status` 小于 0 表示 error，等待结束不代表 GPU 输出内容有效。`Fence::merge()`（内部 `sync_merge()`）适合表达"等待所有前置工作"，但不应为省一个 fd 而合并无关 fence，那会扩大等待范围并掩盖最慢依赖。
 
-**Q8: [learning] BufferQueue 的 slot 状态机里，"FREE"和"可以安全写入"是两个时间点吗？为什么 `releaseBuffer()` 不先等 fence signal？**
+**Q8: [learning] BufferQueue 的 slot 状态机里，"FREE"和"可以安全写入"是两个时间点吗？为什么 releaseBuffer() 不先等 fence signal？**
 
 是两个时间点。Android 17 的 `BufferState` 用 dequeue/queue/acquire 计数器加 shared 标志表达状态，普通单 Producer、单 Consumer 路径呈 FREE → dequeue → DEQUEUED → queue → QUEUED → acquire → ACQUIRED → release → FREE 循环；`releaseBuffer()` 把 slot 放回 FREE 集合并保存 release fence，无需先等 fence 完成。下一次 Producer 可能马上 dequeue 到该 slot，同时取得尚未 signal 的 fence，写入前必须等待它或把它导入 GPU 依赖。这样设计把所有权与异步访问解耦：slot 状态描述"所有权归谁"，fence 描述"旧读何时结束"；不等 fence 先归还，可以让 Consumer 不被阻塞、buffer 更快回到可选集合。诊断时要用 `isFree()`、`isDequeued()`、`isQueued()`、`isAcquired()`、`isShared()` 判断当前源码，不能套用旧版互斥 enum；shared buffer mode 下 `mShared` 与各计数可并存且可大于 1，状态不再总是四选一。
 
@@ -38,11 +38,11 @@ ANGLE 把 GLES/EGL 调用翻译到 Vulkan 等 backend，应用仍提交 GLES 状
 
 buffer 数量由运行时协商决定，"三缓冲"只适合描述常见工作形态。maxBufferCount 约束为 maxAcquiredBufferCount 加 maxDequeuedBufferCount，async 或不可阻塞模式再加 1，最终还受 `mMaxBufferCount` 上限限制；Android 17 的 `BLASTBufferQueue::initialize()` 给 Producer 默认 `setMaxDequeuedBufferCount(2)`，并向 SurfaceComposer 查询最大刷新率下建议的 acquired 数——SurfaceFlinger 按 present latency 与刷新周期计算建议值，其 release 信息还携带当前刷新率对应的 acquired 数。实际可用深度还取决于 DEQUEUED、QUEUED、ACQUIRED 的实时数量、BLAST 暂存的 pending release、buffer 是否需要重分配、release fence 的完成时间。另外 `BufferQueueCore` 默认准备 64 个 slot 索引，分布在 mFreeSlots（未绑定 buffer）、mFreeBuffers（仍绑定旧 buffer）、mUnusedSlots、mActiveBuffers 四类容器——64 是索引容量，不代表已分配 64 块内存；普通 `dequeueBuffer()` 优先复用 mFreeBuffers 里已分配的对象，无可复用对象且允许分配时才在 mFreeSlots 上创建新 `GraphicBuffer`。所以看到三个 buffer 只能说"三缓冲工作形态"，不能反推所有 Surface 都固定三块，也不能把 slot 复用当作 vendor 显存池。
 
-**Q10: [learning] 标准 App Window 的 `dequeueBuffer()` 变长时，Android 17 有哪几种不同的等待原因？各返回什么？**
+**Q10: [learning] 标准 App Window 的 dequeueBuffer() 变长时，Android 17 有哪几种不同的等待原因？各返回什么？**
 
 至少区分三种结果：一是历史标志已入队且 dequeued 数达到上限，直接返回 `INVALID_OPERATION`——这是调用状态不合法，不需要等待 Consumer release；二是没有满足条件的 free slot，async/non-blocking 模式下返回 `WOULD_BLOCK`，其余进入等待，配置超时时可能返回 `TIMED_OUT`；三是真正在等 Consumer 释放。把三者都归为"背压"会得出错误结论——背压专指下游消费不及使上游不能继续生产，需要返回码、Surface 模式、slot 数量与 Consumer 进度共同证明。标准 App Window 还要按 BLAST 专属路径分析：Android 17 的 `BBQBufferQueueProducer::waitForBufferRelease()` 释放 core mutex 后，用 epoll 在 `BufferReleaseChannel` 上同时监听 SF 的 buffer release 消息与本地 interrupt，而不是经典 `mDequeueCondition` 条件变量；release callback 携带 `ReleaseCallbackId`、release fence 与当前刷新率的 acquired 数。因此一条较长的 dequeue slice 不能只按 `mCore->mMutex` 被占用来解释，通用 BufferQueue 与 BLAST 的等待方式要分开分析。
 
-**Q11: [learning] `queueBuffer()` 返回之后到画面显示之间还剩哪些步骤？"BufferTX 增加"能证明新内容被显示了吗？**
+**Q11: [learning] queueBuffer() 返回之后到画面显示之间还剩哪些步骤？"BufferTX 增加"能证明新内容被显示了吗？**
 
 `queueBuffer()` 只完成 Producer 侧提交，其后还可能发生：GPU 继续执行写入命令；App 进程内的 BLAST acquire `BufferItem`，再用 `Transaction::setBuffer()` 把 buffer、acquire fence、frame number 打包进 SurfaceControl transaction；merge 后 `apply()` 到 SurfaceFlinger；本轮 SF latch 没有采用该 buffer；HWC 尚未 present。所以"App 是 Producer、SF 直接消费 BufferQueue"只适用于历史或独立 Surface 模型——Android 17 标准 App Window 的 Consumer 在 App 进程内的 BLAST，SF 接收的是带 buffer 与 fence 的图层事务。`BufferTX - <layerName>` 计数只说明 SF 记录了一笔 pending buffer update；计数在 latch 或 drop（丢弃更新）后都会下降，仅凭下降不能区分两种结果。确认系统采纳本帧要看目标 layer 的 transaction/latch 与关联 DisplayFrame，最终显示要再看 present fence 与 FrameTimeline 的 actual present。
 
@@ -58,7 +58,7 @@ Android 14 起 `Scheduler::onFrameSignal()` 统一帧入口：先为 pacesetter 
 
 五个对象分工：`TransactionHandler` 按 applyToken 排队，并用 timeline、buffer、barrier 过滤器决定本轮可应用的事务；`LayerLifecycleManager` 维护 `RequestedLayerState`（客户端请求合并后的服务端状态）与 layer 生命周期；`LayerHierarchyBuilder` 用图表达 parent、relative Z、mirror 关系；`LayerSnapshotBuilder` 把请求状态按 traversal path 计算成 z-order 排列的 `LayerSnapshot`；CompositionEngine 按 snapshot 为每个 Display 合成。三句话对应三个边界：进入 RequestedLayerState 只是请求状态更新；latch 是把就绪 buffer 接入图层状态，内容仍受 acquire fence 保护；present 还要经过 CompositionEngine、HWC 与显示设备。Android 17 的 FrontEnd 与 legacy Layer 共存：buffer latch、release callback 与部分历史行为仍由对应 Layer 执行 `latchBufferImpl()`，不要假设 legacy 路径已删除。snapshot 更新有 fast path——只有 Content 或 Buffer 变化时增量合并对应 snapshot；但 position、crop、alpha、parent 等字段可能影响子节点或可见区域，"只更新 buffer 更便宜"不能扩写成所有属性更新都只改一个对象。
 
-**Q15: [learning] `LocklessQueue` 的"无锁"到底覆盖 Android 17 SurfaceFlinger 的哪一段？它解决了什么、没解决什么？**
+**Q15: [learning] LocklessQueue 的"无锁"到底覆盖 Android 17 SurfaceFlinger 的哪一段？它解决了什么、没解决什么？**
 
 只覆盖事务入口的 MPSC 交接：Binder 线程把 `QueuedTransactionState` 用 CAS 头插推入 `TransactionHandler` 的 LocklessQueue，SF 主线程用 `exchange` 一次接管整批节点并反转链表恢复入队次序；该入口 Android 14 进入这条路径，Android 16 起元素为 QueuedTransactionState。它不满足 wait-free：CAS 在竞争下会重试，节点每次 push/pop 都有 `new/delete`，高竞争时消耗 CPU 与 cache coherence 带宽；SurfaceFlinger 主流程的 created layers、stalled 信息、display state 与 snapshot 共享状态仍在 `mCreatedLayersLock`、`mStalledMutex`、`mStateLock` 等锁下。它解决的是多 Binder 线程与 SF 主线程争夺入口 queue mutex 的锁竞争，让主线程一次接管一批事务；没有解决 desiredPresentTime 未到、队首等 acquire fence、barrier 未满足、下游合成变慢等任何就绪问题。收益取决于 Binder producer 数量、事务频率、CPU 拓扑与原有锁冲突程度，没有同设备同场景的对照数据不能写"节省若干毫秒"。
 
@@ -70,7 +70,7 @@ Android 17 依次注册三组 readiness filter：timeline 过滤器检查 desire
 
 `getDeviceCompositionChanges()` 在没有现存 client composition 且 Composer 支持 expected-present（或已到 earliest-present）时走 presentOrValidate 快路径：返回 PresentSucceeded 表示 present 已在该次调用中完成并直接取得 present fence 与 release fences（validateWasSkipped 为 true）；否则本次调用完成 validate，读取 composition type changes 后由 `acceptChanges()` 接受，存在 CLIENT layer 时先由 RenderEngine 生成 client target 并 `setClientTarget()`，最后走 `presentAndGetReleaseFences()`——分析 trace 时先确认 validateWasSkipped 与 PresentSucceeded 的含义，不能把所有帧画成"validate 后再 present"。同一 Display 的合成结果通常是混合：DEVICE 层由显示硬件 plane 处理，CLIENT 层由 RenderEngine 合成进 client target，还可能包含 SOLID_COLOR、CURSOR、DISPLAY_DECORATION 等类型（Android 17 AIDL Composition 枚举中没有通用 CLIENT_BYPASS）。DEVICE 只表示该层不进入 GPU client target：其他 CLIENT 层、App 渲染与 SF 特效仍占用 GPU，HWC/DPU 自身也有 validate、state programming、fence 与带宽成本；CLIENT 成本取决于 client 层的像素覆盖、格式、色彩转换、blur、shadow 等，不能按 layer 数量换算。某层能否保持 DEVICE 由整屏 layer 集合与设备能力共同决定，没有跨设备固定阈值，要以该帧 HWC validate 结果为准。
 
-**Q18: [learning] 一个 RGBA_1010102 的 buffer 被误标成 sRGB 会怎样？`Dataspace` 和 `PixelFormat` 是一回事吗？**
+**Q18: [learning] 一个 RGBA_1010102 的 buffer 被误标成 sRGB 会怎样？Dataspace 和 PixelFormat 是一回事吗？**
 
 不是一回事，误标会产生色偏或策略回退。`Dataspace` 由 Standard、Transfer、Range 三个字段组合（例如 BT2020_PQ 是 BT.2020 原色加 ST 2084 传递函数），描述消费者应如何解释像素；`PixelFormat`/gralloc format 只描述通道布局、位宽与数值类型。一个 RGBA_1010102 buffer 可以被错误标成 sRGB，一个标为 Display P3 的 buffer 也未必是 FP16——格式与 dataspace 必须同时正确，消费者才有机会还原颜色。未标记与误标的后果不同：未标记时系统按兼容规则解释，结果取决于入口与版本；误标为 sRGB 时 P3 数值按较小色域解释，误标为 P3 时 sRGB 数值按较大色域解释；只改 metadata 不转换像素通常直接产生色偏。缺少或错误 dataspace 还可能让 HDR 传递函数按 SDR 处理压坏高光、HWC 匹配不到能力而改变合成策略、截图与外接屏结果不同。排查色偏时，第一项证据应是 buffer 与 layer 的实际 dataspace，而不是图片文件名或应用声明的 colorMode。
 
@@ -90,7 +90,7 @@ Android 17 依次注册三组 readiness filter：timeline 过滤器检查 desire
 
 平均 FPS 只统计一段时间产出多少帧，不描述每帧停留多久。90 Hz 屏幕（周期约 11.11 ms）跑 60 FPS 内容（16.67 ms）时两者没有整数倍关系，若每次 GPU 完成就立即 present，相邻内容帧可能分别停留一个和两个刷新周期，计数接近 60 但运动发颤。queue-stuffing 是另一类问题：应用持续以最快速度提交，BufferQueue 积满后 render thread 周期性阻塞在 swap 或 acquire，帧率看似稳定，但输入采样落在更早的逻辑帧，触控到显示延迟增加。完整的 frame pacing 要同时约束三件事：从哪个节拍开始生产（render-loop tick）、何时提交（pacing 等待与在途帧上限）、buffer 期望出现在哪个显示周期（presentation target）；frame-rate vote（`ANativeWindow_setFrameRate()` / `Surface.setFrameRate()`）只声明内容帧率供系统选显示模式，不能替代提交时刻控制。Android 17 新增 `Surface.setProducerThrottlingEnabled()`（对应 `ANativeWindow_setProducerThrottlingEnabled()`）：设为 false 会关闭 `queueBuffer()` 处的 CPU 限速，适合已用 semaphore、fence 与有限在途帧做好显式同步的 Vulkan renderer；旧应用若把 present 中的 stall 当作隐式同步，直接关闭可能暴露资源复用错误，且该开关不取消 BufferQueue 容量、fence 语义与应用自身的在途帧上限，异步模式下 throttling 始终启用。
 
-**Q23: [learning] Swappy 的 Auto 模式是"90/45/30 FPS 三档阈值表"吗？它的提交链比一次 `eglSwapBuffers()` 多做了什么？**
+**Q23: [learning] Swappy 的 Auto 模式是"90/45/30 FPS 三档阈值表"吗？它的提交链比一次 eglSwapBuffers() 多做了什么？**
 
 不是固定档位表。`SwappyCommon::calculateSwapInterval(frameTime, refreshPeriod)` 在运行时计算：frameTime 小于 refreshPeriod 取 1，否则整数除法，余数超过 `REFRESH_RATE_MARGIN`（500 ns）再向上补 1；以 90 Hz 设备 22 ms 的 frame time 为例会算出 interval 2（约 22.22 ms 的展示节奏），来自运行时计算而非"45 FPS 档"。源码常量另有含义：`mAutoSwapIntervalThreshold` 默认 50 ms（观测帧时超过后 auto mode 不再主动 sleep 以便追赶，不是建议帧预算），FrameDurations 的采样窗口是 2 s。提交链上，`SwappyGL::swapInternal()` 在 swap 前插入 `EGL_SYNC_FENCE_KHR` 并由内部 waiter thread 异步观察完成状态，把上一帧 GPU 进度反馈给 SwappyCommon；onPreSwap 按 Choreographer 时序、上一帧完成情况、pipeline mode 与目标 swap duration 决定是否等待；需要时设置 presentation timestamp，且目标时刻离下一次 VSync 太近时会跳过设置，避免一个已失去意义的目标；onPostSwap 记录本次提交并推进下一次目标时刻。Vulkan 侧必须在 `vkCreateDevice()` 前用 `SwappyVk_determineDeviceExtensions()` 合并所需扩展，swapchain 重建前调 `SwappyVk_destroySwapchain()`、device 结束时调 `SwappyVk_destroyDevice()`。Swappy 是随 APK 分发的 AGDK 库而非平台 API，排查线上问题要记录实际打包版本。
 
@@ -98,7 +98,7 @@ Android 17 依次注册三组 readiness filter：timeline 过滤器检查 desire
 
 不能。`Choreographer.postFrameCallback` 或 `AChoreographer` 只把 CPU 工作起点对齐到显示节拍，没有 presentation timestamp、GPU 完成反馈与在途帧控制，官方 Frame Pacing 文档明确指出单独使用仍可能在长帧场景触发 buffer stuffing。frame-rate vote 与 pacing 互补：vote 帮助系统为内容选择合适刷新率，pacing 决定每帧落在哪个显示周期；只投票不控制提交，短帧长帧仍会交替；只控制提交不声明内容率，120 Hz 屏也可能为 60 FPS 内容做不必要的刷新。注意不要在同一个 `ANativeWindow` 上同时让 Swappy 和业务代码持续写 frame-rate vote——它们更新的是同一 Surface 的当前 vote，后续写入覆盖先前设置，容易造成显示模式选择与 pacing 目标来回变化。同理，`Thread.sleep()` 达到目标 FPS 不知道 VSync 相位、队列深度与 GPU 完成状态；Vulkan 的 `VK_PRESENT_MODE_FIFO_KHR` 只保证队列顺序与 VBlank 语义，不提供 Android 的 pacing 反馈。
 
-**Q25: [learning] Android 17 的 `VK_EXT_present_timing` 能查询哪些显示阶段？设备是 Android 17 就一定能用吗？**
+**Q25: [learning] Android 17 的 VK_EXT_present_timing 能查询哪些显示阶段？设备是 Android 17 就一定能用吗？**
 
 该扩展（Android 17/API 37 起支持）允许按 present ID 查询 REQUEST_DEQUEUED、QUEUE_OPERATIONS_END、IMAGE_FIRST_PIXEL_OUT、IMAGE_FIRST_PIXEL_VISIBLE 等阶段的时序反馈，并支持为 present 请求指定目标时间。Android 17 的 AOSP swapchain 实现把前两阶段分别映射到 render-complete 与 composition-latch 时间戳，后两阶段目前都映射到同一个 actual-present 时间戳，不能用两者之差估算 scan-out 时长。使用前提：设备创建时启用 `VK_EXT_present_timing` 与前置 `VK_KHR_present_id2`，并通过 `VkPhysicalDevicePresentTimingFeaturesEXT`、`VkPhysicalDevicePresentId2FeaturesKHR` 查询启用 feature；swapchain 创建加 `VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT`；查询历史前用 `vkSetSwapchainPresentTimingQueueSizeEXT()` 配置反馈队列。feature 或扩展缺失时按官方文档回退 `VK_GOOGLE_display_timing` 或 Swappy。AOSP loader 还有额外条件（SurfaceFlinger present timestamp 属性、平台 flag、ICD 支持 calibrated timestamps）才暴露该扩展，所以"系统是 Android 17"不能代替 `vkEnumerateDeviceExtensionProperties()` 与 feature 查询。另需注意 AGDK games-frame-pacing 的 release 实现按 `VK_GOOGLE_display_timing` 可用性选择内部实现，并未使用 `VK_EXT_present_timing`——设备枚举出新扩展不代表现有 Swappy 会自动切换到新接口。
 

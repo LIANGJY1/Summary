@@ -14,13 +14,13 @@ Perfetto 是 Google 开源的 tracing 基础设施，包含采集端（data sour
 
 采集配置决定分析上限：启用调度事件才能还原线程何时运行，启用 Binder、FrameTimeline 或应用标记后才能回答对应问题；空白轨道只说明这份 trace 没有该证据，不能推断系统没有发生相应行为。采集端、分析端与 UI 可独立升级，排查解析差异时要同时记录设备 build 与工具版本。历史脉络上，Systrace（Android 4.1 引入，ftrace + atrace 生成 HTML 报告）已被取代：Android 9 起 `traced` / `traced_probes` 进入系统镜像，Android 10 完整可用，Android 11 起大多数设备默认启用（官方文档口径）。
 
-**Q2: [learning] `traced` 与 `traced_probes` 在采集链路中各负责什么？为什么不能说 `traced_probes` 以 root 运行？**
+**Q2: [learning] traced 与 traced_probes 在采集链路中各负责什么？为什么不能说 traced_probes 以 root 运行？**
 
 `traced` 是 Perfetto 的 tracing service，管理采集会话、central buffer（会话级中央缓冲区）与结果交付；`traced_probes` 是系统 probe Producer，代替 service 读取 ftrace、`/proc`、`/sys`、log 与功耗等受权限保护的数据。二者职责不同，权限差异来自进程所属 group、Linux capability 与 SELinux domain 策略，而不是 root 身份。
 
 数据流向是：Producer 先把序列化的 trace packet 写进与 service 共享的 shared memory，service 再提交进会话的 central buffer；ftrace 事件还多一层内核 per-CPU buffer，由 `traced_probes` 周期读取。本地 AAOS13 树的 `system/sepolicy/private/` 下存在 `traced.te`、`traced_probes.te`、`traced_perf.te`、`perfetto.te`，其中 `traced_probes` 对 `debugfs_tracing` 目录有读写权限——证明这两个进程是独立 SELinux 域而非 root 兜底。Android 9/10 的非 Pixel 设备常见需要手动设置 `persist.traced.enable=1` 启用服务（该属性在 AAOS13 的 sepolicy property_contexts 中同样存在），Android 11 起大多数设备默认启用（官方文档口径）。
 
-**Q3: [learning] 从 Android 9 到 Android 12+，向 `perfetto` CLI 传入采集配置的方式有什么版本差异？**
+**Q3: [learning] 从 Android 9 到 Android 12+，向 perfetto CLI 传入采集配置的方式有什么版本差异？**
 
 `perfetto` CLI 的 normal mode 接收 protobuf 编码的 `TraceConfig`（设备端不接受 JSON 配置）；差异集中在文本配置的可用性上：Android 9 只接受预先序列化的 binary protobuf，不支持 `--txt`；Android 10 起 `--txt` 可以读取人类可读的 PBTX 文本；Android 12+ 的 `perfetto.rc` 创建 `/data/misc/perfetto-configs/` 专用目录，shell 可推送配置后直接引用。
 
@@ -32,7 +32,7 @@ Perfetto 是 Google 开源的 tracing 基础设施，包含采集端（data sour
 
 simple mode 用短参数（如 `-t 10s sched freq idle am wm gfx view`）在 CLI 内部生成受限配置，只覆盖 ftrace/atrace 子集，仍依赖 `traced` / `traced_probes`，并没有绕过 tracing service。非交互 ADB 会话里 Ctrl+C 不一定能可靠停止采集，可复现场景应设置 `-t` 时长。
 
-**Q4: [learning] `TraceConfig` 的 `fill_policy` 与 long trace 写盘字段分别决定什么？**
+**Q4: [learning] TraceConfig 的 fill_policy 与 long trace 写盘字段分别决定什么？**
 
 `fill_policy` 决定 central buffer 满时保留哪一端：默认的 `RING_BUFFER` 用新数据覆盖旧数据，适合保留停止采集前的时间窗；`DISCARD` 在写满后拒收新数据，保留会话开始后的早期证据——会话本身不停止，不能把 DISCARD 理解为"满后立刻结束 trace"。选择前先确定要保留问题发生前还是会话开始后的证据。
 
@@ -55,13 +55,13 @@ long trace 通过 `write_into_file: true` 让 service 周期性把 central buffe
 
 userdebug/eng 调试镜像可以把 profiling 扩大到更多系统进程。遇到空结果时先按这张清单核对资格与配置，而不是先怀疑查询写错。
 
-**Q6: [learning] `android.os.Trace` 的公开 API 有哪几个？同步区间、异步区间和 Counter 分别怎么正确使用？**
+**Q6: [learning] android.os.Trace 的公开 API 有哪几个？同步区间、异步区间和 Counter 分别怎么正确使用？**
 
 公开 API 只有 6 个方法：`beginSection(String)` / `endSection()`（API 18 引入），`beginAsyncSection(String, int)` / `endAsyncSection(String, int)`、`setCounter(String, long)`、`isEnabled()`（均为 API 29 引入）——AAOS13 的 `frameworks/base/core/api/current.txt` 核对了这一公开面。把异步与 Counter 写成 API 18 能力会让低版本应用在验证或运行时失败。
 
 使用约束：同步区间必须在同一线程按栈结构嵌套，`endSection()` 结束当前线程最近未闭合的 section，异常路径要用 `finally` 保证闭合；异步区间可跨线程、不要求嵌套，但 begin/end 必须用相同名称与相同 `int` cookie 配对，时间重叠的同名任务必须用不同 cookie；`setCounter` 每次写入一个绝对值样本，不要用大量零时长区间模拟计数器。名称上限是 127 个 Unicode code unit（AAOS13 `Trace.java` 的 `MAX_SECTION_NAME_LEN = 127`；UTF-16 计数，一个补充平面字符占两个单位），`|`、换行与空字符由底层替换为空格；超长名称抛 `IllegalArgumentException`。名称宜用稳定操作名，动态 ID 放进 cookie 或 Counter，避免产生大量难以聚合的 slice 名称。抓取配置还要把包名放进 `atrace_apps`，否则 App 的 `ATRACE_TAG_APP`（值为 `1 << 12`，AAOS13 `cutils/trace.h` 核对）事件不会进入这次 system trace。`isEnabled()` 只适合控制观测开销（如懒构造格式化字符串），不能参与鉴权或业务分支；带 `traceTag` 参数的 `traceBegin`、`asyncTraceForTrackBegin/End`、`instant` 等重载是 `@hide`/`@SystemApi`，不属于普通应用 SDK（AAOS13 源码核对）。NDK 侧 `<android/trace.h>` 的同步 API 自 API 23 起可用，异步与 Counter 自 API 29 起（AAOS13 头文件注释核对）。
 
-**Q7: [learning] 在 Android 13 上，`Trace.beginSection()` 的事件实际走哪条路径？"每个埋点都双写 ATrace 和 Perfetto"的说法对吗？**
+**Q7: [learning] 在 Android 13 上，Trace.beginSection() 的事件实际走哪条路径？"每个埋点都双写 ATrace 和 Perfetto"的说法对吗？**
 
 AAOS13 上 Java Trace 走单一 libcutils 路径：JNI（`android_os_Trace.cpp`）把各 API 直接转发给 libcutils 的 `atrace_begin/end/async_begin/async_end/instant` 等函数（本地源码核对），经典 `ATRACE_*` 实现在 `trace-dev.cpp` 中打开 `/sys/kernel/tracing/trace_marker`（失败回退 `/sys/kernel/debug/tracing/`），写文本 marker 进 ftrace 的 print 事件，再由 Perfetto 解析成 slice 或 counter。
 
@@ -85,7 +85,7 @@ AAOS13 的 `system/memory/lmkd/lmkd.cpp` 在杀进程路径上使用 `ATRACE_INT
 
 其他手段按需选择：不需要通用 ftrace 原始表时用 `--no-ftrace-raw` 降低内存；`traceconv` 转文本/JSON 通常更大且转换只保留目标格式能表达的数据，不是无损往返；`BatchTraceProcessor` 为每份 trace 启动独立实例，官方粗算内存约 `2 × 平均文件大小 × Trace 数量`，批大小按主机内存实测。版本固定是复现的硬前提：Trace Processor 的表、标准库模块和查询行为随版本演进，`pip install perfetto` 的包会绑定对应二进制版本，生产流水线应在依赖锁文件固定包版本或用 `bin_path` 指向受审核的二进制并记录校验和；`fetch_latest_trace_processor` 会让同一脚本在不同日期下载不同二进制，产生版本漂移。trace 含进程名、线程名与业务标识，`server http` 只应监听回环地址，公开 URL/外发前先脱敏。
 
-**Q10: [learning] `slice.dur`、`thread_dur` 与 Self Duration 三种时间分别是什么？为什么 NULL 不能按 0 处理？**
+**Q10: [learning] slice.dur、thread_dur 与 Self Duration 三种时间分别是什么？为什么 NULL 不能按 0 处理？**
 
 `slice.dur` 是 slice 起点到终点的墙上时长（时间轴上的宽度），线程在这段时间可能运行、等待 CPU、休眠或阻塞；`thread_dur` 是 slice 消耗的线程时间，只有 Track Event 开启线程时间采集时才填充，Android ATrace 产生的普通 slice 往往没有这个字段；Self Duration 是嵌套概念，用 `slices.self_dur` 标准库计算父 slice 墙上区间扣除同栈子 slice 覆盖后的自身墙上时长，不等于函数自身的 CPU 时间，也不扣除另一条线程上的异步工作。
 
@@ -105,7 +105,7 @@ Linux 的 `TASK_RUNNING` 定义为 0，同时覆盖"正在 CPU 上执行"与"具
 
 数据落点是两张表：`sched_slice` 从 CPU 视角记录"哪个 `utid` 在哪个 CPU 上运行多久"，`thread_state` 从线程视角记录连续状态并附带 CPU、`io_wait`、`blocked_function`、waker 等可选字段；`dur = -1` 表示区间未闭合（trace 结束或数据丢失），聚合时应排除。`utid`/`upid` 是 Trace Processor 在一份 trace 内分配的线程/进程唯一标识，用于区分被操作系统复用后的 PID/TID。UI 颜色会随主题与版本变化，结论应写状态名或 SQL 值。
 
-**Q12: [learning] 线程处于 D 状态能直接判为磁盘 I/O 慢吗？`io_wait` 和 `blocked_function` 什么时候才有值？**
+**Q12: [learning] 线程处于 D 状态能直接判为磁盘 I/O 慢吗？io_wait 和 blocked_function 什么时候才有值？**
 
 不能。`TASK_UNINTERRUPTIBLE` 只说明等待条件不会被普通信号打断，来源覆盖块 I/O、swap、内存回收、页迁移、驱动等待和内核同步路径；磁盘 I/O 只是常见来源之一。没有进一步证据时应写"Uninterruptible Sleep，原因未由本次 trace 识别"。
 
@@ -160,7 +160,7 @@ Running 只表示线程占据了某个 CPU 的任务时间线，可能在用户�
 
 做法是求半开区间交集：对每条 `thread_state` 行计算 `MIN(state_end, window_end) - MAX(state_ts, window_start)`，只累计真正重叠的片段，`dur = -1` 的未闭合区间先裁到 `trace_end()`；工具侧 `sched.time_in_state` 标准库提供 `sched_time_in_state_for_thread_in_interval(开始时间, 时长, utid)` 区间函数可直接使用（材料口径）。输出按 state、`io_wait`、`blocked_function` 分组，Running 为主查调用栈与 IRQ，`R` 为主查唤醒与调度约束，`S` 为主查 Binder/锁/waker，`D` 为主查 I/O 与内核路径。结论至少包含业务区间、`utid`/`upid`、状态时长与至少一种独立旁证。另注意：D 状态本身不触发 ANR——ANR 由输入分发、广播、Service 等框架监控条件判定，D 只有在阻止受监控工作按时完成时才进入因果链，不存在"D 状态超过 N 秒就 ANR"的通用规则。
 
-**Q20: [learning] 调大 `TraceConfig.buffers.size_kb` 为什么不一定解决丢包？`stats` 表应该怎么查、哪些项容易漏？**
+**Q20: [learning] 调大 TraceConfig.buffers.size_kb 为什么不一定解决丢包？stats 表应该怎么查、哪些项容易漏？**
 
 因为丢包可能发生在三层 buffer 的任何一层，`buffers.size_kb` 只作用于第三层：内核 per-CPU ftrace buffer（由 `ftrace_config.buffer_size_kb` 控制且单位是每 CPU）、Producer 与 service 之间的 shared memory、以及 `traced` 的 central buffer。只调大 central buffer 不解决 ftrace overrun，也不解决 producer 突发写满 shared memory。
 
@@ -193,13 +193,13 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 
 埋点治理要点：名称用稳定、低基数的操作名，动态标识放 cookie、counter 或受控字段；账号、URL、文件路径、token 不进 trace；高频循环先估算事件速率再决定采样或缩小范围。开销没有跨设备固定值：官方经验值约为每个区间 5 μs（启用态 ATrace 单事件量级 1–10 μs，材料口径），trace 关闭时走快速检查但不是零开销，应目标设备实测。发布包不要用 `-assumenosideeffects class android.os.Trace` 全局清除——该 R8 规则假定方法无副作用，会删除应用与依赖库的所有调用点并让诊断能力随构建配置漂移；更可控的做法是包装自己的可选埋点，用构建期常量（如 `BuildConfig.ENABLE_APP_TRACE`）让 R8 只移除不可达分支。
 
-**Q24: [learning] `android_input_events` 与 `android.input.inputevent` 的三张原始视图是什么关系？为什么不能桥接？**
+**Q24: [learning] android_input_events 与 android.input.inputevent 的三张原始视图是什么关系？为什么不能桥接？**
 
 两条独立链路。`android_input_events`（标准库 `android.input` 派生，工具侧行为按材料口径）由 ATrace 与 FrameTimeline 派生：`sendMessage`/`receiveMessage` 建立四段消息节点，`UnwantedInteractionBlocker::notifyMotion` 提供事件 ID 与读取时间，`deliverInputEvent` 与 `Choreographer#doFrame` 建立帧关联——常规 user 量产构建即可采集，前提是配置包含 `input`/`view`/`gfx` 类别、目标应用与 FrameTimeline 数据源。`android_motion_events`、`android_key_events`、`android_input_event_dispatch` 来自 `android.input.inputevent` 调试数据源，配置协议限定只能在 `userdebug`/`eng` 构建启用，记录 InputDispatcher 处理的原始事件字段与窗口分发决策。
 
 两者不能当作同一张表拆分后的结果：原始视图的 `event_id` 是数值型，生命周期表的 `input_event_id` 来自 ATrace 名称（通常是 `0x` 前缀的十六进制文本），标准库没有公开稳定的桥接视图，`CAST` 后等值连接可能把格式差异或 ID 碰撞误当成同一事件。原始视图查询时还要注意：同一事件会投递给前台窗口、监视窗口等多个目标，`android_input_event_dispatch` 出现多行不是重复数据；坐标、按键码等敏感字段受脱敏等级影响可能为 NULL，查询必须允许缺失。
 
-**Q25: [learning] `android_input_events` 的四段延迟和 `end_to_end_latency_dur` 分别怎么定义？怎么解读分段异常？**
+**Q25: [learning] android_input_events 的四段延迟和 end_to_end_latency_dur 分别怎么定义？怎么解读分段异常？**
 
 四段往返延迟基于同一事件的四个消息节点（工具侧标准库定义，材料口径）：`dispatch_latency_dur` = 应用收到 − Dispatcher 发出；`handling_latency_dur` = 应用发 `FINISHED` − 应用收到；`ack_latency_dur` = 系统收到确认 − 应用发出；`total_latency_dur` = 发出 − 收到确认。`end_to_end_latency_dur` 定义为 `present_time - read_time`（InputReader 读取到关联帧呈现），无帧关联时为 NULL。
 
@@ -211,7 +211,7 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 
 由此产生的限制：推测关联只说明时间最接近，不能证明该输入触发了该帧；被丢弃的应用帧会让 `frame_id` 指向后续未丢弃帧；一帧可以合并多个 MOVE 事件，输入行与帧不是一一关系。字段边界：标准库内部对象 `_input_read_time` 只匹配 motion 事件的 `notifyMotion` slice，按键事件可以有完整往返延迟却没有 `read_time`、`event_time` 与呈现延迟；`event_time` 是 InputReader 的 ATrace 输出携带的事件时间，比 `dispatch_ts` 更靠近设备事件，但不能描述成触摸控制器中断时间。把输入结果连接 `android_frames` 时应同时用 `frame_id` 与 `upid` 条件，避免不同进程复用 Vsync ID 造成误连；帧持续时间长不等于输入处理慢，还要展开 `doFrame`、RenderThread 与调度上下文。
 
-**Q27: [learning] InputDispatcher 的 `iq`、`oq`、`wq` 队列计数器在 trace 里长什么样？怎么把采样点变成区间？**
+**Q27: [learning] InputDispatcher 的 iq、oq、wq 队列计数器在 trace 里长什么样？怎么把采样点变成区间？**
 
 AAOS13 的 `InputDispatcher.cpp` 用 ATrace 计数器记录三类队列（本地源码逐字核对）：`iq` 是尚未处理的全局入站队列；`oq:<窗口名>` 是该连接上等待写入应用输入通道的出站队列；`wq:<窗口名>` 是已写给应用、仍等待 `FINISHED` 确认的等待队列。名称用固定 40 字节栈缓冲拼接（`char counterName[40]`），过长的通道名会被截断；旧文档中 "InputDispatcher inbound queue" 之类的名称不是源码写法，查询用 `GLOB 'oq:*'`、`GLOB 'wq:*'` 前缀匹配并 JOIN `process_counter_track` 限定 `system_server`。
 
@@ -225,7 +225,7 @@ FROM counter ...;
 
 `LEAD()` 按同一 `track_id` 取下一采样时刻，末条用 `trace_end()` 兜底。解读：瞬间非零是正常流转；持续的 `iq` 表示入站未消费完，持续 `oq` 表示连接上有待写入事件，持续 `wq` 表示还有事件在等确认——队列堆积能缩小范围，但不能单独证明是主线程、socket 写入还是 `system_server` 调度的根因。
 
-**Q28: [learning] 分析输入 ANR 时，为什么 `android_input_events` 里可能没有卡住的那个事件？正确的证据组合是什么？**
+**Q28: [learning] 分析输入 ANR 时，为什么 android_input_events 里可能没有卡住的那个事件？正确的证据组合是什么？**
 
 `android_input_events` 的一行要求四个消息节点（发出、接收、FINISHED、确认）都匹配成功；触发 ANR 的事件往往停在等待队列里没有 `finish_ack`，因此不会出现在结果里——"表里没有"不等于"输入没发生"。
 
@@ -248,7 +248,7 @@ atrace category 不是事件的别名，而是一组采集开关：`view`、`wm`
 
 两个版本相关点：AAOS13 的 Java Trace 走 trace_marker 单路径（见前文），Android 15+ 才有 TrackEvent 路径可选；用户空间埋点不可见时先查包名是否进了 `atrace_apps`、事件是否落在采集窗口内。定位后一次只改一个采集变量，并用同一复现验证；文件成功生成只证明会话结束并拿到输出，不证明数据完整。
 
-**Q31: [learning] `SPAN_JOIN` 的输入要满足什么条件？违反约束会怎样？各变体怎么选？**
+**Q31: [learning] SPAN_JOIN 的输入要满足什么条件？违反约束会怎样？各变体怎么选？**
 
 `SPAN_JOIN` 计算两组时间区间的交集，输入要求：两侧都有 `ts` 且至少一侧有 `dur`（做区间分析应两侧都显式提供）；区间为半开形式 `[ts, ts + dur)`；`dur > 0`，`dur = -1` 的开放区间先裁到查询窗口或 `trace_end()`；分区列必须是整数且两侧表达同一实体（`utid` 对 `utid`、`ucpu` 对 `ucpu`），`PARTITIONED` 两侧列名相同，也可以只给一侧分区。
 
@@ -268,7 +268,7 @@ atrace category 不是事件的别名，而是一组采集开关：`view`、`wm`
 
 两个使用边界：进程在启动期间死亡重建时，一个 `startup_id` 可能关联多个 `upid`，TTID/TTFD 仍是该启动实例的一组时间；`android.startup.startup_breakdowns` 会把主线程 slice 与 `thread_state` 裁成互斥区间并生成 `reason`，但 reason 是标准库的派生分类、不是设备直接记录的原始事件，适合筛选候选原因，仍要用原始时间线与源码确认；模块源码建议采集 Binder、ART、`am`、`view` 事件，缺少时分类变粗。统计启动区间内的 Binder 事务时，要同时满足 `upid` 匹配与时间相交，且各事务可能互相重叠——`SUM(client_dur)` 是时长之和，不是启动区间中的独占时间。
 
-**Q34: [learning] `android_jank_cuj` 为什么看不到第三方 App 的 CUJ？系统 CUJ 指标的输入和第三方路径分别是什么？**
+**Q34: [learning] android_jank_cuj 为什么看不到第三方 App 的 CUJ？系统 CUJ 指标的输入和第三方路径分别是什么？**
 
 因为标准库对输入有明确过滤：CUJ 必须是 `process_track` 上持续时间大于零、名称匹配 `J<*>` 的 slice，且进程名匹配 `com.android.*` 或 `com.google.android*`（工具侧 `android.cujs.base` 的源码行为）——第三方 App 写出同名标记也不会进表。本地 AAOS13 源码可佐证系统侧的产生机制：`InteractionJankMonitor` 用 `J<%s>` 格式写 CUJ 标记，`FrameTracker` 结束时经 `Trace.traceCounter` 写出 `J<CUJ>#totalFrames`、`#missedFrames` 等计数器。
 

@@ -13,7 +13,7 @@ Android Auto 的应用运行在连接的手机上，车机负责显示与输入�
 5. **发布和 host 支持：**截至 2026-10，官方模板媒体应用说明 AAOS 17 及以上车辆会完整支持 Car App Library 媒体能力。旧 AAOS 车辆要核对其 host 能力。Android Auto 模板媒体应用仍处于 beta/early access 发布范围，不能只根据手机 Android 版本判断其可发布范围。
 6. **性能定位：**Android Auto 的输入、手机应用处理、模板返回和车机显示构成跨设备链路。AAOS 通常是车内单设备链路。没有车端 trace 时，可用高速摄像和可识别的输入/画面标记测量触摸到可见反馈时间，但这种测量只能给出端到端时延，不能单独归因某一段。
 
-**Q2: [learning] Car App Library 模板应用的冷启动怎样避免阻塞 `onGetTemplate()`？**
+**Q2: [learning] Car App Library 模板应用的冷启动怎样避免阻塞 onGetTemplate()？**
 
 `onGetTemplate()` 是同步回调，host 需要它返回一个合法模板才能显示页面。因此它只应根据已准备好的界面状态快速构造模板，不应在回调中等待网络、数据库迁移、图片解码或路线计算。
 

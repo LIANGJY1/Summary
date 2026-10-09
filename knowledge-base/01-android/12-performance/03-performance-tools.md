@@ -14,11 +14,11 @@
 
 分类统计来自系统报告的 App 私有已提交内存页，不包含与系统或其他 App 共享的页面，因此不等于 RSS 或 PSS；Graphics 包含图形缓冲区队列、GL surface 和 GL texture 等 CPU/GPU 共享内存，不是独立的 GPU 显存。曲线上升只是候选时段：缓存扩容、延迟 GC、原生分配器保留空闲页、Bitmap 或图形缓冲区的生命周期，以及测试路径没有回到同一状态，都能产生相似曲线；进程 RSS 没有立即下降也不等价于 Java 对象仍存活。泄漏结论需要可重复路径、明确的生命周期预期、多轮 GC 后对象数仍单调增长，以及从 GC Root 追到的引用链。配套任务上，Java/Kotlin allocation 默认 Full 记录全部分配、可切 Sampled（结果为估计值），Android 7.1 及以下最多保存 65,535 条分配记录而 Android 8.0 及以上没有这项限制（材料口径）；Native allocation 任务按累计分配字节数触发采样（材料标注当前默认 2,048 字节），其 Native Remaining Size 只描述窗口内分配减释放的净变化，不能直接证明窗口结束后仍有泄漏。
 
-**Q4: [learning] `<profileable>` 与 `debuggable` 两种构建在 Profiler 能力上差在哪？接近发布的性能问题为什么要先用 profileable 构建采集？**
+**Q4: [learning] <profileable> 与 debuggable 两种构建在 Profiler 能力上差在哪？接近发布的性能问题为什么要先用 profileable 构建采集？**
 
 能力边界由 manifest 属性决定：`<profileable>`（Android 10 / API 29 加入）只开放受控的低扰动采集，System Trace、Callstack Sample、Native allocations 等任务可用；Java/Kotlin allocations、heap dump 和 Interaction timeline 需要 `debuggable` 构建。Studio 菜单中的 `Profile 'app' with low overhead` 对应 profileable 路径，`Profile 'app' with complete data` 对应 debuggable 路径；官方推荐环境是 API 29 及以上、带 Google Play 的测试设备并使用 AGP 7.3 及以上（材料口径）。debug 构建自身的开销会改变 Java、JNI 和编译优化行为，所以只在接近发布的构建中出现的问题应先用 profileable release variant 采集，确认范围后再制作尽量小的 debuggable variant 复现 Java 堆问题。若问题只出现在真实用户设备上，Android 15（API 35）起的 ProfilingManager 提供另一套受系统限流和脱敏约束的生产采集入口。
 
-**Q5: [learning] simpleperf 的 `stat`、`record`、`report` 各产出什么证据？报告里的 Overhead 为什么不能一律当墙钟时间读？**
+**Q5: [learning] simpleperf 的 stat、record、report 各产出什么证据？报告里的 Overhead 为什么不能一律当墙钟时间读？**
 
 `stat` 汇总事件计数，回答"消耗了多少"；`record` 以指定事件触发周期采样，把程序计数器、线程、映射与可选调用栈写入 `perf.data`，回答"消耗发生在哪"；`report` 读取同一 `perf.data`，默认按 `comm,pid,tid,dso,symbol`（进程/线程名、PID、TID、动态共享库、函数符号）聚合样本，回答"样本如何归属"。Overhead 是条目占所选事件总权重的比例，而不同事件衡量的量不同：`task-clock` 是线程在 CPU 上运行的时间，`cpu-cycles` 受 CPU 频率、微架构和迁核影响，`instructions` 是已退休指令数，所以 Overhead 不能一律解释为现实中经过的时间。`record` 产生的是离散样本，占比接近只表示所选事件的权重接近，不证明调用次数接近。`-f 1000` 表示线程处于运行态时每秒约采样 1000 次——线程一秒只运行 200 ms 时样本量约 200 个；`-c 100000` 则按事件累计值采样，每累计十万个所选事件产生一个样本。事件加 `:u` 后缀只统计用户态，适合分析应用代码并减少无符号内核帧干扰。
 
@@ -31,11 +31,11 @@ simpleperf report -i perf.data -g --sort comm,pid,tid,dso,symbol
 
 授权分三种场景：`profileable` 发布应用允许 shell 通过预装工具采样（manifest 声明 `<profileable android:shell="true">`，它不把应用改成 debuggable，也不授予读取进程内存的权限）；`debuggable` 应用可走 run-as 流程，但 debug 构建会改变 Java、JNI 和编译优化行为，材料按 Android 17 核对时 `app_profiler.py` 默认拒绝这类构建，接受偏差需显式传入 `--unrepresentative_profile_debug_app`；root 或 userdebug/eng 构建可分析普通发布应用、原生系统进程或全系统目标。版本差异来自权限模型：Android 16 起（材料引 `environment.cpp` 的实现注释）侧载的 simpleperf 二进制不再拥有获取内核样本所需的权限，应用采样优先由 `simpleperf_app_runner` 启动设备内置 Simpleperf；此前版本（包括 Android 13）优先走 run-as 路径。simpleperf 源码不在本地 AAOS13 树，以上按材料转写。动手前先用 `run_simpleperf_on_device.py list --show-features` 与 `list` 探测设备能力和事件清单：采集时返回 `permission denied`、`not supported`、`event not found` 分别指向权限、内核/硬件支持、事件名称三类不同问题。
 
-**Q7: [learning] simpleperf 的 `-g` 默认怎么还原调用栈？帧指针模式什么时候更快、什么时候反而断栈？丢样了按什么顺序排查？**
+**Q7: [learning] simpleperf 的 -g 默认怎么还原调用栈？帧指针模式什么时候更快、什么时候反而断栈？丢样了按什么顺序排查？**
 
 `-g` 默认选择 DWARF 调用栈：内核为样本保存寄存器和用户栈数据，simpleperf 用 `libunwindstack` 离线展开，依赖 ELF 中的 `.eh_frame`、`.debug_frame`、`.ARM.exidx` 或 `.gnu_debugdata`；材料按 Android 17 核对的单样本栈数据上限是 65,528 字节，深栈仍可能在到达线程入口前截断。`--call-graph fp` 让内核沿帧指针取调用链，在保留帧指针的 ARM64 原生代码上开销较低；但 ART 不保证为 Java 代码保留合适的帧指针，32 位 ARM/Thumb 混合代码也容易断栈，所以 FP 报告更短可能只是代码没有保留帧指针，与调用深度无关。比较两种模式应看 `[unknown]` 比例、栈深、热点归属和业务指标扰动。出现丢样时按顺序定位：先降低 `-f` 确认丢样是否随采样率下降；只有内核丢样时逐步增大 `-m`（每 CPU 的内核缓冲页数，必须是 2 的幂）；用户态缓冲不足或栈被截断时增大 `--user-buffer-size`；再缩短时长、减少目标线程或改用 FP。每次只改一个变量，并记录工具结束时的 `Samples recorded`、`Samples lost` 和 `truncated stacks` 统计。
 
-**Q8: [learning] 线程因锁或 I/O 离开 CPU 的时间，普通 CPU 采样为什么采不到？`--trace-offcpu` 怎么补齐，边界是什么？**
+**Q8: [learning] 线程因锁或 I/O 离开 CPU 的时间，普通 CPU 采样为什么采不到？--trace-offcpu 怎么补齐，边界是什么？**
 
 普通 CPU 采样只在线程运行（on-CPU）时产生样本；线程因抢占、锁、I/O 或其他等待而未在 CPU 上执行时处于 off-CPU，这段时间不在任何样本里。`--trace-offcpu` 额外记录 `sched:sched_switch` 调度切换样本和上下文切换记录，用相邻时间戳估算线程离开 CPU 后停留在哪条调用路径，报告端用 `report_html.py --trace-offcpu on-off-cpu` 把 on-CPU 与 off-CPU 两类权重分开显示。约束有三条：整次记录只能选择 `cpu-clock` 或 `task-clock` 中的一个事件；离开 CPU 的权重来自调度时间戳，丢失样本或切换记录都会降低精度；使用前应先用 `list --show-features` 探测内核支持。若问题涉及可运行队列等待、线程唤醒者、Binder 对端或 CPU 频率，Perfetto System Trace 能提供更完整的时间上下文，两者按证据需要选择或并行采集。
 
@@ -47,7 +47,7 @@ Topdown（自顶向下微架构分析）把超标量处理器的执行机会按 
 
 流程四步（按 LeakCanary 2.14 材料口径）：生命周期观察器把应结束生命周期的对象交给 `ObjectWatcher`（只保留弱引用）；默认等待五秒并触发 GC，弱引用仍未清除则对象进入保留集合；保留对象数量达到阈值（应用可见时默认累计 5 个才转储，不可见时等待一个 `retainedDelayMillis`）后调用 Android 堆转储接口；Shark 堆分析器解析 HPROF，从 GC Root 搜索到保留对象的引用路径并按泄漏签名聚类。它判断的是"对象在等待期和 GC 后仍被保留"，不是"已被证明永远无法释放"——异步任务、动画、消息队列和测试操作尚未结束时对象都可能暂时存活。默认只跟踪已销毁的 Activity、Fragment、Fragment View、Service 和已执行 `onCleared()` 的 ViewModel，业务对象要在生命周期结束处显式调用 `AppWatcher.objectWatcher.expectWeaklyReachable(instance, reason)`。修复依据是引用链上第一条生命周期不合理的强引用，而不是路径中出现过的熟悉类名；基础依赖应使用 `debugImplementation`，避免把堆转储与分析代码带进 release APK。
 
-**Q11: [learning] `adb shell am dumpheap` 从 shell 到 ART 经过哪些层？为什么 user 构建上对普通发布应用执行会失败？**
+**Q11: [learning] adb shell am dumpheap 从 shell 到 ART 经过哪些层？为什么 user 构建上对普通发布应用执行会失败？**
 
 链路分四层（AAOS13 源码核对）：`ActivityManagerShellCommand.runDumpHeap()` 解析参数并创建输出文件描述符，输出路径省略时落到 `/data/local/tmp/heapdump-<时间>.prof`；`ActivityManagerService.dumpHeap()` 检查调用方持有 `android.permission.SET_ACTIVITY_WATCHER`，调用 `enforceDebuggable()` 检查目标进程，并临时调用 `enableFreezer(false)` 关闭缓存应用冻结器；请求经 Binder 到达应用进程的 `ActivityThread.handleDumpHeap()`，在 `-g` 时执行 `System.gc()`、`System.runFinalization()`、`System.gc()` 序列后按分支选择托管堆、native heap 或 malloc info；最后由 ART 停止托管线程并写文件。user 构建上失败的原因是 `enforceDebuggable()` 的实现（AAOS13 核对）：`!Build.IS_DEBUGGABLE && !proc.isDebuggable()` 即抛 SecurityException——user 构建只能转储 debuggable 应用，`profileable` 声明不开放 HPROF；userdebug/eng 构建才允许转储其他目标。Android 13 的选项是 `--user`、`-n`（native heap dump）、`-g`、`-m`（malloc info）；Android 17 材料口径另有 `-b <png|jpg|webp>` 把 Bitmap 像素写进托管堆转储，属版本差异。`-n` 和 `-m` 的产物不是 HPROF，不能交给 HPROF 分析器；应用在自己进程内调用 `Debug.dumpHprofData()` 不经过 AMS 这组跨进程检查。Freezer 临时关闭的目的是防止目标进程被冻结后无法处理 Binder 请求，托管线程的暂停由 ART 负责，两者是两件事。
 
@@ -55,7 +55,7 @@ Topdown（自顶向下微架构分析）把超标量处理器的执行机会按 
 
 `art/runtime/hprof/hprof.cc` 的 `DumpHeap()` 先进入与 GC 互斥的 `ScopedGCCriticalSection`，再创建 `ScopedSuspendAll(..., true /* long suspend */)` 停止其他托管线程，使对象和引用在遍历期间保持一致；`Hprof::Dump()` 在这个暂停范围内执行两遍——第一遍用计数输出器计算整体大小和最大 record 大小，第二遍写正式数据，停顿覆盖计数遍历、正式遍历和文件输出（AAOS13 源码核对）。所以代价远不止"扫一遍对象"，耗时随对象数、字段与数组数据量、存储速度和 Bitmap 内容变化，没有一组"每 100 MB 几秒"的数字能跨设备成立。文件头 magic 是 `JAVA PROFILE 1.0.3`，对象 ID 宽度为 4 字节（AAOS13 源码核对，注释明确 hprof-conv 按 4 硬编码）。`HEAP_DUMP_INFO` record 把对象归入 `HPROF_HEAP_APP`（含 app image）、`HPROF_HEAP_ZYGOTE`、`HPROF_HEAP_IMAGE` 三个空间；zygote 和 boot image 对象通常不是应用泄漏的分配主体，但会出现在 GC Root 路径中、其类与字符串 record 也可能被其他对象引用，直接删除这些二进制区段会得到引用断裂、无法解析的文件——KOOM 一类工具用配套的裁剪器和补全器维护引用关系，手工裁剪前必须理解这一点。
 
-**Q13: [learning] Perfetto 的 `android.java_hprof` 与完整 ART HPROF 差在哪？它的 fork 管线为什么停顿更短但仍不是零成本？**
+**Q13: [learning] Perfetto 的 android.java_hprof 与完整 ART HPROF 差在哪？它的 fork 管线为什么停顿更短但仍不是零成本？**
 
 两者都来自 ART 托管堆，但产物和停顿边界不同：完整 HPROF（`am dumpheap`、`Debug.dumpHprofData()`）保存类、对象、字段、数组、字符串与 GC Root，能回答"某个字段保存了什么"；`android.java_hprof`（Android 11+ 数据源）只记录类型、对象大小、GC Root 与引用关系，直接写成 protobuf `HeapGraph` 包，不保存实例基本类型字段值、字符串内容、基本类型数组字节和 Bitmap 像素，因此文件更小、隐私面也更小，且能与同一 trace 里的 GC、调度事件做时间对齐。管线（AAOS13 源码核对关键点）：Perfetto 的 `JavaHprofProducer` 找到目标并授权后发送 `__SIGRTMIN + 6` 信号（`art/perfetto_hprof/perfetto_hprof.cc` 中 `kJavaHeapprofdSignal`），ART 插件的信号处理器只向 pipe 写通知，专用监听线程再进入 GC 临界区、执行 fork——父进程随后尽快恢复托管线程，派生出的子进程遍历 fork 时刻的堆副本并输出 `HeapGraph`。fork 采用写时复制：采集仍有 fork、页表、页面复制、子进程内存与序列化开销，不能描述成零成本。数据里的 `native_size` 只覆盖 `NativeAllocationRegistry` 为部分 Java 对象登记的原生内存，不能替代 heapprofd 的 native 分配采样；能否采集由 Perfetto 侧的 `CanProfile()` 按 build type、UID 与 manifest 属性判定，与 `am dumpheap` 的权限模型不是同一套。
 
@@ -63,19 +63,19 @@ Topdown（自顶向下微架构分析）把超标量处理器的执行机会按 
 
 按检出目标与运行前提选择：malloc debug（API 24+）在分配器前加入 shim，用 `guard`/`front_guard`/`rear_guard` 检测越界写、`free_track` 提高 use-after-free 检出机会、`backtrace` 记录分配栈，适合错误在分配器检查点才显现的场景，但它会改变被测进程的时序与内存行为，不能开在生产或性能基准里。HWASan 由编译器插桩并用影子内存保存地址标记，要求 ARM64、重编译目标 native 代码，且使用 libc++ 时必须选 `c++_shared`；版本边界要注意——Android 10 至 Android 13 上应用运行依赖 HWASan 系统镜像，Android 14 起普通系统才能用 `wrap.sh`（`LD_HWASAN=1`）启动 debuggable 应用（材料口径，AAOS13 属于前一档）。MTE 由 Arm CPU 比较指针标记与内存标记，需要 SoC、内核与系统支持，应用通过 `android:memtagMode`（API 31+）请求，`sync` 在出错指令处触发信号、精度高，`async` 精度低。三者都是测试变体工具；只是想找"哪些调用栈在持续分配"，默认选择仍是 heapprofd 而不是它们。
 
-**Q15: [learning] `dumpsys` 输出的是哪种证据？为什么 `dumpsys cpuinfo` 的结果不能叫"瞬时 CPU"？**
+**Q15: [learning] dumpsys 输出的是哪种证据？为什么 dumpsys cpuinfo 的结果不能叫"瞬时 CPU"？**
 
 `dumpsys` 通过 ServiceManager 找到目标 Binder 服务并调用它的 dump 接口，拿到的是该服务在采集时刻愿意公开的内部状态——或是即时快照，或是某段累计统计窗口，不是时间线；事件先后要靠 Perfetto、Winscope 或日志补足。AAOS13 的 `dumpsys.cpp` 核对：无参数全量模式按服务名排序逐项 dump，单个服务默认等待 10 秒；`-t` 单位秒、`-T` 单位毫秒（默认 10 秒），是全局参数应写在服务名之前；`-l` 列出注册且可见的服务；`--pid` 只打印服务所在进程 PID；`--priority` 按 CRITICAL 等优先级筛选；`--proto` 筛选声明 `DUMP_FLAG_PROTO` 的服务。cpuinfo 正是"累计窗口"的例子：它输出 ActivityManager 后台 `ProcessCpuTracker` 最近两个采样点之间的增量（来自 `/proc/stat` 与 `/proc/<pid>/stat`，AAOS13 存在该类），调用命令的时刻不一定触发新的测量窗口，"瞬时 CPU"的说法高估了时间精度；进程行的 `user`/`kernel` 分列自该进程的两种态 CPU 时间，`iowait`、`irq`、`softirq` 只在 TOTAL 行传入，多线程进程能并行占用多个 CPU、百分比可能超过 100%。
 
-**Q16: [learning] `dumpsys activity oom` 里的 cur、set、curRaw、setRaw 和 adjType 各代表什么？OOM adjustment 数值高就代表进程会被杀吗？**
+**Q16: [learning] dumpsys activity oom 里的 cur、set、curRaw、setRaw 和 adjType 各代表什么？OOM adjustment 数值高就代表进程会被杀吗？**
 
 OOM adjustment 是系统交给 lmkd 的进程保护分数，数值越大在内存压力下通常越早进入回收候选，但它不表示进程已经发生 OOM。基准值在 AAOS13 的 `ProcessList.java` 核对：`FOREGROUND_APP_ADJ = 0`、`VISIBLE_APP_ADJ = 100`、`PERCEPTIBLE_APP_ADJ = 200`、cached 区间从 900 开始（材料按 Android 17 引用的 `psc/Constants.java` 是新版本文件名，数值一致）。字段要分开读：`curRaw` 是本轮计算中尚未施加部分修正的 raw adj，`setRaw` 是上次写入记录的 raw adj，`cur` 是本轮计算后的目标值，`set` 是已提交给进程/lmkd 路径的值；`adjType`、`adjSource`、`adjTarget` 说明哪个组件关系（绑定服务、ContentProvider、前台服务、显示器可见性等）抬升或降低了保护级别。发现 `set` 与界面状态不符时，应连同这些归因字段一起核对，不能只用一个数字判定 OOM 计算错误；LMK 的最终归因还要对照 lmkd 日志、PSI 与 `exit-info` 退出原因。可见进程还可能受 laddering 影响、被分配到 100–199 之间的细分值（材料口径，具体行为受设备配置控制）。
 
-**Q17: [learning] `dumpsys gfxinfo` 的 `reset`、`framestats` 与聚合统计各承担什么？"Number Slow bitmap uploads" 高就是图片解码慢吗？**
+**Q17: [learning] dumpsys gfxinfo 的 reset、framestats 与聚合统计各承担什么？"Number Slow bitmap uploads" 高就是图片解码慢吗？**
 
 `reset` 清空进程内保存的 HWUI 帧数据以划出可重复的测试窗口；无参数输出 since-reset 的聚合统计；`framestats` 输出环形缓冲区里的逐帧列，解析时读取 `---PROFILEDATA---` 之后的 header 按列名建索引——不同版本会增加字段，按固定列号解析会把后续时间戳整体错位，未填充字段可能用 0、负值或哨兵值，计算差值前要过滤。AAOS13 的 HWUI 源码核对：`JankTracker` 使用固定 120 项的环形缓冲（写满覆盖最早记录），`ProfileData` 同时输出 deadline-aware 与 legacy 两组统计（`Janky frames` 与 `Janky frames (legacy)`）及 90/95/99 分位，deadline 口径按 `GpuCompleted` 是否越过 `FrameDeadline` 判定，`FrameInfo.h` 中存在 `FrameDeadline`、`SyncStart`、`IssueDrawCommandsStart`、`GpuCompleted` 等字段。分类名是 trace 入口不是根因：`Slow bitmap uploads` 是保留的历史输出名（对应 `SyncStart → IssueDrawCommandsStart` 超阈值），不能凭名称认定发生了图片解码；`Slow issue draw commands` 也不区分 CPU、GPU、队列或 fence 等待。方法级归因回到 Perfetto 的 FrameTimeline、UI Thread、RenderThread 与 GPU 证据。
 
-**Q18: [learning] 排查图层缺失或晚呈现时，Android 13 上 `dumpsys SurfaceFlinger` 的 `--list` 与 `--latency` 怎么用？`--frontend` 为什么是无效参数？**
+**Q18: [learning] 排查图层缺失或晚呈现时，Android 13 上 dumpsys SurfaceFlinger 的 --list 与 --latency 怎么用？--frontend 为什么是无效参数？**
 
 Android 13 的 dumper 注册了 `--list`（输出 Layer 精确名称）、`--latency` 与 `--latency-clear`（单 Layer 的历史帧统计）、`--displays`、`--frametimeline`、`--static-screen` 等入口（AAOS13 `SurfaceFlinger.cpp` 核对）；`--frontend`、`--hwclayers`、`--scheduler` 是 Android 15 之后 FrontEnd 架构引入的视角（材料按 Android 17 核对），在 Android 13 设备上不可用——这是本文最容易被旧资料误导的版本差异。`--latency` 的用法：先用 `--list` 复制精确 layer name，输出首行是采集时刻的刷新周期信息，其后每行是一帧的三个纳秒级时间戳——期望呈现时间、实际呈现时间、帧就绪时间（三元组语义按材料口径，各版本字段含义略有差异）；`actual − desired` 只能标记晚呈现，不能独立归因，晚呈现可能来自生产者、acquire fence、调度、client composition、HWC 或 present fence。解析要过滤 0、负值和未完成哨兵，三列都有效才计算差值。dump 中 CLIENT（GPU/RenderEngine 合成）与 DEVICE（HWC 硬件路径）的合成方式只代表该次采集附近的状态，跨帧结论应使用 Perfetto、Winscope 或稳定复现实验。
 
@@ -127,7 +127,7 @@ statsd 是平台侧的指标守护进程：接收 atom（用 protobuf schema 描
 
 配置层不关心事件怎么产生，只关心"哪些 atom 算命中、怎么聚合"：`AtomMatcher` 按 atom ID 和字段条件匹配事件；`Predicate` 用 start/stop atom 表示条件区间（如只统计前台期间）；metric 决定聚合方式——`EventMetric` 保留命中事件明细，`CountMetric` 按时间 bucket 计数，`DurationMetric` 统计状态持续时长（`SUM` 累加区间、`MAX_SPARSE` 保留已结束区间的最大值），`GaugeMetric` 对 pulled atom 或触发事件做周期采样，`ValueMetric`/`KllMetric` 聚合数值字段（KLL 用分位数摘要估计分布）。报告缺条目时按数据流顺序排查：`allowed_log_source` 是否放行了写入来源；matcher/predicate 是否真的命中；metric activation 是否已启用；当前未结束的 bucket 是否被包含；报告是否已被导出并清除；pull 是否超时；socket 或队列是否发生丢失。atom 与 metric 要分开看：报告里有条目只证明对应 atom 到达 statsd、命中配置并进入报告，它不能替代 ANR trace、tombstone、Perfetto trace 或 dumpsys 现场。
 
-**Q31: [learning] 本地用 `cmd stats` 验证一份 statsd 配置的流程是什么？为什么这套命令不能进量产自动化？**
+**Q31: [learning] 本地用 cmd stats 验证一份 statsd 配置的流程是什么？为什么这套命令不能进量产自动化？**
 
 最小流程四步（材料按 Android 17 源码口径转写，本地树无 statsd 模块源码）：用与目标版本匹配的 `statsd_config.proto` 把 textproto 编成二进制（`protoc --encode=android.os.statsd.StatsdConfig`）；`adb shell cmd stats config update 123456 < config.pb` 下发——配置必须从 stdin 传入 wire-encoded protobuf，配置 ID 是 int64，省略 UID 时使用调用方 UID，跨 UID 操作只对 eng/userdebug 开放；触发场景后 `adb shell cmd stats dump-report 123456 --keep_data --include_current_bucket --proto` 拉取报告——`dump-report` 默认导出即清除，调试时要加 `--keep_data`；结束后 `cmd stats config remove 123456` 清理，省略 UID 与 NAME 会删除全部配置。辅助命令：`print-uid-map` 查 UID 到包名映射，`pull-source <id>` 验证某个 puller 是否工作（它不创建 metric、不证明周期采集成功），`print-stats` 打印 statsd 自身统计，`print-logs` 需要 root。不能进量产的原因在权限模型：`cmd stats` 的 shell 入口只允许 root/shell UID；`StatsManager` 是 `@SystemApi`，`addConfig()`/`getReports()` 要求 `DUMP` + `PACKAGE_USAGE_STATS` 特权，量产环境的配置与上报由系统镜像、GMS 或厂商机制控制，普通 App 无法下发平台级配置。
 
@@ -147,7 +147,7 @@ statsd 是平台侧的指标守护进程：接收 atom（用 protobuf schema 描
 
 penalty 决定违规被检出后的处理：`penaltyLog()` 通过 logger 输出违规，相同调用栈指纹会限流；`penaltyDeath()` 在 ThreadPolicy 是处理末尾抛 `RuntimeException`，在 VmPolicy 是调用 `killProcess()` 退出；`penaltyDeathOnNetwork()` 特殊——启用 `detectNetwork()` 后它在其他 penalty 之前直接抛 `NetworkOnMainThreadException`，只想记录就不要同时启用；`penaltyListener(executor, listener)` 把原始 `Violation` 交给指定 Executor（Executor 参数必填，AAOS13 公开 API 核对）；`penaltyDropBox()` 经 ActivityManager 写入系统诊断存储；`penaltyDialog()`/`penaltyFlashScreen()` 面向交互式调试。listener 机制里，回调执行期间 StrictMode 会临时放开回调线程的 ThreadPolicy，避免 listener 内部的日志、入队等操作再次触发自身形成递归，但队列消费与 Executor 生命周期仍由应用负责——回调里不要同步上传网络或做重型符号化，堆栈与明文数据也可能含敏感信息。另一个读数边界：带 Looper 的线程上记录的 `durationMillis` 是从违规时刻到 Looper 完成本轮工作之间的时间，可能包含违规操作后的其他同步代码，不是磁盘 syscall 的精确耗时；同一 Looper 循环的记录数量有上限，日志条数不能当成违规发生次数。
 
-**Q36: [learning] 应用堆栈里出现"发生在 system_server 的 DiskReadViolation"是怎么回事？用 `allowThreadDiskReads()` 临时放行时要注意什么？**
+**Q36: [learning] 应用堆栈里出现"发生在 system_server 的 DiskReadViolation"是怎么回事？用 allowThreadDiskReads() 临时放行时要注意什么？**
 
 这是 ThreadPolicy mask 随同步 Binder 调用传播的结果：`setThreadPolicyMask()` 同时更新 BlockGuard 的 Java policy 与 Binder native 层的 mask，发起同步 Binder 调用时 mask 随事务到达服务端 Binder 线程；服务端触发违规后 `PENALTY_GATHER` 把 `ViolationInfo` 放进 `gatheredViolations` 这个 ThreadLocal，`Parcel.writeNoException()` 把收集到的违规写入 reply——AAOS13 源码核对为最多写前 3 条、每条栈约截断到 20 kB——调用方 `Parcel.readException()` 再经 `readAndHandleBinderCallViolations()` 补上本地调用栈并交给调用方当前策略处理。所以 IPC 间接执行的 I/O 会出现在应用堆栈里；这套传播只覆盖 ThreadPolicy，远端进程的 VmPolicy 不传播，回传信息也不包含 Binder 调用本身的耗时。临时放行方面：`allowThreadDiskReads()` 只清除 disk-read 检测位，`allowThreadDiskWrites()` 同时清除 disk-write 与 disk-read 位（AAOS13 的 `allowThreadDiskWritesMask()` 实现核对，因为写文件通常伴随读取元数据）；返回值是放行前的完整策略，必须在 `finally` 中恢复，异常、提前返回和嵌套调用都不能让线程永久处于宽松状态。放行不会让操作更快，注释应写明数据量上限、调用阶段和无法异步化的原因。自动化测试安装策略时，`@Before` 运行在测试线程、直接调用只改变测试线程，要用 `runOnMainSync` 切到应用主线程；依赖 GC 与 finalization 时序的 VmPolicy 违规不适合直接做确定性断言，适合先收集证据。
 

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：getevent 全参数与上报率测量、`/proc/bus/input/devices` 与 sysfs 取证、`dumpsys input` 的分段结构与队列字段语义、`adb shell input` 命令族与注入工具对比、uinput 自动化、Perfetto 的输入轨道、输入 ANR 的输入侧证据链、整机触摸无响应的分层决策树、乱跳误触的取证方法、防误触机制面、自动化注入的稳定性坑、输入 ANR 根因的快速识别与现场采集清单。分发与 ANR 机制见 [10-input-system.md](./10-input-system.md)；ANR 报告解读见 [../12-performance/08-anr.md](../12-performance/08-anr.md)；车机输入排查见 [15-aaos-input.md](./15-aaos-input.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] `getevent` 有哪些参数？测触控上报率用哪个组合？**
+**Q1: [learning] getevent 有哪些参数？测触控上报率用哪个组合？**
 
 Android 13 的 toolbox `getevent` 常用参数如下：
 
@@ -20,7 +20,7 @@ Android 13 的 toolbox `getevent` 常用参数如下：
 
 `-il` 可同时列出设备信息及加载的 key layout、key character map 和 input device configuration 路径，便于确认映射文件命中情况。读取 `/dev/input` 需要相应权限；若 shell 无法访问节点，应结合构建类型、节点权限和 SELinux 拒绝日志判断，不能据此认定设备不存在。
 
-**Q2: [learning] 没有第三方工具时，`/proc/bus/input/devices` 和 sysfs 能回答什么问题？**
+**Q2: [learning] 没有第三方工具时，/proc/bus/input/devices 和 sysfs 能回答什么问题？**
 
 `/proc/bus/input/devices` 每个设备一组字段：`I:` 总线/厂商/产品/版本、`P:` 物理拓扑路径、`S:` sysfs 路径、`U:` 唯一标识（蓝牙设备常见 MAC）、`H:` handlers（对应哪个 eventX 节点）、`B:` 各类事件能力位图。它回答"系统里有哪些输入设备、各自在哪个节点、是什么身份"——`getevent -il` 需要逐设备打，这份文件一次看全，还能与 `dumpsys input` 交叉验证"内核暴露的"与"Android 识别的"设备清单是否一致。
 
@@ -28,7 +28,7 @@ sysfs 侧的常用入口：`/sys/class/input/inputN/name`、`/sys/class/input/in
 
 排查定位：新设备没被识别时，先看这份文件确认内核层是否存在——不存在查驱动/probe 日志（dmesg），存在而 `dumpsys input` 没有，查 EventHub 打开失败的原因（权限、SELinux、配置加载失败）。
 
-**Q3: [learning] `dumpsys input` 的输出怎么分段阅读？**
+**Q3: [learning] dumpsys input 的输出怎么分段阅读？**
 
 输出按组件分段，从上到下对应分发链（按 AAOS13 源码核对，`InputDispatcher.cpp` 的 dump 实现与 EventHub/InputReader 各自的 dump）：
 
@@ -39,7 +39,7 @@ sysfs 侧的常用入口：`/sys/class/input/inputN/name`、`/sys/class/input/in
 
 阅读纪律：先确认问题归属哪一段再细读，整段通读效率低；多屏设备所有窗口条目都带 displayId，先按屏过滤再分析；改过配置或做过注入后，前后各取一次 dump 做对比比单次快照更有诊断力。
 
-**Q4: [learning] `iq`/`oq`/`wq` 之外，dump 里的 RecentQueue、PendingEvent、AppSwitch 是什么？**
+**Q4: [learning] iq/oq/wq 之外，dump 里的 RecentQueue、PendingEvent、AppSwitch 是什么？**
 
 三段队列的迁移语义不在此重复，这里给 dump 视角的字段口径（按 AAOS13 源码核对，`InputDispatcher.cpp`）：
 
@@ -53,7 +53,7 @@ sysfs 侧的常用入口：`/sys/class/input/inputN/name`、`/sys/class/input/in
 
 判读组合：wq 堆积且 age 增长 → 查目标应用主线程；iq 堆积 → 查分发器调度与监视链；oq 堆积而 wq 空 → 查通道与完成回报路径；AppSwitch 频繁 pending → 查系统负载与桌面应用启动。
 
-**Q5: [learning] `adb shell input` 命令族有哪些成员？各适合什么验证？**
+**Q5: [learning] adb shell input 命令族有哪些成员？各适合什么验证？**
 
 Android 13 的 `InputShellCommand` 提供这些常用子命令：
 
@@ -70,7 +70,7 @@ Android 13 的 `InputShellCommand` 提供这些常用子命令：
 
 按验证目标选择命令：点击与一般滑动用 `tap`/`swipe`；按键分发和长按用 `keyevent`；复现指定的运动事件轨迹用 `motionevent`。`text` 验证的是键盘字符映射与按键事件处理，不等价于测试 IME 的拼音组合、文本提交或删除行为；这类场景应通过真实 IME 或直接测试编辑器的 `InputConnection`。输入注入绕过真实硬件，注入成功而真机失败说明还需检查设备上报、驱动与 InputReader 路径。
 
-**Q6: [learning] `input` 命令、uiautomator、Instrumentation、monkey 四种注入怎么选？**
+**Q6: [learning] input 命令、uiautomator、Instrumentation、monkey 四种注入怎么选？**
 
 四种入口都向系统注入事件，但目标选择和等待语义不同：
 

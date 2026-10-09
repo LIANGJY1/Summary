@@ -1,6 +1,6 @@
 # 软件测试（testing）学习资料目录
 
-> 学习资料目录（不参与 `ROUTING.md` 大类路由）。收录跨项目适用的软件测试知识与实践，按主题编写 Q&A，供连续学习和查找。维护者：session-to-knowledge。
+> 学习资料目录（不参与 `ROUTING.md` 大类路由）。收录跨项目适用的软件测试知识与实践，供连续学习和查找。维护者：session-to-knowledge。
 
 ## 边界
 
@@ -16,8 +16,6 @@
 
 1. [Testing Fundamentals](./01-testing-basics.md) — Q1–Q10 cover smoke testing, unit test structure, JUnit, Mockito, parameterization and static mocks.
 
-## 写作约定
+## 写作规范
 
-1. 按主题维护 Markdown 问答文档，Q 序列作为文档结构。
-2. 先直答问题，再按因果关系解释；并列条件适合列表时使用列表，并遵守 [`../WRITING-GUIDE.md`](../WRITING-GUIDE.md)。
-3. 版本、平台或项目背景只有在会改变结论时才写入正文。
+文档结构、Q 编号、表达和质量验收统一遵守 [WRITING-GUIDE.md](../WRITING-GUIDE.md)。本 README 只规定测试知识的范围和相邻主题归属。

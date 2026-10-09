@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 Android 日志从调用到 logd 的路径、级别过滤能节省的成本、写入丢弃与缓冲区裁剪的区别，以及 logcat 客户端过滤和 logd 读取过滤的边界。R8 构建期删日志与包体积治理归应用 CPU 与体积优化主题。实现细节按 Android 17 语境核对，参考 AOSP `system/logging/liblog`、`system/logging/logd`、`system/logging/logcat` 和 `frameworks/base` 日志实现。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: [learning] 一条 `Log.d()` 从调用到 logd 经过哪些步骤？native 级别过滤能省掉哪些成本？**
+**Q1: [learning] 一条 Log.d() 从调用到 logd 经过哪些步骤？native 级别过滤能省掉哪些成本？**
 
 `Log.d()` 进入 logd 前经过 Java/native 桥和 liblog。native 级别判断能阻止不需要的日志继续传输，但不能撤销调用参数已经完成的构造工作。
 
@@ -26,7 +26,7 @@ Android 17 的普通日志 buffer 写入使用非阻塞 socket。logd 接收队�
 5. **日志风暴的实际代价：**即使 socket 写入不等待，应用仍持续支付参数格式化、JNI 和系统调用成本。大量日志也会遮住关键现场或使旧记录更快被裁剪。logd 接收、压缩、回收和向 reader 分发日志也会增加系统负载。
 6. **控制写入：**用 `adb logcat -g` 查看 logd 各 ring buffer 当前容量，不会改变容量。随后降低产生日志的频率、合并重复事件并只保留诊断必需字段，而不是一味增大 buffer。
 
-**Q3: [learning] `MyApp:V *:S` 和 `--regex` 在哪里过滤？如何减少 logd 发送给 logcat 的日志量？**
+**Q3: [learning] MyApp:V *:S 和 --regex 在哪里过滤？如何减少 logd 发送给 logcat 的日志量？**
 
 tag/priority filter spec 和 `--regex` 都由 logcat 客户端在收到日志后执行，所以主要减少终端输出和后续文本处理，不会自动缩小 logd 已经发来的数据。要缩小传输范围，应先使用 buffer、PID、时间或序号等 logd reader 条件。
 

@@ -76,7 +76,7 @@ Android Verified Boot（AVB）用签名元数据和分区摘要建立从 Bootloa
 
 边界：AVB/dm-verity 保护启动镜像和配置为验证的只读分区，不对可写 `/data` 提供同一种分区完整性校验。FBE 提供文件级静态数据加密，不应描述成 `/data` 的通用完整性保护。
 
-**Q6: 内核怎样启动第一个用户态进程 `/init`？为什么这个过程不是 fork？**
+**Q6: [learning] 内核怎样启动第一个用户态进程 /init？为什么这个过程不是 fork？**
 
 `/init` 不是从现有用户态进程 fork 出来的。内核初始化尾声创建的 `kernel_init` 内核线程以 PID 1 的身份调用 `kernel_execve("/init")`，用 init 程序映像替换自己的内核线程映像。
 
@@ -125,7 +125,7 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 
 
-**Q9: [learning] `/dev`、`/proc`、`/sys` 三个伪文件系统分别提供什么信息？init 为什么要先挂载它们？**
+**Q9: [learning] /dev、/proc、/sys 三个伪文件系统分别提供什么信息？init 为什么要先挂载它们？**
 
 这三个伪文件系统把内核维护的设备、进程和设备模型状态呈现为文件接口，内容不按普通磁盘文件方式保存。init 第一阶段挂载它们，是为了让后续初始化能够读取启动状态、发现设备节点并访问内核设备模型。
 
@@ -749,7 +749,7 @@ bootloader 锁定状态决定 AVB 校验失败的处置：锁定设备校验失�
 2. **启动期配合**：first_stage_init 的 `LoadKernelModules()` 加载的就是 vendor_boot/vendor 分区里的模块，fstab 指向的块设备驱动就绪后才能挂载。
 3. **边界**：GKI 镜像结构与模块版本校验细节归 GKI 专题册，本册只讲它在启动链中的位置。
 
-**Q49: [learning] [tags:系统启动] `androidboot.*` 参数是怎么生成并传到用户态的？bootconfig 改变了什么？**
+**Q49: [learning] [tags:系统启动] androidboot.* 参数是怎么生成并传到用户态的？bootconfig 改变了什么？**
 
 bootloader 把设备信息（硬件、槽位、解锁状态、启动原因等）以 `androidboot.xxx=yyy` 形式追加到内核命令行；内核把 cmdline 暴露在 `/proc/cmdline`，first_stage_init 读入后通过环境变量转发，第二阶段 init 把每个 `androidboot.xxx` 转成 `ro.boot.xxx` 系统属性——这就是 `ro.boot.bootreason`、`ro.boot.slot_suffix` 等属性的来源。
 
@@ -887,7 +887,7 @@ init 为每个 critical 服务维护崩溃计数与时间窗：服务意外退�
 2. **排障**："setProperty 不生效"先区分三种失败：SELinux 拒绝（avc 日志）、前缀权限不符、属性根本不存在（`ro.` 误当可写）。
 3. **边界**：persist 属性的落盘与开机恢复是独立机制，见本册 persist 题。
 
-**Q66: [learning] [tags:系统启动] `on property` 触发器如何编排启动时序？late_start 为什么是经典案例？**
+**Q66: [learning] [tags:系统启动] on property 触发器如何编排启动时序？late_start 为什么是经典案例？**
 
 init 在属性变化时检查所有以 `on property:<name>=<value>` 声明的 action，满足则把其中的命令入队执行——启动时序因此可以完全用属性当"就绪信号"来编排。经典案例是 `late_start`：加密设备开机时 /data 尚不可用，vold 完成解密后设置属性，init 命中对应触发器执行 `class_start late_start`，一次性拉起所有依赖 /data 的服务（网络、UI 服务群等）。
 

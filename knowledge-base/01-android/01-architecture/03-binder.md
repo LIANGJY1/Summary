@@ -75,7 +75,7 @@ IPC 按职责可分为接口语义、控制面传输、数据面传输和通知�
 6. **资源所有权**：Parcel 适合方法号、少量参数、令牌和 fd。图像、音频帧、模型权重或大型结果集通常只通过句柄或 fd 引用。协议还要明确 fd 由谁关闭、映射何时解除、DMA-BUF 栅栏完成前谁不能复用缓冲，以及 FMQ 一端死亡后如何重建。
 7. **性能比较**：不要引用固定的“Binder 0.5 ms、Socket 0.1 ms”数字。IPC 延迟包含 client 编组、驱动传输、server 排队调度、业务执行和 reply 返回。数据量、CPU、线程池与 SELinux 都会改变结果。比较必须使用同一设备、相同负载与统计口径。
 
-**Q8: oneway 调用到底保证了什么、没保证什么？`BR_TRANSACTION_COMPLETE` 代表服务端执行完成吗？**
+**Q8: [learning] oneway 调用到底保证了什么、没保证什么？BR_TRANSACTION_COMPLETE 代表服务端执行完成吗？**
 
 oneway 只保证"调用方不等待业务回复"与"发往同一个 Binder 节点的异步事务按发送顺序逐个分发"；它不保证服务端已执行、不保证跨节点全局有序、也不保证不会失败。`BR_TRANSACTION_COMPLETE` 只表示驱动完成了本次提交——目标进程可能尚未被调度，事务可能仍在 `proc->todo` 或 `node->async_todo` 中排队。
 
@@ -101,7 +101,7 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 3. 执行中的 Binder 线程数达到配置上限并持续超过 100 ms 时，libbinder 启发式日志可输出 `binder thread pool (N threads) starved for M ms`。这表示该进程长时间没有空闲工作线程，不证明驱动队列有积压，也不证明延迟完全由 CPU 忙导致。`blockUntilThreadAvailable()` 存在，但标准 `transact()` 路径不会调用它。
 4. 常见根因包括持锁跨进程调用、无超时 I/O、数据库长事务、嵌套同步调用和 oneway 积压。只有多个请求可安全并行、共享资源有余量且轨迹显示等待空闲 worker 占主导时，增加线程才可能有效。若所有 worker 都在等同一把锁，加线程只会增加等待者。
 
-**Q11: 大数据跨进程传输应该如何设计？`writeBlob` 的 16KiB 分界、`SharedMemory.setProtect()` 和 FMQ 各自的边界是什么？**
+**Q11: [learning] 大数据跨进程传输应该如何设计？writeBlob 的 16KiB 分界、SharedMemory.setProtect() 和 FMQ 各自的边界是什么？**
 
 原则是 Binder 只传控制信息与句柄，持续数据走共享内存、文件描述符或专用队列。C++ `Parcel::writeBlob()` 以 16KiB 为分界：不超过 16KiB 直接内联写入 Parcel；超过且允许传 fd 时改走兼容 ashmem 区域并用 fd 传递。Java `SharedMemory.setProtect()` 只能移除权限不能加回，应按"写入 → 解除映射 → 降为只读 → 交给对端"的最小权限顺序使用。FMQ 是共享内存上的有界单向队列，单个队列只有一个写入方；双向协议要建两条方向相反的队列。
 
@@ -118,7 +118,7 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 2. **消息传递**：适合边界清晰、数据较小的请求与事件，可把权限和调用契约集中到接口上，但会产生序列化、排队与传输开销。
 3. **Android 常用组合**：Binder/AIDL 传递结构化请求与响应。大型二进制内容通常通过文件描述符、共享内存句柄或 URI 引用，不直接塞进 Binder Parcel。
 
-**Q13: [learning] AIDL 的 `in`、`out`、`inout` 参数方向怎样影响传输成本，什么时候该避免 `inout`？**
+**Q13: [learning] AIDL 的 in、out、inout 参数方向怎样影响传输成本，什么时候该避免 inout？**
 
 参数方向决定对象在哪一侧编组和回传。`inout` 要双向传输同一对象，通常比单向参数有更高的编组成本，因此只在接口语义确实需要双向修改时使用。
 
@@ -129,7 +129,7 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 
 方向标记只适用于需要标记方向的非原语参数。设计时同时检查 AIDL 版本、生成后类型与对象复制成本。
 
-**Q14: 跨进程 Bundle 中的自定义 Parcelable 为什么会在读取时抛 `ClassNotFoundException`，怎样避免相关 Parcel 错误？**
+**Q14: [learning] 跨进程 Bundle 中的自定义 Parcelable 为什么会在读取时抛 ClassNotFoundException，怎样避免相关 Parcel 错误？**
 
 Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读取 Parcelable 才执行反序列化。因此发送调用成功并不证明接收端类加载器能解析该对象；若自定义类不在接收端 classpath 或加载器不正确，异常会出现在读取位置。
 
@@ -150,7 +150,7 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 6. **内核 tracepoint**：可见事件包括 `binder_transaction`、`binder_transaction_received`、`binder_transaction_alloc_buf` 和 `binder_txn_latency_free`。不存在名为 `binder_reply` 或 `binder_freeze` 的 tracepoint，不要用虚构事件名标注区间。
 7. **调试节点快照**：debugfs/binderfs 状态文件只反映读取时刻。两次读取之间完成的事务可能完全不在快照中。
 
-**Q16: `RecordedTransaction` 能做什么？为什么不能当线上常驻监控？**
+**Q16: [learning] RecordedTransaction 能做什么？为什么不能当线上常驻监控？**
 
 `RecordedTransaction` 是 libbinder 的事务录制能力，可保存接口名、事务码、flags、返回状态与请求/回复 Parcel 内容，适合受控环境下复现协议问题与离线检查。它同时受三个条件限制：libbinder 编译期定义 `BINDER_ENABLE_RECORDING`、使用内核 Binder、发起录制的调用方 UID 为 root；源码明确标记文件格式仍在开发、不稳定，录制内容可能包含令牌等敏感数据，序列化与写文件还会改变被测路径的时延。
 
@@ -167,7 +167,7 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 3. **判读要点**：`failed_transaction_log` 中 `BR_DEAD_REPLY` 或 `BR_FAILED_RETURN` 密集出现，说明对端死亡或句柄失效。它是环形日志，只保留最近若干条。
 4. **权限**：userdebug + root 才能读驱动节点（`su 0 cat`）。
 
-**Q18: 怎么确认某个 Binder/AIDL 服务在设备上注册了？`service call` 能做什么？**
+**Q18: [learning] 怎么确认某个 Binder/AIDL 服务在设备上注册了？service call 能做什么？**
 
 1. **列服务**：`dumpsys -l` 或 `service list` 可列出当前注册的服务名，不会自动 dump 每个服务的详细内容。`service check <名>` 可检查指定名称是否注册。
 2. **探活**：`service call <名> <事务码>` 手动发送一笔事务。事务码通常对应生成接口的方法编号，但编号与参数编码受接口版本影响，不应当作稳定 shell API。只有正确构造参数并选择无副作用的方法时，响应结果才适合作为探活证据。

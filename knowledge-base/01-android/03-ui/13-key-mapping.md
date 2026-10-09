@@ -18,7 +18,7 @@
 
 排查"按键映射没生效"时，`dumpsys input` 里每个设备的 `KeyLayoutFile`/`KeyCharacterMapFile` 字段直接显示最终命中的绝对路径：显示的是 Generic.kl 说明按 VID/PID 和设备名都没找到专属文件，通常是文件名不符或放错了分区。
 
-**Q3: [learning] `.kl` 按键布局文件的语法是什么？flags 列能写什么？**
+**Q3: [learning] .kl 按键布局文件的语法是什么？flags 列能写什么？**
 
 基础语法共五个顶级声明（按 AAOS13 源码核对，`frameworks/native/libs/input/KeyLayoutMap.cpp` 的解析器关键词）：`key <扫描码> <KEYCODE> [flags...]` 把扫描码映射为按键码并可附加策略标志，另有 `key usage <HID 用法码>` 变体按 HID 用法映射（HID 设备查表时用法优先于扫描码）；`axis <扫描码> <AXIS>` 映射相对轴（支持 invert 反向、split 拆分双轴与 flat 死区）；`led <扫描码> <LED>` 关联指示灯；`sensor <绝对轴> <传感器类型> <轴>` 声明传感器类设备的轴；`requires_kernel_config <CONFIG>` 要求特定内核配置存在，不满足时整个文件不加载、自动改试同名 `_fallback` 布局。flags 列表逐个经标签表转成位标志，重复声明同一标志会报解析错误。
 
@@ -32,7 +32,7 @@ key 116   KEYCODE_VOICE_ASSIST  WAKE
 
 注意映射方向：一个 KEYCODE 可以被多个扫描码映射过来（复用语义），但反查扫描码时布局文件返回的是一组扫描码；车机上"同一个按键码来自不同按键板"的场景要在应用里用 `KeyEvent.getDeviceId()` 区分来源，而不是改映射。
 
-**Q4: [learning] `.kcm` 字符映射文件与 `.kl` 怎么分工？type 声明影响什么？**
+**Q4: [learning] .kcm 字符映射文件与 .kl 怎么分工？type 声明影响什么？**
 
 分工是"行为映射"与"字符映射"：`.kl` 决定扫描码变哪个按键码（只对键盘类设备必配），`.kcm` 决定按键码在各修饰键组合下产生什么字符或 fallback 行为。`.kcm` 的语法是 `type` 声明加 `key` 块：`key <KEYCODE> { label: ... base: ... <修饰列>: ... }`，修饰列按 `shift`、`lctrl`、`ralt` 等命名；`fallback` 属性声明"该键未被应用处理时合成的替代按键"。按 AAOS13 源码核对（`frameworks/native/libs/input/KeyCharacterMap.cpp` 解析器），`type` 与 `key`/`map` 是顶层关键词，`fallback` 是 key 块内的属性之一。
 
@@ -40,7 +40,7 @@ key 116   KEYCODE_VOICE_ASSIST  WAKE
 
 改键场景的判断规则：想改"这个键是什么键"改 `.kl`；想改"这个键打出什么字、按住 Ctrl 是什么"改 `.kcm`；中文物理键盘输入法场景则两者都不动，由输入法消费按键码自行转换。
 
-**Q5: [learning] `.idc` 输入设备配置文件是干什么的？哪些场景必须配？**
+**Q5: [learning] .idc 输入设备配置文件是干什么的？哪些场景必须配？**
 
 `.idc`（输入设备配置）是设备级属性文件，告诉 InputReader"这个设备是什么类型、该怎么处理"，很多行为没有它就无法正确工作。查找链与 `.kl` 相同（设备名/Vendor_Product 系列），同样按分区目录优先级探测。
 
@@ -115,7 +115,7 @@ uinput 是内核提供的虚拟输入设备接口：用户态程序打开 `/dev/
 
 车机旋钮方案的分工：AOSP 的 RotaryController（无障碍服务）负责解析旋钮并驱动同样的焦点移动，应用侧只需要按焦点导航规范做好可聚焦性——这也是"适配旋钮 = 适配焦点导航"的原因。调试时 `adb shell input keyevent DPAD_LEFT` 可在无旋钮环境验证焦点链。
 
-**Q13: [learning] `downTime` 和 `eventTime` 为什么分开？长按判定和 repeat 判定分别用哪个？**
+**Q13: [learning] downTime 和 eventTime 为什么分开？长按判定和 repeat 判定分别用哪个？**
 
 `downTime` 记录本次按键序列中按下动作的时间，同一序列内的所有事件（含每条 repeat）都携带同一个 `downTime`；`eventTime` 是当前这条事件产生的时间。分开存才能只靠一条事件算出"已经按了多久"：框架决定何时合成 repeat、应用判断是否超时，看的都是 `eventTime - downTime` 是否越过各自的阈值，不需要谁在旁边记住按下时刻。
 
@@ -151,7 +151,7 @@ fallback 是按键的第二轮分发：一条按键未被应用消费时，syste
 
 调试用 `adb shell input keycombination <键1> <键2>`（同时按下的语义）；两条间隔几十毫秒的独立 `keyevent` 注入可能进不了组合时间窗，组合逻辑没触发时先检查注入方式而不是先改代码。
 
-**Q17: [learning] 已弃用的 `ACTION_MULTIPLE` 表示什么？兼容代码还要考虑吗？**
+**Q17: [learning] 已弃用的 ACTION_MULTIPLE 表示什么？兼容代码还要考虑吗？**
 
 `ACTION_MULTIPLE` 是 `KeyEvent` 中除按下/抬起外的旧动作，表示同一键码重复多次，或 `KEYCODE_UNKNOWN` 携带一串字符。它自 API 29 起弃用，官方说明输入系统不再使用它；新输入路径不应依赖 IME 或外接设备一定会产生该动作。
 

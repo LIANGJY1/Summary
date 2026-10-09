@@ -49,7 +49,7 @@ break;
 
 `O_CLOEXEC` 保证这个 fd 不会被子进程继承。同一段代码也处理 `BINDER_TYPE_BINDER`（服务端把引用传给自己）和 `BINDER_TYPE_HANDLE`（客户端把 handle 传给对端）——三者都是"指针/句柄跨进程要重新落地"的同类问题。判断规则：把 fd 通过 Bundle 塞给对端时，接收方拿到的**不是同一个 fd 号**而是新分配的同号 fd；因此判断"两个进程是否共享同一块内存"的正确方式是看底层 inode 是否相同，而不是比较 fd 数值。
 
-**Q3: [learning] Android 为什么在传统共享内存之外还需要 ashmem 这类机制，普通 `memfd_create` 不好用吗？**
+**Q3: [learning] Android 为什么在传统共享内存之外还需要 ashmem 这类机制，普通 memfd_create 不好用吗？**
 
 `memfd_create` 提供共享内存但不提供**与内存管理系统的协作接口**：它无法被 `register_shrinker` 按 LRU 回收，也无法按区域 pin/unpin。ashmem 的价值就是补上这两点——让图形缓冲这类"平时要留、紧张时可回收、回收后应能恢复"的内存能被系统统一调度。
 
@@ -104,7 +104,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 
 用户态导出走 `ION_IOC_MAP` → `ion_share_dma_buf_fd()` → `dma_buf_export()`，把 `dma_buf_ops`（`map_dma_buf`、`mmap`、`begin_cpu_access`/`end_cpu_access` 等）挂到 `dma_buf` 上，再用 `anon_inode_getfile()` 给它造一个 `file`，最后为该 `file` 分配 fd。判断规则：`begin_cpu_access`/`end_cpu_access` 这对回调的存在说明"CPU 访问与设备 DMA 访问需要显式切换缓存"，在自研图形栈里若漏实现它们，症状是偶发的花屏/数据损坏而不是崩溃。
 
-**Q7: [learning] `dma_buf` 的 exporter / importer 两个角色分别是谁，谁在什么时候切换？**
+**Q7: [learning] dma_buf 的 exporter / importer 两个角色分别是谁，谁在什么时候切换？**
 
 exporter 是生产 `dma_buf` 的一方（分配并导出缓冲区），importer 是消费图形元的一方。ION 内部同时扮演两者：对上通过 `dma_buf_export` 表现为 exporter，对下作为通用 DMA 缓冲的消费者表现为 importer。
 
@@ -126,7 +126,7 @@ static struct dma_buf_ops dma_buf_ops = {
 
 同一份物理内存被两个进程各自 mmap 时，进程 A 分配并导出、进程 B 通过 fd 拿到同一个 `dma_buf` 并 mmap，两边走的都是 `dma_buf_ops` 里的同一个 `mmap` 实现——所以"共享"成立的前提是 `dma_buf` 与其 `file` 在两个进程的 `fget` 路径下拿到的是同一个 `struct file`，而不是各建一份。`dma_buf_fd` 做的事就是"为 `dma_buf->file` 在当前进程分配一个可用 fd"，这一步保证 handle 在每个进程里各自有效。判断规则：把图形内存跨进程共享时，共享的是 `dma_buf`（一次分配）而不是两次分配；若两侧各自申请了一块地址恰好相同的内存，那不是共享，缓存一致性问题会以随机花屏形式出现。
 
-**Q8: [learning] GKI 2.0 引入 DMA-BUF heap 的同时关闭了 `CONFIG_ION`，这中间的分界点在哪？**
+**Q8: [learning] GKI 2.0 引入 DMA-BUF heap 的同时关闭了 CONFIG_ION，这中间的分界点在哪？**
 
 分界点是 Android 12。GKI 2.0 在 `android12-5.10` 分支已于 2021 年 3 月 1 日停用 `CONFIG_ION`，同时把 `gki_defconfig` 里的 `CONFIG_DMABUF_HEAPS_SYSTEM` 关闭，让它可以成为供应商模块。停用 ION 换来三项收益：可按堆做 sepolicy 隔离、UAPI 稳定、通用 VTS 可验证。
 

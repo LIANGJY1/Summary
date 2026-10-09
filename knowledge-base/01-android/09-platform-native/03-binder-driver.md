@@ -48,7 +48,7 @@ copy_from_user(t->buffer->data,
 - 发送方 Parcel 的内存与接收方 Binder 空间是两个指标；`TransactionTooLargeException` 是 Java 层按失败上下文推测的异常，不是驱动返回的精确字节上限。
 - 排查 `-ENOSPC`/`ENOSPC` 扩展错误时，先看接收进程的并发事务、大事务与异步占用，而不是假设"这一笔超过了 1MiB"。
 
-**Q3: [learning] `drivers/android/binder.c` 里 `binder_alloc_buf` 为什么要在接收者的 `alloc` 里找缓冲区，找不到会怎样？**
+**Q3: [learning] drivers/android/binder.c 里 binder_alloc_buf 为什么要在接收者的 alloc 里找缓冲区，找不到会怎样？**
 
 因为缓冲区必须落在接收者已 mmap 的区域里，才能省掉接收侧拷贝。`binder_alloc_buf` 在 `alloc->free_buffers` 红黑树里找足够大的空闲块，失败时尝试扩展 mmap 区域；异步事务还额外遵守 `free_async_space` 上限（映射区的一半），避免异步请求把同步事务的可用空间吃光。
 
@@ -73,7 +73,7 @@ atomic_inc(&alloc->vma_vm_mm->mm_count);
 
 `binder_mmap` 还有两个硬约束：单次映射上限 `SZ_4M`，且只有进程主线程能调用（`proc->tsk != current->group_leader` 直接返回 `-EINVAL`），同时置 `VM_DONTCOPY` 并清 `VM_MAYWRITE` 让映射区不可写不可被 fork 复制。判断规则：`TransactionTooLargeException`、缓冲区耗尽、`ENOMEM` 这几类失败要区分——映射区扩展失败是内存压力，异步空间不足说明同步事务在抢占资源，前者看整机内存，后者看调用模式（是否大量并发 oneway 调用）。
 
-**Q4: [learning] Binder 驱动的 `binder_proc`、`binder_thread`、`binder_node`、`binder_ref` 分别代表什么，谁引用谁？**
+**Q4: [learning] Binder 驱动的 binder_proc、binder_thread、binder_node、binder_ref 分别代表什么，谁引用谁？**
 
 `binder_proc` 是一个进程在 Binder 侧的全局上下文，`binder_thread` 是该进程内的一个线程，`binder_node` 是服务端 Binder 对象的内核化身，`binder_ref` 是客户端进程对该 `binder_node` 的引用。引用方向是 `binder_proc` 持有本进程 `binder_thread` 的红黑树，客户端 `binder_proc` 经 `binder_ref` 指向服务端 `binder_node`。
 
@@ -97,7 +97,7 @@ if (tr->target.handle) {
 
 边界：`binder_context_mgr_node` 是唯一的全局 node，对应 `servicemanager`，所有 `addService`/`checkService` 都打到它。判断规则：排查"Binder 通了但拿到的对象不对"时，先确认 handle 落在哪个 node 上——handle 非零走对象、handle 为零走 servicemanager，两条路径的权限与失败表现完全不同。
 
-**Q5: [learning] Framework 的一次 `ioctl` 到底传了什么，为什么用户态要把"待写数据"和"待读数据"塞进同一个结构体？**
+**Q5: [learning] Framework 的一次 ioctl 到底传了什么，为什么用户态要把"待写数据"和"待读数据"塞进同一个结构体？**
 
 塞进同一个结构体 `binder_write_read` 是为了在**一次系统调用**里同时完成"投递事务"和"收割回复"两件事，避免两次陷入内核。驱动按 `write_size` 与 `read_size` 分别决定是否执行写侧与读侧处理，再把实际消耗量回写给用户态。
 
@@ -149,7 +149,7 @@ static int binder_ioctl_write_read(struct file *filp,
 
 客户端持有的 `binder_ref` 只在收到 `BR_DEAD_OBJ` 后才失效，而 `binder_death`（服务端进程死亡）与对象失效是两条路：前者是 `binder_node` 所在的进程没了，后者是对象被 `unlink` 但进程还在。两者都会让对端拿到 `BINDER_ERROR_DEAD_OBJ`，但对业务的处置不同——前者通常需要重新查找服务，后者是调用时序撞上了对象销毁。Java 侧的 `RemoteException` 就是这个错误码的映射。判断规则：把 `RemoteException` 一律当"服务没注册"处理是常见误判；先看死亡通知是 `linkToDeath` 回调触发（进程死了）还是调用当场抛 `DEAD_OBJ`（对象没了），再决定是重试、重查服务还是修正调用时序。
 
-**Q7: [learning] 进程退出时 Binder 的资源如何回收，`binder_flush` 与 `binder_release` 各负责什么？**
+**Q7: [learning] 进程退出时 Binder 的资源如何回收，binder_flush 与 binder_release 各负责什么？**
 
 `binder_release` 负责进程最后一次关闭 `/dev/binder` fd 时的整体清理；`binder_flush` 负责单个 fd 的引用归零时的清理。进程异常退出时，内核按 `files_struct` 逐个 `flush` 打开的 binder fd，无需用户态参与——这是 Binder 在客户端崩溃场景下不泄漏的关键。
 
@@ -182,7 +182,7 @@ static int binder_open(struct inode *inode, struct file *filp)
 
 边界：线程退出不销毁 `binder_thread` 上的待处理事务语义——内核线程池与工作线程要区分，线程池线程退出时其 work 会被重新派发或取消，直接 `clone` 出的线程退出则其 `todo` 队列随线程一起清理。判断规则：客户端进程被 kill 后服务端仍持有服务端对象引用，依赖的是"进程死亡通知 + 引用计数归零"这条路径，不依赖服务端的主动解注册；因此服务端必须对 `DeadObjectException` 幂等，不能假设客户端会正常调用 `unbind`。
 
-**Q8: [learning] `servicemanager`（`ServiceManager`）本身是怎么启动和承载的，它和普通服务有什么不同？**
+**Q8: [learning] servicemanager（ServiceManager）本身是怎么启动和承载的，它和普通服务有什么不同？**
 
 `servicemanager` 是一个在 init 阶段启动的独立原生进程，持有全局唯一的 `binder_context_mgr_node`。普通服务通过 `addService` 把名字与 `binder_node` 的 handle 注册到它；客户端 `checkService` 时 handle 为零，事务就打到这个 node 上。
 

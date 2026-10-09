@@ -2,7 +2,7 @@
 
 > AAOS 13 动态路由的配置面。不同车型的 bus 地址、扬声器布局和 AudioControl HAL 实现须以设备文件与实际测量为准。本册不提供未经目标车验证的配置样例。
 
-**Q1: [learning] 焦点获准之后，是什么把 `USAGE_ASSISTANCE_SONIFICATION` 送到某个 bus？**
+**Q1: [learning] 焦点获准之后，是什么把 USAGE_ASSISTANCE_SONIFICATION 送到某个 bus？**
 
 焦点只裁决能否开始逻辑播放。实际路由由 AudioPolicyService 执行：CarAudioService 解析 `car_audio_configuration.xml`，把每个 zone 中 context 对应的 usage 与 bus 关联起来，再注册动态 AudioPolicy/AudioMix。底层 `audio_policy_configuration.xml` 声明 bus 设备及可打开的输出路径。两份配置必须对上，Android 才能把音效落到可用的输出设备。
 
@@ -13,7 +13,7 @@
 
 若焦点显示 `SYSTEM_SOUND` 却从媒体 bus 出声，先比较“申请焦点用的 attributes”和“SoundPool/AudioTrack 实际播放用的 attributes”，再查两份配置的对应关系。来源：[AAOS 13 CarAudioDynamicRouting](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioDynamicRouting.java)、[AAOS 车机音频配置](https://source.android.com/docs/automotive/audio/audio-policy-configuration)、[AAOS 多音区路由](https://source.android.com/docs/automotive/audio/audio-multizone-routing)。
 
-**Q2: [learning] `car_audio_configuration.xml` 与 `audio_policy_configuration.xml` 为什么不能互相代替？**
+**Q2: [learning] car_audio_configuration.xml 与 audio_policy_configuration.xml 为什么不能互相代替？**
 
 前者描述车载产品语义，后者描述 Android 音频设备及连接能力。CarAudioService 不能凭一个虚构 bus 地址让 HAL 出声，AudioPolicyManager 也不会从设备端口自行推断“哪个 bus 是导航”。
 

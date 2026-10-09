@@ -2,7 +2,7 @@
 
 > 应用框架 API 契约。边界：本文回答"Parcelable/Serializable 选型与 Parcel 读写契约"。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: Java 对象在 Android 进程间传递时，`Parcelable` 与 `Serializable` 应怎样选择？**
+**Q1: [learning] Java 对象在 Android 进程间传递时，Parcelable 与 Serializable 应怎样选择？**
 
 选择取决于调用场景、实现成本和载荷大小：
 

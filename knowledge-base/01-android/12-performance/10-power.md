@@ -10,7 +10,7 @@
 
 做法：报告耗电结论前先声明口径（活动时长、charge、energy、mAh、百分比），比较只发生在同一口径内；`BATTERY_PROPERTY_CHARGE_COUNTER`（µAh）与 `BATTERY_PROPERTY_CURRENT_NOW`（µA）等属性的精度和符号方向由设备实现决定，不给库仑计设通用误差范围。
 
-**Q2: [learning] `power_profile.xml` 在功耗估算里承担什么角色？为什么用 AOSP 默认值算真机耗电没有意义，PMIC rail 的电流能直接填进去吗？**
+**Q2: [learning] power_profile.xml 在功耗估算里承担什么角色？为什么用 AOSP 默认值算真机耗电没有意义，PMIC rail 的电流能直接填进去吗？**
 
 `power_profile.xml` 是软件估算用的设备参数表：记录组件在不同状态下折算到电池侧的平均电流（单位 mA、按标称电压测量），Framework 用 `charge(mAh) = 电流(mA) × 时长(ms) / 3,600,000` 把活动时长换算成电荷量。AAOS13 源码核对（`frameworks/base/core/res/res/xml/power_profile.xml`）：文件注释明确写着 "The default values are deliberately incorrect values"，OEM 出货前必须实测覆盖——默认 `screen.on.display0` 是 0.1，任何用默认值算出的真机报告都没有设备测量意义。
 
@@ -80,7 +80,7 @@ FCM 优先级边界：normal priority 适合普通同步，在 Doze 中可能延
 
 推送不能替代数据一致性设计：消息可能重复、延迟或丢失，客户端仍要用版本号或游标拉取缺失数据。测试 Doze 场景时要在未充电状态下用 `dumpsys deviceidle force-idle` 验证推送送达与普通同步的恢复延迟，并在结束后 `unforce`。
 
-**Q11: [learning] Android 的两种精确闹钟权限有什么区别？`setExactAndAllowWhileIdle()` 约九分钟一次的频率边界决定了它适合什么场景？**
+**Q11: [learning] Android 的两种精确闹钟权限有什么区别？setExactAndAllowWhileIdle() 约九分钟一次的频率边界决定了它适合什么场景？**
 
 Android 12（API 31）引入 "Alarms & reminders" special app access；Android 13 起可按场景选择两种权限（AlarmManager 属 jobscheduler 模块、源码不在本地 AAOS13 树，按材料转写）：`SCHEDULE_EXACT_ALARM` 由用户授予、也可被用户或系统撤销，使用面较宽，调用前检查 `canScheduleExactAlarms()`；`USE_EXACT_ALARM` 安装时自动授予且用户不可撤销，只允许闹钟、计时器、日历等受限核心场景，并受应用商店政策约束。材料按 Android 14 核对：target 33+ 的多数新安装应用不再预授予 `SCHEDULE_EXACT_ALARM`，备份恢复到 Android 14 设备也按拒绝处理——这些是 A13 之后的行为。
 
@@ -88,7 +88,7 @@ Android 12（API 31）引入 "Alarms & reminders" special app access；Android 1
 
 `OnAlarmListener` 形式的 `setExact()`（API 24 起）不要求精确闹钟权限，但它是进程内监听器：进程退出后不再投递，系统还可在进程没有任何组件时取消（材料按 Android 17 核对的新增 listener 版 `setExactAndAllowWhileIdle()` 同样如此，A13 无该重载）。这个例外不能用来构造后台保活；需要跨进程生命周期的可靠提醒应使用 `PendingIntent` 并遵守精确闹钟权限与政策。
 
-**Q12: [learning] `shortService`、`dataSync`、`mediaProcessing` 三类前台服务的运行时限规则是什么？超时回调后不停止服务会发生什么？**
+**Q12: [learning] shortService、dataSync、mediaProcessing 三类前台服务的运行时限规则是什么？超时回调后不停止服务会发生什么？**
 
 限时规则从 Android 14 起逐版本引入（AAOS13 源码核对：`ServiceInfo` 只有 `FOREGROUND_SERVICE_TYPE_DATA_SYNC`、`MEDIA_PLAYBACK` 等类型常量，没有 shortService）：`shortService`（Android 14）约三分钟，超时回调 `Service.onTimeout(int)`，仍不停止会走 ANR 流程；`dataSync` 与 `mediaProcessing`（Android 15、target 35+）在应用处于后台时每 24 小时累计 6 小时，回调为 `Service.onTimeout(int, int)`，数秒内不停止会抛内部远程服务异常并终止进程。六小时按类型分别计时，同一 App 的多个同类型服务共享额度，回前台会重置；额度耗尽后再启动同类型服务收到 `ForegroundServiceStartNotAllowedException`。
 
@@ -108,13 +108,13 @@ tag 是 BatteryStats 与 Android vitals 聚合的键：稳定 tag（硬编码的
 
 WorkSource 表示"这份工作替哪个 UID 执行"，常见于系统服务或中间层；材料按 Android 17 核对，`PowerManagerService.BinderService.acquireWakeLock()` 会在非空 WorkSource 上校验 `UPDATE_DEVICE_STATS` 权限——普通应用不能借此改写自身归因，也不应把成本转给其他 UID。归因还要注意：某个系统组件持有锁不代表成本一定计在它名下，排查时要结合 WorkSource、UID 与 tag 三条线索。
 
-**Q15: [learning] 客户端 `isHeld()` 返回 true 的 WakeLock，为什么在系统侧可能根本不生效？`WakeLockStateListener` 观察到的又是什么？**
+**Q15: [learning] 客户端 isHeld() 返回 true 的 WakeLock，为什么在系统侧可能根本不生效？WakeLockStateListener 观察到的又是什么？**
 
 `isHeld()` 只说明客户端尚未 release；服务端是否"尊重"这把锁由 PowerManagerService 决定。AAOS13 源码核对（`setWakeLockDisabledStateLocked()`），对应用 UID 的 PARTIAL_WAKE_LOCK 满足任一条件即被禁用：owner UID 处于 cached 状态（`NO_CACHED_WAKE_LOCKS` 开启时按进程状态判断）、设备处于 Doze 且 UID 不在静态或临时豁免名单、Low Power Standby 生效且 UID 不在 LPS allowlist、force-suspend 激活。材料按 Android 17 核对的版本还检查 owner 进程 frozen 状态与 power group 强制禁用——A13 该方法没有 frozen 检查，属版本差异。
 
 `WakeLockStateListener`（API 33 引入，AAOS13 `PowerManager.java` 已含 `setStateListener()`）回调的 `enabled=false` 表示 Framework 服务因上述电源策略暂时忽略这把锁；策略重新允许后，仍处于 held 状态的锁可能再次生效。因此监听状态不能替代 release：客户端仍要保证成功、失败、取消、超时和组件销毁都进入同一条释放路径，引用计数锁还要由单一 owner 管理 acquire/release 配对。
 
-**Q16: [learning] BatteryStats 里能看到几十个应用 wakelock tag，内核 `/sys/kernel/debug/wakeup_sources` 里却对不上号——应用 tag、suspend blocker 与内核 wakeup_source 三层为什么不一一对应？**
+**Q16: [learning] BatteryStats 里能看到几十个应用 wakelock tag，内核 /sys/kernel/debug/wakeup_sources 里却对不上号——应用 tag、suspend blocker 与内核 wakeup_source 三层为什么不一一对应？**
 
 因为每层记录的对象不同。应用每个 tag 的锁保留在 Framework 的 UID/tag 统计（BatteryStats）里；PowerManagerService 只判断是否存在需要 CPU 的有效锁（AAOS13 源码核对：`updateSuspendBlockerLocked()` 检查 `mWakeLockSummary & WAKE_LOCK_CPU`），有需要才持有名为 `PowerManagerService.WakeLocks` 的一个 suspend blocker（blocker 名在 A13 源码 `PowerManagerService.java` 中核对）——多个应用的锁在这一段已经汇总。内核侧还有 alarmtimer、输入、USB、蓝牙、modem 等驱动自己注册的 wakeup source，与应用 tag 没有命名对应关系。
 
@@ -122,7 +122,7 @@ SystemSuspend 的协调流程（Android 10 起取代 libsuspend；源码不在 A
 
 诊断分工：`dumpsys suspend_control_internal --wakelocks/--wakeups` 回答"用户态 blocker 与唤醒统计"；debugfs `wakeup_sources` 的 `active_count`、`total_time`、`max_time`、`prevent_suspend_time` 等字段回答"哪个内核 source 活跃"——量产 user build 通常不允许 `adb root` 也读不到 debugfs，且快照之间要比增量而不是绝对累计值。看到某个 kernel source 活跃，不能按名字去找同名 App tag。
 
-**Q17: [learning] 应用没有调用过 `newWakeLock()`，Android vitals 里为什么仍会出现归因到它的锁？excessive partial wake lock 指标怎么算、超了会怎样？**
+**Q17: [learning] 应用没有调用过 newWakeLock()，Android vitals 里为什么仍会出现归因到它的锁？excessive partial wake lock 指标怎么算、超了会怎样？**
 
 JobScheduler、WorkManager、AlarmManager、FCM、Location 与音频栈都在各自的执行窗口内代持 WakeLock 并归因到发起应用：Job 执行期由调度框架代持、Alarm 投递到 `onReceive()` 完成期间持锁、位置栈在采集与投递期持锁、FCM 在消息投递期间短时持有。所以排查陌生锁名时不能只搜项目里的 `newWakeLock()`，要按锁名与时间回查是哪条 API 链路；WorkManager 管理锁的生命周期也不代表 Worker 可以无限执行——Job 的 stop reason 仍要记录。
 
@@ -130,7 +130,7 @@ excessive partial wake lock 口径（按材料与官方文档转写）：所有�
 
 边界：2 小时与 5% 是质量指标口径，不是系统 API 配额，也不是"每用户可持锁 5% 的时间"；修复要回到 Play Console 的锁名、affected sessions 与 P90/P99 时长定位具体业务，再看持锁区间内的 CPU、网络、定位活动与 suspend 成功次数，不能只看持锁总时长。
 
-**Q18: [learning] BLE 扫描的能耗由哪些参数决定？`ScanFilter` 与 `setReportDelay()` 分别省的是什么，`SCAN_MODE_LOW_LATENCY` 能长期开着吗？**
+**Q18: [learning] BLE 扫描的能耗由哪些参数决定？ScanFilter 与 setReportDelay() 分别省的是什么，SCAN_MODE_LOW_LATENCY 能长期开着吗？**
 
 一次扫描的能耗分三段：controller 侧扫描窗口占用接收机（active scan 还要发 scan request 并等待 response）；Bluetooth 进程侧的过滤、组装结果与统计；应用侧的 Binder 回调与业务处理。scan mode 控制接收占空比——材料按 Android 17 源码转写的 AOSP 默认参数：`LOW_POWER` 约 10%、`BALANCED` 约 25%、`LOW_LATENCY` 100%（100 ms 窗口/100 ms 间隔）。这些毫秒数不是 SDK 公开保证，`Settings.Global`、DeviceConfig 与 OEM 都可能改变运行参数，应用只应依赖 mode 的语义。`LOW_LATENCY` 的 100% 占空比只适合用户正在等待配对的短窗口，长期开启等于让接收机持续工作。
 
@@ -148,7 +148,7 @@ excessive partial wake lock 口径（按材料与官方文档转写）：所有�
 
 生命周期与重连：不再使用的 `BluetoothGatt` 要 `disconnect()` 加 `close()`；重连要有带 jitter 的指数退避、重试上限与取消条件（蓝牙关闭、权限撤销、用户解绑、业务完成），避免多台设备同时重连形成风暴。`autoConnect=true` 适合已知设备的长期在场检测，但不保证进程存活；API 37 新增 `BluetoothGattConnectionSettings` 统一 transport、autoConnect、opportunistic 等参数（AAOS13 无此 API，按材料版本标注），其中 opportunistic client 不维持底层连接、只适合复用现有连接的观察者。
 
-**Q21: [learning] 排查蓝牙功耗异常时，应用日志、`dumpsys bluetooth_manager`、BatteryStats 与 controller activity 各能回答什么？"BLE scan 归因时间很短"能证明 controller 没在工作吗？**
+**Q21: [learning] 排查蓝牙功耗异常时，应用日志、dumpsys bluetooth_manager、BatteryStats 与 controller activity 各能回答什么？"BLE scan 归因时间很短"能证明 controller 没在工作吗？**
 
 不能。BatteryStats 的 start/stop 区间覆盖整个逻辑扫描请求，而逻辑扫描可能因熄屏、位置关闭或系统 suspend 被暂停——材料按 Android 17 源码核对：`ScanController` 在 `ScanManager.startScan()` 之前就调用 `AppScanStats.recordScanStart()`，Bluetooth dump 能记录 suspended duration。所以"归因时间"不等于"controller 连续接收时间"。材料还指出 batch scan 的成本可能归到 Bluetooth 应用而非发起 UID：UID 时间偏短时要继续查 Bluetooth 组件与 controller activity，不能下"该应用没怎么扫"的结论。
 
@@ -164,7 +164,7 @@ excessive partial wake lock 口径（按材料与官方文档转写）：所有�
 
 论文数字的边界：材料引用的实验（亮度 0%→100% 汇总 +86.5% 等）来自单台 Galaxy S23 Ultra 的短场景与 BatteryStats 口径，只能说明方向与实验设计方法，不能外推为收益预期。面板类型决定内容与耗电的关系：LCD 背光是主成本、页面颜色影响有限；OLED/AMOLED 像素自发光，亮度与内容共同决定成本，短测跨过热阈值还会把帧率变化混进显示功耗。
 
-**Q23: [learning] 应用请求 120 Hz 就等于面板运行在 120 Hz 吗？Android 的刷新率由谁决定，`Surface.setFrameRate()` 承诺了什么？**
+**Q23: [learning] 应用请求 120 Hz 就等于面板运行在 120 Hz 吗？Android 的刷新率由谁决定，Surface.setFrameRate() 承诺了什么？**
 
 不等于。显示链路有四个不同频率：应用产生新 buffer 的速率、Choreographer/VSync 驱动 UI 的节奏、SurfaceFlinger 合成与提交的节奏、面板物理刷新率——30 fps 的视频可以由 120 Hz 面板重复帧显示；支持自适应刷新率（ARR）的设备还会在同一面板模式内改变 VSync 节奏。实验报告必须分别记录"请求值"与"观察值"（VSync 间隔、显示模式、面板观察值），把"请求 120 Hz"写成"持续 120 Hz"是常见混淆。
 

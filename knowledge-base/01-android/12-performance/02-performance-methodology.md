@@ -160,7 +160,7 @@ headroom 类查询各有约束：`getCurrentThermalStatus()` 与 `isPowerSaveMod
 
 工具只降低测量成本，不会自动补齐合同：Macrobenchmark 生成的数字若缺少设备状态与工作负载断言，可能测到错误页面、空列表或已经失败的启动。因此每个 benchmark 在代码和报告中都要回答：目标是什么、指标与方向、测量范围从哪到哪、应用处于什么数据与编译状态、环境如何、重复多少次、判定阈值与排除规则是什么、原始 JSON 与 trace 保存在哪。测试块末尾应断言目标状态已经出现（列表加载完成、目标控件可见、视频开始播放）——否则应用崩溃后快速返回错误页也会得到一组"更快"的结果。
 
-**Q21: [learning] 性能回归测试的环境标准化有哪些关键约束？为什么 `cmd thermalservice override-status` 不能用来制造"未降频"基准？**
+**Q21: [learning] 性能回归测试的环境标准化有哪些关键约束？为什么 cmd thermalservice override-status 不能用来制造"未降频"基准？**
 
 数值判定用专用真机：模拟器结果受宿主机、虚拟化、GPU 和存储影响，官方不建议用于性能判定，只适合安装、导航、断言与产物产出的冒烟检查；参考设备要固定序列号、build fingerprint、安全补丁、vendor 镜像、ART Mainline 版本、电池健康与实验室散热方式。目标应用应接近 release：`debuggable=false`、启用 `profileable`（允许 shell 在不打开调试时采集）、与发布一致的 R8 配置、包含 ProfileInstaller；eng 构建、debuggable 目标包和 method tracing 都会改变执行路径。显示模式与亮度保持一致或记录每帧实际 deadline，测动画时保留发布配置的 animation scale；`adb shell am kill-all` 只清理符合条件的后台进程，不能当作"设备已经干净"的证明，串行运行并禁止同设备并行测试。
 
@@ -193,7 +193,7 @@ headroom 类查询各有约束：`getCurrentThermalStatus()` 与 `isPowerSaveMod
 
 可观测性有硬边界：`FrameMetrics` 只能接入自己控制的应用，无法注入未授权的竞品进程；Macrobenchmark 要求目标包 profileable，竞品通常不满足——竞品侧用 UI Automator/adb 驱动加 shell Perfetto 采集，接受可观测性更低的限制。没有竞品源码时，trace 能证明某线程或阶段占用时间，却不能证明其设计动机；结论应分成"观测、候选原因、验证办法"三列。
 
-**Q25: [learning] `adb shell am start -W` 的输出应该怎么读？"冷启动"与"清缓存"为什么不是一回事？**
+**Q25: [learning] adb shell am start -W 的输出应该怎么读？"冷启动"与"清缓存"为什么不是一回事？**
 
 `-S` 会在启动前 force-stop Intent 匹配的包，`-W` 等待启动结果。Android 13 与 17 的输出都是 Status、LaunchState、TotalTime、WaitTime 四项（AAOS13 的 `ActivityManagerShellCommand` 与 `WaitResult` 源码核对；旧版本的 ThisTime 已不再打印）。读法：
 

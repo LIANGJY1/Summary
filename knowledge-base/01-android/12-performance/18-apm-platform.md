@@ -27,7 +27,7 @@
 
 另一个容易漏的要素是丢弃原因计数（配额耗尽、磁盘已满、已过期、触发限流、上传失败）：服务端收到事件不代表数据完整，不上报丢弃统计的看板只描述"成功上传的人群"。最后，样本数不能直接当发生率——异常触发采样、设备离线、进程死亡和上传限流都会改变样本被看见的概率。
 
-**Q3: [learning] Firebase Performance 的 `_app_start` 从什么时刻计到什么时刻？为什么它不能当进程启动或首屏完整耗时用？**
+**Q3: [learning] Firebase Performance 的 _app_start 从什么时刻计到什么时刻？为什么它不能当进程启动或首屏完整耗时用？**
 
 `_app_start` 的起点是 Firebase 首个类的早期 class-load（类加载）近似时间，终点是第一个 Activity 的 `onResume()`；SDK 内部把这条 trace 记为 `_as`，计时使用单调时钟 `elapsedRealtime`（按设备启动后经过时间递增，不受修改系统时间影响）。它是"SDK 可见的启动区间"，不是进程启动或首屏耗时。
 
@@ -72,7 +72,7 @@ Sentry 的 UI profiling 说明了版本分支的必要性：SDK `8.51.0` 起按�
 
 Bugly 的教训是制品线要拆开：普通版 Android changelog 停在 `3.4.4`（2021 年），不能推断 Pro `4.4.x` 的能力；Pro 的 Maven 最新是 `4.4.7.16` 而公开 changelog 只到 `4.4.7.8`，这之间的版本不能按号猜行为；crash、ANR、OOM 默认 100% 上报且不支持采样，其他监控项才支持采样，直接影响事件费用与流量估算；16 KB 适配必须使用 `com.tencent.bugly_16kb` 的 groupId，只升版本号不换 groupId 不算选择了 16 KB 制品。APMPlus 则要核对国内与海外制品的上报地域差异，PoC 设备需加入白名单强制进入采集，否则"没有数据"可能只是没命中采样。以上均为第三方商业 SDK，未本地核对。
 
-**Q8: [learning] androidx.tracing 2.0 的进程内 `Tracer` 与经典 `trace {}` 为什么是两条路径而不是替代关系？**
+**Q8: [learning] androidx.tracing 2.0 的进程内 Tracer 与经典 trace {} 为什么是两条路径而不是替代关系？**
 
 经典 `Trace.beginSection()` / `trace {}` 把同步 slice、异步 slice 和 counter 写入系统 trace 缓冲区，随系统 trace 会话进入 Perfetto；2.0 新增的进程内路径把带字段的事件写入应用进程控制的缓冲区，由 `TraceDriver` 持有 `Tracer` 管理一次 tracing 生命周期、`TraceSink` 决定事件如何序列化输出，`tracing-wire:2.0.0` 提供 Perfetto 格式的 `TraceSink` 实现。两者用途不同，官方也没有弃用经典 API——低频、希望始终进入系统 trace 缓冲区的事件仍推荐它。
 
@@ -80,7 +80,7 @@ Bugly 的教训是制品线要拆开：普通版 Android changelog 停在 `3.4.4
 
 版本坐标：稳定线 `androidx.tracing:tracing:2.0.0` 的 Android 变体 minSdk 23；仍需覆盖 API 21–22 的应用用 1.3.0 兼容线（自 1.3.0 起 `tracing-ktx` 已并入主 artifact）。平台侧的 `android.os.Trace` 机制（同步/异步/counter 语义、127 字符限制、AAOS13 的 libcutils 单路径）已在 01-Perfetto 文档核对，此处不重复。
 
-**Q9: [learning] 非 debuggable 进程里 `Trace.isEnabled()` 返回 true 需要什么条件？各 API 段允许应用写 trace 的前提有什么差别？**
+**Q9: [learning] 非 debuggable 进程里 Trace.isEnabled() 返回 true 需要什么条件？各 API 段允许应用写 trace 的前提有什么差别？**
 
 `isEnabled()` 为 true 需要同时满足两件事：当前存在能接收应用事件的 trace 会话，且该进程被允许写 app trace。Android 12 以后"默认允许应用 tracing"不表示系统一直在后台记录——没有采集会话时返回 false，昂贵的名称构造应借此跳过或改用 lazy label。
 
@@ -92,7 +92,7 @@ Bugly 的教训是制品线要拆开：普通版 Android changelog 停在 `3.4.4
 
 采集侧还要包含目标应用：Macrobenchmark 会自动采集目标应用的自定义 trace point；自定义 Perfetto 配置要把目标包放进 atrace 的应用配置。正式性能结论应来自 non-debuggable、profileable 且接近发布配置的构建——debuggable 包的调试设施与运行时行为会改变时间分布。
 
-**Q10: [learning] btrace 3.0 用"运行时 Hook + 同步抓栈"采集方法栈——为什么调小 `-sampleInterval` 也不能保证固定周期采样？`-m` 参数最常见的误解是什么？**
+**Q10: [learning] btrace 3.0 用"运行时 Hook + 同步抓栈"采集方法栈——为什么调小 -sampleInterval 也不能保证固定周期采样？-m 参数最常见的误解是什么？**
 
 btrace 3.0 已删除 2.0 的编译期全量插桩，改为 ShadowHook 与 JNI Hook 拦截一批高频或可能阻塞的 ART 路径（对象分配、JNI 调用、Monitor 锁、GC、`Object.wait()`、`Unsafe.park()`），Hook 点在目标线程上同步抓栈、只保存 `ArtMethod*` 与轻量信息——样本只在经过 Hook 点时产生。因此 `-sampleInterval`（默认 1,000,000 ns，即 1 ms）是同一线程两次同步抓栈之间的最小间隔，不会启动严格每 1 ms 唤醒的定时采样器；线程在两次 Hook 之间执行的短方法不会被记录，长期阻塞在未覆盖入口的线程也可能没有样本。最终 Perfetto 里的 slice 由样本与 Hook 上下文重建，不能当每个方法精确的 enter/exit 计时。
 
@@ -236,7 +236,7 @@ Collie 用很少的代码拼出第一批信号，但它的信号是 SDK 自定�
 
 编译口径决定结果可解释性：使用 AGP 8.4.0+ 并应用 `androidx.benchmark` Gradle 插件时，Microbenchmark APK 默认 full AOT 编译，目标是压掉 JIT 稳定期的波动；`androidx.benchmark.forceaotcompilation=false` 退出该默认、结果更接近 warmup 后的 JIT 状态。full AOT 更稳定但不代表用户设备的常态编译状态——依赖 JIT 行为的局部优化要补一组关闭强制 AOT 的实验。两组结果只在编译配置一致时才可比较，报告必须记录 Benchmark、AGP、Kotlin、R8 与该开关。
 
-**Q27: [learning] Macrobenchmark 为什么必须用独立的 `com.android.test` 模块和 non-debuggable 且 profileable 的目标应用？setupBlock 与 measureBlock 各承担什么？**
+**Q27: [learning] Macrobenchmark 为什么必须用独立的 com.android.test 模块和 non-debuggable 且 profileable 的目标应用？setupBlock 与 measureBlock 各承担什么？**
 
 Macrobenchmark 由单独安装的 test APK 从外部进程驱动目标应用（UiAutomator 负责启动、手势与等待），所以目标应用要保持 non-debuggable 并声明 `<profileable android:shell="true"/>`——允许 adb shell 启动的受控工具读取详细 trace，又不会把应用变成 debuggable。工程结构随之固定：`:app` 的 `benchmark` build type 用 `initWith(release)` 继承 R8 与资源压缩、只换成 debug 签名，`matchingFallbacks` 指向 release 让依赖模块正确匹配；`:macrobenchmark` 模块用 `com.android.test` 插件并声明 `targetProjectPath`，test APK 的 benchmark variant 可以 debuggable（与目标应用的 non-debuggable 不要混淆）；`:app` 还要依赖 ProfileInstaller（1.3+），它负责把 Baseline Profile 交给系统，也提供清 shader cache、重置 profile 的命令通道。
 
@@ -250,7 +250,7 @@ Macrobenchmark 由单独安装的 test APK 从外部进程驱动目标应用（U
 
 验证侧要求成对运行两个 `CompilationMode`：`None()` 清除预编译作为对照，`Partial(BaselineProfileMode.Require)` 要求 APK 内 Baseline Profile 可安装并以 `speed-profile` 编译、装不上直接失败——不能用 `DEFAULT`（等价于 `Partial(UseIfAvailable)`，profile 缺失时不失败）代替严格验证。两组必须使用相同 APK、fixture、设备与迭代数；`Partial(Require)` 需要 API 24+（API 23 只有 `Full()`），其编译动作在平台侧走 `pm compile` 的 `speed-profile` 路径（AAOS13 已核对）。补充证据可用 `ArtMetric`（API 24+）观察启动期 JIT、类加载与校验工作是否减少，再配合启动/滚动指标确认端到端改善。
 
-**Q29: [learning] `FrameTimingMetric` 的三个输出怎么读？`TraceSectionMetric` 默认 `Mode.Sum` 的陷阱是什么？**
+**Q29: [learning] FrameTimingMetric 的三个输出怎么读？TraceSectionMetric 默认 Mode.Sum 的陷阱是什么？**
 
 `FrameTimingMetric` 输出三类样本：`frameDurationCpuMs` 是 UI thread 与 RenderThread 产出一帧的 CPU duration（API 31 前无法计入 `Choreographer#doFrame` 开始前的时间）；`frameOverrunMs`（API 31+，AAOS13 的 `FrameMetrics.DEADLINE` 已支持）是相对帧 deadline 的超期或余量——正值超期、负值仍有余量，变刷新率设备上应优先用它判断 deadline 表现；`frameCount` 记录测量窗口内产出的帧数，用来解释"删掉无效帧后分位数反而上升"这类样本变化。它仍要与 FrameTimeline、主线程、RenderThread 与 GPU 轨道联读，不能凭一个分位数定位根因。
 

@@ -16,7 +16,7 @@
 
 反例提醒：不能把所有 `SIGKILL` 都算作 LMK（信号退出还需结合 status 与上下文），也不能拿 Java Crash 的处理方式分析 ANR；`OutOfMemoryError` 描述进程内分配失败，与系统低内存终止是两条记录，不能互相替代。
 
-**Q2: [learning] API 30 的 `ApplicationExitInfo` 能回答什么、不能回答什么？读取时有哪些边界？**
+**Q2: [learning] API 30 的 ApplicationExitInfo 能回答什么、不能回答什么？读取时有哪些边界？**
 
 `ApplicationExitInfo` 是进程退出后留在系统里的历史记录，能补上异常处理器来不及写完的证据，解释 LMK、信号退出、用户强停等非 Crash 退出；它不是实时崩溃回调，只能在后续进程读取，记录与 trace 都可能缺失。
 
@@ -133,7 +133,7 @@ class DelegatingFatalHandler(
 
 `AtomicBoolean` 保证多线程接近同时崩溃时只有一个线程进入写入；`finally` 保证自有采集失败后仍委托旧处理器。致命路径上不能做：发送同步网络请求、生成完整堆转储、等待其他线程释放普通业务锁、初始化数据库或大型序列化框架——进程可能正处于锁异常、内存紧张或 Binder 不可用状态，上传只能尽力而为。正确分工是把工作移到正常运行期：维护固定容量的 breadcrumb 环形缓冲、版本与会话快照、已打开并可独占写入的应用私有暂存区；处理器内只写时间戳、进程与线程标识、异常链摘要和完整性校验字段，重启后再补传。两个边界：这套结构不承诺记录必达（磁盘满、OOM、进程被外部终止都可能打断）；普通第三方应用不应把系统 `DropBoxManager` 当自有崩溃暂存区，它是容量受限的系统诊断设施，条目可能被丢弃。
 
-**Q10: [learning] `Thread.getAllStackTraces()` 为什么不是原子快照？跨线程取栈的真实成本是什么？**
+**Q10: [learning] Thread.getAllStackTraces() 为什么不是原子快照？跨线程取栈的真实成本是什么？**
 
 AAOS13 的 `getAllStackTraces()` 先枚举活动线程数组，再逐线程调用 `getStackTrace()`，各条栈的采样时刻不同，不是同一指令时刻的原子快照；线程并发创建或退出时，枚举结果也不承诺覆盖每条活动线程。公开 API 文档同样把每条栈定义为可能在不同时间取得的快照。
 
@@ -229,7 +229,7 @@ AGP 4.1+ 可为 AAB 生成 native debug symbols：`SYMBOL_TABLE` 只能恢复函
 
 多采集器互相破坏的机制是：内核对每个信号只维护一份 disposition，后一次 `sigaction()` 会替换前一次；AAOS13 的 ART SignalChain 包装了 `sigaction` 以保护平台特殊处理器先行处理（`sigchain.cc` 中每个信号一个 `SignalChain`、平台槽位数组加单个用户 action），应用通过 `dlopen("libc.so") + dlsym("sigaction")` 绕过包装层，会直接竞争内核 disposition，导致系统 tombstone 缺失或处理器不被调用。保存旧处理器也不会自动形成安全链——`SIG_DFL`、`SA_SIGINFO`、重复进入与重新投递都要保留原语义。稳妥策略是让一个组件负责致命 Native 信号、其他 SDK 关闭 Native 捕获只保留 Java 与上传能力；接入第二个采集器后缺堆栈时，先逐段确认现场生成、文件完整、符号匹配与上传，再检查 signal disposition，并用故障注入验证 tombstone 仍能生成。
 
-**Q21: [learning] 广播 ANR 的时间窗口怎么算？`goAsync()` 会延长它吗？**
+**Q21: [learning] 广播 ANR 的时间窗口怎么算？goAsync() 会延长它吗？**
 
 广播 ANR 从系统分发广播开始计时，到 receiver 完成（同步 receiver 以 `onReceive()` 返回为完成点，`goAsync()` 后以 `PendingResult.finish()` 为完成点）为止；计时窗口还包含进程冷启动与线程池排队消耗的时间。AAOS13 的广播基线 `TIMEOUT` 为 10 秒 × `HW_TIMEOUT_MULTIPLIER`（`BroadcastConstants` 核对），官方 ANR 文档口径为带 `FLAG_RECEIVER_FOREGROUND` 的前台广播 10 秒、普通广播 60 秒；材料按 Android 17 核对，Android 14 起进程因调度得不到足够 CPU 时窗口可放宽到约 10–20 秒与 60–120 秒，AAOS13 没有这一扩展。
 

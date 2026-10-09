@@ -8,7 +8,7 @@
 
 TTFB 的起点在不同平台口径不同：从 `callStart` 起算包含排队、DNS、建连、握手与上传；从请求发送结束起算才接近"网络往返加服务端"。TTFB 高可能来自客户端排队、边缘节点排队、CDN cache miss 或源站处理，必须结合服务端 trace、`Server-Timing`、CDN 缓存状态与客户端分段计时才能归因。`responseHeadersStart` 表示开始读响应头，不等于业务已拿到可展示数据；OkHttp 的 `callStart` 在 `enqueue()`/`execute()` 后即触发，网络完成到业务可用之间还有解析与 UI 提交。
 
-**Q2: [learning] 主线程发起网络会抛 `NetworkOnMainThreadException`，但"主线程等待后台网络结果"为什么同样危险？BlockGuard 覆盖哪些入口？**
+**Q2: [learning] 主线程发起网络会抛 NetworkOnMainThreadException，但"主线程等待后台网络结果"为什么同样危险？BlockGuard 覆盖哪些入口？**
 
 危险在于结果相同——主线程被网络往返阻塞，造成卡顿甚至 ANR。`Future.get()`、`CountDownLatch.await()`、`runBlocking` 等同步等待不会触发任何异常，因为它们不是网络调用，而是阻塞在锁或队列上；Perfetto 里主线程出现 `nativePollOnce` 通常只说明 Looper 在等消息，只有调用栈、线程状态与网络 slice 时间重叠共同指向等待点时，才能判断 UI 在等网络。
 
@@ -34,7 +34,7 @@ HTTP/2 用 HPACK 压缩头部、把多个 stream 复用进一条 TCP 连接，�
 
 一次复用要满足完整 `Address` 条件：scheme、端口、代理、DNS 结果、socket/TLS 配置、hostname verifier 与 certificate pinner 全部一致；HTTP/2 跨主机 connection coalescing 还要求现有连接指向同一 IP/端口、证书覆盖新主机且校验与 pin 兼容——两个域名不保证共享连接。OkHttp 5 默认启用 fast fallback 并行尝试多路由以降低 IPv6/IPv4 等待，一次 Call 会出现多组 connect 事件，监控按 attempt 分别保存。"预热"是一笔真实成本：发送 HEAD 或空 GET 产生 DNS、建连、TLS、流量与电量开销，后续请求还可能因网络切换、authority 不同或空闲回收而无法复用；DNS 预解析只省 resolver 段，完不成 TCP/TLS 握手。
 
-**Q6: [learning] OkHttp 的 `callTimeout`、`connectTimeout`、`readTimeout`、`writeTimeout` 分别约束哪一段？弱网下把超时一律调大或调小各有什么问题？**
+**Q6: [learning] OkHttp 的 callTimeout、connectTimeout、readTimeout、writeTimeout 分别约束哪一段？弱网下把超时一律调大或调小各有什么问题？**
 
 四者是不同层级的期限（OkHttp 5.3.0 默认 connect/read/write 各 10 秒，默认没有覆盖整个 Call 的总期限）：`callTimeout` 覆盖整个调用，包括 DNS、建连、写入、服务端处理、读取、重定向与内部恢复；`connectTimeout` 只约束新 TCP socket 的连接阶段，不约束 DNS 与整体；`readTimeout` 约束 socket 上单次读取操作之间的间隔，不等于整个响应体的期限；`writeTimeout` 约束单次写入操作，不等于上传业务的完整截止时间。交互接口需要明确的总期限；大文件上传适合分片加断点续传；长连接与流媒体按心跳或 segment 设计；后台同步用 WorkManager 的网络约束与重试调度。
 
@@ -70,13 +70,13 @@ CT 通过公开日志与 SCT（签名证书时间戳）留下可审计的签发�
 
 Network Security Config 有一个容易遗漏的分支：当前域显式启用 CT 才执行；当前域使用用户证书或应用配置了自定义信任锚时默认不执行 CT；其余继承上层。私有 PKI 与抓包调试环境常落入第二种情况——同一应用的公网站点执行 CT、企业根证书的内网站点不执行。完整策略按 SCT 交付方式、证书有效期、日志状态与运营者判断：嵌入证书在有效期不超过 180 天时需要 2 个不同合格日志的 SCT、超过 180 天需要 3 个，且覆盖至少 2 个日志运营者；OCSP stapling 或 TLS 扩展方式需要至少 2 个合格日志的 SCT——日志清单会变化，不要把数字固化成永久服务端规则。CT 检查在本地验证握手携带的证书、OCSP 响应或扩展，不应按"额外一次网络请求"估算；迁移期更常见的影响是握手直接失败（SCT 缺失、日志状态不满足、证书链发送错误）。
 
-**Q12: [learning] 用 OkHttp `EventListener` 做网络监控要注意什么？`NetworkCallback` 的 `VALIDATED` 能证明业务域名可达吗？**
+**Q12: [learning] 用 OkHttp EventListener 做网络监控要注意什么？NetworkCallback 的 VALIDATED 能证明业务域名可达吗？**
 
 EventListener 的使用约束：每个 `Call` 要由 `EventListener.Factory` 创建独立 listener 实例（事件携带并发状态）；回调必须快速返回，不能做磁盘或网络 I/O，也不能重新进入同一个 client——事件先写无阻塞队列，由后台消费者批量处理。DNS、connect、请求与响应事件可能因重定向、fast fallback 和重试重复出现，要追加到 attempt 列表；连接复用时 DNS 与 connect 缺席是正常结果。指标要限制基数并保护隐私：记录白名单映射的接口模板、协议、状态码与错误类别，完整 URL、query、header、请求体与 token 不进性能日志。计时用单调时钟；Perfetto 不会自动展开 OkHttp Call，需要用 AndroidX Tracing 异步 slice 标记逻辑调用并用唯一 cookie 区分并发请求。
 
 `VALIDATED` 不能证明业务可达：`INTERNET` 是能力声明，`VALIDATED` 是系统对公网探测点的结论，业务请求成功还取决于目标域名、路由、证书、CDN 与服务端。`NetworkCapabilities.getLinkDownstreamBandwidthKbps()` 返回的是设备到所接网络的第一跳带宽估计，不是到目标服务的吞吐；`SubscriptionInfo` 的流媒体速率上限（Android 17 新增，按材料核对）返回 `BITRATE_UNKNOWN` 时也不是测速值。这些平台状态只作为请求策略输入；后台任务关心"有网或非计费网"时优先用 WorkManager/JobScheduler 约束，网络切换后不要统一清空连接池或立即重放全部失败请求。
 
-**Q13: [learning] HTTP cache 与业务离线数据各管什么？`onlyIfCached()` 在缓存缺失时返回什么？**
+**Q13: [learning] HTTP cache 与业务离线数据各管什么？onlyIfCached() 在缓存缺失时返回什么？**
 
 OkHttp cache 遵守 HTTP 缓存语义：客户端只保存符合 `Cache-Control`、`ETag`、`Last-Modified`、`Vary` 规则的响应，服务端负责正确返回这些头。它不能替代 Room、SQLite 或文件层的业务离线数据——后者承载业务状态与查询能力，前者只缓存 HTTP 响应。
 
@@ -88,7 +88,7 @@ OkHttp cache 遵守 HTTP 缓存语义：客户端只保存符合 `Cache-Control`
 
 迁移路径（按材料核对）：Android 9 及更早，resolver 代码分布在 Bionic 与 netd，Java 查询可经本地代理 `dnsproxyd`；Android 9 引入用户侧 Private DNS 设置（基于 DoT）；Android 10 resolver 迁入 `system/netd/resolv` 并以 `com.android.resolv` APEX 交付，直接服务 `/dev/socket/dnsproxyd`，resolver 配置的 Binder 入口也从 netd 移入模块；Android 17 当前实现位于 `packages/modules/DnsResolver`，接口仍是 `IDnsResolver`。模块化允许通过 Mainline 更新解析器而无需完整 OTA，但普通应用没有获得全局 DNS 控制权——不能清空所有网络的 resolver 缓存、不能改别的网络的 DNS server、不能操纵 Private DNS 校验状态。
 
-**Q15: [learning] `DnsResolver` 的 Looper、Executor 与 CancellationSignal 分别控制什么？`query()` 与 `rawQuery()` 的错误信息差别为什么重要？**
+**Q15: [learning] DnsResolver 的 Looper、Executor 与 CancellationSignal 分别控制什么？query() 与 rawQuery() 的错误信息差别为什么重要？**
 
 三者控制不同的纬度：Looper（Android 17 新增 `DnsResolver(Context, Looper)` 构造引入，`getInstance()` 同版本废弃，按材料核对）用来监视 resolver 文件描述符的可读事件；查询方法中的 Executor 决定结果回调在哪个执行环境运行——两个线程参数不能互相替代；`CancellationSignal` 让调用方取消异步查询，页面退出、请求取消或网络会话失效后继续等旧查询只增加无效工作。解析入口还有 `InetAddress.getAllByName()`/`Network.getAllByName()`（传入明确 `Network` 时用该网络的 resolver 配置，未指定则跟随默认网络）与 native 的 `android_getaddrinfofornetwork()`。
 
@@ -112,13 +112,13 @@ Private DNS（Android 9 引入的用户设置）保护的是本机 resolver 到�
 
 `ResolverController::dump()` 的 server 统计（查询总数、成功、错误、超时、平均 RTT、server 状态）能回答"设备当前 resolver 是否集中失败"，不能替代应用侧分段计时——应用可能命中自己的缓存、等待线程调度或复用既有连接。`NetworkDiagnostics`（材料按 Android 17 核对）把探测 socket 绑定到指定 `Network`，对网关、DNS server 与测试地址做 ICMP、UDP DNS 与 DoT 探测，能缩小系统网络故障范围，但不能证明业务域名、CDN 或应用 HTTPDNS 正常。现象分流举例：`UnknownHostException` 增长先查解析入口与 resolver/HTTPDNS 结果，不推 NXDOMAIN；`.local` 失败先核对 targetSdk 37 的 `ACCESS_LOCAL_NETWORK` 权限与目标网络（Android 17 起 .local 解析受本地网络权限限制，A13 无此权限），再判断 resolver 故障；VPN 下公网正常内网失败，查 VPN DNS、split DNS 与绑定的 `Network`。指标按解析来源、缓存状态、传输类型、查询类型与 rcode 分组聚合，分位数服务于 SLO——低流量域名的 p99 波动大，固定套用制造噪声；`netId` 会被系统复用，长期聚合用进程内递增的网络会话号，无盐哈希 hostname 在候选域名很少时可被离线枚举，不算匿名化。
 
-**Q19: [learning] 用 OkHttp 自定义 `Dns` 接 HTTPDNS 时，缓存 key、TTL 与 bootstrap 有什么约束？为什么 URL 不能改成裸 IP？**
+**Q19: [learning] 用 OkHttp 自定义 Dns 接 HTTPDNS 时，缓存 key、TTL 与 bootstrap 有什么约束？为什么 URL 不能改成裸 IP？**
 
 `Dns.lookup(hostname)` 是同步接口且可能被多请求并发调用，实现边界：优先读线程安全的内存缓存；缓存 key 至少包含 hostname 与网络会话（必要时加地址族与用户网络策略），避免旧网络地址跨网络复用；TTL 使用 DNS/HTTPDNS 服务返回的有效期，对负缓存（域名不存在或失败结果）单独设策略；缓存缺失时同步访问 HTTPDNS 的耗时会进入建连前的 DNS 阶段；异步预取由明确业务触发、过期结果不无限续用；持久化地址只适用于能正确保存 TTL、网络分区与数据版本的设计，默认用内存；系统 fallback 是否允许由可用性、隐私与企业网络策略共同决定。HTTPDNS 客户端要独立、最小化 bootstrap，不能递归调用同一个自定义 `Dns`。
 
 连接仍要保留 hostname：URL 改成裸 IP 会破坏 HTTP Host、TLS SNI 与证书主机名校验的一致性——把 URL 换成 IP 再关闭主机名校验属于安全缺陷。正确做法是连接层用解析出的 IP、URL 与校验层保持域名。连接池还会改变 DNS 统计：请求复用现有连接时不调用 `lookup()`；同一域名多 IP 时连接策略决定尝试顺序与回退。
 
-**Q20: [learning] 网络性能日志应该记录什么、不应该记录什么？OkHttp、Cronet 与平台 `HttpEngine` 的选型边界是什么？**
+**Q20: [learning] 网络性能日志应该记录什么、不应该记录什么？OkHttp、Cronet 与平台 HttpEngine 的选型边界是什么？**
 
 日志记录低基数分组字段：白名单映射的接口模板、协议、状态码、错误类别、时间分段、metered/roaming、缓存命中；完整 URL、query、header、请求体、响应体、Cookie、Authorization 与 token 不进入性能日志。CDN 观测也走白名单：记录协议与 IP family、POP/cache 状态响应头白名单字段、各分段耗时——客户端很难仅凭 TTFB 区分边缘排队、cache miss 与源站处理，需要 CDN 日志与服务端 trace ID（白名单传递）配合。
 

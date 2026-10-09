@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：system_server 的进程构成、服务就绪与恢复语义，以及它和 WMS、SurfaceFlinger 的边界。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: `system_server` 进程都包含哪些层级的代码？了解这些有什么用？**
+**Q1: [learning] system_server 进程都包含哪些层级的代码？了解这些有什么用？**
 
 `system_server` 是应用框架服务端的宿主进程。理解它的边界，先区分进程内包含什么，以及系统服务如何暴露调用接口。
 
@@ -124,7 +124,7 @@ AAOS 13 源码基线中，Watchdog 默认完整超时为 60 秒，调试默认�
 2. **定位职责**：Activity 任务和生命周期编排主要由 ATMS（wm 包）负责，进程管理等由 AMS（am 包）负责。
 3. **判断合法性**：分析一段代码前确认它运行在哪个线程、假设冷启动还是运行期重启，以及职责属于 AMS 还是 ATMS。
 
-**Q9: AMS 的双锁模型（`mGlobalLock` 与 `mProcLock`）如何工作？为什么 OOM adj 全量更新仍要同时持两把锁？**
+**Q9: [learning] AMS 的双锁模型（mGlobalLock 与 mProcLock）如何工作？为什么 OOM adj 全量更新仍要同时持两把锁？**
 
 Android 12 起 AMS 持有两把锁。AMS 从 Android 12 起逐步把受保护状态分到两把锁。`mGlobalLock`（即 `ActivityManagerService.this`）保护 Service、Provider、Broadcast 等核心组件状态。`mProcLock`（`ENABLE_PROC_LOCK = true` 时为独立的 `ActivityManagerProcLock` 对象）保护逐步迁入的进程管理状态。需要同时持锁时固定按 `mGlobalLock` → `mProcLock` 的顺序获取，反向获取会形成 AB-BA 死锁。OOM adj 全量更新既要读组件关系又要写进程状态，所以 `updateOomAdjLocked()` 在持全局锁后再进入 `mProcLock` 调用 `updateOomAdjLSP()`。
 

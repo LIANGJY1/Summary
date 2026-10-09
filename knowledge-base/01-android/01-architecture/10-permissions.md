@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：应用权限的声明与授权、Framework 检查、AppOps、Linux UID/GID 和 SELinux 的协作边界。应用沙箱机制见 `09-app-sandbox.md`，SELinux 策略细节见 `11-selinux.md`。应用侧 API 使用与排障按具体服务主题归档。
 
-**Q1: Android 的 `android.permission.*` 是什么机制，权限检查发生在哪一层？**
+**Q1: [learning] Android 的 android.permission.* 是什么机制，权限检查发生在哪一层？**
 
 Android 权限是由系统框架管理的访问控制契约：应用在 manifest 请求权限，系统按 protection level 和用户/系统授权状态决定是否授予，受保护的 API 或服务再依据调用者身份检查是否允许操作。它主要由 Android Framework 与系统服务实现，但不能简化为“纯 Java 检查”或“内核完全不参与”。
 

@@ -61,7 +61,7 @@ batching 省的是"缓冲与搬运 + AP 唤醒"两段成本：事件暂存在 se
 
 传感器耗电来自三个位置：**采样与计算**（频率、传感器类型、融合复杂度，发生在 MEMS/hub/融合算法）；**缓冲与搬运**（FIFO 深度、事件大小、共享方式，发生在 hub SRAM、硬件 FIFO、HAL FMQ 与 SensorService 队列）；**AP 唤醒与处理**（wake-up 属性、批量窗口、回调工作量，发生在 SoC resume、SensorService 与应用线程）。关键边界：`batch()` 只是提交配置，真正的省电来自 hub/FIFO 在 AP 之外暂存事件；没有硬件 FIFO 或低功耗 hub 时，即使 `batch()` 返回成功，也可能无法减少 AP 唤醒。
 
-**Q8: [learning] `registerListener` 的 `samplingPeriodUs` 与 `maxReportLatencyUs` 分别控制什么，请求 50 Hz 加 5 秒延迟会不会变成 0.2 Hz？**
+**Q8: [learning] registerListener 的 samplingPeriodUs 与 maxReportLatencyUs 分别控制什么，请求 50 Hz 加 5 秒延迟会不会变成 0.2 Hz？**
 
 `samplingPeriodUs` 控制采样频率（单位是微秒，20,000 µs 约为 50 Hz，只有增大它才降低频率）；`maxReportLatencyUs` 控制事件允许在 FIFO 暂存的最长交付延迟，正数表示允许批量交付，0 表示尽快上报。所以四参数重载请求"20,000 µs + 5,000,000 µs"仍以约 50 Hz 采样，只是允许每批最多等 5 秒交付，不会变成 0.2 Hz；应用回调可能一次收到多个事件，其 timestamp 早于回调时刻。
 
@@ -79,7 +79,7 @@ SensorService 的 `SensorDevice` 为每个连接保存 `BatchParams`，由 `Info
 
 wake-up sensor 允许 AP suspend，但必须在事件达到最大上报延迟、wake-up FIFO 即将满或 one-shot wake-up 触发时唤醒 AP，正数 `maxReportLatencyUs` 可让多个事件共用一次 AP resume；设备从 suspend 恢复时会尽量交付 FIFO 中全部内容，减少刚回 suspend 又被唤醒的概率。两个关键边界：相同传感器类型可同时存在 wake-up 与 non-wake-up 两个独立实例，必须用 `Sensor.isWakeUpSensor()` 判断当前实例，不能按 `TYPE_ACCELEROMETER` 等类型名推断；on-change sensor（如 step counter）有"最新事件保存在共享 FIFO 之外、不被 continuous 事件覆盖"的特殊保证，累计值语义依赖它。业务若要求灭屏期间每个事件都不丢，只能持 partial wake lock 保活或改用 wake-up sensor，两者都会显著改变功耗模型，通常应先确认业务是否只需要最新状态或累计结果。
 
-**Q11: [learning] Android 12 起的高采样率限制是什么，为什么声明了 `HIGH_SAMPLING_RATE_SENSORS` 还可能被限？**
+**Q11: [learning] Android 12 起的高采样率限制是什么，为什么声明了 HIGH_SAMPLING_RATE_SENSORS 还可能被限？**
 
 目标版本为 Android 12（API 31）及以上的应用访问六类运动/姿态传感器（加速度计、未校准加速度计、陀螺仪、未校准陀螺仪、磁场、未校准磁场）时，普通 listener 默认最多约 200 Hz，Sensor Direct Channel 默认最高 `RATE_NORMAL`（通常约 50 Hz）；需要更高频率要在 manifest 声明 `android.permission.HIGH_SAMPLING_RATE_SENSORS`。声明了权限也可能仍被限制：用户关闭麦克风访问权限时，这六类传感器即使已有高采样权限也会受限，因为高频运动/姿态数据可能泄露音频相关信息。
 
@@ -102,13 +102,13 @@ false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写�
 
 量化时注意比例计算：AoS 元素 40 字节、循环只读 `x/y/z` 共 12 字节时，有效数据约占对象流量的 30%（12/40），不是固定套用 cache line 得出的比例，且 cache line 可能跨越两个对象，边界与数组起始地址有关。SoA 的代价是多个数组的构造成本与内存占用。判断依据用测量而不是经验排名：目标循环端到端耗时、bytes processed/item、L1D refill/LLC miss/TLB miss、向量化报告与内存占用，并对照自己的结构运行 `sizeof`/`offsetof` 与布局 dump，不要用想象中的框架类布局论证方案。
 
-**Q14: [learning] 把热循环里的 `List<Float>` 换成 `FloatArray`，收益来自哪里，什么时候值得做？**
+**Q14: [learning] 把热循环里的 List<Float> 换成 FloatArray，收益来自哪里，什么时候值得做？**
 
 收益通常同时来自三个方向：减少装箱、减少分配和改善空间局部性，报告改动时必须说明包含哪些因素，不能把全部收益归给 cache。机制：`List<Float>` 每个元素访问都要经过对象引用和装箱对象（pointer chasing），数据密度低于 `FloatArray`；`IntArray` 连续保存 primitive 值，而 `Array<MyObject>` 连续保存的只是引用，对象本体仍分散在堆中，Java 多维数组是"数组的数组"，每一行是独立对象。
 
 边界：这只在性能分析确认是热点的计算环节（图像、音频、统计、几何运算）值得做；不在热点的业务代码可读性与正确性更重要，常见做法是保留清晰的业务对象，只在热点环节把数据转换为批量 buffer。`ByteArray`/`FloatArray` 适合紧凑的批量处理，`Array<Int>`/`List<Int>` 涉及装箱对象。
 
-**Q15: [learning] 线程迁移到另一个 CPU 后会发生什么，`cpu-migrations` 上升能说明什么？**
+**Q15: [learning] 线程迁移到另一个 CPU 后会发生什么，cpu-migrations 上升能说明什么？**
 
 迁移后新核心的私有 cache 可能没有该线程最近使用的数据，需要从共享层级或同一硬件一致性域内的其他 cache 获取；原核心的全部 L1/L2 不会因迁移被软件统一失效，硬件一致性协议仍负责维护共享数据的可见性。所以"迁移清空原核心 cache"是错误模型，正确理解是"新核心可能缺数据、代价取决于多个条件"。
 

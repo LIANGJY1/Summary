@@ -22,7 +22,7 @@
 
 
 
-**Q3: [learning] 用户态调用 `open`、`read` 或 `write` 后，VFS 如何把操作分发到设备驱动？**
+**Q3: [learning] 用户态调用 open、read 或 write 后，VFS 如何把操作分发到设备驱动？**
 
 系统调用进入内核后由 VFS 根据路径和对象类型选择实现；对字符设备节点，设备号关联字符设备驱动，文件操作最终可分发到驱动注册的 `file_operations` 回调。
 
@@ -32,7 +32,7 @@
 
 
 
-**Q4: [learning] `struct file`、文件描述符、`struct inode` 和 `file_operations` 各是什么关系？**
+**Q4: [learning] struct file、文件描述符、struct inode 和 file_operations 各是什么关系？**
 
 文件描述符是进程 fd 表中的整数索引，`struct file` 表示一次打开的内核文件对象，`struct inode` 描述文件对象及其类型/元数据，`file_operations` 则提供该对象可调用的操作实现。
 
@@ -42,7 +42,7 @@
 
 
 
-**Q5: [learning] 字符设备的主设备号、次设备号和 `/dev` 节点各负责标识什么？**
+**Q5: [learning] 字符设备的主设备号、次设备号和 /dev 节点各负责标识什么？**
 
 设备号是内核侧字符设备标识，由主设备号和次设备号组成；主设备号用于关联驱动操作集，次设备号通常用于区分同一驱动管理的设备实例。`/dev` 节点是用户空间访问该设备的文件系统入口。
 
@@ -52,7 +52,7 @@ Android/Linux 上设备节点的创建方式、权限、所有者和 SELinux 标
 
 
 
-**Q6: [learning] 字符设备 `open` 到 `release` 的生命周期应如何设计？**
+**Q6: [learning] 字符设备 open 到 release 的生命周期应如何设计？**
 
 `open` 在一次打开时建立或引用设备状态，读写/ioctl 在打开期间执行操作，最后一次关闭对应的 `release` 释放该打开实例的资源。驱动需保证每个失败路径和并发路径都能正确清理。
 
@@ -62,7 +62,7 @@ Android/Linux 上设备节点的创建方式、权限、所有者和 SELinux 标
 
 
 
-**Q7: [learning] 为什么驱动不能直接解引用用户传入的指针，`copy_from_user` 与 `copy_to_user` 如何使用？**
+**Q7: [learning] 为什么驱动不能直接解引用用户传入的指针，copy_from_user 与 copy_to_user 如何使用？**
 
 用户地址不能作为可信内核指针直接解引用；驱动应通过 `copy_from_user`/`copy_to_user` 在用户空间与内核缓冲区之间安全拷贝，并处理拷贝未完成的返回值。
 
@@ -82,7 +82,7 @@ Android/Linux 上设备节点的创建方式、权限、所有者和 SELinux 标
 
 
 
-**Q9: [learning] `ioctl` 和 `mmap` 什么时候适合用于设备接口，它们增加了哪些设计责任？**
+**Q9: [learning] ioctl 和 mmap 什么时候适合用于设备接口，它们增加了哪些设计责任？**
 
 `ioctl` 适用于不自然映射成字节流读写的设备控制命令；`mmap` 可用于把受控设备/缓冲区映射到用户空间以支持特定共享或高吞吐场景。二者都扩大了接口复杂度和安全审查范围。
 
@@ -92,7 +92,7 @@ Android/Linux 上设备节点的创建方式、权限、所有者和 SELinux 标
 
 
 
-**Q10: [learning] Linux 内核的 `list_head`、`hlist` 和红黑树分别适合什么数据组织？**
+**Q10: [learning] Linux 内核的 list_head、hlist 和红黑树分别适合什么数据组织？**
 
 三者都是内核常用的侵入式数据结构，节点嵌入宿主对象；链表适合顺序组织，`hlist` 常用于哈希桶链，红黑树适合保持键有序并进行对数复杂度查找。选择取决于访问模式，而不是名称偏好。
 
@@ -104,7 +104,7 @@ Android/Linux 上设备节点的创建方式、权限、所有者和 SELinux 标
 
 
 
-**Q11: [learning] 为什么 `/dev/hello` 不一定会随着驱动注册自动出现，驱动卸载时又应如何处理？**
+**Q11: [learning] 为什么 /dev/hello 不一定会随着驱动注册自动出现，驱动卸载时又应如何处理？**
 
 设备节点创建取决于驱动采用的设备模型和系统用户空间管理方式；注册字符设备操作集与创建 `/dev` 节点是相关但分离的步骤。动态主次设备号也需要被正确关联到节点。
 

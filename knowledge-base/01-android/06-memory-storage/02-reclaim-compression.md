@@ -10,7 +10,7 @@
 
 因此，GC 是否发生只说明引用机制在运转：应用若把释放寄望于 `finalize()`，关闭时机由 GC 与调度决定，进程结束前来不及执行就直接丢失。主路径必须是显式关闭（Java 的 try-with-resources、Kotlin 的 `use`），终结与 Cleaner 只是兜底。
 
-**Q2: [learning] 可终结对象的 FinalizerReference 为什么有"head 链表"与"queue"两套结构？`get()` 返回的 zombie 是什么含义？**
+**Q2: [learning] 可终结对象的 FinalizerReference 为什么有"head 链表"与"queue"两套结构？get() 返回的 zombie 是什么含义？**
 
 每个需要执行 `finalize()` 的对象注册时会生成一个 FinalizerReference 节点；"全部可终结对象链表"与"待终结队列"是两套独立结构。按 AAOS13 源码核对（`libcore/luni/src/main/java/java/lang/ref/FinalizerReference.java`）：静态字段 `queue` 是共享的 ReferenceQueue；`LIST_LOCK` 保护的 `head` 链表覆盖堆内所有可终结对象，此时对象可能仍然可达；只有 GC 判定对象不可达后，节点才进入 `queue`。
 
@@ -34,7 +34,7 @@ GC 产生的 pending 链表挂在静态字段 `ReferenceQueue.unenqueued` 上；
 
 版本边界：材料按 Android 17 核对的"超时窗口分 5 次唤醒、每次比较计数"是 A17 的调度方式；Android 13 是整窗口单次睡眠加 500 ms 复查。"容忍 5 次"的行为两者一致。另外 Android 13 的 FinalizerDaemon 只处理终结引用；材料描述的"FinalizerDaemon 同时执行 SystemCleaner 的 Cleanable 并用 `reachabilityFence()` 收尾"在 AAOS13 的 `Daemons.java` 中不存在，属于 Android 14 之后的演进。
 
-**Q5: [learning] `sun.misc.Cleaner`、`java.lang.ref.Cleaner` 与 `SystemCleaner` 三种 Cleaner 路径的执行线程与异常边界有何不同？**
+**Q5: [learning] sun.misc.Cleaner、java.lang.ref.Cleaner 与 SystemCleaner 三种 Cleaner 路径的执行线程与异常边界有何不同？**
 
 三条路径的线程归属和故障隔离不同，混写会直接导致线程归因错误。按 AAOS13 源码核对：`sun.misc.Cleaner` 是平台内部实现，`ReferenceQueue.enqueuePending()` 识别到它的占位队列后不入普通队列，直接在 ReferenceQueueDaemon 线程调用 `clean()`——它的慢动作会卡住全进程的待处理引用转移；`java.lang.ref.Cleaner.create()` 每次 创建一个由 CleanerImpl 管理的守护线程，清理动作抛出的 Throwable 被该线程捕获忽略（按 `jdk/internal/ref/CleanerImpl.java` 核对），一个动作阻塞只影响同一 Cleaner 上后续注册的动作。
 
@@ -113,7 +113,7 @@ order 是伙伴系统中"连续物理页数量 = 2^order"的指数，order-0 就
 
 两类操作的停顿时间都经 `psi_memstall_enter()`/`psi_memstall_leave()` 计入内存 PSI。PSI 的 some/full 只说明任务因内存短缺停顿，不区分回收、规整还是 swap I/O，归因必须叠加内核跟踪点（`mm_vmscan_*`、`mm_compaction_*`）与 `/proc/vmstat` 的区间增量；`compact_success` 增长只说明规整后取得了目标页面，不代表没有延迟。版本边界：本地 AAOS13 树不含内核源码，以上分支顺序以材料核对的 Linux 6.18 语境为准，具体分支受内核版本影响；lmkd 作为独立用户态进程不在这条内核慢路径上。
 
-**Q12: [learning] `vm.compaction_proactiveness` 等规整参数怎么理解？调参实验要遵守什么纪律？**
+**Q12: [learning] vm.compaction_proactiveness 等规整参数怎么理解？调参实验要遵守什么纪律？**
 
 `kcompactd` 是每个内存节点的后台规整线程，`vm.compaction_proactiveness`（0–100，通用内核默认 20，按材料核对的 Android 17 内核文档）控制主动规整的积极程度：0 只关闭主动规整，不关闭分配请求驱动的直接规整；写入非零值本身会立即触发一次规整。主动规整用相对大页 order 的外部碎片分数判断，kswapd 正在运行时会跳过，避免两类后台内存工作争用。
 

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 CarPropertyService 对属性访问的校验、VHAL 死亡后的服务恢复、属性订阅和事件契约，以及 HIDL 到 AIDL 迁移时的接口差异。每题只讨论对应契约，Q 序列供 Atlas 同源直读。
 
-**Q1: [learning] CarPropertyService 为什么会对属性读写抛出 `not writable at areaId` 或 `SecurityException`？属性访问要通过哪些检查？**
+**Q1: [learning] CarPropertyService 为什么会对属性读写抛出 not writable at areaId 或 SecurityException？属性访问要通过哪些检查？**
 
 一次属性访问必须同时满足属性配置允许该读写、目标区域有效，以及调用方具有框架权限。异常文字通常能定位失败层。应用查询属性列表时还可能因为权限不足而看不到 vendor 属性。
 

@@ -10,7 +10,7 @@
 
 理解这条链的排查意义在于分段：`getevent` 有输出说明驱动与内核段通了；InputReader 没消费通常是设备分类或配置问题；而"事件有了但坐标乱"则进入校准与绑定环节——每一层有各自独立的失效方式。
 
-**Q2: [learning] `input_event` 的 type/code/value 各自什么语义？一帧触摸由哪些事件组成？**
+**Q2: [learning] input_event 的 type/code/value 各自什么语义？一帧触摸由哪些事件组成？**
 
 `type` 是事件大类：`EV_SYN`（同步，0x00）、`EV_KEY`（按键/触点状态，0x01）、`EV_REL`（相对位移，0x02）、`EV_ABS`（绝对坐标，0x03）、`EV_SW`（开关，0x05）、`EV_LED`、`EV_FF`（力反馈）等（码值按本地 `input-event-codes.h` 核对）。`code` 是大类内的具体项，`value` 的语义随 type 变化：`EV_KEY` 的 value 0/1/2 表示释放/按下/自动重复；`EV_REL` 是增量；`EV_ABS` 是当前绝对值（轴的 min/max/fuzz/flat/resolution 由 `input_absinfo` 描述）；`EV_SW` 是开关状态。
 
@@ -34,7 +34,7 @@ EventHub 用一路 epoll 同时监听三类文件描述符：全部已打开的 
 
 排查热插拔问题时，`dumpsys input` 的 EventHub 段列出当前全部设备与身份信息（bus/vendor/product/version/name），对照 `getevent -il` 可以确认"系统看到的设备"与"内核暴露的设备"是否一致——不一致通常是 SELinux 或权限导致 EventHub 打不开节点。
 
-**Q5: [learning] Android 怎么判断一个 `/dev/input` 设备是触摸屏、键盘还是旋钮？**
+**Q5: [learning] Android 怎么判断一个 /dev/input 设备是触摸屏、键盘还是旋钮？**
 
 全部靠能力位推断，不依赖驱动自报类型（按 AAOS13 源码核对，`EventHub.cpp` 用 `EVIOCGBIT` 系列读事件能力位、`EVIOCGPROP` 读设备属性位）。主要判定规则：
 
@@ -93,7 +93,7 @@ Android 有意关掉了内核重复：EventHub 打开键盘类设备时下发 `E
 
 "双份重复"（按住一个键出现密集连发）的典型成因就是配置漂移：设备配了 `handlesKeyRepeat`，同时应用的逻辑又对 `repeatCount` 做了累加处理，或注入端自己循环发送。排查时先看 `dumpsys input` 里该设备的配置，再看事件流的 `repeatCount` 是否连续——内核重复的序列不带框架语义。
 
-**Q12: [learning] `SYN_DROPPED` 是什么？出现时系统会怎样、该查什么？**
+**Q12: [learning] SYN_DROPPED 是什么？出现时系统会怎样、该查什么？**
 
 `SYN_DROPPED` 是内核 evdev 在缓冲溢出时插入的特殊同步事件：用户态消费太慢、缓冲写满，内核丢弃积压事件并发出这个标记，要求接收端放弃积累的状态、用 `EVIOCGKEY`/`EVIOCGSW`/`EVIOCGABS` 全量重同步（官方内核文档结论；引入于内核 2.6.39）。Android 侧 EventHub 只透传原始事件、不做重同步，靠 mapper 的 reset 机制兜底——表现为当前手势状态被丢弃重建，极端时应用收到取消。
 

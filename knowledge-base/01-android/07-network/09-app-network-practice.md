@@ -2,11 +2,11 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把连接类问题分成"系统已决定什么"与"应用还能改什么"——HTTPDNS 只替换解析地址、Wi-Fi 与 Connectivity 分层选网、低带宽与卫星按数据预算治理、移动数据配额限总量不限速、BluetoothSocket 与 NFC 各自有执行边界。Connectivity 服务层机制见 [../07-network/02-cellular-wireless.md](./02-cellular-wireless.md)，本文只写 App 侧适配视角。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] OkHttp 的自定义 `Dns.lookup()` 在什么时机执行，为什么不能在这个同步回调里现场发起 HTTPDNS 网络请求？**
+**Q1: [learning] OkHttp 的自定义 Dns.lookup() 在什么时机执行，为什么不能在这个同步回调里现场发起 HTTPDNS 网络请求？**
 
 `lookup()` 位于新连接的路由规划同步路径（OkHttp 5.4.0 锚点：`RealCall` → `RealRoutePlanner.plan()` → `RouteSelector.next()` → `address.dns.lookup()`），返回地址列表之前 TCP 连接不会开始，接口本身只有一个同步方法。在现场回调里再发 HTTP 请求，会把解析服务的建连、TLS 与响应等待叠加进每个业务请求的建连前阶段；若 HTTPDNS 客户端也安装了同一个 `Dns`，解析服务域名会再次进入 `lookup()` 形成递归；即使固定地址避开递归，共用 `Dispatcher` 与连接池也会让解析流量挤占业务并发额度。超时边界：`connectTimeout` 只约束套接字连接不约束 DNS，`callTimeout` 虽把 DNS 计入整次调用，但取消一个 `Call` 不能保证任意阻塞的自定义代码立即返回——不能依赖外层超时兜底现场网络查询。正确结构是查询与读取分离：后台任务负责查询、校验并原子发布不可变快照，`lookup()` 只读内存、筛选地址，没有可用结果时回退系统解析；OkHttp 自带的 `DnsOverHttps` 也受同一同步约束（内部异步提交 A/AAAA 查询后用 `CountDownLatch` 等待），且需要独立的引导解析与专用客户端。
 
-**Q2: [learning] 生产日志里没有出现 OkHttp 的 `dnsStart` 事件，能断定自定义解析模块没有生效吗？**
+**Q2: [learning] 生产日志里没有出现 OkHttp 的 dnsStart 事件，能断定自定义解析模块没有生效吗？**
 
 不能。连接复用、IP 字面量、代理与连接合并都会让一次业务请求不触发 DNS：连接池已有合格连接时直接复用；URL 主机本身是 IPv4/IPv6 字面量时 `RouteSelector` 直接构造地址；SOCKS 代理把目标主机名交给代理解析，HTTP 代理只解析代理服务器主机名；HTTP/2 连接合并允许证书与路由条件相容的不同主机复用同一条连接。观测要以完整事件序列为准：`EventListener` 应由 `EventListener.Factory` 为每个 `Call` 单独创建，一次 `Call` 可能因重试、重定向、认证包含多组 DNS/连接事件；复用连接时 DNS 与连接事件都不存在，`lookup()` 抛异常时也不会有正常的 `dnsEnd`。因此 HTTPDNS 实现要自己记录查询来源、缓存年龄与回退原因，不能只靠 `dnsStart`/`dnsEnd` 两个事件相减得出结论。
 
@@ -46,7 +46,7 @@ TTL 决定地址可信期，工程上需要两个时间点：`refreshAt` 到达�
 
 OkHttp 自带传输实现只支持 HTTP/1.1 与 HTTP/2（以 5.4.0 为锚点），需要 HTTP/3 时要评估平台 `HttpEngine`、Cronet 或官方提供的 Cronet Transport for OkHttp 集成。QUIC 用连接 ID 而非 IP 地址加端口标识连接，因此具备连接迁移的协议基础，但迁移不会因为使用 HTTP/3 自动发生：需要客户端启用迁移选项、请求实际使用 QUIC、服务端支持迁移，且只启用"默认网络迁移"时活动连接才有机会在网络变化后继续；允许迁往非默认网络还可能消耗按量计费的流量。分批启用时要分别记录实际协商协议与网络代次、QUIC 建连与迁移结果、改用 HTTP/2 的原因、切网前后长连接恢复情况与非默认计费网络使用。协议层的迁移只改变传输连续性，支付、下单与上传仍需幂等与恢复协议——连接迁移不能提供业务一致性。
 
-**Q12: [learning] `TRANSPORT_SATELLITE` 与缺少 `NET_CAPABILITY_NOT_BANDWIDTH_CONSTRAINED` 是什么关系？低数据模式按哪个判断？**
+**Q12: [learning] TRANSPORT_SATELLITE 与缺少 NET_CAPABILITY_NOT_BANDWIDTH_CONSTRAINED 是什么关系？低数据模式按哪个判断？**
 
 两个独立信号：`hasTransport(TRANSPORT_SATELLITE)` 表示网络使用卫星传输（Android 15 / API 35 公开）；缺少 `NOT_BANDWIDTH_CONSTRAINED` 表示网络受带宽约束（API 36 公开，Android 16 QPR2 起支持约束卫星网络的应用显式接入、Android 17 延续）。卫星网络也可能带"不受带宽约束"能力，非卫星网络也可能缺失该能力，所以进入低数据模式的判断是"缺少该能力"，或按产品同时覆盖两种组合；`NOT_METERED`（计费属性）与 `NOT_CONGESTED`（拥塞）是另外两个维度，不能替代带宽约束。能力对象上的上下行带宽字段是首跳估算值，不是应用到服务端的实际吞吐。电话侧的 `ServiceState.isUsingNonTerrestrialNetwork()`（API 35）只说明电话业务注册在非地面网络，不能证明应用数据正走卫星。版本边界：这些能力与常量均为 API 35 及以后新增，Android 13 设备上不存在，按材料 Android 17 锚点转写；`registerBestMatchingNetworkCallback`（API 31+）在 Android 13 已可用。
 
@@ -54,7 +54,7 @@ OkHttp 自带传输实现只支持 HTTP/1.1 与 HTTP/2（以 5.4.0 为锚点）�
 
 按操作对用户的意义分四级（依据是业务语义，不能只看 URL 或 HTTP 方法）：用户关键（主动发送短文本、确认回执）允许发送但缩减字段、分别显示本地保存与服务端确认；用户交互（手动刷新轻量列表）用户触发后发送、不连续预取；可延迟（预取、推荐刷新、配置轮询）暂停等非约束网络；批量传输（原图、视频、全量同步、行为事件回传）默认暂停，确需发送时用可恢复协议并给出进度。每次尝试都消耗握手、请求头与载荷字节，"用户关键"不等于无限重试；重试要同时满足请求幂等或有幂等键、失败发生在可恢复的网络阶段、本地数据预算充足、计划时间不早于服务端 `Retry-After`、不越过用户可理解的期限。退避逐步延长并加入随机抖动，按主机、接口与业务队列隔离；HTTP 429/503 与网络不可达分开记录，TLS 证书、鉴权与业务校验失败不能靠网络重试解决；从无网络恢复时按优先级分批提交队列；排队状态、最近错误与下次允许尝试时间写入持久化存储，进程重启后继续遵守。WorkManager 的 `UNMETERED` 约束只表达不计费、表达不了带宽约束，批量任务传输前要复查应用保存的网络预算。
 
-**Q14: [learning] FCM 的 `bandwidth_constrained_ok` 与 `restricted_satellite_ok` 各承诺什么？为什么不能给所有推送开启？**
+**Q14: [learning] FCM 的 bandwidth_constrained_ok 与 restricted_satellite_ok 各承诺什么？为什么不能给所有推送开启？**
 
 `bandwidth_constrained_ok` 位于 FCM HTTP v1 的 `message.android` 配置：未设置时消息会等待非约束网络再投递，设置后允许在带宽受限网络（含约束卫星）投递，只适合已适配低数据模式、且用户需要及时知道的轻量消息。`restricted_satellite_ok`（Admin SDK 中为 `restrictedSatelliteOk`）表示消息可在受限卫星网络投递，能否实际使用还取决于运营商设置与设备型号——带宽约束网络与受限卫星网络是两类投递条件，服务端应按实际接入的产品选择。配套语义：`collapse_key` 让"只需最新状态"的旧消息被新消息折叠，TTL 决定系统保留消息的最长时间，两者都按消息语义设置，避免网络恢复后集中投递已过期的通知。消息载荷只保留资源标识，让客户端按当前预算决定是否拉取详情；已声明卫星优化元数据的应用也不等于每条消息都应放行，推送仍然是"有新工作"的提示而不是数据同步本身。
 
@@ -70,7 +70,7 @@ API 37 在 `SubscriptionInfo` 上提供 `getStreamingAppMaxDownlinkKbps()` 与 `
 
 源码里的 quota 表示剩余字节预算：耗尽后内核拒绝报文，不是把速率调到某个 Kbit/s——手机路径上的 Data Saver 与 UID 规则是访问控制，Android TV 是官方明确记录的例外（前台 800 Kbit/s、后台 10 Kbit/s，按材料所引官方文档转写）。五类概念分开：历史网络用量（`NetworkStatsService` 保存的接口/UID/标签维度统计，只记录不限制）；`NetworkPolicy.warningBytes`（触发用量提醒并调整采集时机，不进内核拒绝规则）；`NetworkPolicy.limitBytes`（计算接口剩余字节，经 netd 写入 `quota2`，耗尽拒绝并可停用移动数据）；Data Saver 与 UID 规则（限制后台 UID 使用计量网络，处理前台与允许名单例外）；机会型配额（给可等待作业、多路径传输的预算，与用户套餐上限无关）。这些路径共享统计结果但触发条件与执行对象不同，排查前先确认关注的是用量记录、阈值提醒、接口总量限制还是 UID 后台访问限制。
 
-**Q18: [learning] 一条接口上限规则从 `NetworkPolicyManagerService` 到内核经历了什么？warning 为什么不会拒绝流量？**
+**Q18: [learning] 一条接口上限规则从 NetworkPolicyManagerService 到内核经历了什么？warning 为什么不会拒绝流量？**
 
 链路是：`NetworkPolicyManagerService` 按策略周期总量计算剩余字节（`Math.max(1, limitBytes - totalBytes)`，内核规则不接受 0 字节）→ `NetworkManagementService.setInterfaceQuota()`（校验特权并拒绝重复安装未移除的上限）→ netd 的 `BandwidthController` 生成 `bw_costly_<iface>` 链并挂到输入、输出、转发路径，`quota2` 匹配器按报文长度递减计数，`! --quota` 使余量耗尽后命中 `REJECT`。警告值只用于提醒和通知自定义统计提供方，`setInterfaceLimit()` 只传 `limitBytes`，所以监控里的 warning 字段应解释为提醒阈值、不是内核拒绝阈值。两个 AAOS13 源码可核对的细节：没有显式策略的计量接口也会安装 `Long.MAX_VALUE` 的规则入口（AAOS13 `NetworkPolicyManagerService` 的 `setInterfaceQuotasAsync`，为 Data Saver 与 UID 限制提供执行位置，不代表网络免费）；同一模板匹配多个接口时每接口各得一份相同余量，源码注明不支持跨接口共享配额，套餐状态仍按模板周期总量判断。`quota2` 计数器跨零会发出事件，策略服务收到后强制刷新统计并重算规则，但判断套餐是否超限用的是刷新后的模板总量而非单次接口事件。
 
@@ -86,7 +86,7 @@ API 37 在 `SubscriptionInfo` 上提供 `getStreamingAppMaxDownlinkKbps()` 与 `
 
 第一步确认设备形态：Android TV 的 Data Saver 可能直接限制速率，手机则对应连接被拒绝或移动数据被停用。然后依次：确认当前网络是否计量、应用处于前台/后台/允许名单；`dumpsys netpolicy` 核对匹配模板、周期、warning、limit、snooze 与 UID 规则；`dumpsys netstats --poll` 强制刷新后比较模板总量、接口总量与 UID 总量，记录 VPN、共享网络与订阅切换；有权限的调试构建再查 `NetworkManagementService`、netd 与 `xt_quota2` 命名计数器，确认余量规则安装到预期接口（user 构建可能隐藏部分规则，没有输出不能证明规则不存在）。测试用 `cmd netpolicy set restrict-background true` 与 `add/remove restrict-background-whitelist <UID>`，覆盖前台、后台、允许名单三种状态，测完恢复开关并移除测试 UID。与运营商账单不一致时，分别检查计费口径、时间区间、零费流量、共享套餐与漫游——Android 统计值不能当结算值。
 
-**Q22: [learning] Android 17 让 RFCOMM `BluetoothSocket.read()` 返回 -1 的生效条件是什么？-1 能证明远端正常断开吗？**
+**Q22: [learning] Android 17 让 RFCOMM BluetoothSocket.read() 返回 -1 的生效条件是什么？-1 能证明远端正常断开吗？**
 
 四个条件同时满足：设备运行 Android 17、应用 `targetSdkVersion` 为 37 或更高、输入流来自 RFCOMM 套接字、套接字被 `close()` 或连接丢失。源码锚点是兼容性变更 `MAKE_SOCKET_READ_BEHAVIOR_CONSISTENT`（change id 383671392，按目标 SDK 门控）加 aconfig 开关 `make_socket_read_behavior_consistent`，LE CoC 在此之前已返回 -1，该变更把两者统一到 Java `InputStream` 契约；SCO 等其他套接字类型不在承诺范围内。官方契约把"应用调用 close()"与"连接丢失"都映射到 -1，平台不提供公开的关闭原因，所以 -1 只能证明输入流结束（EndOfStream），不能命名为"远端正常关闭"；其他 I/O 故障仍抛 `IOException`，读循环必须同时处理正数字节数、-1 与异常。版本边界：本地 AAOS13 树不含 Bluetooth 模块源码，Android 13 的公开行为是负返回值抛 `IOException`，-1 语义按材料 Android 17 锚点转写；可调试应用可在 Android 17 设备用 `am compat enable/disable/reset 383671392` 对照新旧分支。
 
@@ -102,7 +102,7 @@ API 37 在 `SubscriptionInfo` 上提供 `getStreamingAppMaxDownlinkKbps()` 与 `
 
 三条路径的角色与数据流不同：标签分发与 Reader Mode 里手机是读卡器，标签数据经 Intent 或 `ReaderCallback` 进入应用进程；HCE 里手机是卡片，APDU 经 NfcService 与 `HostEmulationManager` 通过 Binder 进入 `HostApduService.processCommandApdu()`，应用处理时间影响响应；off-host 卡模拟里交易 APDU 由安全元件（eSE 或 UICC）处理，`OffHostApduService` 只声明 AID 与路由信息、交易时不会启动该 Android 服务，应用观察不到 SE 内部耗时。路由判定：终端发出 SELECT AID 后，NFCC 路由表先决定 host 还是 SE——host 路径由 `RegisteredAidCache` 与 `HostEmulationManager` 从已注册 HCE 服务中解析目标组件，没有已连接服务时缓存该 APDU 并进入等待服务状态，绑定完成后补发；AID 组整体路由给同一服务，支付类别同一时刻只启用一个 AID 组。省去应用处理（off-host）不等于端到端延迟固定，终端、射频、SE 内 applet 与支付协议仍是变量；Android 文档与 AOSP 源码只覆盖手机一侧的分发与路由。
 
-**Q26: [learning] HCE 交易"只有首个 APDU 慢"和"每个 APDU 都慢"分别查什么？`processCommandApdu()` 的线程约束是什么？**
+**Q26: [learning] HCE 交易"只有首个 APDU 慢"和"每个 APDU 都慢"分别查什么？processCommandApdu() 的线程约束是什么？**
 
 首个 APDU 慢先查进程启动与服务绑定：首选支付服务由 `HostEmulationManager.bindPaymentServiceLocked()` 用 `BIND_AUTO_CREATE` 预绑定，普通 HCE 服务可能在首个 SELECT AID 到达后才绑定，未运行进程的启动与类初始化都计入这一段。每个 APDU 都慢查应用处理：回调运行在主线程（AAOS13 源码核对：`HostApduService` 的 `MSG_COMMAND_APDU` 由绑定主线程 Looper 的 Handler 分发，源码注明仅在主线程访问）——能立即算出的响应直接返回，异步处理返回 null 并在工作完成后从任意线程调用非阻塞的 `sendResponseApdu()`；排查主线程计算、锁竞争、存储访问与异步依赖耗时。HCE 只支持一个逻辑通道、APDU 半双工交换，耗时任务会延迟同一交易的后续命令。生命周期边界：`onDeactivated()`（终端移开、AID 切换、链路断开）里递增交易代号并取消在途异步响应，防止旧交易响应发到新交易；应用不需要额外前台服务保活 HCE 进程，系统已有支付服务绑定机制，额外保活只增加功耗与后台限制风险。
 

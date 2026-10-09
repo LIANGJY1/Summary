@@ -9,7 +9,7 @@
 
 ## 第 8 章 函数式编程
 
-**Q1: [learning] 高频高阶函数或 `reified` 类型参数为什么需要 `inline`？它会带来哪些代码体积和 API 兼容性代价？**
+**Q1: [learning] 高频高阶函数或 reified 类型参数为什么需要 inline？它会带来哪些代码体积和 API 兼容性代价？**
 
 `inline` 让 Kotlin 编译器在调用点展开函数体和可内联 lambda，使某些高频高阶调用避免函数对象与间接调用成本，也让 `reified` 类型参数和非局部返回成为可能。它不是“保证零开销”的开关，调用点代码增长与公开 API 兼容性都要纳入取舍。
 
@@ -32,7 +32,7 @@ inline fun repeatAction(times: Int, action: (Int) -> Unit) {
 repeatAction(3) { index -> println(index) }
 ```
 
-**Q2: [learning] 在 inline 函数的 `forEach` lambda 中，裸 `return` 为什么会退出外层函数？只想跳过当前元素时该怎样写？**
+**Q2: [learning] 在 inline 函数的 forEach lambda 中，裸 return 为什么会退出外层函数？只想跳过当前元素时该怎样写？**
 
 标准库 `forEach` 是 inline 函数，因此 lambda 中未加标签的 `return` 可以返回最近的外层具名函数。只结束当前 lambda 调用时使用 `return@forEach`。需要普通循环中的 `break` 或复杂多层跳转时，用显式循环通常更容易读懂。
 
@@ -72,7 +72,7 @@ fun printBeforeZero(values: List<Int>) {
 }
 ```
 
-**Q3: [learning] `runCatching { ... }.onFailure { ... }` 把异常存在哪里？为什么它不等于 `try/catch` 已经处理异常？**
+**Q3: [learning] runCatching { ... }.onFailure { ... } 把异常存在哪里？为什么它不等于 try/catch 已经处理异常？**
 
 `runCatching` 捕获代码块抛出的 `Throwable` 并将其装进失败的 `Result`。`onFailure` 只对失败结果执行观察逻辑并返回原 `Result`，不恢复结果，也不会自动重新抛出异常。后续代码怎样消费 `Result` 才决定失败是否继续传播。
 
@@ -91,7 +91,7 @@ println(result.getOrNull()) // 打印 null
 
 所以，异常没有因为 `onFailure` 消失。它仍在 `Result` 中，除非调用方显式转换或重新抛出。
 
-**Q4: [learning] `ids.forEach { id -> service.get(id)?.let { value -> handle(value) } }` 中两个 lambda 各在什么时候执行？`?.let` 和 `let` 的返回值是什么？**
+**Q4: [learning] ids.forEach { id -> service.get(id)?.let { value -> handle(value) } } 中两个 lambda 各在什么时候执行？?.let 和 let 的返回值是什么？**
 
 外层 `forEach` 为每个 id 调用一次 lambda。`service.get(id)` 返回非空值时，安全调用才会执行 `let` 的 lambda，并把该值作为 `value` 传给它。返回 `null` 时本轮跳过 `handle`。`let` 的结果是 lambda 最后一条表达式的值，外层 `forEach` 本身返回 `Unit`。
 

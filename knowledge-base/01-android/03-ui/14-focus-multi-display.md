@@ -68,7 +68,7 @@ slippery（可滑出）窗口允许进行中的触摸在滑出自身边界后把
 
 应用侧注意：拖放目标窗口必须声明可接受拖放的类型（`View.setOnDragListener` 在窗口层接受），否则悬停目标不变、事件不达——"拖到窗口上没反应"先查目标窗口的拖放监听注册，再查分发器层的会话状态。
 
-**Q9: [learning] 每块屏幕的焦点是独立的吗？`setFocusedDisplay` 改变什么？**
+**Q9: [learning] 每块屏幕的焦点是独立的吗？setFocusedDisplay 改变什么？**
 
 独立。InputDispatcher 按显示器维护各自的焦点窗口与输入策略（Android 10 起的多屏输入支持），`setFocusedDisplay()` 切换"默认焦点屏"——影响的是没有携带 displayId 的事件（如某些注入与外设输入）去哪块屏，各屏已有焦点的窗口不受影响（按 AAOS13 源码核对，`InputDispatcher.h` 的 `mFocusedDisplayId` 与 `setFocusedDisplay` 接口）。窗口信息按屏推送，焦点请求也按屏保存；连 HOME 键的处理都按屏各有一份（策略层为每块显示器建独立的 Home 处理器），所以多屏设备上"哪块屏的 HOME"是按事件 displayId 决定的。
 

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把 Vulkan/Impeller 管线首用成本、WebView 打开链路、Media3 帧释放与首帧指标、CameraX 会话协商、App Widget 更新与系统取色的优化手段收敛为"哪些证据归哪一层、哪些手段在哪个边界内有效"的判断规则。跨框架与媒体的管线机制层（WebView provider 装载与 functor、HAL3 缓冲与 fence、Codec2 与 tunnel、Impeller 后端选择与 vkcache）见 [10-app-media-hybrid-practice.md](./10-app-media-hybrid-practice.md)，本文只写优化实战视角，不与其重复出题。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] Vulkan 应用首次绘制某个状态组合时卡顿，为什么增加图形队列和观察 `FrameMetrics.GPU_DURATION` 都无法解释或缓解它？**
+**Q1: [learning] Vulkan 应用首次绘制某个状态组合时卡顿，为什么增加图形队列和观察 FrameMetrics.GPU_DURATION 都无法解释或缓解它？**
 
 管线创建是主机端工作：`vkCreateGraphicsPipelines()` 的校验、优化与设备指令生成发生在调用线程的 CPU 与驱动上，不会作为 GPU 命令提交到任何 `VkQueue`，所以增加图形队列不会提高管线编译并行度；`FrameMetrics.GPU_DURATION` 只统计该帧在 GPU 上完成所用的总时间，同样看不到这段主机端成本。
 
@@ -18,7 +18,7 @@
 
 HWUI 侧的 `VkDevice`、队列与持久化缓存由平台管理，应用拿不到也不应反射干预；平台为 OpenGL 着色器缓存、Skia 着色器缓存与 Skia 管线缓存配置独立路径属于实现细节而非 SDK 契约（Android 13 的 `VulkanManager` 只创建单图形队列的 Skia Ganesh 上下文；材料的 Android 17 另有独立上传队列，机制随版本可能变化）。有效做法：`RuntimeShader` 源码保持稳定、可变参数放 `uniform`，复用 `RuntimeShader`/`RenderEffect`/`Shader`/`Paint` 对象，把必须首用的复杂效果放在用户可接受的非关键阶段，并用 Macrobenchmark 证明首个关键操作改善且启动没有退化；标准 HWUI 没有公开 API 保证"预热完成了全部目标管线"。
 
-**Q3: [learning] 原生 Vulkan 引擎要求渲染线程永不现场编译管线，应怎样用管线创建缓存控制做"仅缓存查询"？返回 `VK_PIPELINE_COMPILE_REQUIRED` 之后到管线可用之前，任务调度与降级要满足什么条件？**
+**Q3: [learning] 原生 Vulkan 引擎要求渲染线程永不现场编译管线，应怎样用管线创建缓存控制做"仅缓存查询"？返回 VK_PIPELINE_COMPILE_REQUIRED 之后到管线可用之前，任务调度与降级要满足什么条件？**
 
 先查询并启用管线创建缓存控制（Vulkan 1.3 核心能力，旧设备经 `VK_EXT_pipeline_creation_cache_control` 提供），再给 `vkCreateGraphicsPipelines()` 加 `VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT`：返回 `VK_SUCCESS` 说明缓存命中，可直接发布；返回 `VK_PIPELINE_COMPILE_REQUIRED` 表示本次没有执行编译，应把管线键交给编译线程，由它用不带该标志的创建信息执行允许编译的调用；其他 `VkResult` 按 错误处理，不能全部当成缓存未命中。
 
@@ -26,7 +26,7 @@ HWUI 侧的 `VkDevice`、队列与持久化缓存由平台管理，应用拿不�
 
 边界：该标志只阻止当前调用执行昂贵编译，不会自动创建后台任务，也不提供降级管线；降级管线必须与渲染过程、管线布局、描述符绑定和资源格式兼容，否则应延后绘制而不是绑定错误管线。编译线程数量没有通用答案，应在代表设备上比较 1/2/4 个线程的总完成时间、关键线程调度与峰值内存；默认创建的 `VkPipelineCache` 可多线程共用（规范要求驱动内部同步），若创建时设置 `VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT`，所有修改该缓存的调用就要由应用自行串行化；`VkPipeline` 销毁要等使用它的 GPU 工作完成。
 
-**Q4: [learning] 把 `vkGetPipelineCacheData()` 的结果存成文件、下次启动灌回 `pInitialData`：缓存文件该用什么身份校验和命名？哪些保存与失效做法会让缓存白白失效或把损坏数据反复交给驱动？**
+**Q4: [learning] 把 vkGetPipelineCacheData() 的结果存成文件、下次启动灌回 pInitialData：缓存文件该用什么身份校验和命名？哪些保存与失效做法会让缓存白白失效或把损坏数据反复交给驱动？**
 
 缓存数据除版本一文件头外都是驱动定义的不透明数据：文件头包含 `headerSize`、`headerVersion`、`vendorID`、`deviceID`、`pipelineCacheUUID`，应按小端字节布局自行校验（不依赖结构体填充字节），通过后再交给驱动；文件名要包含应用或引擎的图形资源版本，失效身份至少覆盖 `pipelineCacheUUID`/`vendorID`/`deviceID`、着色器包内容版本与影响创建信息的渲染配置版本。系统升级后 UUID 改变即丢弃旧数据；`Build.SOC_MODEL` 只适合做诊断标签，不能单独决定缓存兼容性；一个设备的数据不能分发给所有设备。
 
@@ -34,7 +34,7 @@ HWUI 侧的 `VkDevice`、队列与持久化缓存由平台管理，应用拿不�
 
 驱动会忽略不兼容的初始数据，但应用先校验文件头才能删除损坏文件、记录失效原因，避免把无关数据反复交给驱动；文件头兼容只说明可以尝试使用，不保证每次创建都命中。使用外部同步缓存（`VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT`）时，保存期间还要满足对应的主机端同步要求。
 
-**Q5: [learning] Flutter 的着色器已在构建期由 impellerc 编译打包，为什么设备上首次使用某个合成状态仍可能出现 Raster 尖峰？`FragmentProgram.fromAsset()` 的 await 和框架的 `ShaderWarmUp` 能当管线预热用吗？**
+**Q5: [learning] Flutter 的着色器已在构建期由 impellerc 编译打包，为什么设备上首次使用某个合成状态仍可能出现 Raster 尖峰？FragmentProgram.fromAsset() 的 await 和框架的 ShaderWarmUp 能当管线预热用吗？**
 
 离线编译只完成着色器前端与反射：运行时仍要装载注册着色器函数、创建管线状态对象（驱动在此校验、链接、特化），其后还有 GPU 执行与 Android 显示链路成本。`FragmentProgram.fromAsset()` 的 `Future` 只覆盖资源读取与解析，初始管线任务是异步投递到 Raster/工作线程的，`await` 完成不构成"管线已就绪"的同步栅栏；`ShaderWarmUp` 的实现与诊断面向 Skia 着色器编译，不是 Impeller 的公开控制接口（以上为 Flutter 3.44.7 外部库口径，未本地核对）。
 
@@ -42,7 +42,7 @@ HWUI 侧的 `VkDevice`、队列与持久化缓存由平台管理，应用拿不�
 
 做法与边界：动画前加载 `FragmentProgram`、图片和字体，给工作线程留处理时间，但首次合成状态仍可能尖峰，要继续检查管线变体、纹理首次上传与离屏渲染；复用 `FragmentProgram` 与长期使用的 `FragmentShader`，帧间变化参数用 `uniform` 表达，不要用多份近似着色器源文件制造额外程序；`PaintingBinding.shaderWarmUp` 默认为 null，启用后首帧 Raster 会等待预热完成，只有在使用 Skia 回退路径且轨迹证明存在 Skia 编译卡顿时才评估它。
 
-**Q6: [learning] H5 页面里 `onPageFinished()` 已经回调，为什么仍不能把这一刻当成"首屏可用"？`onPageCommitVisible()`、`postVisualStateCallback()` 与页面自报的可用信号各适合回答什么问题？**
+**Q6: [learning] H5 页面里 onPageFinished() 已经回调，为什么仍不能把这一刻当成"首屏可用"？onPageCommitVisible()、postVisualStateCallback() 与页面自报的可用信号各适合回答什么问题？**
 
 `onPageFinished()` 只说明 main frame 完成加载：官方文档明确它不保证下一帧已经反映当时的 DOM 状态，也无法证明首屏数据和交互处理就绪；把等待终点定在这里会系统性高估页面速度。一次 H5 打开应按业务可见节点拆时间线，而不是压成一个"WebView 加载时间"。
 
@@ -50,7 +50,7 @@ HWUI 侧的 `VkDevice`、队列与持久化缓存由平台管理，应用拿不�
 
 度量方法：用 `SystemClock.elapsedRealtimeNanos()` 单调时钟取点，避免用户改时间或网络校时干扰；每次打开携带 `navigationId` 隔离重定向、刷新与并发打开，否则旧页面的迟到回调会写进新导航；报告还应带上 provider 包名、`versionName` 与 `versionCode`（`WebView.getCurrentWebViewPackage()` 自 API 26 可用且查询本身不装载 provider，AAOS13 核对存在）——同为 Android 13 的设备可能装不同版本的 provider。
 
-**Q7: [learning] 用 `WebViewCompat.startUpWebView()` 做异步启动初始化后，为什么回调到达前访问 WebView API 仍可能阻塞 UI 线程？两段式配置与多进程的数据目录后缀要注意什么顺序？**
+**Q7: [learning] 用 WebViewCompat.startUpWebView() 做异步启动初始化后，为什么回调到达前访问 WebView API 仍可能阻塞 UI 线程？两段式配置与多进程的数据目录后缀要注意什么顺序？**
 
 WebView 启动初始化每个进程只发生一次：`startUpWebView()`（AndroidX WebKit 1.16.0 起稳定，外部库口径）把后台部分交给指定 executor、必须留在 UI 线程的工作分段执行，但回调到达前，任何线程访问 `android.webkit` 或 `androidx.webkit` API 仍可能等待尚未完成的初始化部分——异步启动只是移动可移动的工作，不是把初始化变成非阻塞接口。`onResult()` 会给出 UI 线程与非 UI 线程的阻塞位置；`onError()` 之后应停止继续访问 WebView API，后续调用可能抛异常或使进程崩溃。
 
@@ -58,7 +58,7 @@ WebView 启动初始化每个进程只发生一次：`startUpWebView()`（Androi
 
 多进程：API 28 起的 `WebView.setDataDirectorySuffix()`（AAOS13 核对存在）必须早于本进程任何 WebView 实例和其他 `android.webkit` 调用——需要异步启动的进程先设 suffix 再调 `startUpWebView()`；不同 suffix 的数据目录不共享 Cookie、LocalStorage 与缓存。大多数应用更适合把 WebView 集中在一个进程，并在其他进程尽早调用 `WebView.disableWebView()`（AAOS13 核对存在），防止 SDK 意外初始化。
 
-**Q8: [learning] 预创建一个空白 WebView 与维护"用完归还"的 WebView 池，各自需要什么所有权与状态边界？`clearCache(true)` 与 `clearHistory()` 为什么不能当作"把页面清干净"？**
+**Q8: [learning] 预创建一个空白 WebView 与维护"用完归还"的 WebView 池，各自需要什么所有权与状态边界？clearCache(true) 与 clearHistory() 为什么不能当作"把页面清干净"？**
 
 预创建只解决启动初始化完成后的实例构造成本，且只缓存尚未导航的空白实例，需要一个明确的 owner：在 UI 线程创建和销毁、使用将来展示它的 Activity Context、只服务同一个 Activity 生命周期与安全域、在 Activity 结束、进程内存压力或预测失效时销毁。池化加载过页面的实例则要完整状态机 `ACTIVE → RESETTING → IDLE`，任何清理失败转 `DESTROYED`——因为实例带有导航历史、页面 JS 状态、Bridge、客户端回调、表单、焦点、滚动位置与媒体状态。
 
@@ -66,7 +66,7 @@ WebView 启动初始化每个进程只发生一次：`startUpWebView()`（Androi
 
 池的准入条件：同一 Activity 或明确容器所有者、同一账号与隐私边界、同一组可信 origin 与 Bridge 能力、页面明确支持复用、trace 证明复用收益存在、有内存压力收缩与 renderer 退出处理。支付、第三方登录、用户输入 URL 与权限敏感页面更适合新建实例或交给 Custom Tabs。真正销毁的顺序：从视图树移除 → `stopLoading()` → 移除 JS 接口 → 置空 client 与下载监听 → 在创建线程调 `destroy()`；已决定销毁就不要先导航 `about:blank` 再等——那是一次额外导航和更多回调。
 
-**Q9: [learning] `addJavascriptInterface()` 注入对象的方法在哪个线程执行？页面包含第三方 iframe 时为什么校验当前 URL 不足以保护 Bridge？`evaluateJavascript()` 为什么不能用 `CountDownLatch` 改成同步等待？**
+**Q9: [learning] addJavascriptInterface() 注入对象的方法在哪个线程执行？页面包含第三方 iframe 时为什么校验当前 URL 不足以保护 Bridge？evaluateJavascript() 为什么不能用 CountDownLatch 改成同步等待？**
 
 注入对象的公开方法运行在 WebView 自己的后台线程上（AAOS13 `WebView.java` 文档核对），但调用是同步跨边界的——JavaScript 等待 Java 方法返回，方法内做磁盘 I/O、网络请求或跨线程 `join()` 会阻塞网页调用方；如果它又同步等待主线程而主线程正在等 WebView 结果，还可能形成循环等待。`evaluateJavascript()` 只能在创建 WebView 的 UI 线程调用、结果回调也在 UI 线程（AAOS13 文档核对），是异步 API，用 latch、`Future.get()` 或阻塞式协程桥接把它改成同步等待会拖死调用线程。
 
@@ -74,7 +74,7 @@ iframe 盲区：注入对象会进入"页面所有 frame，包括所有 iframe"�
 
 做法：支持 `WEB_MESSAGE_LISTENER` 的 provider 用 `WebViewCompat.addWebMessageListener()` 按 HTTPS origin 规则注册，回调携带 `sourceOrigin` 与 `isMainFrame`，先校验来源、长度、协议版本与方法白名单，再把耗时工作投给有生命周期的协程或 executor 并立即返回，完成后在 UI 线程经 reply proxy 回复；页面销毁、导航切换、超时或 renderer 退出时取消未完成请求。provider 不支持该特性时，只对全内容受控、不会加载第三方 frame 的页面注入，并在导航离开可信域前移除接口。协议层面优先批量请求与埋点分批提交，减少序列化、线程切换与回调调度次数。
 
-**Q10: [learning] 在 `shouldInterceptRequest()` 里接离线包：哪些边界会让实现"看起来没生效"或把加速变成安全问题？provider 的预取（prefetch）与离线拦截同时开启时，主 HTML 应该归谁管？**
+**Q10: [learning] 在 shouldInterceptRequest() 里接离线包：哪些边界会让实现"看起来没生效"或把加速变成安全问题？provider 的预取（prefetch）与离线拦截同时开启时，主 HTML 应该归谁管？**
 
 回调在非 UI 线程触发且可能并发（AAOS13 `WebViewClient.java` 文档核对），实现里不能访问 View、等待 UI 线程，也不应在高频路径上解压大包或校验整包——下载、签名与哈希验证、解压应离线完成，再用不可变索引原子切换版本。返回 `null` 表示交回 provider 正常加载，这是"本地未命中回网络"的正规出口；只拦已验证的 HTTPS GET，Range 请求交回（要承载音视频或大文件必须完整实现 `206 Partial Content` 语义）。
 
@@ -82,7 +82,7 @@ iframe 盲区：注入对象会进入"页面所有 frame，包括所有 iframe"�
 
 预取冲突：`Profile.prefetchUrlAsync()` 的后台请求跳过 `shouldInterceptRequest()`，用户导航时主 HTML 才进入拦截回调，此时若返回自定义 `WebResourceResponse`，provider 会采用拦截结果并绕过预取缓存——离线包与预取同时启用必须设计"谁拥有主文档"。三档推测加载按成本递增：`preconnect()` 按 origin 提前完成 DNS/TCP/TLS（必须 UI 线程发起）、`prefetchUrlAsync()` 只取主 HTML 入 profile 缓存（任意线程）、`prerenderUrlAsync()` 绑定具体 WebView 后台建页（UI 线程，成本最高）；三者均为带实验注解的能力（AndroidX WebKit 材料口径），上线前按项目版本与 `WebViewFeature` 确认。动态离线包本身要求 HTML/JS/CSS 来自同一兼容集合、单次导航固定一份 manifest 快照、校验失败回退上一健康版本——只更新主文档或单个 bundle 会让 Bridge 协议、chunk 清单与资源哈希对不上。
 
-**Q11: [learning] Media3 播放诊断里同时出现 `AsynchronousMediaCodecAdapter`、MediaCodec 异步模式、BufferQueue asyncMode 和 EGL swap interval——这四个"异步"分别在哪一层控制什么？把强制同步/异步 adapter 当常规优化合适吗？**
+**Q11: [learning] Media3 播放诊断里同时出现 AsynchronousMediaCodecAdapter、MediaCodec 异步模式、BufferQueue asyncMode 和 EGL swap interval——这四个"异步"分别在哪一层控制什么？把强制同步/异步 adapter 当常规优化合适吗？**
 
 四者分属不同层：`AsynchronousMediaCodecAdapter` 是 Media3 在 API 31 及以上的默认 adapter 线程模型——`MediaCodec.Callback` 在专用回调线程接收 buffer 可用、format change 与错误，input buffer 由另一个 queueing 线程提交；framework 的 MediaCodec 异步模式就是这套 `Callback` 机制本身（native 侧由独立的 `mCodecLooper` 驱动通知，AAOS13 `MediaCodec.cpp` 核对存在）；BufferQueue `asyncMode` 是 native 图形队列在 producer 拥塞时的可替换 slot 语义，与 codec 无关；EGL swap interval 0 只影响 native GL producer 的交换节奏，decoder 输出 Surface 没有 Java 调优开关。Media3 1.11.0 默认启用的 dynamic scheduling 控制播放线程唤醒时机，又是与 adapter 无关的第五个维度（Media3 1.11.0 外部库口径）。
 
@@ -90,7 +90,7 @@ iframe 盲区：注入对象会进入"页面所有 frame，包括所有 iframe"�
 
 做法：API 31—37 一般保留默认值；`forceEnableMediaCodecAsynchronousQueueing()`/`forceDisableMediaCodecAsynchronousQueueing()` 只适合受控 A/B——某机型出现 callback 或 flush 竞态、验证同步 dequeue 是否阻塞播放线程时使用，实验要保持内容、Surface、codec、DRM、显示模式与温度一致，并比较 flush、seek 与转场的尾部分布而不只看平均首帧。Media3 1.11.0 默认启用的 crypto async（`CONFIGURE_FLAG_USE_CRYPTO_ASYNC`）只在 API 36 及以上设置 flag，属 secure input 行为，不能推导图形输出的异步状态——版本敏感项。
 
-**Q12: [learning] 把 Media3 的 dropped 计数与 skipped 计数加总成一个"丢帧率"、再把 `onRenderedFirstFrame()` 当作"用户看到首帧"的时刻，这两种读法错在哪？joining 的 5 秒窗口为什么不是首帧超时？**
+**Q12: [learning] 把 Media3 的 dropped 计数与 skipped 计数加总成一个"丢帧率"、再把 onRenderedFirstFrame() 当作"用户看到首帧"的时刻，这两种读法错在哪？joining 的 5 秒窗口为什么不是首帧超时？**
 
 drop 与 skip 都可能不显示画面，但语义不同：`FRAME_RELEASE_DROP` 表示帧本应显示却因迟到被丢；`FRAME_RELEASE_SKIP` 是 decode-only、joining 追赶等有意跳过；二者可能都走到 `releaseOutputBuffer(index, false)`，统计却进不同 counter——加总成"丢帧率"会掩盖 seek、转场与播放性能问题的差别。六种 release action（IMMEDIATELY/SCHEDULED/DROP/SKIP/IGNORE/TRY_AGAIN_LATER）中，晚帧的默认处理是（Media3 1.11.0 值，非平台常量）：晚约 30 ms 可 drop，晚约 500 ms 可丢到关键帧并 flush/reinitialize codec，晚约 30 ms 且超过 100 ms 没释放新帧可强制释放一帧；早于目标超 50 ms 先 `TRY_AGAIN_LATER`，decoder input 预计晚约 15 ms 可提前丢输入。
 
@@ -98,7 +98,7 @@ drop 与 skip 都可能不显示画面，但语义不同：`FRAME_RELEASE_DROP` 
 
 首帧边界：joining 的 `DEFAULT_ALLOWED_VIDEO_JOINING_TIME_MS = 5000` 是 renderer 可以短暂报告 ready 的状态连续性窗口，不表示系统允许首帧慢 5 秒，也不表示画面已可见；`onRenderedFirstFrame()` 在 renderer 释放首帧后上报，1.11.0 的派发时间用的是派发时的 `elapsedRealtime()`，距离显示还隔着 BufferQueue、SurfaceFlinger latch、HWC 合成与 display present——产品应把"播放器首帧事件"与"用户可见首帧"命名为两个指标。`onDroppedVideoFrames()` 也只统计 renderer 侧，不等于系统从解码到显示的总丢帧：Surface 层丢帧、latch 未采用、HWC 延迟与 present miss 在播放器计数里不可见。
 
-**Q13: [learning] `MediaFormat.KEY_ALLOW_FRAME_DROP` 控制的是哪一层的丢帧？为什么 Media3 只在启用视频效果且条件命中时才写 0，而"怕掉帧就设 0"不是通用建议？**
+**Q13: [learning] MediaFormat.KEY_ALLOW_FRAME_DROP 控制的是哪一层的丢帧？为什么 Media3 只在启用视频效果且条件命中时才写 0，而"怕掉帧就设 0"不是通用建议？**
 
 它控制 decoder 输出 Surface 这一层的丢帧：Android 10 起 Surface 输出默认允许在消费不及时时丢弃过量帧——AAOS13 `MediaCodec.cpp` 核对：格式中没有该 key 且连接了 Surface 时 `mAllowFrameDroppingBySurface` 默认为 `true`；写 `0` 时 `connectToSurface()` 调用 `disableLegacyBufferDropPostQ()` 选择退出该行为，代价是消费持续不及时时 decoder 更容易背上背压。
 
@@ -106,7 +106,7 @@ Media3 1.11.0 只在启用视频效果后写 0（外部库口径）：效果管�
 
 边界：官方文档把可控退出描述为面向非 View Surface（独立 `SurfaceTexture`、`ImageReader`）；`SurfaceView` 与 `TextureView` 上设 0 得不到跨设备"零丢帧"保证。无条件设 0 可能让播放更卡而不是更流畅——背压最终表现为 decoder 输出等待，掉帧只是换了一层发生。
 
-**Q14: [learning] PlayerView 默认 `surface_type` 是 `surface_view`：普通视频优先 SurfaceView 的理由是什么？什么需求才值得换 TextureView？"用 TextureView 才能加视频特效"为什么不成立？**
+**Q14: [learning] PlayerView 默认 surface_type 是 surface_view：普通视频优先 SurfaceView 的理由是什么？什么需求才值得换 TextureView？"用 TextureView 才能加视频特效"为什么不成立？**
 
 SurfaceView 让 decoder 输出保持独立 SurfaceFlinger layer：HWC 每帧可以评估视频 layer 是否适合 DEVICE 合成，大面积视频避免宿主 HWUI 再采样，HDR、secure 输出与电视端全分辨率路径通常更合适，视频与宿主 UI 还能按各自节奏出帧——普通长视频保留默认。边界：独立 layer 只是 overlay 候选条件，缩放、旋转、alpha、HDR/SDR 混合、protected usage、plane 数量与显示带宽都可能让它回到 CLIENT 合成，SurfaceView 不保证每帧硬件合成。
 
@@ -114,7 +114,7 @@ TextureView 的路径是 decoder → SurfaceTexture BufferQueue → 宿主 HWUI/
 
 "特效前提"不成立：Media3 的 effects 管线用独立的输入 Surface 和输出 Surface 完成 GPU 处理，与 TextureView 无关；是否换 TextureView 只取决于最终 UI 变换需求（Media3 1.11.0 外部库口径）。生命周期上优先用 `player.setVideoSurfaceView()`/`setVideoTextureView()`/`PlayerView.setPlayer()` 让 player 跟踪 Surface 回调；直接 `setVideoSurface()` 时调用方必须在 Surface 销毁前清除输出并管理包装对象；多视图切换用 `PlayerView.switchTargetView()`（先绑新再解旧）。API 34+ 默认 follows-attachment 的 Surface 生命周期可减少滚动转场中的销毁重建，但不替代明确的 player 生命周期所有者。
 
-**Q15: [learning] CameraX 里 Preview 单独能开的分辨率，加上 ImageCapture、ImageAnalysis 后绑定失败——为什么逐个用例调参解决不了？`SessionConfig` 与 `isSessionConfigSupported()` 各解决什么？**
+**Q15: [learning] CameraX 里 Preview 单独能开的分辨率，加上 ImageCapture、ImageAnalysis 后绑定失败——为什么逐个用例调参解决不了？SessionConfig 与 isSessionConfigSupported() 各解决什么？**
 
 CameraX 要把所有同时运行的用例转换成一组底层输出：分辨率、格式、帧率、dynamic range、防抖、扩展模式与设备 quirk 都参与组合协商——某个尺寸单独可行不等于它能与另外三路输出并发，逐个调参不改变组合约束。应用已知要同跑的用例时，应在同一次 `bindToLifecycle()` 中提交完整集合，避免先绑 Preview 再逐个增删导致反复会话重配、缓冲区准备与首帧等待；切换相机/扩展/dynamic range、增删用例、生命周期频繁 STARTED/STOPPED、每次重组新建用例都会触发重绑。
 
@@ -122,7 +122,7 @@ CameraX 要把所有同时运行的用例转换成一组底层输出：分辨率
 
 归因与版本：CameraX 1.6 的默认 Camera2 后端已迁移到 CameraPipe，仍跑在平台 Camera2 接口、`cameraserver` 与 HAL 之上——用例协商与 quirk 属 CameraX，请求提交与结果分发跨 CameraPipe 与平台，曝光与 ISP 属设备，性能结论要写明等待发生在哪个对象。CameraX 1.5.1 及更早在 Android 17 设备遇到新 dynamic range profile 可能绑定崩溃（材料口径），应使用 1.5.2+/1.6.x；AAOS13 不受此影响。
 
-**Q16: [learning] ImageAnalysis 用默认的 `STRATEGY_KEEP_ONLY_LATEST` 时，Builder 里配置的队列深度为什么被忽略？什么时候才值得换 `STRATEGY_BLOCK_PRODUCER`？Analyzer 里漏调 `imageProxy.close()` 的后果会扩散到哪里？**
+**Q16: [learning] ImageAnalysis 用默认的 STRATEGY_KEEP_ONLY_LATEST 时，Builder 里配置的队列深度为什么被忽略？什么时候才值得换 STRATEGY_BLOCK_PRODUCER？Analyzer 里漏调 imageProxy.close() 的后果会扩散到哪里？**
 
 `KEEP_ONLY_LATEST`（默认）在 Analyzer 忙时直接替换待处理的旧帧，队列深度配置被忽略；`BLOCK_PRODUCER` 按顺序保留帧，默认深度 6（含正在分析的图像），队列满后生产端等待——回压会传给同一相机设备的其他用例（CameraX 1.6.1 外部库口径）。只有"每帧都必须处理且平均吞吐跟得上输入"的任务才值得换 `BLOCK_PRODUCER`：增加深度只能吸收短时抖动，同时增加内存与结果等待时间，平均处理慢于输入时队列迟早占满。
 
@@ -130,7 +130,7 @@ CameraX 要把所有同时运行的用例转换成一组底层输出：分辨率
 
 成本与优化顺序：默认输出 `YUV_420_888`，请求 `RGBA_8888` 会有内部 YUV→RGBA 转换时间，应计入分析预算（等待、旋转裁剪、格式转换、预处理、推理、后处理与 `ImageProxy` 持有总时长），只记模型 `process()` 耗时会低估对相机管线的占用。降负载按影响范围递进：改 `KEEP_ONLY_LATEST` → 减小输入尺寸 → 避免每帧分配大对象 → 直接用 YUV plane 减少转换 → 降低分析频率 → 更轻的模型，最后才是 `BLOCK_PRODUCER` 加队列等待监控。
 
-**Q17: [learning] CameraX 1.6.1 里 `isZslSupported()` 返回 true 后，哪些条件仍会让一次拍照静默降级成普通拍照？"ZSL 缓存 3 帧"中的 3、9、1 三个数字分别约束什么？**
+**Q17: [learning] CameraX 1.6.1 里 isZslSupported() 返回 true 后，哪些条件仍会让一次拍照静默降级成普通拍照？"ZSL 缓存 3 帧"中的 3、9、1 三个数字分别约束什么？**
 
 能力检查只是三层判定的第一层（设备能力 → 会话配置 → 单次拍照）。会绑定 `VideoCapture`、启用 Camera Extension、闪光灯为 ON 或 AUTO、请求高分辨率优先、命中 `ZslDisablerQuirk` 设备特例、缺 `REQUEST_AVAILABLE_CAPABILITIES_PRIVATE_REPROCESSING`、无可用 `PRIVATE` 输入尺寸、`PRIVATE` 无 JPEG 输出映射——这些会让 CameraX 不建重处理输入流；拍照时环形队列为空或没有带完整元数据的合格帧，则本次静默改用普通静态拍照（`TEMPLATE_STILL_CAPTURE`）。闪光灯是特例：CameraX 保留已建的可重处理会话，只在 ON/AUTO 时提交普通拍照，切回 OFF 无需重建会话（CameraX 1.6.1 外部库口径）。
 
@@ -138,7 +138,7 @@ CameraX 要把所有同时运行的用例转换成一组底层输出：分辨率
 
 资格与选取：`MetadataImageReader` 按时间戳把图像与捕获结果配对，AF 为 `LOCKED_FOCUSED`/`PASSIVE_FOCUSED`、AE 与 AWB 均 `CONVERGED` 才入队，否则立即关闭；1.6.1 的实现没有按按键时间搜索，也没有清晰度评分——拍照时从队列取最早保留的合格帧，经 `ImageWriter.queueInputImage()` 与 `createReprocessCaptureRequest(TotalCaptureResult)` 送回重处理（平台 API，AAOS13 `CameraDevice` 核对存在），成功、失败、取消都经原子引用回收输入图像。成本与归因：每个候选帧占用一块 `PRIVATE` 输出缓冲，不归还就压缩预览上游；日志中 `No such element` 表示拍照时队列为空，`Queuing image ... for reprocessing` 才接近重处理提交阶段；`InputRequest` 构造之后的失败会让本次捕获序列失败，而不是自动再降级。
 
-**Q18: [learning] 把 `PreviewView.ImplementationMode` 设为默认的 PERFORMANCE，能保证预览走 SurfaceView 吗？`getPreviewStreamState()` 报告 STREAMING 时画面已经可见了吗？**
+**Q18: [learning] 把 PreviewView.ImplementationMode 设为默认的 PERFORMANCE，能保证预览走 SurfaceView 吗？getPreviewStreamState() 报告 STREAMING 时画面已经可见了吗？**
 
 不能保证：PERFORMANCE 是"尽量使用 SurfaceView"的偏好，CameraX 仍可能因 API 24 及以下、LEGACY camera 或设备 quirk 回退 TextureView（1.6.1 源码 `shouldUseTextureView()` 的实际判断）；COMPATIBLE 则使用 TextureView。版本内还要注意文档与源码的差异：该版本说明文档把 target rotation 与显示旋转不一致列为 TextureView 回退条件，源码尚未实现该项判断——工程结论以锁定版本源码与设备观测为准，不能只按枚举名推断（CameraX 1.6.1 外部库口径）。
 
@@ -146,7 +146,7 @@ STREAMING 也不等于可见：PERFORMANCE 模式下 `STREAMING` 可能早于画
 
 附带判断：预览分辨率只需覆盖显示与业务裁剪需求，超过部分只会增加 ISP、缓冲区、带宽与 GPU 工作；帧率判断用目标帧周期（30 fps 约 33.33 ms、60 fps 约 16.67 ms），弱光长曝光与可变帧率下按显示帧率判断 HAL 掉帧会误报，应统计 sensor timestamp、相机输出与显示 present 三组间隔。
 
-**Q19: [learning] AppWidget 的 `updateAppWidget()` 已经返回，桌面为什么可能还没变？RemoteViews 传给宿主的是一棵 View 树吗？宿主执行 `apply()` 还是 `reapply()` 由谁决定？**
+**Q19: [learning] AppWidget 的 updateAppWidget() 已经返回，桌面为什么可能还没变？RemoteViews 传给宿主的是一棵 View 树吗？宿主执行 apply() 还是 reapply() 由谁决定？**
 
 `RemoteViews` 保存的是布局资源、可能的尺寸变体和动作列表（`setTextViewText()` 记录一条文本动作，`setImageViewBitmap()` 记录携带位图的 `BitmapReflectionAction`），不是已建好的 View 树；`updateAppWidget()` 返回只代表更新请求已交给系统服务，宿主的布局加载、动作重放与绘制尚未发生——调用返回不等于桌面像素刷新。
 
@@ -154,7 +154,7 @@ STREAMING 也不等于可见：PERFORMANCE 模式下 `STREAMING` 可能早于画
 
 `apply()`/`reapply()` 由宿主决定：`AppWidgetHostView` 按当前尺寸选出 RemoteViews 后，布局与现有 View 满足复用条件走 `reapply()`（宿主配置异步 executor 则 `reapplyAsync()`），否则 `apply()` 新建。提供方没有强制 reapply 的公开接口；切换布局资源或尺寸变体、宿主颜色映射变化都会让复用失效——稳定结构留在 XML、减少无意义的布局切换。Glance 1.2.0 用 Compose Runtime 生成描述再翻译成 RemoteViews（外部库口径）：不使用 Compose UI 的 LayoutNode 与绘制管线、不支持任意 Compose UI 组件，Binder、服务端缓存与宿主成本原样存在，不能拿 Compose 的重组跳过率推导桌面更新成本；`SizeMode.Exact` 每次尺寸变化重建内容、易造成调整大小时的跳变，尺寸能归纳为有限断点时优先 `SizeMode.Responsive`。车机里 SystemUI plugin 式 Launcher 插件卡片不经 AppWidgetManager/RemoteViews 链路，上述分析与工具均不适用。
 
-**Q20: [learning] `partiallyUpdateAppWidget()` 第一次调用没有生效、`notifyAppWidgetViewDataChanged()` 被标弃用——这两种"更新不动/不能用"的正确解法分别是什么？集合项的更新成本应该花在哪个方法里？**
+**Q20: [learning] partiallyUpdateAppWidget() 第一次调用没有生效、notifyAppWidgetViewDataChanged() 被标弃用——这两种"更新不动/不能用"的正确解法分别是什么？集合项的更新成本应该花在哪个方法里？**
 
 局部更新的公开契约要求实例先收到过一次完整更新，缺基线时会被忽略——正确做法是先提交完整 RemoteViews 建立可恢复的缓存基线，再对稳定布局上的少量属性用 partial。AAOS13 `AppWidgetServiceImpl` 核对：完整更新直接替换 `widget.views`，部分更新在缓存非空时合并；缓存为空时服务会把传入对象整体存为基线而不合并——这属内部行为，其他版本与厂商实现无需保持，应用不能依赖。集合刷新的旧路径（`RemoteViewsService` + `notifyAppWidgetViewDataChanged()`）在材料口径的 API 35 已弃用，新实现优先 `RemoteCollectionItems`。
 
@@ -162,7 +162,7 @@ STREAMING 也不等于可见：PERFORMANCE 模式下 `STREAMING` 可能早于画
 
 成本位置：在 `onDataSetChanged()` 里完成一次数据快照（后台完成查询、排序与业务计算，生成不可变列表并原子替换旧引用），`getViewAt()` 只做确定性的映射并复用资源引用；数据暂不可用时返回稳定的加载或空状态。注意服务断连本身不会触发 `onDataSetChanged()`，不要把刷新逻辑挂在断连事件上。完整更新还有一层语义：提供方进程死亡不会立即清除 `system_server` 缓存，宿主重连时仍可能收到这份快照；设备重启后的重新更新是另一条生命周期路径。
 
-**Q21: [learning] 把 `updatePeriodMillis` 配成 1 分钟、往 RemoteViews 里塞一张相机原图，分别会撞上什么系统约束？`content://` 和 `file://` 的图片 URI 为什么待遇不同？**
+**Q21: [learning] 把 updatePeriodMillis 配成 1 分钟、往 RemoteViews 里塞一张相机原图，分别会撞上什么系统约束？content:// 和 file:// 的图片 URI 为什么待遇不同？**
 
 周期下限与图像上限都是服务端强制约束（AAOS13 `AppWidgetServiceImpl` 核对）：`updatePeriodMillis` 为 0 不注册周期更新，正值与 `MIN_UPDATE_PERIOD` 取较大值——非调试构建为 30 分钟，最终用 `AlarmManager.setInexactRepeating(ELAPSED_REALTIME_WAKEUP, ...)` 注册，所以配 1 分钟实际得到约 30 分钟的非精确闹钟；图像方面服务按 `6 × size.x × size.y`（即 1.5 个屏幕 × 每像素 4 字节）计算上限，每次更新完成缓存合并或替换后检查，超限会清空该次缓存并抛 `IllegalArgumentException`。上限随设备显示尺寸变化，不是固定的 1 MB 或 8 MB，设计峰值应显著低于它；targetSdk 不高于 37 时强制检查只计普通位图、`Icon` 携带位图仅记录警告，高于 37 两者都计入强制检查（材料 Android 17 口径）。
 
@@ -170,7 +170,7 @@ STREAMING 也不等于可见：PERFORMANCE 模式下 `STREAMING` 可能早于画
 
 URI 待遇差异（材料 Android 17 口径）：服务会遍历 RemoteViews 中的 URI，`content://` 要求调用 UID 自己具有读权限（经 URI 授权服务确认），`android.resource://` 可以通过，`file://` 与其他方案被拒绝；AAOS13 版本的 `AppWidgetServiceImpl` 没有该遍历检查（本地核对），按材料口径转写。用 URI 能减少动作内联位图的体积，但宿主读权限与文件存活期仍要自己保证。动作数量也累积成本：按数据版本去重、多字段合成一次更新、相同内容多实例用 `int[]` 批量提交、不重复设置从未变化的点击与可见性。
 
-**Q22: [learning] 应用想接入系统取色：`ACTION_OPEN_EYE_DROPPER` 返回的 `EXTRA_COLOR` 是什么格式？secure 窗口区域的像素返回什么？接入要覆盖哪几条失败分支？Android 13 上有这个 API 吗？**
+**Q22: [learning] 应用想接入系统取色：ACTION_OPEN_EYE_DROPPER 返回的 EXTRA_COLOR 是什么格式？secure 窗口区域的像素返回什么？接入要覆盖哪几条失败分支？Android 13 上有这个 API 吗？**
 
 输出契约是 opaque ARGB `0xFFRRGGBB`：`Intent.EXTRA_COLOR` 本身是可存 `0xAARRGGBB` 的通用 int extra，取色 action 把 alpha 固定为 `0xFF`；secure 窗口与 protected buffer 的像素被涂黑，且返回的黑色与真实黑色没有额外标记，调用方无法区分该像素是本来黑色还是经过 redaction。版本上这是 Android 17 / API 37 的新增 action（带 `@FlaggedApi("com.android.eyedropper.enable_eye_dropper_api")`，材料口径）；AAOS13（Android 13）的 `Intent.java` 没有该常量、树中也没有 EyeDropper 应用（本地核对），Android 13 设备必须走应用内取色降级。
 
@@ -186,7 +186,7 @@ URI 待遇差异（材料 Android 17 口径）：服务会遍历 RemoteViews 中
 
 多显示器指"同一 Android 系统内"的多个 display：为每个 display 建独立 `WindowContext` 与 Compose overlay、用 `ActiveDisplayTracker` 切换准星、display 增删与 configuration 变化时取消会话。它不包含设备发现、连接或传输 API——跨设备同步完全属于应用自己的协议，只应同步业务需要的结果字段并遵守数据最小化；`source_elapsed_realtime_ns` 只在单设备单次开机内单调，跨设备冲突要用服务端分配的 revision/sequence，不能拿两台设备的 elapsed time 直接比较。
 
-**Q24: [learning] EyeDropper 返回的 `0xFFRRGGBB` 能当成"这块屏幕该位置的物理颜色"来用吗？为什么把同一个整数同步到另一台设备后颜色看起来仍可能不同？它与 PixelCopy、MediaProjection 的适用边界差在哪？**
+**Q24: [learning] EyeDropper 返回的 0xFFRRGGBB 能当成"这块屏幕该位置的物理颜色"来用吗？为什么把同一个整数同步到另一台设备后颜色看起来仍可能不同？它与 PixelCopy、MediaProjection 的适用边界差在哪？**
 
 不能：结果 int 不携带 ColorSpace、HDR 元数据或 headroom、来源 display id、像素坐标、取样时间与 redaction 状态标记，AOSP 捕获参数还设置了 `preserveDisplayColors(false)`——它只是适合色板、画笔与普通 UI 的 UI 色值，不是色度测量结果。跨设备同步同一个整数，两台设备的面板、色彩管理、亮度与 HDR 状态不同，观感仍会不同；印刷、摄影、HDR 调色或需要 ΔE 的业务要用包含色彩空间、参考白点、传递函数与设备校准信息的专用数据模型。
 

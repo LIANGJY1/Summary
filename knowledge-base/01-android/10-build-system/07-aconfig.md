@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀，证据等级：Android 官方 feature-flagging 文档与 AOSP 源码）。边界：本文回答 `.aconfig` 声明字段、Soong 接入、codegen 模板、release config 与版本核对。运行期存储和 `aflags` 归 [../08-platform-services/05-aconfig-runtime.md](../08-platform-services/05-aconfig-runtime.md)。版本相关结论以目标 Android 分支为准。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] aconfig 是什么，它和以前用 `Build.IS_BOARD_*` 之类的宏有什么本质不同？**
+**Q1: [learning] aconfig 是什么，它和以前用 Build.IS_BOARD_* 之类的宏有什么本质不同？**
 
 aconfig 是 Android 特性发布流程使用的开关基础设施，贯穿 flag 声明、构建期代码生成、版本配置和运行期取值。它与 `Build.IS_BOARD_*`、`PRODUCT_*` 等构建期配置的差异是：声明为 `READ_WRITE` 的 aconfig 标志可在运行期覆盖，构建期值则随构建确定。不是所有 aconfig 标志都能运行期修改，`READ_ONLY` 标志不可改。
 
@@ -19,7 +19,7 @@ aconfig 是 Android 特性发布流程使用的开关基础设施，贯穿 flag 
 
 所有特性发布 flag 默认 `READ_WRITE` 且 `DISABLED`。具体 release config 可以覆盖状态与权限。
 
-**Q2: [learning] 声明一个 aconfig 标志需要哪几个必填字段，`container` 与 `package` 分别管什么？**
+**Q2: [learning] 声明一个 aconfig 标志需要哪几个必填字段，container 与 package 分别管什么？**
 
 声明文件以 `package` 和 `container` 设定声明范围，每个 `flag` 提供 `name`、`namespace`、`description` 和 `bug`。`package` 与 `name` 组合成 flag 唯一键。AOSP 贡献规范要求这些字段按文档给出。自建镜像可按官方说明使用自己的 bug 编号或 `<none>`。
 
@@ -114,7 +114,7 @@ Android 17 源码删除了独立的 `FeatureFlagsImpl.deviceConfig.java.template
 
 该优化由构建标志 `RELEASE_ACONFIG_OPTIMIZE_READ_ONLY_JAVA` 控制。需要检查其目标分支的声明、默认值和作用范围，不能假设所有产品都开启。只读适合发布版本中已确定的路径。需要运行期切换的标志若被设为只读，运行期修改命令不会改变它的值。
 
-**Q6: [learning] 版本配置（release config）是什么，`trunk_staging` 与正式发布的区别？**
+**Q6: [learning] 版本配置（release config）是什么，trunk_staging 与正式发布的区别？**
 
 版本配置是一个目录，包含特定 Android build 的所有标志值文件（启用或禁用哪些特性）。AOSP 自带若干版本配置，位于 `WORKING_DIRECTORY/build/release/aconfig/` 下，例如 `trunk_staging`。
 
@@ -150,7 +150,7 @@ aconfig_values {
 
 未提供覆盖值时，特性发布 flag 默认是 `DISABLED` 和 `READ_WRITE`。调试“声明后没有启用”时，分别检查是否有值文件、该文件是否在模块 `srcs` 中，以及目标构建实际选择了哪个 release config。AOSP 内置配置由 Google 维护，官方不接受通过贡献修改其特性 flag 值。自建镜像应定义自己的 release config。
 
-**Q7: [learning] 声明里 `namespace` 字段的约束是什么，自建镜像该怎么处理？**
+**Q7: [learning] 声明里 namespace 字段的约束是什么，自建镜像该怎么处理？**
 
 `namespace` 用于组织 AOSP 贡献的审核命名空间。上游贡献者需与指定的 Google reviewer 协作确定它。维护自建 AOSP 镜像时可自行选择 namespace。
 

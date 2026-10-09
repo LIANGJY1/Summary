@@ -139,7 +139,7 @@ AndroidView 将一棵传统 View 子树纳入 Compose 的布局与绘制，因�
 2. **单向状态流**：指定唯一状态持有方。Compose 状态通过 AndroidView update 更新 View，用户事件从 View 回调回到状态持有方。
 3. **性能归因**：混合页面经过两套布局/绘制桥接和 Android 渲染链路，应按 Compose 阶段、View 阶段及帧提交分别查证，不能预设瓶颈一定在某一侧。
 
-**Q16: 普通 Compose 页面有自己的渲染引擎吗？`AndroidUiFrameClock` 的 Choreographer 回调与 ViewRootImpl 的 traversal 回调各做什么？**
+**Q16: [learning] 普通 Compose 页面有自己的渲染引擎吗？AndroidUiFrameClock 的 Choreographer 回调与 ViewRootImpl 的 traversal 回调各做什么？**
 
 Compose 有独立 UI runtime 与节点系统，但常规 Android 硬件加速窗口仍由 HWUI 完成图形渲染和提交。AndroidUiFrameClock 的 Choreographer 回调负责恢复帧等待者，ViewRootImpl 的 traversal 才驱动窗口布局、绘制和 HWUI 提交。
 
@@ -160,7 +160,7 @@ Snapshot 按读取所处阶段建立观察关系。失效从被读取的最早�
 6. **编译器规则**：Strong Skipping 是 Compose Compiler 模式，Kotlin 2.0.20 起默认启用。不稳定参数的比较和 lambda 自动记忆受编译器规则影响，不是 Android 平台 API 版本边界。
 7. **派生结果**：derivedStateOf 适用于输入频繁变化但观察结果较少变化的场景。它仍有依赖追踪与计算成本。
 
-**Q18: Compose 的每个 LayoutNode 都对应一个 Android RenderNode 吗？`Modifier.graphicsLayer` 一定创建离屏纹理吗？**
+**Q18: [learning] Compose 的每个 LayoutNode 都对应一个 Android RenderNode 吗？Modifier.graphicsLayer 一定创建离屏纹理吗？**
 
 LayoutNode 与 RenderNode/GraphicsLayer 是不同层次的对象，不是一一对应。graphicsLayer 建立绘制属性和合成边界，也不必然创建离屏缓冲区。离屏需求由内容效果与 CompositingStrategy 决定，会增加中间纹理、像素填充和 GPU 内存带宽成本。
 

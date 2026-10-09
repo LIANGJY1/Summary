@@ -6,7 +6,7 @@
 
 先把感受转换成可重复场景——设备、系统构建、前后台状态、网络、温度、测试区间与业务动作全部固定，否则电量百分比、某条电源轨峰值或某个 UID 的 CPU 时间都不能单独定责。证据分三层：设备能量层（外部电源分析仪、ODPM 电源轨、电池电荷计）回答测试区间内整机或某条供电链路耗了多少能量，不能回答归谁；系统归因层（`dumpsys batterystats`、`BatteryUsageStats`、Android vitals）回答系统把 CPU、网络、WakeLock、传感器活动记给了哪个 UID，数值是模型与硬件数据混合的归因结果；执行行为层（Perfetto、应用日志、方法追踪）回答哪个线程、请求或回调在什么时刻运行。可靠结论至少两层互相印证，并用同机基线对照或逐模块消融复核；报告要保存每次重复的原始结果而不只是均值。
 
-**Q2: [learning] 一轮可复现的 BatteryStats 采集怎么搭？Battery Historian、Power Profiler 与 Macrobenchmark `PowerMetric` 各适合什么问题？**
+**Q2: [learning] 一轮可复现的 BatteryStats 采集怎么搭？Battery Historian、Power Profiler 与 Macrobenchmark PowerMetric 各适合什么问题？**
 
 采集流程：记录构建指纹与电池状态 → `dumpsys batterystats --reset` 建立窗口起点（会清除统计，只在专用测试设备执行）→ 断开 USB 执行预定义场景（充电改变电池电流方向，部分设备 USB 链路还会阻止完整休眠）→ `adb bugreport` 与 `--charged`/`--checkin` 导出；需要逐锁明细时临时开 `--enable full-wake-history`，采集完关闭。工具分工：Battery Historian 适合回看长区间系统事件与 UID 统计，官方已声明不再活跃维护，图上的活动条不代表该组件的能量消耗；`dumpsys batterystats` 的文本与 checkin 数据适合按 UID 比较 CPU、网络、WakeLock 与传感器统计，读数前先确认统计区间与包名对应的 UID（共享 UID、多用户会让"一个包一个 UID"失效）；Power Profiler（Android Studio，Android 10+ 的 Pixel 6 及后续设备）把 ODPM 电源轨与系统追踪放同一条时间轴，是设备级数据、不按应用分摊；Macrobenchmark `PowerMetric` 适合把固定脚本纳入回归，接口仍是实验性、高精度追踪仅限部分 Pixel，用前先查 `deviceSupportsHighPrecisionTracking()`。跨设备只比趋势，不比绝对电流或绝对耗电。
 
@@ -14,7 +14,7 @@
 
 因为"某厂商会杀应用"的印象无法指导修复，必须先回答 AOSP 当前如何评价这个包。顺序：其一，`cmd activity get-bg-restriction-level --user current <pkg>` 看限制等级、`am get-standby-bucket` 看待机分组——两者相关但不是同一项，报告保留两项原始输出；其二，核对豁免来源：`cmd activity list-bg-exemptions-config`（SystemConfig 的 `bg-restriction-exemption` 静态集合）、`device_config get activity_manager bg_restriction_exempted_packages`（动态 DeviceConfig）、`dumpsys deviceidle whitelist`（设备空闲允许名单）——三份输出来自不同配置源，包出现在 Device Idle 白名单不等于命中静态豁免；其三，`dumpsys activity -a` 末尾检索 `APP BACKGROUND RESTRICTIONS` 段看各 tracker 与 policy 配置（该输出由 `AppRestrictionController` 产生，Android 13 已有此控制器与该等级体系，本地源码核对）；其四，`dumpsys activity exit-info`（`ApplicationExitInfo`，API 30+）区分 `REASON_LOW_MEMORY`、`REASON_USER_STOPPED`、`REASON_SIGNALED` 等退出原因——`REASON_SIGNALED` 只证明信号退出，不能单独指认厂商清理组件。两台设备 AOSP 状态相同仍稳定复现差异时，才进入厂商设置、服务与事件日志的专项取证。
 
-**Q4: [learning] `BACKGROUND_RESTRICTED` 能由系统自动打上吗？"耗电豁免"是什么性质的东西？**
+**Q4: [learning] BACKGROUND_RESTRICTED 能由系统自动打上吗？"耗电豁免"是什么性质的东西？**
 
 `BACKGROUND_RESTRICTED` 不能仅凭 tracker 自动进入，源码要求用户同意该级别；多个 policy 提出候选等级时控制器取数值更大的等级并保留来源 tracker，但这是汇总规则而非完整决策——之前还要处理休眠、force-stop、系统豁免与当前待机分组（`AppRestrictionController` 的 tracker 汇总逻辑，Android 13 已有）。`AppBatteryExemptionTracker` 记录的是耗电扣除区间：按 UID 维护状态位，同 UID 的第一个包进入可豁免状态时记开始事件、全部离开才记结束事件（避免共享 UID 的两个包重复计时），`AppBatteryTracker` 再从后台总耗电中扣除这些区间——这是归因层面的"这段耗电不算它的"，不是给固定时长的后台执行许可，源码也没有"16 ms 生效延迟"或统一豁免窗口的契约。`EXEMPTED` 等级同样不是 CPU、网络与前台服务规则的通行证，各子系统仍按各自的 allowlist 判断。
 
@@ -26,11 +26,11 @@
 
 六连问：任务是否用户刚刚发起并正在等待结果；结果允许延迟到什么时刻；网络、充电、空闲、电量哪些是业务要求；重复触发时保留、替换还是追加旧工作；页面关闭、退出账号、权限撤销、数据删除时谁负责取消；被系统停止后哪些进度可安全恢复、哪些步骤必须幂等。三组条件不可互替：Doze 描述整台设备是否空闲（未充电、静止、熄屏一段时间，暂停网络、忽略普通 WakeLock、延后 Job 与 Alarm 到维护窗口）；App Standby 待机分组描述单个应用的近期使用频率（active/working set/frequent/rare/restricted，`restricted` 是限制最严的分组但 Android 13 起每天仍保留一次十分钟批处理时段，OEM 可调算法，应用不应诱导分组）；任务接口与权限决定具体执行资格（WorkManager/JobScheduler 的约束与配额、FGS 类型与启动资格）。进程存活也不等于任务可持续：组件生命周期、后台启动资格、Job 配额与资源权限是不同条件，任务开始时间不是承诺时间。
 
-**Q7: [learning] 从 `startForegroundService()` 到真正以前台服务运行，要过哪三道互相独立的检查？**
+**Q7: [learning] 从 startForegroundService() 到真正以前台服务运行，要过哪三道互相独立的检查？**
 
 其一，调用方能否从当前状态启动 FGS：发生在 `startForegroundService()` 进入 AMS 时，后台无豁免抛 `ForegroundServiceStartNotAllowedException`——高优先级 FCM 只是可能提供临时启动窗口（来源与时效由产生例外的系统组件决定，没有"固定 10 秒"契约），应用应检查 `RemoteMessage.getPriority()` 而不是假定推送必然获准。其二，Service 能否按 Manifest 声明的类型晋升：`startForeground()` 时校验运行时类型必须是 Manifest 类型位集合的子集（否则 `IllegalArgumentException`），类型专用权限或运行前提不满足抛 `SecurityException`，缺有效类型抛 `MissingForegroundServiceTypeException`；多个类型可按位组合，但 `shortService` 与其他类型组合时会被系统忽略。其三，晋升后能否访问目标资源并继续运行：camera、microphone、location、health 受 while-in-use 能力约束（后台应用 `checkSelfPermission()` 仍可能返回已授权，只说明用户授予了"使用期间可用"权限），限时类型受运行时限约束，各子系统还有自己的检查。三道检查的失败要分开记录，修复位置各不相同。
 
-**Q8: [learning] `startForegroundService()` 之后迟迟不调 `startForeground()` 会发生什么？怎么避免晋升超时？**
+**Q8: [learning] startForegroundService() 之后迟迟不调 startForeground() 会发生什么？怎么避免晋升超时？**
 
 系统会启动晋升计时器，到期后停止仍在等待的服务并进入 ANR 流程；Service 在等待期间被提前销毁时，应用会收到 `ForegroundServiceDidNotStartInTimeException`。计时器默认值 AAOS13 源码核对为 30 秒（`ActivityManagerConstants.DEFAULT_SERVICE_START_FOREGROUND_TIMEOUT_MS = 30 * 1000`），超时后另有约 10 秒的 ANR 处理延迟，两个值都可由 DeviceConfig 改写——Android 17 材料口径与 Android 13 一致。诊断标志是错误文本 `Context.startForegroundService() did not then call Service.startForeground()`，说明故障点在晋升阶段而不是业务执行。避免方式：预先创建通知渠道；Service 进入回调后立即构造轻量通知并调用 `startForeground()`；业务工作交给可取消的异步任务；完成、失败或取消时统一 `stopSelf()`。常见错误是在 `onCreate()` 里同步建库、恢复大对象或等网络返回后再晋升，这会把全部冷启动成本叠加到计时器上；也不要把 30 秒当业务预算——进程启动、主线程排队和依赖初始化都在挤占它。
 
@@ -46,11 +46,11 @@ WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休�
 
 按时效与偏差容忍选：`set()`/`setWindow()` 是非精确单次 Alarm（窗口便于系统合并唤醒；目标 31+ 小于十分钟的窗口可能被扩展到十分钟）；`setInexactRepeating()` 用于粗略重复（普通周期工作仍优先 WorkManager）；`setAndAllowWhileIdle()` 空闲期也要到达的非精确；`setExact()`/`setExactAndAllowWhileIdle()` 精确（受精确 Alarm 权限与频率约束）；`setAlarmClock()` 面向用户可见闹钟、系统必要时离开低功耗模式。时间基准：`RTC` 系列用墙上时钟、适合按当地时间提醒（受校时、时区、夏令时影响，应用要重新核对下一次触发）；`ELAPSED_REALTIME` 系列用开机后单调时间、适合同一次开机内的延迟；带 `WAKEUP` 的类型才唤醒设备，业务允许等待就选不唤醒类型。PendingIntent 身份坑：extras 不参与等价判断，只改 extra 可能覆盖已有 Alarm——用唯一 `data` URI（或 action、组件、requestCode 的组合）区分提醒，取消时重建等价身份。设备关机会清除 Alarm，跨重启的提醒先持久化、`BOOT_COMPLETED` 后重建；按当地时间重复的提醒按下一次日历时间安排单次 Alarm 比固定毫秒间隔可靠。
 
-**Q12: [learning] Android 17 的 Listener 版 `setExactAndAllowWhileIdle()` 适合什么场景、边界在哪？**
+**Q12: [learning] Android 17 的 Listener 版 setExactAndAllowWhileIdle() 适合什么场景、边界在哪？**
 
 新重载接受 `OnAlarmListener` 与 `Executor`，不要求 `SCHEDULE_EXACT_ALARM` 权限，适合"组件仍在运行、不希望持续持锁等待下一次时机"的进程内调度（如长连接维护）：回调经进程内 Binder 交付，系统在投递前获取共享 WakeLock、`onAlarm()` 返回后释放，因此回调应同步快速完成、不要再自持应用 WakeLock——把工作另起异步线程后立即返回会失去这段保护。边界：不跨进程生命周期——进程没有任何活动组件、进入 cached 或冻结状态、或组件结束时，系统可以移除该 Alarm，组件结束也应主动 `alarmManager.cancel(listener)`；它仍受允许空闲分发的频率限制（Android 17 为 Listener 型维护独立配额，AOSP 默认值不是业务承诺），不适合循环安排高频回调；进程死亡后仍需触发的提醒应使用 `PendingIntent` 版本并遵守精确 Alarm 权限。版本边界：该重载为 API 37 新增，Android 13 上不存在（AlarmManagerService 源码不在本地树，按材料锚点转写）；A13 的进程内等价选择是 `OnAlarmListener` 版 `setExact()`（同样不跨进程存活）。
 
-**Q13: [learning] WorkManager 的唯一工作、任务链与 `Data` 传参各有哪些边界？**
+**Q13: [learning] WorkManager 的唯一工作、任务链与 Data 传参各有哪些边界？**
 
 唯一工作：`enqueueUniqueWork()` 的 `KEEP`/`REPLACE`/`APPEND`/`APPEND_OR_REPLACE` 解决重复入队，不解决业务去重——唯一名称要含业务作用域（如 `account-sync:<id>`），所有账户共用 `"sync"` 会误合并无关请求，随机名则失去去重意义；周期任务的 `UPDATE` 策略保留入队时间并让后续轮次采用新约束。任务链：`beginWith(...).then(...).enqueue()` 才把整张 DAG 写入 WorkManager；上游失败或取消时下游直接进入失败/取消、不会执行，所以"由下游检查上游失败再走备用"不成立——可接受的降级结果应作为 `success(Data)` 传出，不可接受的失败在链外观察终态后明确入队另一条链。输入合并：多个前置汇聚时默认 `OverwritingInputMerger` 同名键只保留一个值（覆盖顺序不可依赖），收集并行结果用 `ArrayCreatingInputMerger`。`Data` 边界：只支持基本类型、字符串及其数组，序列化后不能超过 10 KiB——大对象存数据库或文件、只传主键或摘要，跨重启用 URI 要确认权限仍有效；WorkRequest 的 UUID 是 WorkManager 内部标识，不要与平台 Job ID 混用。
 
@@ -58,7 +58,7 @@ WakeLock 表达"工作已经开始，设备暂时不能进入会中断它的休�
 
 三层取证：WorkManager 层看 WorkSpec 状态、约束、依赖与入队时间（`getWorkInfoByIdFlow` 观察 `state`/`progress`/`stopReason`——停止后仍可能重新调度，一次停止不能显示为永久失败）；系统层看 `dumpsys jobscheduler` 中对应 `SystemJobService` Job 的等待原因、约束与配额；Worker 层确认是否进入 `doWork()`、返回了什么结果、是否收到停止信号。Pending reasons：`getPendingJobReason(jobId)`（API 34）返回主要等待原因，`getPendingJobReasons`/`getPendingJobReasonsHistory`（API 36）给出当前原因集合与变化历史，`getPendingJobReasonStats`（API 37）给出每种原因的累计等待时长（官方功能页称之为 JobDebugInfo，公开 SDK 无同名类，入口都在 `JobScheduler`）。原因常量只给方向：`CONSTRAINT_*` 指向显式约束，`QUOTA` 指向待机分组或运行额度，`BACKGROUND_RESTRICTION`/`APP_STANDBY` 指向应用状态，`DEVICE_STATE` 含 Doze、热状态、内存压力等。边界：这些 API 均为 34+，Android 13 无（材料锚点）；历史不跨重启、Job 完成或取消后清空，查询与完成竞态可能抛 `IllegalArgumentException`；多个原因同时计时，累计之和可能大于实际等待。发布门禁要区分"合理等待"（低优先级同步等充电或非计费网络）与设计错误（用户发起任务长期等 `QUOTA`、反复入队不完成）。
 
-**Q15: [learning] `setExpedited()` 与长时 Worker（`setForeground()`）的使用边界是什么？**
+**Q15: [learning] setExpedited() 与长时 Worker（setForeground()）的使用边界是什么？**
 
 加急：`setExpedited()` 用于短小、对用户重要、需要尽快开始的一次性工作——不能用于周期任务，也不等于立即执行；Android 12+ 申请加急 Job，配额与待机分组、进程重要性相关且没有固定可查询的分钟数，`OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST` 让配额不足时退化为普通任务而不是被放弃；兼容 API 23–30 时系统可能以前台服务承载加急工作，Worker 需要实现 `getForegroundInfo()`。普通 Worker 一次执行约十分钟上限；超过就转长时 Worker：`setForeground()` 后由 WorkManager 管理前台服务与通知，目标 34+ 必须在 `ForegroundInfo` 传入与工作内容相符的前台服务类型并声明对应权限（如 dataSync 需要 `FOREGROUND_SERVICE_DATA_SYNC`，并覆盖清单中 WorkManager 的 `SystemForegroundService` 类型）。配额纪律：普通、加急、长时不要混用同一语义；Android 15+ 的 dataSync/mediaProcessing 六小时额度与 Android 16–17 的 JobScheduler 运行配额都继续适用于长时 Worker——`setForeground()` 只声明业务类别，不取消配额检查；用户主动发起的大文件传输更适合 user-initiated data transfer job 或直接前台服务。
 

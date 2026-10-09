@@ -10,7 +10,7 @@
 2. 合成方式是逐帧决定的，不能沿用上一帧结论。直接证据应检查问题区间目标视频 layer 的 `hwc_composition_type`；`dumpsys SurfaceFlinger` 提供某一时刻快照，Perfetto 可观察 composition type 随时间的变化和 fence 等待。
 3. GPU 轨道忙或空只能作为旁证，因为 GPU 还可能在执行 App 渲染或其他 client 合成。AIDL Composer3 改变的是接口形式，plane 与格式能力仍须按设备实际配置判断。
 
-**Q2: [learning] `MediaCodec.releaseOutputBuffer(index, renderTimestampNs)` 返回后帧就显示了吗？BufferQueue 怎样处理"还没到点"的帧？**
+**Q2: [learning] MediaCodec.releaseOutputBuffer(index, renderTimestampNs) 返回后帧就显示了吗？BufferQueue 怎样处理"还没到点"的帧？**
 
 没有。`MediaCodec.releaseOutputBuffer(index, renderTimestampNs)` 表示 App 放弃对输出 buffer 的控制，并给出以纳秒为单位的期望显示时间；它不是帧已上屏的回执。
 
@@ -19,7 +19,7 @@
 3. 队列中若已有更合时的后续帧，过期队首帧可被整帧退回并丢弃；时间戳异常或过远时也会进入保护分支，避免错误时间戳卡住队列。
 4. acquire 之后仍有 SurfaceFlinger latch、HWC 合成和 display present。排查卡顿要把同一帧的 queue、latch、合成和 present fence 对齐，不能把 `releaseOutputBuffer()` 正常返回当成显示完成。
 
-**Q3: [learning] tunneled playback 需要哪些条件？AAOS13 源码里 sideband 是怎样建立的，`SIDEBAND` 与 `DEVICE` 有何不同？**
+**Q3: [learning] tunneled playback 需要哪些条件？AAOS13 源码里 sideband 是怎样建立的，SIDEBAND 与 DEVICE 有何不同？**
 
 Tunneled playback 需要解码器、音频时钟、音视频同步和输出目标形成受支持的组合；单项 capability 查询通过只代表可以发起请求，稳定播放仍要设备实测。
 
@@ -31,7 +31,7 @@ Tunneled playback 需要解码器、音频时钟、音视频同步和输出目�
 6. `DEVICE` 仍逐帧提交 buffer 给硬件合成；`SIDEBAND` 把 buffer 更新与内容同步整体交给设备侧机制。tunnel 视频仍经 SurfaceFlinger 的 sideband layer 进入显示链，但 trace 中通常没有密集的 queueBuffer/latch 事件，因此缺少这些事件可能是正常路径。
 7. `PARAMETER_KEY_TUNNEL_PEEK` 未显式设置时的行为由 OEM 决定；Android 13 的 ACodec 保留 legacy unspecified 标记。
 
-**Q4: [learning] Media3 的 ABR 会因为解码掉帧或视频 layer 不是 `DEVICE` 而降码率吗？1.10.1 的选档逻辑看什么？**
+**Q4: [learning] Media3 的 ABR 会因为解码掉帧或视频 layer 不是 DEVICE 而降码率吗？1.10.1 的选档逻辑看什么？**
 
 不会。Media3 1.10.1 的选档分两层，且没有把 HWC 合成结果或 decoder 掉帧作为默认 ABR 信号：
 

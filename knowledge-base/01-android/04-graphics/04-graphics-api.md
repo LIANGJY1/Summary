@@ -165,7 +165,7 @@ HardwareBufferRenderer（HBR）把 RenderNode 场景树光栅化到调用方持�
 
 Compatibility 不能概括成“不支持 compute 或 storage texture”；它会补充少量 vertex/fragment stage 上限字段。`maxImmediateSize` 也不能直接解释为 Vulkan push constant 支持，底层寄存器映射取决于 Dawn 和驱动实现。WGSL 是稳定的 shader 输入口；中间表示和编译路径随 Dawn commit 与 backend 变化，不能描述成固定管线。
 
-**Q15: [learning] WebGPU 的 `surface.present()` 返回表示上屏了吗？`AndroidExternalSurface` 与 `AndroidEmbeddedExternalSurface` 差在哪？**
+**Q15: [learning] WebGPU 的 surface.present() 返回表示上屏了吗？AndroidExternalSurface 与 AndroidEmbeddedExternalSurface 差在哪？**
 
 没有。`present()` 只把当前 surface texture 交给后端呈现路径；其后仍有 GPU 完成、BufferQueue 交接、SurfaceFlinger latch、HWC 合成和 display present。
 

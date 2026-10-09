@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线包括按 owner 和生命周期证据判断线程与协程泄漏，按传输、服务端和业务结果定位 Binder 故障，以及把 Android 17 Keystore alias 配额当作需要 owner、状态和回滚期的持久资源治理。源文档：android-internals-wiki §20.8《线程与协程泄漏治理》、§20.9《Binder IPC 故障判断与性能诊断》、§20.10《Android 17 Keystore 密钥配额与登录恢复》。本地可核对的机制按 AAOS 13 源码标注版本。工程实践按材料口径转写，不确定处已弱化。Android 17 的 Keystore 配额数值与错误码边界已与官方文档核对。Binder 线程池规模、事务缓冲区与冻结进程的机制层见 `../01-architecture/03-binder.md`。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: 线程快照里出现大量 WAITING 状态的 `Thread-N` 线程，能据此判定线程泄漏并强杀这些线程吗？**
+**Q1: [learning] 线程快照里出现大量 WAITING 状态的 Thread-N 线程，能据此判定线程泄漏并强杀这些线程吗？**
 
 不能。`WAITING` 是空闲等待的常见状态，`Thread-N` 或 `pool-N-thread-M` 这类名称也只表示归因信息不足。判断泄漏要确认资源是否超过约定生命周期仍然存活，或是否被不应持有它的长生命周期对象强引用。
 
@@ -21,7 +21,7 @@
 3. Java `Thread.name` 可以比 `/proc/self/task/<tid>/comm` 长。需要 Native 侧识别时，将标识放在前 15 个 ASCII 字节内。
 4. 线程名不得包含账号、URL 等用户数据。
 
-**Q2: 按 Android 13 源码，Java 线程退出时 ART 会清空 `Thread` 的 `target` 与 `ThreadLocal` 字段吗？已终止的 `Thread` 被静态集合持有时为什么会滞留对象？**
+**Q2: [learning] 按 Android 13 源码，Java 线程退出时 ART 会清空 Thread 的 target 与 ThreadLocal 字段吗？已终止的 Thread 被静态集合持有时为什么会滞留对象？**
 
 不会。AAOS 13 的 `Thread.java` 私有 `exit()` 会清空 `target`、`threadLocals`、`inheritableThreadLocals` 和 `blocker` 等字段，但 `getThreadGroup()` 附近的 Android 注释指出，Android runtime 在线程退出时不会调用这个 Java `exit()`。ART 的 `Thread::Destroy()` 在 Native 路径处理未捕获异常、移除 Java peer 并唤醒 `join()` 等待者，不会执行这段 Java 字段清理。
 
@@ -34,7 +34,7 @@
 
 版本边界：字段清理和 ART 退出行为按 AAOS 13（Android 13）源码核对，android-internals-wiki 中的 Android 17 源码核对结论一致。AAOS 13 文件为 `libcore/ojluni/src/main/java/java/lang/Thread.java`。
 
-**Q3: [learning] `/proc/self/status` 的 `Threads`、`/proc/self/task`、Java `Thread` 快照与组件指标各能回答什么？`ThreadGroup.activeCount()` 能当硬限流依据吗？**
+**Q3: [learning] /proc/self/status 的 Threads、/proc/self/task、Java Thread 快照与组件指标各能回答什么？ThreadGroup.activeCount() 能当硬限流依据吗？**
 
 四类观测的统计对象不同，不能互相替代。`ThreadGroup.activeCount()` 只能提供估算值，不适合作为硬限流依据，因为计数与枚举之间线程可能启动或退出，`enumerate(Thread[])` 在数组过小时还会静默截断。
 
@@ -53,7 +53,7 @@
 2. TID 在线程退出后可能复用，跨时间关联必须带采样时间。
 3. 枚举 `/proc/self/task` 时，读取期间消失的 TID 是正常竞态。读取失败应记录为“缺测”，不能记成零条线程。
 
-**Q4: raw joinable pthread 退出后，为什么 `/proc` 和线程快照都看不到它，但 Native 内存仍可能增长？监控要覆盖哪些事件？**
+**Q4: [learning] raw joinable pthread 退出后，为什么 /proc 和线程快照都看不到它，但 Native 内存仍可能增长？监控要覆盖哪些事件？**
 
 joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux task 就消失了，但栈映射等资源要等另一线程调用 `pthread_join()` 才回收。若线程仍存活，也可调用 `pthread_detach()` 释放 join 责任。创建时设为 detached 的线程会在退出时自行回收。因此活线程数回落而 Native RSS 或虚拟地址空间持续增长时，应检查是否有退出后未回收的 joinable 线程资源。
 
@@ -91,7 +91,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 3. `pthread_create()` 抛出 `OutOfMemoryError` 只说明创建路径失败。失败可能来自 ART 分配、bionic 栈或 TLS 映射，也可能来自内核 `clone`。
 4. 即使 Java heap 仍有余量，也不能排除系统资源耗尽。应保留原始错误、task 数、`VmSize`、RSS 与进程角色。
 
-**Q6: `activeCount` 小于 `poolSize`、或大量一次性延迟任务被取消后内存仍不降，能得出 worker 泄漏的结论吗？应分别怎么处理？**
+**Q6: [learning] activeCount 小于 poolSize、或大量一次性延迟任务被取消后内存仍不降，能得出 worker 泄漏的结论吗？应分别怎么处理？**
 
 不能。这两种现象分别涉及线程池 worker 生命周期和延迟任务队列，不能用同一种“线程泄漏”解释。
 
@@ -110,7 +110,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 因此，“worker 没退出”应查线程池 owner 和关闭路径，“取消任务仍在队列”应查取消策略和队列内容。
 
-**Q7: 排查“协程数量持续上涨”时，如何区分协程泄漏与线程泄漏？`GlobalScope` 的边界是什么？**
+**Q7: [learning] 排查“协程数量持续上涨”时，如何区分协程泄漏与线程泄漏？GlobalScope 的边界是什么？**
 
 同时观察活跃 `Job` 或协程队列数，以及 Linux task 数。协程可以在挂起时不占用专属线程，所以 Job 增长而线程平稳，通常是 scope 或任务生命周期问题。两者同步增长时，再调查自建 dispatcher、executor 或 Native 库。
 
@@ -129,7 +129,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 长期组件应持有显式创建、显式关闭的 root scope，例如 `SupervisorJob`、dispatcher 和 `AutoCloseable`，并由组件结束回调关闭。一次性请求中的并发子任务应使用 `coroutineScope` 或 `supervisorScope`，不要为每个请求另建 root scope。以上协程语义按 kotlinx.coroutines 1.11.0 说明，库版本独立于 Android 版本。
 
-**Q8: 协程的 `cancel()` 为什么不保证立即停止？`Dispatchers.limitedParallelism(1)` 是跨挂起点的互斥锁吗？**
+**Q8: [learning] 协程的 cancel() 为什么不保证立即停止？Dispatchers.limitedParallelism(1) 是跨挂起点的互斥锁吗？**
 
 `cancel()` 是协作式取消，只设置取消状态。协程代码执行取消检查或进入支持取消的挂起点后才会停止。`limitedParallelism(1)` 也不是跨挂起点互斥锁，它只限制同一时刻在该 dispatcher 上执行的代码段数量。
 
@@ -167,7 +167,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 5. **请求序列化失败：**本地运行时异常通常意味着请求未交给服务端，但仍需确认异常发生位置。
 6. `oneway` 调用：本地返回不代表目标已经处理。要保证投递结果，需另行设计确认和序号协议。
 
-**Q10: [learning] 调用 framework 管理类需要到处 `catch (RemoteException)` 吗？服务端 `onTransact()` 抛出的异常如何回到客户端？**
+**Q10: [learning] 调用 framework 管理类需要到处 catch (RemoteException) 吗？服务端 onTransact() 抛出的异常如何回到客户端？**
 
 不需要，也不一定可行。`RemoteException` 是受检异常，但 `PackageManager`、`ActivityManager` 等 framework 管理类通常会在内部捕获它，再通过 `rethrowFromSystemServer()` 转换成该 API 约定的运行时异常。只有自有 AIDL 代理对象或签名明确声明 `RemoteException` 的接口，才应在调用处处理这类受检异常。
 
@@ -178,7 +178,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 3. `oneway`：没有同步回复通道，服务端异常无法沿调用路径返回。需要业务确认时，应另行设计回调和超时。
 4. **客户端解包失败：**`BadParcelableException`、找不到 Parcelable 类加载器或 Stable AIDL 版本不兼容不等同于远端死亡。日志要记录接口版本、transaction code 和错误发生方向。
 
-**Q11: 驱动返回 `FAILED_TRANSACTION` 时 Java 层如何选异常？小 Parcel 调用失败却抛 `DeadObjectException` 合理吗？**
+**Q11: [learning] 驱动返回 FAILED_TRANSACTION 时 Java 层如何选异常？小 Parcel 调用失败却抛 DeadObjectException 合理吗？**
 
 合理。Java Binder JNI 根据 `FAILED_TRANSACTION` 和请求 Parcel 大小启发式选择异常，因此异常名称不是底层失败原因的精确说明。按 AAOS 13 `frameworks/base/core/jni/android_util_Binder.cpp`，请求 Parcel 超过 200 KiB 时抛 `TransactionTooLargeException`，更小的失败优先映射为 `DeadObjectException`。
 
@@ -191,7 +191,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 格式错误的 transaction、已关闭的 FD、远端在传输途中死亡和缓冲区空间不足都可能导致 `FAILED_TRANSACTION`。排查时还要结合请求与回复两端日志、并发量和进程状态。
 
-**Q12: `linkToDeath()` 的注册与回调之间存在哪些竞态？死亡回调里应该做什么、不该做什么？**
+**Q12: [learning] linkToDeath() 的注册与回调之间存在哪些竞态？死亡回调里应该做什么、不该做什么？**
 
 `linkToDeath()` 可能在目标已经死亡时直接抛 `RemoteException`。`isBinderAlive()` 只反映检查那一刻的状态，返回后目标仍可能立即退出。收到死亡回调后，旧代理对象不可继续使用，重连后必须取得新代理并重新协商状态。
 
@@ -221,7 +221,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 普通应用没有可依赖的全局 Binder 拦截点。`Binder.ProxyTransactListener` 和 `BinderInternal.Observer` 属于隐藏或平台内部接口，Native 和 Rust Binder 也不一定经过同一个 Java 入口。反射或 Native Hook 还会改变被测路径的时序。
 
-**Q14: [learning] ANR trace 显示主线程停在 `BinderProxy.transactNative`，接下来怎样补全证据链？**
+**Q14: [learning] ANR trace 显示主线程停在 BinderProxy.transactNative，接下来怎样补全证据链？**
 
 这条客户端堆栈只能证明主线程正在等待一次 IPC，不能说明服务端正在做什么。应使用 Perfetto 对齐时间线，采集 `binder_driver`、`sched` 和相关 atrace 类别，沿 flow 找到服务端线程，确认它在排队、等待锁、执行 I/O 还是发起下游 Binder，再检查回复返回后客户端何时恢复。
 
@@ -302,7 +302,7 @@ passkey 是否计入本应用配额，取决于私钥由谁管理：
 
 同名 alias 的 rebind 不能靠原样重试解决，因为配额检查发生在创建替换密钥之前。满额时必须先删除可回收 alias 释放额度。不能临时退回明文 token、共享外部存储或缺少认证约束的软件密钥。是否从 StrongBox 改用 TEE 必须由预先审查的安全策略决定。卸载应用通常会清理对应 UID 的 Keystore 数据，但重装同时会清除业务数据和认证状态，也不会修复 alias 持续增长的代码，不能作为线上恢复方案。
 
-**Q19: 为什么不能在 `containsAlias()` 返回 false 后直接 `generateKey()`？多进程应用如何保证 alias 状态一致？**
+**Q19: [learning] 为什么不能在 containsAlias() 返回 false 后直接 generateKey()？多进程应用如何保证 alias 状态一致？**
 
 不能把 `containsAlias()` 的检查与 `generateKey()` 当成一个原子操作。两个进程可能同时读到不存在，再各自创建密钥，造成重复密钥和配额浪费。创建、轮换和删除应由单一 owner 在持久状态机中串行管理。
 
@@ -342,7 +342,7 @@ alias 生命周期可用以下状态迁移表示：
 3. 50,000 和 200,000 是拒绝新密钥的硬上限，不适合作为业务预警阈值。预警线应根据每日增长速度、清理能力和一次轮换的最大增量设得更低。
 4. 容量测试使用独立设备或可重置测试用户，固定测试前缀并限制生成数量。任务正常结束或中断恢复时都要清理测试密钥。
 
-**Q21: 线程停在 `futex_wait` 就应该去找 Java 持锁者吗？Java 锁等待在 Android 17 上有几条不同路径？**
+**Q21: [learning] 线程停在 futex_wait 就应该去找 Java 持锁者吗？Java 锁等待在 Android 17 上有几条不同路径？**
 
 不应该。Java 锁等待至少有三条路径——ART Monitor（`synchronized`）、原生同步原语（`pthread_mutex`、条件变量、`LockSupport.park()`）与同步 Binder 回复等待。futex 只是让用户态原子状态与内核等待队列协作的底层机制，从 `blocked_function` 里的 `futex_*` 无法还原锁对象与持锁者，必须结合调用栈与轨迹证据。
 

@@ -46,7 +46,7 @@ $ readelf -h out/target/product/<产品名>/system/bin/init | grep -E 'Type|Mach
 
 
 
-**Q4: [learning] Android 启动时执行的 `/init` 是什么，为什么源码里有两个 init？**
+**Q4: [learning] Android 启动时执行的 /init 是什么，为什么源码里有两个 init？**
 
 `/init` 是 ramdisk 根目录中的 ELF 可执行程序，内核启动用户空间时执行它作为 PID 1。AAOS 13 中，它由 Soong 模块 `init_first_stage` 构建；模块名不是设备上的文件名。
 
@@ -77,7 +77,7 @@ $ readelf -h out/target/product/<产品名>/system/bin/init | grep -E 'Type|Mach
 
 
 
-**Q6: [learning] `.so`、静态库、Java JAR 和 APK 都是可执行文件吗？**
+**Q6: [learning] .so、静态库、Java JAR 和 APK 都是可执行文件吗？**
 
 它们用途不同：本机可执行 ELF 可作为独立程序启动；库供程序链接或加载；JAR 由运行时加载；APK 是应用安装包，安装后由 Android 框架在应用进程中启动组件。
 

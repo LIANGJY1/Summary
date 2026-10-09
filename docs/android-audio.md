@@ -5,19 +5,18 @@
 ## 边界
 
 - **收**：AudioFocus / AudioPlaybackConfiguration / 音源识别 / 音频路由相关的机制层事实与踩坑
-- **不收**：UI 域坑（→ [android-ui.md](./android-ui.md)）、跨进程共享与监听机制（→ [android-provider.md](./android-provider.md)）、通用设计权衡（→ [design-principles.md](./design-principles.md)）
+- **不收**：UI 域坑（→ [android-ui.md](android-ui.md)）、跨进程共享与监听机制（→ [android-provider.md](android-provider.md)）、通用设计权衡（→ [design-principles.md](design-principles.md)）
 - **分工**：本文收音频域"机制是什么、哪里有陷阱"；"该怎么设计"的通用思想只在 design-principles.md 出现
 
-## 规则
+## 写作规范
 
-- 条目用默认五段模板：**现象 → 原因 → 误区 → 解决方案 → 启示**
-- 标题为完整命题（"X 条件下会 Y"），便于按问题检索
+本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../knowledge-base/WRITING-GUIDE.md)。
 
 ## 目录
 
 - [音源识别需焦点层与播放层合用：焦点层给"谁"，播放层给"真不真"](#音源识别需焦点层与播放层合用焦点层给谁播放层给真不真)
 
-<!-- 条目模板：见 session-to-knowledge skill 默认五段模板 -->
+
 
 ## 音源识别需焦点层与播放层合用：焦点层给"谁"，播放层给"真不真"
 

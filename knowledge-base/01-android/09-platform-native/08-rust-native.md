@@ -29,7 +29,7 @@ AAOS 13 所用 Soong Rust 配置在设备全局设置 `opt-level=3`、`overflow-
 5. **ThinLTO：**Soong 的 Rust `lto.thin` 属性默认是 `true`，构建器在适用的最终链接类型上追加 `-C lto=thin`，让 LLVM 跨 crate 做 ThinLTO。模块显式设为 `false` 时不会走这个默认分支。这不等于 Rust 对所有 crate 输出形态都统一附加该参数，例如 rlib 编译路径不追加最终链接参数。
 6. **版本核对：**AAOS 13 的具体设备参数应以 `build/soong/rust/config/global.go` 和 `build/soong/rust/builder.go` 为准。Soong 的 `lto.thin` 属性行为应看同一源码版本的 `rust/compiler.go`。Android 分支和模块配置变化时，应重新检查最终 rustc 命令，不能把当前 Soong 主分支行为倒推成旧版本事实。
 
-**Q4: [learning] Rust Android 代码未声明 `#[global_allocator]` 时如何分配？Scudo 与 jemalloc 的适用边界是什么？**
+**Q4: [learning] Rust Android 代码未声明 #[global_allocator] 时如何分配？Scudo 与 jemalloc 的适用边界是什么？**
 
 没有自定义 `#[global_allocator]` 时，使用 Rust 标准库的系统分配器。Android 上它与进程使用的 native allocator 协同工作，因此 Rust `String`、`Vec` 等堆分配仍会产生本机堆分配成本。Android 11 起 Scudo 用于 native 代码，低内存设备仍可能使用 jemalloc，具体产品与版本应以设备配置为准。
 
@@ -38,7 +38,7 @@ AAOS 13 所用 Soong Rust 配置在设备全局设置 `opt-level=3`、`overflow-
 3. **低内存设备：**Android 文档说明低内存设备仍使用 jemalloc。不能将 Scudo 描述为所有 Android 设备唯一的 allocator，也不能把某个设备的分配器选择直接推广到所有产品。
 4. **安全能力边界：**Scudo 是缓解机制，不是完整的内存错误检测器，也不等同于 ASan。不能假定它为每次分配都在对象两侧建立 guard page，性能分析要针对实际 allocator 与负载。
 
-**Q5: [learning] Android 设备构建使用 `panic=abort` 时，`catch_unwind` 为什么不能恢复 FFI 调用？错误应该怎样表达？**
+**Q5: [learning] Android 设备构建使用 panic=abort 时，catch_unwind 为什么不能恢复 FFI 调用？错误应该怎样表达？**
 
 `catch_unwind` 只能捕获通过栈展开传播的 Rust panic。Android 设备构建使用 `panic=abort` 时，panic 直接终止进程，所以它不能在 FFI 入口恢复调用。跨语言边界的可预期失败应使用显式错误结果，而不是把 panic 当作常规控制流。
 

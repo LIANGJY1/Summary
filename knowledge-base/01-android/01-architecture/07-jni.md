@@ -16,7 +16,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 2. **动态注册**：在 `JNI_OnLoad` 中取得目标类并调用 `RegisterNatives`，把 Java 方法名、签名和函数指针绑定起来。未被其他用途导出的实现函数可以保持内部符号，映射关系集中在注册表中。Android 官方也建议性能敏感的方法显式注册，避免依赖按名称发现 native 符号。
 3. **选择边界**：两者都能实现 JNI 调用。动态注册便于显式管理方法签名和隐藏实现符号，但不会自动解决错误签名、类加载器或线程问题。选择时考虑工程生成方式、混淆规则和符号可见性需求。
 
-**Q3: native 崩溃日志只有 `pc 0x… libfoo.so` 时，怎样定位源码行？线上包没有 tombstone 时怎么办？**
+**Q3: [learning] native 崩溃日志只有 pc 0x… libfoo.so 时，怎样定位源码行？线上包没有 tombstone 时怎么办？**
 
 符号化需要与崩溃二进制完全匹配、包含调试符号的未 strip `.so`。崩溃回溯给出的库内相对偏移才能映射到函数、文件和行号，不能拿绝对运行地址直接查符号。
 
@@ -26,7 +26,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 4. **分析热点**：simpleperf 的 `app_profiler.py` 可按包采样并收集 `binary_cache`，`report_html.py` 可生成关联符号的报告。库文件必须与设备上实际运行的版本匹配。
 5. **线上包取证**：应用不能直接读取系统 `/data/tombstones` 文件，但 Android 12（API 31）起可从 `ApplicationExitInfo.getTraceInputStream()` 读取本应用 native crash 的 tombstone protobuf。它存放在全局循环缓冲区，较新的崩溃可能覆盖旧记录，接口也可能返回 null。对旧系统或无 trace 的退出，可接入 Breakpad、Crashpad 一类方案捕获 minidump 并上传，再用对应版本的符号文件离线符号化。
 
-**Q4: JNI 中反复调用 `GetStringUTFChars` 或 `GetByteArrayElements` 后 Native Heap 线性增长，怎样确认并修复泄漏？**
+**Q4: [learning] JNI 中反复调用 GetStringUTFChars 或 GetByteArrayElements 后 Native Heap 线性增长，怎样确认并修复泄漏？**
 
 `GetStringUTFChars`、`GetByteArrayElements` 等接口可能返回副本，也可能返回 VM 管理的直接访问指针。无论是否复制，调用方都必须用对应的 Release 接口结束访问；遗漏 Release 会让高频或长驻路径持续占用 native 资源。
 
@@ -36,7 +36,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 4. **启用检查**：在可调试设备上按该 Android 版本配置 CheckJNI，再执行稳定复现用例。可在应用 manifest 中启用 `android:debuggable` 以只对该应用启用，或在可用的调试设备上设置 `debug.checkjni=1`。CheckJNI 会检测部分 JNI 契约误用并报告 `JNI DETECTED ERROR IN APPLICATION`，但不能替代内存分析器发现所有泄漏。
 5. **定位分配点**：使用 heapprofd 等 native 内存分析工具关联分配调用栈，并将增长曲线与复现操作次数对照。
 
-**Q5: [learning] Android 的 `@FastNative` 和 `@CriticalNative` 分别减少什么调用开销？它们有哪些限制？**
+**Q5: [learning] Android 的 @FastNative 和 @CriticalNative 分别减少什么调用开销？它们有哪些限制？**
 
 两种注解都针对短小、高频的 JNI 调用，减少托管代码与 native 之间的转换开销。执行期间 GC 不能为关键工作挂起该线程，因而长时间运行或阻塞会延误 GC。`@FastNative` 保留常规 JNI 参数能力；`@CriticalNative` 更严格，适用的方法不能访问 Java 对象，ABI 中也没有 `JNIEnv*` 和 `jclass` 参数。
 
@@ -46,7 +46,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 4. **性能证据**：官方曾在特定设备上报告普通 JNI、FastNative 和 CriticalNative 的微基准时延约为 115 ns、35 ns 和 25 ns。该数字只代表对应设备和测试条件，不能当作应用实际收益保证。
 5. **使用判断**：先测量跨界调用是否为热点，再确认方法满足线程挂起、参数类型和耗时约束。若主要成本在计算、分配或数据复制，换注解不一定解决瓶颈。
 
-**Q6: native 自建线程调用 `FindClass` 为什么可能找不到应用类？跨线程使用 JNI 引用要遵守什么规则？**
+**Q6: [learning] native 自建线程调用 FindClass 为什么可能找不到应用类？跨线程使用 JNI 引用要遵守什么规则？**
 
 native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始 Java 调用栈提供的应用类加载器上下文。该线程上的 `FindClass` 可能退回系统类加载器，因此能找到系统类却找不到应用类。
 
@@ -57,7 +57,7 @@ native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始
 
 统一在有 Java 类加载器上下文的阶段准备全局引用与 ID，线程入口只使用缓存，并在完成时清理引用和线程附着。
 
-**Q7: `GetStringCritical` 返回的指针能否保存到函数调用之外？critical 区域有哪些限制？**
+**Q7: [learning] GetStringCritical 返回的指针能否保存到函数调用之外？critical 区域有哪些限制？**
 
 不能把 `GetStringCritical` 返回的指针保存到配对的 `ReleaseStringCritical` 之后，也不能跨越可能改变对象状态的调用继续使用。VM 可能直接暴露内部存储，也可能返回副本，调用方必须按短时借用指针处理。
 
@@ -65,7 +65,7 @@ native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始
 2. critical 区域必须短小，不得阻塞、等待锁或调用其他 JNI 函数，因为 VM 可能在此期间延迟 GC 或线程挂起。
 3. 不要根据 `isCopy` 的值决定是否释放，也不要把指针缓存到全局变量或异步任务中。
 
-**Q8: [learning] `Get<Type>ArrayElements` 的三种 Release 模式有什么区别，修改后的数组应选哪一种？**
+**Q8: [learning] Get<Type>ArrayElements 的三种 Release 模式有什么区别，修改后的数组应选哪一种？**
 
 `Get<Type>ArrayElements` 可能返回 pin 住的数组存储，也可能返回副本。Release 时要按是否提交修改和是否结束访问选择模式。
 

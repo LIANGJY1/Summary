@@ -52,7 +52,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 在 `onMeasure()` 中应先明确自身视口尺寸和内容尺寸各自的规则，再为子 View 构造 MeasureSpec。多屏之间宽度差异可能让相同内容落入不同约束区间。测量顺序或轴选择错误会使问题只在部分屏幕出现。
 
-**Q6: 自定义 ViewGroup 里的子 View 已创建却不显示，`layout()` 与 `onLayout()` 各负责什么？**
+**Q6: [learning] 自定义 ViewGroup 里的子 View 已创建却不显示，layout() 与 onLayout() 各负责什么？**
 
 框架调用父 View 的 `layout()` 写入它自己的边界，随后回调 `onLayout()`。自定义 ViewGroup 在 `onLayout()` 中计算并调用每个子 View 的 `layout()`，使子节点取得最终位置。
 
@@ -62,7 +62,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 自定义 ViewGroup 忘记对子 View 调用 `layout()` 时，子 View 虽然已创建并测量，却没有可显示的布局位置。直接改 `left/top` 而不走 `layout()` 也会使内部几何状态与绘制位置不一致。View.java 可核对调用链。
 
-**Q7: 内容更新后画面没变或位置错了，该调用 `requestLayout()` 还是 `invalidate()`？**
+**Q7: [learning] 内容更新后画面没变或位置错了，该调用 requestLayout() 还是 invalidate()？**
 
 布局几何可能变化时请求重新布局，绘制内容变化时标记需要重绘。两种变化同时发生时，应根据自定义 View 的实现分别发出所需请求。
 
@@ -73,7 +73,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 只 `invalidate()` 而尺寸已变，可能仍按旧几何绘制。只 `requestLayout()` 而绘制数据变了，也可能留下旧内容。View.java 可核对这三个入口的失效路径。
 
-**Q8: 硬件加速后修改绘制数据却仍显示旧内容，为什么必须显式 `invalidate()`？**
+**Q8: [learning] 硬件加速后修改绘制数据却仍显示旧内容，为什么必须显式 invalidate()？**
 
 硬件加速下，系统把 View 的绘制命令记录为 display list。未被标记为脏的 View 可重用旧 display list，因此修改外部数据本身不会通知框架重新录制。
 
@@ -83,7 +83,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 这解释了为什么对象数据已更新、界面却仍显示旧内容。该模型与软件/硬件绘制差异可对照 Android 官方硬件加速文档。
 
-**Q9: 只 `invalidate()` 一个小 View 却感觉整块区域重绘，脏区实际如何传播？**
+**Q9: [learning] 只 invalidate() 一个小 View 却感觉整块区域重绘，脏区实际如何传播？**
 
 脏区先沿 View 父链转换到祖先坐标系，最后由 ViewRootImpl 汇总到窗口。实际重绘范围取决于软件绘制或硬件加速路径，不应把“局部 invalidate”理解为只重画脏矩形内的几条像素。
 
@@ -94,7 +94,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 “局部 invalidate 省不了多少”是经验判断而非普遍结论，需通过 trace 确认具体路径与瓶颈。
 
-**Q10: 动画中的 View 突然盖住兄弟控件，`dispatchDraw()` 的绘制顺序何时会变化？**
+**Q10: [learning] 动画中的 View 突然盖住兄弟控件，dispatchDraw() 的绘制顺序何时会变化？**
 
 子 View 的绘制顺序由 ViewGroup 的子节点顺序、Z 值和自定义绘制规则共同决定，动画本身不会普遍自动改变 `dispatchDraw()` 的遍历顺序。遇到遮挡变化时应先查层级和 Z，而不是只归因于动画。
 
@@ -103,7 +103,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 3. **Z 顺序**：`elevation`、`translationZ` 等影响子 View 的前后层级。动画改变这些属性时，视觉遮挡也会变化。
 4. **定位动态变化**：检查动画是否修改 Z/translationZ、父容器是否启用自定义顺序，以及运行期间是否新增或移除了子 View。`dispatchDraw()` 的行为需按具体父容器和 API 实现核对。
 
-**Q11: 子 View 需要画到父容器外却被裁掉，`clipChildren` 与 `clipToPadding` 分别该怎么设？**
+**Q11: [learning] 子 View 需要画到父容器外却被裁掉，clipChildren 与 clipToPadding 分别该怎么设？**
 
 `clipChildren` 控制子 View 是否可绘制到父容器边界之外，`clipToPadding` 控制绘制是否被父容器 padding 区域裁剪。两者解决的是不同边界。
 
@@ -113,7 +113,7 @@ ViewGroup 自身尺寸受父容器约束，滚动内容尺寸则由子 View 的�
 
 只按实际需要关闭对应边界，不能把 `clipChildren` 与 `clipToPadding` 当成同一个开关。
 
-**Q12: 自定义 View 滚动时持续掉帧，`onDraw()` 中分配对象会造成什么开销？**
+**Q12: [learning] 自定义 View 滚动时持续掉帧，onDraw() 中分配对象会造成什么开销？**
 
 `onDraw()` 是高频路径，反复创建绘制对象和临时数据会增加分配成本与堆水位。堆压力上升可能触发 GC。ART 并发 GC 的主要工作可与应用并行。启动和收尾仍可能出现停顿，足以挤占当帧预算。60 Hz 显示下单帧总预算约 16.7 ms，实际留给应用绘制的时间更少。
 
@@ -145,7 +145,7 @@ Layer 类型决定 View 绘制结果是否进入离屏缓存，选择依据是�
 
 先从 trace 确认瓶颈在 display list 录制、RenderThread、GPU 还是合成，再决定是否建 layer。凭感觉加硬件层可能把 CPU 开销转成显存和上传开销。
 
-**Q15: 视频控件旋转后出现黑区或层级异常，`SurfaceView` 与 `TextureView` 应该怎么选？**
+**Q15: [learning] 视频控件旋转后出现黑区或层级异常，SurfaceView 与 TextureView 应该怎么选？**
 
 `SurfaceView` 把内容交给独立 Surface 与 SurfaceFlinger layer，`TextureView` 把 SurfaceTexture 内容作为纹理绘制进宿主窗口。需要独立合成与大面积视频时通常优先评估 SurfaceView。需要普通 View 变换、裁剪和混合时评估 TextureView。
 
@@ -156,7 +156,7 @@ Layer 类型决定 View 绘制结果是否进入离屏缓存，选择依据是�
 
 两种 View 的性能取舍受设备、格式、合成器与具体内容影响，应以目标设备 trace 和功耗数据验证。
 
-**Q16: [learning] 只想移动一个 View 却触发复杂动画，`ViewPropertyAnimator` 与 `ObjectAnimator` 适用场景是什么？**
+**Q16: [learning] 只想移动一个 View 却触发复杂动画，ViewPropertyAnimator 与 ObjectAnimator 适用场景是什么？**
 
 两者都属于属性动画。`ViewPropertyAnimator` 面向单个 View 的常见属性，调用更简洁。`ObjectAnimator` 可对任意对象的属性执行动画，控制能力更通用。
 
@@ -165,7 +165,7 @@ Layer 类型决定 View 绘制结果是否进入离屏缓存，选择依据是�
 3. **帧调度**：AnimationHandler 根据帧回调推进当前值，Android 实现将其接入 Choreographer 帧节奏。若应用错过帧截止时间，动画会跳过显示帧，不会自动延长该帧的显示时间。帧调度细节见 [渲染管线与 VSync 调度](../04-graphics/01-render-pipeline-vsync.md)。
 4. **动画时长缩放**：`Settings.Global.ANIMATOR_DURATION_SCALE` 是 API 17 起提供的 Animator 动画时长倍率，会同时影响 start delay 与 duration。默认值为 `1.0`，`0.0` 会让动画立即结束。它是系统全局设置，不是逐 Activity 默认值。调试时确认目标系统当前设置，不能把动画被立即结束误判为绘制性能问题。
 
-**Q17: [learning] 改变布局参数后界面瞬间跳变，`LayoutAnimation` 与 `TransitionManager` 哪个能动画化尺寸变化？**
+**Q17: [learning] 改变布局参数后界面瞬间跳变，LayoutAnimation 与 TransitionManager 哪个能动画化尺寸变化？**
 
 要动画化布局边界变化，使用 `TransitionManager.beginDelayedTransition()` 配合 `ChangeBounds` 等 Transition。`android:layoutAnimation` 用于对子 View 的进场施加动画，不负责插值已有 View 的尺寸变化。
 
@@ -175,7 +175,7 @@ Layer 类型决定 View 绘制结果是否进入离屏缓存，选择依据是�
 
 列表新增项目需要平滑改变容器高度时，使用包含 `ChangeBounds` 的 delayed transition。不要用 `layoutAnimation` 代替布局边界过渡。
 
-**Q18: 自定义 View 重建后状态没恢复，为什么 `onSaveInstanceState()` 可能根本没被调用？**
+**Q18: [learning] 自定义 View 重建后状态没恢复，为什么 onSaveInstanceState() 可能根本没被调用？**
 
 View 层级状态按 View ID 保存。没有稳定 ID 的 View 通常不会进入层级状态保存/恢复映射，因此自定义状态保存回调可能不被调用。
 
@@ -186,7 +186,7 @@ View 层级状态按 View ID 保存。没有稳定 ID 的 View 通常不会进�
 
 View.java 的 `mID != NO_ID` 判断说明无 ID View 不进入相应状态保存流程。
 
-**Q19: [learning] `onCreate()` 中 `post()` 后能读到尺寸，但 `doOnPreDraw` 时机又不同，二者该怎么选？**
+**Q19: [learning] onCreate() 中 post() 后能读到尺寸，但 doOnPreDraw 时机又不同，二者该怎么选？**
 
 `post()` 只是把任务安排到 View 关联的消息队列，不承诺 View 已完成 layout。`doOnPreDraw` 在一次绘制前回调，适合读取已经计算好的布局尺寸，但也不代表像素已显示。
 
@@ -197,7 +197,7 @@ View.java 的 `mID != NO_ID` 判断说明无 ID View 不进入相应状态保存
 
 `View.java` 中 `post()` 与 HandlerActionQueue 的处理可用于核对 attach 前后的排队行为。
 
-**Q20: `View.setTag()` 和 keyed tag 适合存什么，如何避免资源键错误与引用泄漏？**
+**Q20: [learning] View.setTag() 和 keyed tag 适合存什么，如何避免资源键错误与引用泄漏？**
 
 无键 Tag 适合给一个 View 保存单个关联对象。keyed tag 适合由多个组件各自保存数据。Tag 与 View 生命周期绑定，不能当成无生命周期约束的业务仓库。
 
@@ -206,7 +206,7 @@ View.java 的 `mID != NO_ID` 判断说明无 ID View 不进入相应状态保存
 3. **引用生命周期**：只存生命周期不长于 View 的轻量数据。若对象持有 Activity、Context、监听器或大型对象图，而 View 被长期持有，就可能连带泄漏。
 4. **避免错误用法**：不要用硬编码整数代替资源 ID，也不要用 `Map<View, …>` 或 Tag 替代职责清晰的数据模型。
 
-**Q21: [learning] `LAYER_TYPE_SOFTWARE`、`LAYER_TYPE_HARDWARE` 与 `Canvas.saveLayer()` 三者最容易被怎样混淆，为什么 SurfaceFlinger 看不到独立 software View layer？**
+**Q21: [learning] LAYER_TYPE_SOFTWARE、LAYER_TYPE_HARDWARE 与 Canvas.saveLayer() 三者最容易被怎样混淆，为什么 SurfaceFlinger 看不到独立 software View layer？**
 
 三者作用于不同对象：View layer 控制 View 子树缓存方式，`Canvas.saveLayer()` 则要求当前 Canvas 创建离屏绘制目标。软件 View layer 生成的像素会合入宿主窗口缓冲区，因此 SurfaceFlinger 不会把它视为独立 layer。
 
@@ -217,7 +217,7 @@ View.java 的 `mID != NO_ID` 判断说明无 ID View 不进入相应状态保存
 5. **SurfaceFlinger 可见边界**：software layer Bitmap 与其他 View 内容合入宿主窗口 buffer，宿主 HWUI 帧再采样它。SurfaceFlinger 看到的是 App Window，不会看到一个独立 software View layer。
 6. **成本与用途**：software layer 涉及 CPU 栅格化以及上传/采样成本。缓存可复用，频繁 invalidate 或尺寸变化则可能重复生成。把它当兼容或滤镜手段，不要当通用性能开关。trace 中应识别 CPU Bitmap 栅格化与宿主 HWUI 帧的组合，不依赖固定 slice 名。
 
-**Q22: `SurfaceView` 的“独立”具体独立在哪里，带来哪些收益，又有哪些不保证？**
+**Q22: [learning] SurfaceView 的“独立”具体独立在哪里，带来哪些收益，又有哪些不保证？**
 
 `SurfaceView` 独立的是主体像素生产与合成 layer：Producer 写入自己的 Surface、BufferQueue 与 SurfaceFlinger layer，不经宿主窗口 buffer。Activity 窗口转场期间，Surface layer 也可能与宿主窗口分别参与合成，但这不保证内容在 Activity 切换后继续存活。宿主主线程、RenderThread 和控制条等普通 View 仍按常规窗口链路工作。
 
@@ -229,7 +229,7 @@ View.java 的 `mID != NO_ID` 判断说明无 ID View 不进入相应状态保存
 
 排查时分别确认内容是否继续生产、宿主几何是否更新、本轮采用何种合成，不能仅凭组件名称推断 overlay 或性能结论。
 
-**Q23: [learning] Z-below 的 `SurfaceView` 为什么要在宿主窗口“挖洞”，`mDrawFinished` 置位后能证明什么、不能证明什么？**
+**Q23: [learning] Z-below 的 SurfaceView 为什么要在宿主窗口“挖洞”，mDrawFinished 置位后能证明什么、不能证明什么？**
 
 Z-below 的 SurfaceView 位于宿主窗口下方。宿主窗口若在相同区域继续画不透明像素会遮住内容，因此 framework 让宿主 buffer 对应区域透明以便 SurfaceFlinger 合成下方 layer。`mDrawFinished` 只表示 framework 的 redraw 阶段完成，不证明 Producer 已提交或显示 buffer。
 
@@ -240,7 +240,7 @@ Z-below 的 SurfaceView 位于宿主窗口下方。宿主窗口若在相同区�
 5. `mDrawFinished` 边界：它表示 framework 认为 redraw 回调阶段结束，不证明 Producer 提交首块 buffer，更不证明 SurfaceFlinger latch 或 display present 已完成。
 6. **排查错位**：container 的 position 更新不能证明 content child 已采用新 buffer。把几何事务与内容 buffer 放在同一时间轴检查。Z-above 不需要挖洞，但宿主普通 View 不能盖在内容层上方。
 
-**Q24: `surfaceDestroyed()` 返回后 Producer 还在写旧 Surface 会怎样，正确的停止协议是什么？**
+**Q24: [learning] surfaceDestroyed() 返回后 Producer 还在写旧 Surface 会怎样，正确的停止协议是什么？**
 
 `surfaceDestroyed()` 返回后，渲染线程不得继续访问对应 Surface。若 Producer 在工作线程或远端服务，回调必须等待旧连接真正停止使用 Surface。只异步发送 stop 消息就返回，会造成回调顺序与生产线程状态不一致，可能引发崩溃、黑屏或新 Surface 首帧异常。
 
@@ -277,7 +277,7 @@ TextureView 的主要额外成本是宿主 RenderThread 采样输入纹理并再
 
 需要普通 View 混合时评估 TextureView，需要独立节奏、protected 内容或避免宿主采样时评估 SurfaceView。最终以目标设备数据验证。
 
-**Q27: [learning] `GLSurfaceView` 的两种 render mode 节奏由什么决定，GLThread 独立后哪些责任没有被隔离？**
+**Q27: [learning] GLSurfaceView 的两种 render mode 节奏由什么决定，GLThread 独立后哪些责任没有被隔离？**
 
 `RENDERMODE_CONTINUOUSLY` 持续触发绘制，`RENDERMODE_WHEN_DIRTY` 只在收到绘制请求后更新。独立 GLThread 隔离的是渲染执行队列，不会自动解决 Surface 生命周期、业务状态同步或 EGL/GPU 资源同步。
 

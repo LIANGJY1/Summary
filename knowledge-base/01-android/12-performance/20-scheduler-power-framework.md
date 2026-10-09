@@ -26,7 +26,7 @@ EAS（能量感知调度，Linux 5.0 主线）只在满足前提时生效：调�
 
 EAS 不负责其余迁移：周期负载均衡、newidle balance、主动均衡与 misfit migration 依据调度域、负载和 capacity 判断，不会为每次迁移做能量估算。
 
-**Q4: [learning] `fits_capacity` 预留了多少余量？温控为什么会让"冷机能装下的任务"变成 misfit？**
+**Q4: [learning] fits_capacity 预留了多少余量？温控为什么会让"冷机能装下的任务"变成 misfit？**
 
 材料按 Linux 6.18 核对，`fits_capacity(util, capacity)` 预留约 20% 余量，判断形如 `util × 1280 < capacity × 1024`；所以 util=800 不能算"刚好装进 capacity=800 的 CPU"。这段余量避免任务在临界位置反复迁移，也给突发负载留出空间。UClamp 会进一步参与 `util_fits_cpu()`：`uclamp.min` 表达最低性能点，`uclamp.max` 可让被限幅的任务在较低 capacity CPU 上仍被视为适配。
 
@@ -56,7 +56,7 @@ DVFS 的物理基础是 CMOS 动态功耗近似式 `P ≈ α × C × V² × f`�
 
 但对短任务，"race to idle"可能更省能：先用高性能档快速完成、更早进入更深空闲态，整段能量反而低于长时间低速运行。讨论续航要用能量 `E = ∫P(t)dt` 而非瞬时功率，结论以同一工作量下的能量与完成时间为准。另外通用 Android 接口不承诺支持欠压；高频端能效变差，但拐点与幅度依赖具体芯片、温度与封装，不能用固定 GHz 数字概括。
 
-**Q9: [learning] Linux CPUFreq 分几层？`scaling_cur_freq` 是硬件实频吗？**
+**Q9: [learning] Linux CPUFreq 分几层？scaling_cur_freq 是硬件实频吗？**
 
 CPUFreq 分三层：核心层维护 policy、频率上下限与公共接口；governor 根据负载或用户策略计算性能需求；驱动把需求提交给硬件寄存器、固件或性能状态接口。policy 不等于单个 CPU——`/sys/devices/system/cpu/cpufreq/policyN/` 可以包含多个共享频率的 CPU，排查时先读 `related_cpus`、`scaling_driver`、`scaling_governor` 与频率上下限。
 
@@ -80,7 +80,7 @@ CPUFreq 分三层：核心层维护 policy、频率上下限与公共接口；go
 
 按 AAOS13 源码核对，`ThermalManagerService` 位于 `frameworks/base/services/core/java/com/android/server/power/ThermalManagerService.java`（材料按 Android 17 核对的路径是 `server/power/thermal/`，A17 才迁移）；它缓存 HAL 上报的温度、维护面向公开 API 的整体 thermal status、为 headroom 收集 SKIN 温度，并对 SHUTDOWN 状态发起关机。整体 status 由 SKIN 类型传感器的最高 severity 计算：`PowerManager.getCurrentThermalStatus()` 返回的 NONE 到 SHUTDOWN 描述的是用户体验热状态，不代表"所有传感器最高温度"或"CPU 被限到几 GHz"——芯片或充电域可能已受限而整体 status 仍为 NONE。
 
-**Q13: [learning] `getThermalHeadroom()` 返回的数值怎么解读？应用侧降载策略要满足什么条件？**
+**Q13: [learning] getThermalHeadroom() 返回的数值怎么解读？应用侧降载策略要满足什么条件？**
 
 它是"距离 SEVERE 热限制的相对余量"，不是剩余 CPU 百分比：1.0 表示当前或预测达到 `THERMAL_STATUS_SEVERE`，数值可以大于 1.0 但没有固定 status 映射，0.0 不对应固定温度或 NONE，设备不支持或调用过密时可能返回 NaN。参数是 0–60 秒的预测范围，主要跟踪 SKIN 一类慢变化传感器，采样高于约每秒一次没有收益；AAOS13 已含该 API（`PowerManager.getThermalHeadroom()`，本地源码核对），API 35 的 `getThermalHeadroomThresholds()` 与 API 36 的 CPU/GPU headroom 在 Android 13 上不存在。
 
@@ -166,7 +166,7 @@ Android 17 增加了控制面（按材料核对，AAOS13 中不存在）：`Pack
 - `cgroup.freeze` 是 v2 核心接口，不通过 `+freezer` 写入 `subtree_control`；AOSP 把它命名为 freezer controller 是为了让 task profile 经统一抽象找到文件。
 - 看到 `/proc/<pid>/cgroup` 中的 `0::/apps/...`，不能推断 CPU 与 cpuset 也已迁入 v2，必须结合 mountinfo 或设备上的 `cgroups.json` 解释；厂商可覆盖控制器版本与挂载点，结论以设备实际配置为准。
 
-**Q27: [learning] libprocessgroup 和 task profile 把什么抽象掉了？`SetClamps` 为什么不能用？**
+**Q27: [learning] libprocessgroup 和 task profile 把什么抽象掉了？SetClamps 为什么不能用？**
 
 libprocessgroup 用两份 JSON（`cgroups.json` 定义控制器与挂载点；`task_profiles.json` 定义 attribute、action 与 aggregate profile）把"后台/前台/top-app/冻结"等意图翻译成具体 cgroup 文件操作，framework 与 native 服务只表达意图、不接触路径。Android 17 支持的 action 包括 `JoinCgroup`、`SetAttribute`、`WriteFile`、`SetTimerSlack`、`SetSchedulerPolicy`、`Compact` 与按序执行的 aggregate profile；`SetClamps` 不在支持列表中——UClamp 通过 `UClampMin`/`UClampMax` 等 attribute 表达，而不是独立 action。
 

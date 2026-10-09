@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答"BroadcastQueue 的队列模型、超时契约、缓存态延后与投递语义"。ANR 诊断归 12-performance/03，应用侧广播用法归 02-app-framework/01。源文档：android-internals-wiki §1.14。实现细节对照 frameworks/base android17-release 中的 BroadcastQueueImpl、BroadcastProcessQueue 和 BroadcastConstants，公开行为对照 Android Developers 广播文档。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] Android 17 还有前台/后台两条广播队列吗？`FLAG_RECEIVER_FOREGROUND` 到底影响什么？**
+**Q1: [learning] Android 17 还有前台/后台两条广播队列吗？FLAG_RECEIVER_FOREGROUND 到底影响什么？**
 
 Android 17（API 37）不再用前台队列和后台队列各自维护全局待投递记录：AMS 持有一个 `mBroadcastQueue`，实际实现为 `BroadcastQueueImpl`，该实例接收前台与后台两套 `BroadcastConstants`。`FLAG_RECEIVER_FOREGROUND` 把广播标记为前台优先级，影响调度优先级和接收超时基线，但不会创建第二条全局队列。
 
@@ -42,7 +42,7 @@ Android 17（API 37）不再用前台队列和后台队列各自维护全局待�
 2. **投递分组：**API 34 加入 `setDeliveryGroupPolicy(DELIVERY_GROUP_POLICY_MOST_RECENT)`，同一投递组只保留最新广播，较旧待投递项可被丢弃。它决定“是否每条都要投”，延后策略决定“何时投”，二者处理不同问题。
 3. **跨进程顺序：**Android 16 起，接收者 `priority` 不再保证不同进程之间的广播顺序，只在同一应用进程内生效。不能用它建立跨应用的协议顺序或同步关系。
 
-**Q4: [learning] 广播 ANR 的计时从哪里开始？`goAsync()` 能把窗口延长多少？**
+**Q4: [learning] 广播 ANR 的计时从哪里开始？goAsync() 能把窗口延长多少？**
 
 对于需要等待接收器完成的广播，Android 17 `BroadcastQueueImpl.dispatchReceivers()` 在调度回调前启动 ANR 定时器，`finishReceiverLocked()` 在完成回执到达后取消它。排队等待和拉起冷进程发生在回调调度前，不计入这个接收器完成窗口。因此端到端广播耗时长，不能单凭这一点断定发生了接收器超时。无序且无结果回调的动态接收器属于 assumed-delivered，不走此完成等待计时。
 

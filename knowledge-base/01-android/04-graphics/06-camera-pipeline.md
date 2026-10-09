@@ -34,7 +34,7 @@ fence 随 buffer 所有权交接，用来表达“前一方何时停止访问”
 
 判断 fence 方向时，应同时说明当前谁准备读写 buffer、前一方是否已结束访问。
 
-**Q4: [learning] `Camera3BufferManager` 与 HAL buffer management 是同一个机制吗？`requestStreamBuffers()` 返回的 buffer 预先绑定某个 request 吗？**
+**Q4: [learning] Camera3BufferManager 与 HAL buffer management 是同一个机制吗？requestStreamBuffers() 返回的 buffer 预先绑定某个 request 吗？**
 
 两者属于不同层次的 buffer 管理：
 
@@ -44,7 +44,7 @@ fence 随 buffer 所有权交接，用来表达“前一方何时停止访问”
 4. CameraService 会逐 stream 检查 stream 是否存在、是否重复请求、Surface 是否断开、未归还数量加本次请求数是否超过 `maxBuffers`，以及当前是否正在执行 `configureStreams`。错误状态包括 `STREAM_DISCONNECTED`、`NO_BUFFER_AVAILABLE`、`MAX_BUFFER_EXCEEDED` 和 `FAILED_CONFIGURING`。归还未用 buffer 时会以错误状态和时间戳 0 走 `cancelBuffer()`。
 5. `bufferId` 缓存只在会话内有效。首次传输携带原生句柄，后续只需传 `streamId` 和 `bufferId`；会话关闭或 stream 移除后不得沿用旧映射。
 
-**Q5: [learning] `CONTROL_ENABLE_ZSL` 与应用自管 ZSL（ring buffer 加 reprocess）机制差在哪？为什么 ZSL 照片的回调顺序看起来"乱"？**
+**Q5: [learning] CONTROL_ENABLE_ZSL 与应用自管 ZSL（ring buffer 加 reprocess）机制差在哪？为什么 ZSL 照片的回调顺序看起来"乱"？**
 
 `CONTROL_ENABLE_ZSL` 与应用自管 ZSL 的关键区别是历史帧由谁选择和管理：
 

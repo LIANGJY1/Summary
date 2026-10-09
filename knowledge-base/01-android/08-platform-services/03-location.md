@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答"LocationManager 的 provider 语义、请求合并、权限改写与回调背压"。功耗策略归 12-performance，应用侧定位实践见相应应用与功耗主题册。源文档：android-internals-wiki §1.25（Android 17 语境）。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 向 `LocationManager` 的 network provider 提交 `QUALITY_HIGH_ACCURACY` 请求，会自动切换到 GPS 吗？**
+**Q1: [learning] 向 LocationManager 的 network provider 提交 QUALITY_HIGH_ACCURACY 请求，会自动切换到 GPS 吗？**
 
 不会。显式指定 provider 后，系统把请求交给该 provider 的 `LocationProviderManager`，`LocationRequest.quality` 是该 provider 的精度与功耗提示，不会把请求自动切换到另一个 provider。quality 的实际效果由 provider 实现决定。
 
@@ -12,7 +12,7 @@
 2. 向 `network` provider 提交 `QUALITY_HIGH_ACCURACY` 也不会因此自动换为 `gps`。
 3. 如果希望系统组合多个可用来源，应明确使用 fused provider，而不是把 quality 当作自动选源器。
 
-**Q2: [learning] `getLastKnownLocation()`、`getCurrentLocation()` 和 `requestLocationUpdates()` 的成本与保证有什么不同？**
+**Q2: [learning] getLastKnownLocation()、getCurrentLocation() 和 requestLocationUpdates() 的成本与保证有什么不同？**
 
 三者分别适用于读取已有缓存、获取一次新鲜位置和持续订阅。它们是否启动 provider、是否可能返回 `null`、以及应用需要维持的注册时长都不同。
 
@@ -20,7 +20,7 @@
 2. `getCurrentLocation()`：Android 17 AOSP 把不超过 10 秒的缓存视为“current”，否则可启动 provider 获取一次新位置。请求 duration 超过 30 秒时会被 `LocationProviderManager` 截到 30 秒。请求超时或系统无法取得有效位置时回调可收到 `null`，缺少位置权限则可能直接抛 `SecurityException`。保留 `CancellationSignal` 并在业务结束时取消，不要让单次等待成为无期限状态。
 3. `requestLocationUpdates()`：Listener 适合进程存活且生命周期清晰的页面或服务。保存同一实例并在 `onStop()` 用 `removeUpdates(listener)` 取消，避免页面不可见后仍收到更新。`PendingIntent` 适合跨组件交付，但仍受后台位置权限与系统节流约束。取消某个注册会把它从服务端合并请求中移除，是否降低 provider 工作量取决于其他调用者的请求。
 
-**Q3: [learning] 同一 `gps` provider 上同时有 1 秒与 30 秒两个注册，底层 GNSS 如何工作？请求怎样合并？**
+**Q3: [learning] 同一 gps provider 上同时有 1 秒与 30 秒两个注册，底层 GNSS 如何工作？请求怎样合并？**
 
 底层按合并请求工作：同一非 passive provider 上的 active 注册合并为一条 `ProviderRequest`。示例中，1 秒请求会让 `gps` provider 按约 1 秒的最小间隔工作，30 秒请求只在结果分发阶段按自身间隔过滤，不能抵消高频请求带来的共同成本。
 
@@ -49,7 +49,7 @@
 2. 服务端在收到完成通知或 wakelock 超时前继续持有唤醒锁，造成额外耗电。
 3. 回调应保持轻量，重计算转交工作线程。更长的后台工作应采用系统允许的执行机制，不能把 framework 交付 wakelock 当成业务 wakelock。
 
-**Q6: [learning] `LocationManager.FUSED_PROVIDER` 与 Google Play services 的 `FusedLocationProviderClient` 有什么区别？**
+**Q6: [learning] LocationManager.FUSED_PROVIDER 与 Google Play services 的 FusedLocationProviderClient 有什么区别？**
 
 两者可能都组合多个定位来源，但属于不同 API 契约。`LocationManager.FUSED_PROVIDER` 是平台 `android.location` provider 名称（API 31 起公开）。`FusedLocationProviderClient` 则是 Google Play services 的客户端 API，不能把一者的回调、可用性或依赖假设套到另一者上。
 

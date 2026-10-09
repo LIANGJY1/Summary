@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：DisplayManagerService 的职责边界与启动时序、显示热插拔与 VirtualDisplay、刷新率切换的三方分工、折叠 DeviceState 与 display layout、合盖展开的两阶段行为、SystemUI 折叠动画与帧的关系。多窗口/PiP/Insets/TaskSnapshot 等窗口交互语义已于 2026-10-06 拆至 [../03-ui/04-window-system.md](../03-ui/04-window-system.md)。AOSP 机制按本地 AAOS13 源码（Android 13）核对。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] DisplayManagerService 在显示系统中管什么、不管什么？外接屏黑屏时 `dumpsys display` 里存在 LogicalDisplay 能证明什么？**
+**Q1: [learning] DisplayManagerService 在显示系统中管什么、不管什么？外接屏黑屏时 dumpsys display 里存在 LogicalDisplay 能证明什么？**
 
 DMS 负责 Display 的发现、身份与逻辑映射、状态与功耗、对外事件分发，不负责应用逐帧绘制，也不决定某个 layer 走 HWC 的 DEVICE 合成还是 RenderEngine 的 CLIENT 合成。`dumpsys display` 里存在 LogicalDisplay 只能证明管理对象已建立，距离画面出现还隔着 WMS 窗口、SF 合成、HWC 与面板 present 三段。
 
@@ -60,7 +60,7 @@ VirtualDisplay 生命周期由调用方发起：
 4. resize 或更换 Surface 的 API 返回只表示配置请求被接收，不表示新输出帧已到达 consumer。
 
 
-**Q4: [learning] DMS 为什么用 `mSyncRoot` 一把大锁？哪些慢工作已经被移出锁外？**
+**Q4: [learning] DMS 为什么用 mSyncRoot 一把大锁？哪些慢工作已经被移出锁外？**
 
 `mSyncRoot` 保护整个共享模型——设备集合、LogicalDisplay/DisplayGroup、功耗与亮度索引、回调注册、输入 viewport、pending traversal——因为一次 hotplug 需要原子完成"设备 → 逻辑屏 → group → power → 事件"的关系更新，拆锁会出现设备已删但 LogicalDisplay 仍可见、group 与拓扑不一致等问题。锁序约束是 WMS 可能先持 `mGlobalLock` 再进入 DMS，因此 DMS 持 `mSyncRoot` 时不得做可能回调 WMS 的同步调用。
 
@@ -74,7 +74,7 @@ A13 已把这些慢操作移出锁（源码核对）：
 稳定显示期间，应用 buffer latch 与 HWC validate/present 不经过 `mSyncRoot`，DMS 的观察窗口是开机默认屏发现、插拔、DeviceState 切换、mode/亮度/电源变化和 VirtualDisplay 生命周期。稳定动画每帧卡而 Display 配置没变时，先查 App、SF、HWC 与 present，不先归因于这把锁。版本边界：A17 材料指出 topology 的 `setTopology` 仍在锁内写 XML 持久化，且 A13 没有 `DisplayTopologyCoordinator`（Android 16+ 才引入），分析 A13 不存在该热点。
 
 
-**Q5: [learning] `DisplayManager.DisplayListener` 与 Choreographer 的 VSync 是什么关系？双屏设备能拿到两路独立硬件 VSync 吗？**
+**Q5: [learning] DisplayManager.DisplayListener 与 Choreographer 的 VSync 是什么关系？双屏设备能拿到两路独立硬件 VSync 吗？**
 
 两条通道的对象和用途不同：
 

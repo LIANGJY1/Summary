@@ -2,7 +2,7 @@
 
 > 面向 Android 13/AAOS 初学者，说明分区镜像、启动镜像中的 ramdisk 布局、产品内容、动态分区及刷写排查。具体镜像布局以目标设备配置为准。维护者：session-to-knowledge。
 
-**Q1: [learning] `system.img`、整机 ROM、`target_files.zip` 和 OTA 包分别是什么？**
+**Q1: [learning] system.img、整机 ROM、target_files.zip 和 OTA 包分别是什么？**
 
 `system.img` 是 system 分区的镜像，不等于整机 ROM。整机软件由多个分区镜像和设备配置共同组成。`target_files.zip` 与 OTA 包是供后续打包、升级流程使用的归档产物。
 
@@ -22,7 +22,7 @@ ramdisk 的归档随启动镜像交付，具体放在哪个镜像取决于设备
 
 分析具体产品时，应检查该产品生成的启动镜像和分区配置。布局依据 [AOSP 通用启动分区说明](https://source.android.com/docs/core/architecture/partitions/generic-boot) 和 [vendor_boot 分区说明](https://source.android.com/docs/core/architecture/partitions/vendor-boot-partitions)。
 
-**Q3: [learning] 哪些文件会进入 `system.img`，模块编译成功后为什么可能不在里面？**
+**Q3: [learning] 哪些文件会进入 system.img，模块编译成功后为什么可能不在里面？**
 
 `system.img` 由构建系统从 system 分区的暂存目录生成。模块必须被产品选中并安装到该分区，才会成为镜像内容。仅有模块声明或单独构建成功都不能保证它进入 `system.img`。
 
@@ -32,7 +32,7 @@ ramdisk 的归档随启动镜像交付，具体放在哪个镜像取决于设备
 
 排查缺文件时，依次检查产品是否选中模块、模块最终安装路径，以及该文件是否出现在 system 暂存目录和安装文件清单中。
 
-**Q4: [learning] `super.img` 和 `system.img` 有什么关系，Android 13 何时生成 `super.img`？**
+**Q4: [learning] super.img 和 system.img 有什么关系，Android 13 何时生成 super.img？**
 
 动态分区把 `system`、`vendor` 等逻辑分区放在物理 `super` 分区中。因此，`system.img` 是单个分区镜像，`super.img` 可按产品布局打包多个逻辑分区镜像；分区机制详见 [Android 分区](../06-memory-storage/05-partitions.md)。
 
@@ -41,7 +41,7 @@ ramdisk 的归档随启动镜像交付，具体放在哪个镜像取决于设备
 
 是否交付或刷写 `super.img` 由产品流程决定，不能把它当作通用刷机包。
 
-**Q5: [learning] 如何只构建 `system.img`，如何构建当前产品的整套镜像？**
+**Q5: [learning] 如何只构建 system.img，如何构建当前产品的整套镜像？**
 
 先用 `lunch` 选定产品和变体，再选择构建目标。`m systemimage` 生成 system 分区镜像。默认目标 `m` 对应完整产品构建流程，会依产品配置构建所需镜像和产物。
 
@@ -59,14 +59,14 @@ ramdisk 的归档随启动镜像交付，具体放在哪个镜像取决于设备
 3. **镜像超过分区限制：**查看 `BOARD_SYSTEMIMAGE_PARTITION_SIZE` 等设备分区大小配置及构建报错。Android 13 的 system 镜像安装规则会校验镜像大小。[大小校验](</home/liang/Project/MyProject/AAOS13_study/build/make/core/Makefile:3227>)
 4. **修改后仍是旧内容：**确认构建的是当前 `PRODUCT_OUT` 下的目标文件，检查文件时间和内容。再确认设备实际刷入了这份产物，而非另一产品或旧镜像。
 
-**Q7: [learning] 如何判断 `system.img` 的文件系统格式和稀疏格式？**
+**Q7: [learning] 如何判断 system.img 的文件系统格式和稀疏格式？**
 
 `.img` 后缀只说明它是镜像文件，不能单独判断内部文件系统或是否采用 Android sparse 表示。产品配置可选择 ext4、EROFS 等文件系统，并决定输出是否稀疏。读取、挂载或刷写前应先识别实际格式。[Android 13 镜像构建脚本](</home/liang/Project/MyProject/AAOS13_study/build/make/tools/releasetools/build_image.py:500>)
 
 1. **识别镜像：**在构建主机上用 `file system.img` 查看文件类型。无法确定时，结合目标产品的文件系统配置和构建日志判断。
 2. **稀疏转换：**若工具确认它是 Android sparse image，可用 Android 构建工具 `simg2img` 转为普通镜像，再按文件系统类型检查或挂载。不要把稀疏格式与 ext4、EROFS 等文件系统类型混为一谈。
 
-**Q8: [learning] `system.img`、`super.img` 和 OTA 包应该怎样刷入设备？**
+**Q8: [learning] system.img、super.img 和 OTA 包应该怎样刷入设备？**
 
 刷写方式由设备分区布局、A/B 状态、Verified Boot 和厂商升级流程决定。不要把 `fastboot flash system system.img` 当作所有 Android 设备的通用命令。优先使用该产品提供的工厂刷机脚本或 OTA 流程。
 

@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把"内存不足"拆成 Java 堆、Native、线程、地址空间与 FD 的独立失败路径，先分类再选工具，并按独立进程边界处理 WebView renderer 的退出与恢复。lmkd、整理回调与 MemoryLimiter 的机制层见 [../06-memory-storage/01-memory-management.md](./01-memory-management.md)；ANR 机制层见 [../12-performance/08-anr.md](../12-performance/08-anr.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 一条"内存不足"告警可能来自哪几类资源失败？哪些会抛出 Java `OutOfMemoryError`？**
+**Q1: [learning] 一条"内存不足"告警可能来自哪几类资源失败？哪些会抛出 Java OutOfMemoryError？**
 
 "内存不足"不是单一故障：至少要区分 Java 堆 OOME、Native 分配失败、线程创建失败、FD 耗尽、虚拟地址空间耗尽与 LMK 六类；只有部分路径会抛 `OutOfMemoryError`——LMKD 终止进程直接以 SIGKILL 结束、没有任何 Java 异常，FD 耗尽通常返回 `EMFILE` 也不经过 ART。
 
@@ -17,7 +17,7 @@
 
 这张分类决定工具选择：heap dump 看不到所有 native 映射，heapprofd 看不到 Java 对象引用，LMKD 结束进程后崩溃 SDK 没有机会执行收尾代码。反例：`OutOfMemoryError` 不能只凭异常类型判定"内存泄漏"，`REASON_LOW_MEMORY` 也不能单独证明应用存在泄漏。
 
-**Q2: [learning] ART 抛出 Java 堆 `OutOfMemoryError` 时错误文本能读出什么？为什么不能只凭文本断定泄漏？**
+**Q2: [learning] ART 抛出 Java 堆 OutOfMemoryError 时错误文本能读出什么？为什么不能只凭文本断定泄漏？**
 
 AAOS13 的 `Heap::ThrowOutOfMemoryError()` 生成的文本形如 `Failed to allocate a 48 byte allocation with 3610680 free bytes and 3526KB until OOM, target footprint 536870912, growth limit 536870912; giving up on allocation because <1% of heap free after GC.`——它描述的是失败那一刻的堆状态，请求很小仍失败通常说明堆已贴近限制或碎片化（AAOS13 `heap.cc` 核对）。
 
@@ -32,13 +32,13 @@ AAOS13 的 `Heap::ThrowOutOfMemoryError()` 生成的文本形如 `Failed to allo
 
 抛出机制上还有一个兜底：AAOS13 的 `Thread::ThrowOutOfMemoryError()` 先尝试构造带文本的 OOME，若构造时再次耗尽内存，线程改用 Runtime 启动期预分配的 OOME 对象（`thread.cc` 核对）——保证异常状态可设置，但没有完整文本与栈。因此监控平台只能提取 allocation size、growth limit 等已知字段做辅助分组，原始文本和栈必须保留；判断泄漏要比较同一场景、同一 GC 状态下对象数量与 retained size，错误文本替代不了 heap dump 的引用关系。
 
-**Q3: [learning] `android:largeHeap="true"` 能解决 OOM 吗？它的真实作用与边界是什么？**
+**Q3: [learning] android:largeHeap="true" 能解决 OOM 吗？它的真实作用与边界是什么？**
 
 不能。`largeHeap` 只让 AAOS13 的 `ActivityThread` 调用 `VMRuntime.clearGrowthLimit()`，把应用 Java 堆的增长上限放宽到设备配置的大堆档；它不增加设备物理内存，也不会消除 native、图形缓冲、线程栈与其他进程的内存压力（AAOS13 `ActivityThread.java` 核对）。
 
 边界：设备通过 `dalvik.vm.heapgrowthlimit`、`dalvik.vm.heapsize` 等属性配置堆档位，没有固定的 512 MB 保证；更大的堆会容纳更多存活对象，让系统更早承受内存竞争，通常只是推迟故障并增加 GC 成本。它适合的对象是少数确有大内存工作集、且已在低内存设备、后台切换与进程重建上有测试数据的产品；泄漏、无界缓存和错误尺寸的分配不能靠它处理。通过反射改 ART 私有字段或动态"扩堆"的做法依赖内部实现、可能破坏 GC 假设，不应进入生产方案；`Runtime.maxMemory()` 与 `getMemoryClass()`/`getLargeMemoryClass()` 的值都取决于设备与运行时配置，也不代表进程总内存上限。
 
-**Q4: [learning] 哪些 native 失败会转换成 Java `OutOfMemoryError`？普通 `malloc` 失败为什么不是 OOME？**
+**Q4: [learning] 哪些 native 失败会转换成 Java OutOfMemoryError？普通 malloc 失败为什么不是 OOME？**
 
 Android 有明确的转换点：`Unsafe.allocateMemory()` 的 `malloc` 返回空指针后抛出消息为 "native alloc" 的 OOME（AAOS13 `jdk_internal_misc_Unsafe.cc` 核对）；Bitmap 像素由 `allocateHeapBitmap()` 用 `calloc` 分配，失败后经 JNI 入口 `doThrowOOME()` 抛出 OOME（AAOS13 `libs/hwui` 核对）；部分 JNI API（如超长 `NewStringUTF`）在无法分配时也会抛 OOME。
 
@@ -46,7 +46,7 @@ Android 有明确的转换点：`Unsafe.allocateMemory()` 的 `malloc` 返回空
 
 Bitmap 的版本边界：Android 8.0 起普通 Bitmap 像素由 native 堆持有（官方文档口径），`Bitmap.Config.HARDWARE` 使用 GraphicBuffer/AHardwareBuffer——两者都增加进程或系统内存压力，但归属与采集方式不同；Java heap dump 里体积很小的 Bitmap 包装对象不代表全部像素或图形缓冲成本。
 
-**Q5: [learning] `pthread_create` 失败抛出的 `OutOfMemoryError` 应该怎样解读？线程数治理从哪里入手？**
+**Q5: [learning] pthread_create 失败抛出的 OutOfMemoryError 应该怎样解读？线程数治理从哪里入手？**
 
 AAOS13 的 `Thread::CreateNativeThread()` 失败后有两条错误文本："Could not allocate JNI Env" 说明失败发生在 pthread 启动前的 JNI 环境分配；"pthread_create (N stack) failed: <errno>" 要继续看 `strerror()` 给出的原因（AAOS13 `thread.cc` 核对）。Bionic 在栈/TLS 映射失败时返回 `EAGAIN`（AAOS13 `pthread_create.cpp` 核对），含义是当前资源不足、稍后可能成功；内核 `clone` 还可能因 task 数量或 `RLIMIT_NPROC` 返回同样的错误——诊断必须保留原始 errno，不能把所有 `EAGAIN` 记成同一原因。
 
@@ -54,7 +54,7 @@ AAOS13 的 `Thread::CreateNativeThread()` 失败后有两条错误文本："Coul
 
 治理动作：自有任务使用队列长度受限的 executor 与统一调度入口，记录池大小、执行中、排队、拒绝与取消次数；审计 SDK、WebView、媒体与网络库的线程池——多个库各自"合理"的池相加仍可能过量；`Dispatchers.IO` 不是全应用线程总额控制器，多个 `limitedParallelism` 也要共享一份产品级预算。监控读取 `/proc/self/status` 的 `Threads` 与 `/proc/self/task`（两者是采样值），阈值来自设备与场景基线而非固定 400/500；线程数超阈值时不要立即调用 `Thread.getAllStackTraces()`（会创建大量对象），用平时保留的线程名与责任模块记录定位。线程数下降也要确认任务仍能完成——把线程改成一个无界队列，只是把资源 OOM 换成排队延迟或 ANR。
 
-**Q6: [learning] `mmap` 返回 `ENOMEM` 时，为什么"内存用完"只是原因之一？32 位与 64 位进程分别怎么排查？**
+**Q6: [learning] mmap 返回 ENOMEM 时，为什么"内存用完"只是原因之一？32 位与 64 位进程分别怎么排查？**
 
 `ENOMEM` 覆盖多类失败：32 位进程地址空间窄，`.so`、Java 堆、native 堆、线程栈与映射互相挤压；64 位进程也可能因无界映射、VMA 数量上限或超大连续请求失败。总剩余地址空间足够，不代表存在满足本次请求的连续区间；"32 位用户空间固定 3 GB、内核占 1 GB"也不能作为跨设备结论——内核配置、ASLR、保留区与进程映射共同决定可用范围。
 
@@ -62,7 +62,7 @@ AAOS13 的 `Thread::CreateNativeThread()` 失败后有两条错误文本："Coul
 
 治理方向：能迁移时提供完整 64 位 ABI，并验证指针变大带来的 native 增量与第三方 `.so` 兼容；限制线程、映射与内存映射文件的数量与生命周期，及时 `munmap()` 或释放所有者；大对象分块、流式处理或设置尺寸上限，避免要求巨型连续区域；`mallopt(M_PURGE, 0)` 只能归还可清理的空闲物理页，不能释放保留地址区间、更不能修复映射泄漏；拆进程能获得独立地址空间，但会复制 Runtime、`.so`、线程与缓存，只有隔离边界和测量数据同时成立时才采用。
 
-**Q7: [learning] OOM 前的降级应该怎么做？为什么不能指望 `UncaughtExceptionHandler` 里的抢救？**
+**Q7: [learning] OOM 前的降级应该怎么做？为什么不能指望 UncaughtExceptionHandler 里的抢救？**
 
 降级与观测必须在资源接近预算时由明确的 owner 完成；OOME 交给 `UncaughtExceptionHandler` 后，当前线程连创建异常对象都可能失败，此时只应保留最小记录并沿默认处理路径结束进程。
 
@@ -76,7 +76,7 @@ AAOS13 的 `Thread::CreateNativeThread()` 失败后有两条错误文本："Coul
 
 版本边界：API 34 起常规只投递 `TRIM_MEMORY_UI_HIDDEN` 与 `TRIM_MEMORY_BACKGROUND` 两个整理级别（旧的 `RUNNING_*`、`MODERATE`、`COMPLETE` 不再送达，材料按 Android 17 核对），面向新系统的代码聚焦这两级；回调在主线程执行，只做快速的引用释放。预算管理要同时覆盖 Java live heap、native malloc、进程物理成本、图形/媒体、线程、FD 与虚拟地址空间，采样点用"场景完成条件满足 + 短暂稳定窗口"而不是启动后固定等待若干秒；模块预算之和不能直接等于进程预算，Runtime、共享库与共享对象需要单独余量。在局部边界捕获 OOME 只适用于输入尺寸已知、无共享状态写到一半、能返回低规格结果的操作；`sigsetjmp`/`siglongjmp` 不能处理 Java 堆 OOME，跳回会绕过析构与锁释放，不是 OOM 降级方案。
 
-**Q8: [learning] `onRenderProcessGone()` 的契约是什么？`didCrash()` 返回 false 能断定页面 OOM 吗？**
+**Q8: [learning] onRenderProcessGone() 的契约是什么？didCrash() 返回 false 能断定页面 OOM 吗？**
 
 Android 8（API 26）起，`WebViewClient.onRenderProcessGone(view, detail)` 是 WebView renderer（承载 Blink、JavaScript 与绘制的独立渲染进程）退出后的入口。契约要点：多个 WebView 可能关联同一个 renderer，每个受影响实例都会收到回调；当前回调只负责清理参数中的 `view`，不能假设其他实例已失效；返回 `false` 时，renderer 崩溃宿主随之崩溃、renderer 被系统结束宿主也被结束；返回 `true` 表示应用已处理并继续运行。官方指南进一步要求：旧实例不可复用——从视图树移除、清理引用并调用 `destroy()`，需要网页内容就新建实例并返回 true；任何使用该 renderer 的 WebView 未返回 true，WebView 会按退出原因 kill 或 crash 应用。
 
@@ -107,13 +107,13 @@ Android 8（API 26）起，`WebViewClient.onRenderProcessGone(view, detail)` 是
 
 采样时每个维度要绑定场景与时间点；比较点必须具有相近的页面、网络、播放与前后台状态，"启动后 1 分钟/1 小时"的固定时刻只适合连续使用场景。
 
-**Q11: [learning] `mallinfo` 为什么只能当趋势计数器？bionic 的 `mallinfo2` 与 glibc 有什么不同？**
+**Q11: [learning] mallinfo 为什么只能当趋势计数器？bionic 的 mallinfo2 与 glibc 有什么不同？**
 
 `mallinfo` 是 allocator 自己的统计，不是进程 RSS/PSS，也不是泄漏证明：AAOS13 的 `Debug.getNativeHeapAllocatedSize()` 直接返回 `mallinfo().uordblks`，`getNativeHeapSize()`/`getNativeHeapFreeSize()` 分别取 `usmblks`/`fordblks`（AAOS13 `android_os_Debug.cpp` 核对）；Scudo 把 `uordblks` 填为已分配字节、`fordblks` 为空闲字节、`hblkhd` 为映射字节。bionic 头文件明确把 `mallinfo()` 标为 inherently unreliable，建议需要更多信息时用 `malloc_info()`；在 allocator 与配置一致的前提下，这些计数器仍适合按秒级或分钟级观察趋势。
 
 版本与可观测边界：bionic 的 `struct mallinfo` 字段已是 `size_t`，`mallinfo2()` 经 `__RENAME(mallinfo)` 指向同一个符号、布局相同（AAOS13 `malloc.h` 核对）——不要把 glibc 历史上 mallinfo 的窄整数与版本规则套到 bionic。sanitizer 与 hook 会改变可观测结果：heapprofd、GWP-ASan 生效时统计由当前 malloc dispatch 路径提供，HWASan 路径的 `malloc_info()` 会返回 -1 并置 `errno` 为 `ENOTSUP`——采集端要允许"无数据"、不要把 0 当作没有分配、灰度对比时保持构建类型与 allocator 配置一致。`malloc_info()` 输出的 XML（如 `scudo-1` 结构）不是稳定业务协议，且实现会暂停 allocator 并遍历 chunks，不能进信号处理器或高频心跳，只适合低内存告警后执行一次并把解析器按 allocator/version 分派。
 
-**Q12: [learning] PLT hook 拦截 `malloc/free` 做内存账本，为什么容易得到错误结论？**
+**Q12: [learning] PLT hook 拦截 malloc/free 做内存账本，为什么容易得到错误结论？**
 
 PLT/GOT hook 只改写选定 ELF 的导入跳转，覆盖范围达不到进程级 allocator 替换，Android 平台也不承诺其为稳定 API；若目标是维护"仍存活的分配"，只拦 `malloc/free` 的账本必然失真。
 
@@ -134,7 +134,7 @@ heapprofd 是 Perfetto 的 Native 堆采样器，经 bionic 的 `MallocDispatch`
 
 版本边界：Android 10 起可用；Android 10–14 上能否采集取决于应用是否声明 `profileable`、是否 debuggable 构建或由 shell 发起；Android 15（API 35）起普通应用可经 `ProfilingManager` 请求受系统管理的 heap profile——AAOS13 没有 `ProfilingManager`，线上要在受控灰度、异常趋势或 MemoryLimiter anomaly 命中后开短窗口，不持续高频采集（CPU、内存、trace 存储与隐私都有成本）。
 
-**Q14: [learning] `mallopt` 的 purge 能不能修复泄漏？Scudo、GWP-ASan、HWASan、MTE 各自查什么？**
+**Q14: [learning] mallopt 的 purge 能不能修复泄漏？Scudo、GWP-ASan、HWASan、MTE 各自查什么？**
 
 不能。`mallopt` 的 purge 只是把 allocator 中已经空闲、可归还的页交回内核：`M_DECAY_TIME`（API 27）调整空闲页归还时间策略、`M_PURGE`（API 28）主动请求归还，两者 AAOS13 已有；`M_PURGE_ALL`（API 34）与 `M_PURGE_FAST`（API 37）是后续版本新增（AAOS13 `malloc.h` 仅含前两者）。仍被引用的泄漏块不会因 purge 消失，碎片也可能让部分页无法释放；若每次 purge 后 RSS 暂时下降又持续上升，应继续查对象生命周期，不要把周期性 purge 包装成修复。Scudo 的环境变量选项适合可控 native 进程与测试构建，由 Zygote 启动的普通应用不应把它当线上开关。
 
@@ -162,13 +162,13 @@ L0–L3 表示采集成本与证据深度递增，不是事故等级：L0 常驻
 
 最终判定依据：工具命中的是内存安全错误时按崩溃证据修复；只有"稳定增长 + 未释放调用栈 + 与业务生命周期吻合"三者同时成立，才把结论写成泄漏。诊断开始与结束都要记录边界，避免把窗口外的存量解释成窗口内泄漏。
 
-**Q17: [learning] FD 监控要区分哪些维度？为什么 `/proc/self/fd` 只能算近似快照？**
+**Q17: [learning] FD 监控要区分哪些维度？为什么 /proc/self/fd 只能算近似快照？**
 
 FD 是进程描述符表中的整数索引，监控要同时区分六个维度：当前打开数量、FD 编号本身（是否达到 `FD_SETSIZE`）、符号链接指向的对象类型、创建代次（generation）、负责关闭的所有者，以及 `dup` 复制后新旧描述符各自的生命周期。编号会复用：关闭后内核通常分配最小空闲编号，double-close 的第二次关闭可能关掉别的线程刚创建的对象，所以只记"编号 123 曾由谁打开"不够，要用 `fd + generation` 区分旧的 123 和新的 123。
 
 `/proc/self/fd` 只是近似快照的原因：枚举目录本身要短暂打开一个目录 FD，采样期间其他线程仍可能打开或关闭 FD，`readlink()` 失败可能只是资源恰好被关闭，不能直接记成泄漏。`/proc/self/status` 的 `FDSize` 是已分配的描述符槽位数，不是当前打开数量。落地做法：常规样本只计数（跳过非数字目录项，不为"精确值"固定减 1），阈值触发时才读取各条符号链接归类为 `socket:`、`pipe:`、`anon_inode:`、文件与设备，并对私有路径归一化、去掉文件名与用户信息；结果保留 `complete` 与 `skipped` 字段，缺少条目的快照不能解释为资源已恢复。
 
-**Q18: [learning] `RLIMIT_NOFILE` 与 `FD_SETSIZE` 是两条什么边界？"打开 FD 超过 1024 就会崩溃"错在哪里？**
+**Q18: [learning] RLIMIT_NOFILE 与 FD_SETSIZE 是两条什么边界？"打开 FD 超过 1024 就会崩溃"错在哪里？**
 
 两者是独立边界：`RLIMIT_NOFILE` 约束进程可打开的 FD 数量，超出 soft limit 时新分配通常返回 `EMFILE`（系统级打开文件表压力则返回 `ENFILE`）；`FD_SETSIZE` 是 `select()` 所用 `fd_set` 位集合的表示边界，AAOS13 bionic 的 `sys/select.h` 将其定义为 1024。
 

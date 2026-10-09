@@ -57,7 +57,7 @@ MVP 按职责拆分界面、业务协调和数据操作：View 展示界面并�
 3. **Presenter：**根据 View 是否仍有效决定是否发布结果，并管理由页面拥有的观察或任务。
 4. **生命周期所有权：**协程和 RxJava 提供执行与取消机制，但不会自动决定任务归页面、进程还是业务流程所有。仍需明确生命周期所有者。
 
-**Q6: [learning] MVP 是否更容易单元测试？`BaseActivity` 和 `BasePresenter` 有什么取舍？**
+**Q6: [learning] MVP 是否更容易单元测试？BaseActivity 和 BasePresenter 有什么取舍？**
 
 当 Presenter 依赖接口而不依赖 Android View 实现时，可以在普通 JVM 测试中注入假数据源和假 View，验证“输入动作—数据调用—状态呈现”链路：用 Mockito 之类框架 mock View 接口、stub 数据层返回值，再验证登录成功路径调用了 showSuccess()、失败路径调用了 showError()。测试性来自清晰的依赖边界，不是来自 MVP 这个名称。
 

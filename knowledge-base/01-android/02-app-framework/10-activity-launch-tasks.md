@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：启动请求的任务选择与实例复用两条判断、launchMode 与 Intent flag 的叠加语义、Intent Filter 的 action/category/data 匹配规则与包可见性、taskAffinity 与 allowTaskReparenting、冷热启动与实例复用的区分、非 Activity Context 启动的约束、任务栈组合场景推演。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityStarter、TaskFragment、ContextImpl、ActivityTaskSupervisor），版本相关结论按官方文档口径（2026-09 检索）。生命周期与首帧时序见 [01-activity.md](../03-ui/01-activity.md)，四大组件总览见 [01-four-components.md](01-four-components.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] `startActivity()` 如何在任务选择与 Activity 实例复用之间作出决定？**
+**Q1: [learning] startActivity() 如何在任务选择与 Activity 实例复用之间作出决定？**
 
 系统先选目标任务，再决定目标 Activity 是复用还是新建。这是两个相关但不同的判断：任务已被选中，不代表该任务中的任意 Activity 都会被复用。
 
@@ -15,7 +15,7 @@
 
 具体 Android 版本决定内部实现。`startActivityInner()` 等方法名和分支会变化，不是稳定 SDK 契约。
 
-**Q2: [learning] `FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？**
+**Q2: [learning] FLAG_ACTIVITY_NEW_TASK、SINGLE_TOP 与 CLEAR_TOP 如何改变 Activity 启动？**
 
 这三个 Intent flag 分别影响目标任务选择与目标实例所在栈的处理，效果还要和目标 Activity 的 launchMode、启动方及现有任务一起判断。
 
@@ -54,7 +54,7 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 调用方只表达操作意图、无需绑定某个实现类时适合隐式 Intent。对查询结果应结合包可见性、导出状态、权限和实际启动结果判断。
 
-**Q6: [learning] 详情页返回后直接退出应用，是否由 `singleTask` 清理了返回栈？**
+**Q6: [learning] 详情页返回后直接退出应用，是否由 singleTask 清理了返回栈？**
 
 `singleTask` 会让目标 Activity 在匹配的任务中以根 Activity 形式复用。系统清除其上方页面后，按返回可能直接离开该任务。先检查目标 launchMode 和任务栈，再判断是否是该行为导致。
 
@@ -68,7 +68,7 @@ Intent Filter 按操作、类别和数据三组条件匹配隐式 Intent。三�
 
 Intent flags 也会影响启动结果。若页面需要普通的页面内返回栈，不要只为复用实例而随意设置 `singleTask`。
 
-**Q7: [learning] Activity 复用后收到新 Intent，为什么 `getIntent()` 仍是旧值？**
+**Q7: [learning] Activity 复用后收到新 Intent，为什么 getIntent() 仍是旧值？**
 
 当启动规则复用已有 Activity 实例时，系统通过 `onNewIntent()` 交付新 Intent，但不会自动替应用更新 Activity 保存的 Intent 字段，因此 `getIntent()` 仍可能返回最初启动时的 Intent。
 
@@ -76,7 +76,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 2. **回调差异**：复用实例时调用 `onNewIntent()`，不会重新调用该实例的 `onCreate()`。若系统创建新实例，则走新的创建生命周期。
 3. **同步业务输入**：把回调参数作为新的业务输入处理。需要后续 `getIntent()` 返回新值时，在回调里显式调用 `setIntent(intent)`。否则 Activity 自身仍保存旧 Intent。
 
-**Q8: [learning] 跨应用启动后 Activity 跑进了意外的任务栈，`taskAffinity` 与 `allowTaskReparenting` 起什么作用？**
+**Q8: [learning] 跨应用启动后 Activity 跑进了意外的任务栈，taskAffinity 与 allowTaskReparenting 起什么作用？**
 
 `taskAffinity` 表达 Activity 倾向加入哪个任务，`allowTaskReparenting` 允许系统在相应任务再次到前台时，把 Activity 从启动它的任务迁到 affinity 匹配的任务。两项都不能单独决定完整启动结果。
 
@@ -85,7 +85,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 3. **适用模式**：官方清单语义将重新归属限制在 `standard` 与 `singleTop` 模式。`singleTask` 和 `singleInstance` Activity 作为任务根，不按该方式 reparent。
 4. **运行时核对**：检查启动方、`NEW_TASK` 等 flags、目标 launchMode、两侧 affinity 和当前任务栈。记录实际 task 归属，不依赖固定 `taskId` 或唯一返回路径。
 
-**Q9: [learning] AAOS Launcher 设置 `FLAG_ACTIVITY_NEW_TASK` 后，系统是否一定新建任务？**
+**Q9: [learning] AAOS Launcher 设置 FLAG_ACTIVITY_NEW_TASK 后，系统是否一定新建任务？**
 
 不一定。该 flag 要求 Activity 在任务上下文中启动，但系统仍会匹配可复用的任务。只有没有合适的已有任务时，才会创建新任务。
 
@@ -108,7 +108,7 @@ Intent flags 也会影响启动结果。若页面需要普通的页面内返回�
 
 AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分支：目标进程可用时调用 `realStartActivityLocked()`。否则走异步进程启动路径。排查启动后“回到旧页面”“新建了 Activity”或“没有看到新进程”时，应把任务复用、Activity 实例复用和进程启动分开判断。
 
-**Q11: [learning] 在 Application 或 Service 等 Context 里调用 `startActivity()` 为什么抛 `AndroidRuntimeException`，应该怎么改？**
+**Q11: [learning] 在 Application 或 Service 等 Context 里调用 startActivity() 为什么抛 AndroidRuntimeException，应该怎么改？**
 
 非 Activity 上下文不属于任何任务，框架无法决定新 Activity 的落点，因此要求 Intent 显式携带 `FLAG_ACTIVITY_NEW_TASK`，让系统按 taskAffinity 选择目标任务，找不到再新建。
 
@@ -117,7 +117,7 @@ AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分�
 3. **加上 flag 后的行为**：系统按目标 Activity 的 taskAffinity 查找可复用任务，复用规则与从 Activity 发起时相同。但新页面不在调用方的返回栈里，评估按返回的行为时要按任务归属单独判断。
 4. **Activity 为何不受限**：Activity 重写了 `startActivity()`，经 `Instrumentation` 发起启动并携带自身所属任务信息，不需要额外 flag。
 
-**Q12: [learning] 为 Activity 指定启动行为时，清单里的 `android:launchMode` 与 Intent flag 各能表达什么，两者同时设置时如何生效？**
+**Q12: [learning] 为 Activity 指定启动行为时，清单里的 android:launchMode 与 Intent flag 各能表达什么，两者同时设置时如何生效？**
 
 两种方式可以并用，系统解析启动请求时把清单的静态声明与本次 Intent 携带的 flag 一起判断：launchMode 描述该 Activity 的固定归属规则，flag 描述这一次启动的动态行为。
 
@@ -126,7 +126,7 @@ AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分�
 3. **同时设置的生效方式**：两者叠加解析而非二选一，清单为 `standard` 的 Activity 加上 `FLAG_ACTIVITY_SINGLE_TOP` 同样获得栈顶复用。“flag 优先级更高”的常见说法应理解为动态行为叠加在静态模式之上，但 flag 改变不了 `singleInstance` 的独占任务语义。
 4. **选择**：要求所有入口都遵循同一模式时写清单。只想对特定路径（如通知跳转）改变行为时用 flag。
 
-**Q13: [learning] 前台任务栈为 A、B，后台任务栈为 C、D（C、D 均为 `singleTask` 且声明了与包名不同的同一 `taskAffinity`），从 B 启动已存在的 D 后连续按返回，回退顺序是什么？**
+**Q13: [learning] 前台任务栈为 A、B，后台任务栈为 C、D（C、D 均为 singleTask 且声明了与包名不同的同一 taskAffinity），从 B 启动已存在的 D 后连续按返回，回退顺序是什么？**
 
 D 所需的任务已经存在，系统把整个后台任务连同 C 一起带到前台，而不是把 D 压入当前任务。合并后的回退顺序是 D → C → B → A，最后回到桌面。
 
@@ -136,7 +136,7 @@ D 所需的任务已经存在，系统把整个后台任务连同 C 一起带到
 
 判断规则：`singleTask` 启动的复用粒度是任务——先按 affinity 定位并前置整个任务，再谈实例复用与新 Intent 交付。
 
-**Q14: [learning] 同一应用内 A 为 `standard`，B、C 均为 `singleTask` 且未修改 `taskAffinity`，依次执行 A 启动 B、B 启动 C、C 启动 A、A 再次启动 B，返回栈如何变化，连按两次返回停在哪个界面？**
+**Q14: [learning] 同一应用内 A 为 standard，B、C 均为 singleTask 且未修改 taskAffinity，依次执行 A 启动 B、B 启动 C、C 启动 A、A 再次启动 B，返回栈如何变化，连按两次返回停在哪个界面？**
 
 默认 `taskAffinity` 就是应用包名，B、C 所需的任务与 A 所在任务相同，因此全部进入同一个任务而不新建任务。A 再次启动 B 时复用栈内实例并清除其上方页面，连按两次返回先回到 A，再回到桌面。
 

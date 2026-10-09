@@ -216,7 +216,7 @@ AAOS 13 中三条线程分担显示消息、窗口布局/Surface placement 和 S
 `DrawFrameTask::run()` 在 `syncFrameState()` 后按 `prepareTextures` 决定是否提前放行 UI 线程，所以主线程回调、RenderThread 任务与 GPU 工作是三段不同时间线，应分别读排队与依赖（A13 源码核对）。窗口挪到另一块屏后，mode、deadline、HWC 能力与 present fence 换了一套，不能用默认屏的 FrameTimeline 解释外屏延迟；同一 layer 经镜像或投屏可出现在多个 Output，要检查目标 Display 的 output layer state 而不是全局 layer 是否存在。
 
 
-**Q23: [learning] 视频应用进入 PiP 后继续出帧，这条链路与全屏时相比变了什么？`setSeamlessResizeEnabled` 不设置会怎样？**
+**Q23: [learning] 视频应用进入 PiP 后继续出帧，这条链路与全屏时相比变了什么？setSeamlessResizeEnabled 不设置会怎样？**
 
 PiP 与 Freeform 仍走常规应用绘制链路，变的是 Task/Window bounds、transition leash、layer 几何与同屏合成策略：WM Shell 取得 Task leash，在动画中持续更新 position、crop、scale 与 alpha，系统可先用旧内容缩放裁剪过渡，不必等应用在每个采样点出新 buffer。视频以 24/30 fps 供帧而屏幕以 60/90/120 Hz present 时，多次复用同一视频 buffer 属正常。SF 缩小 layer 只改合成几何，不会自动降低 Producer 的分辨率与供帧节奏。
 
@@ -225,12 +225,12 @@ PiP 与 Freeform 仍走常规应用绘制链路，变的是 Task/Window bounds�
 PiP 常见风险对应明确证据：leash 几何已变而新 buffer 未到（过渡期正常缩放）、圆角/alpha/HDR 组合改变 HWC 策略、旧大尺寸 buffer 未 release 时新尺寸 buffer 已开始分配、进入小窗后 Producer 仍维持高分辨率高帧率（须由应用自查）。
 
 
-**Q24: [learning] PiP 应用何时设置 `setAutoEnterEnabled(true)`，如何避免暂停播放时仍自动进入？**
+**Q24: [learning] PiP 应用何时设置 setAutoEnterEnabled(true)，如何避免暂停播放时仍自动进入？**
 
 API 31 起，`setAutoEnterEnabled(true)` 允许系统在适用的离开手势中自动把 Activity 切入 PiP，不再等待应用于 `onUserLeaveHint()` 调用 `enterPictureInPictureMode()`；默认值是 `false`。应用应在播放状态和 PiP 参数已更新时尽早提交 `setPictureInPictureParams()`，并在暂停或不再希望进入 PiP 时把 auto-enter 设为 `false`。启用后 `onPictureInPictureRequested()` 不会被调用，因此不能把该回调作为启用 auto-enter 时的进入通知。
 
 
-**Q25: [learning] PiP 与桌面窗口过渡期间，`WindowContainerTransaction`、`SurfaceControl.Transaction` 和应用 buffer 是三条怎样的输入？**
+**Q25: [learning] PiP 与桌面窗口过渡期间，WindowContainerTransaction、SurfaceControl.Transaction 和应用 buffer 是三条怎样的输入？**
 
 过渡画面由三条异步输入合成：WCT（`WindowContainerTransaction`）改变 Task bounds、windowing mode、层级与 reparent，由 SystemUI 进程中的 WM Shell 下发；`SurfaceControl.Transaction` 改 layer 的 position、crop、alpha、Z 序与可见性，过渡期常落在 Shell 创建的 leash 上；应用 BLAST 提交新尺寸 buffer。三者在不同时刻到达，"新几何配旧 buffer"是过渡策略的一部分（旧内容被缩放或 letterbox），不一定是缺陷。
 
@@ -239,7 +239,7 @@ API 31 起，`setAutoEnterEnabled(true)` 允许系统在适用的离开手势中
 排查黑边、拉伸或跳变要对齐四条证据：WCT 内容、leash/geometry 事务、应用 relayout 与 traversal、buffer 尺寸与到达时刻。桌面模式的 caption、最大化菜单、拖拽控件由 Shell 的 window decoration 子系统管理，不属于应用 `DecorView`；A17 可复用 `ViewHost` 降低 caption 反复创建成本，A13 源码树尚无该桌面装饰栈（版本边界），caption 卡顿在 A17 语境先查 SystemUI/Shell 线程。
 
 
-**Q26: [learning] 分屏里的副窗口失去了焦点，它进入 `onStop()` 了吗？**
+**Q26: [learning] 分屏里的副窗口失去了焦点，它进入 onStop() 了吗？**
 
 没有。Android 10（API 29）引入 Multi-resume 后，多个可见 Activity 可以同时停留在 `RESUMED`；焦点（focusable）、可见性（visible）与 top resumed 是三套不同信号。分屏副窗口、导航小窗、视频 PiP 都可能"可见但无焦点仍 RESUMED"，不能按后台已停止处理，也不能停掉全部渲染。
 
@@ -248,7 +248,7 @@ API 31 起，`setAutoEnterEnabled(true)` 允许系统在适用的离开手势中
 A13 依据：`Activity.onTopResumedActivityChanged` 存在于 A13 源码（API 29 引入）。高频动画、连续 invalidate 与 frame-rate vote 应同时参考 top-resumed、实际可见性与内容是否仍在更新，三选一都不完整。
 
 
-**Q27: [learning] 折叠展开或多窗口 resize 时 Activity 何时重建？`recreateOnConfigChanges` 和 `ViewModel` 各管什么？**
+**Q27: [learning] 折叠展开或多窗口 resize 时 Activity 何时重建？recreateOnConfigChanges 和 ViewModel 各管什么？**
 
 默认情况下，未在 `android:configChanges` 中声明的配置变化（一次折叠可能改变 `screenSize`、`smallestScreenSize`、`screenLayout`、`orientation`、`density` 的某个子集，取决于面板与厂商实现）会销毁并重建 Activity；声明自行处理则收到 `onConfigurationChanged()`，但必须重新读资源、更新布局与 display/density/Insets 等派生状态，不能原样返回。`ViewModel` 与 `ViewModelStore` 跨配置变化保留实例，`SavedStateHandle`/`rememberSaveable` 负责可恢复 UI 状态并覆盖进程被系统回收的情况；导航位置、滚动位置、表单等业务状态应与窗口尺寸和 posture 分离，折叠不应顺带清空它们。
 
@@ -266,7 +266,7 @@ Edge-to-Edge 强制是 Android 15（API 35）起对 target SDK 35+ 应用的行�
 关联版本差异：Android 15 还把 target 35 应用的 `Configuration.screenWidthDp/screenHeightDp` 与系统栏 Insets 解耦，运行时布局几何应改用实际容器、`WindowMetrics` 与 `WindowInsets`；A13 上这些 Configuration 值仍扣除系统栏，两套行为不能混用。
 
 
-**Q29: [learning] 一个 `WindowInsets` 从 WMS 到 View 树经过哪些环节？listener 与 override 谁先执行、消费会挡住兄弟节点吗？**
+**Q29: [learning] 一个 WindowInsets 从 WMS 到 View 树经过哪些环节？listener 与 override 谁先执行、消费会挡住兄弟节点吗？**
 
 分发有五个阶段，理解阶段边界有助于把系统状态更新与应用主动重分发区分开：
 
@@ -294,7 +294,7 @@ HWC 按整个 Display 的可见 layer 集合决策，输入包括 layer 的 form
 证明 HWC 回退需要同帧证据（AAOS13 源码核对 `DecorView.updateColorViews` 维护状态栏/导航栏 color view、三键导航可转对比度 scrim）：固定设备、Display mode、导航方式与页面内容；对比变更前后可见 layer tree；对齐同一 DisplayFrame 的 per-layer composition type 或 FrameTimeline 的 GPU Composition；排除 IME、transition、视频、多窗口同时变化的干扰。"透明栏出现""SF 时长变长""功耗上升"任何一项单独都不足以证明。
 
 
-**Q31: [learning] IME 弹出动画期间，`onProgress()` 回调和"逐帧 apply Insets"是一回事吗？**
+**Q31: [learning] IME 弹出动画期间，onProgress() 回调和"逐帧 apply Insets"是一回事吗？**
 
 不是。注册 `WindowInsetsAnimation.Callback` 后，动画帧走 Choreographer 的 `CALLBACK_INSETS_ANIMATION` 阶段（A13 常量顺序 INPUT=0、ANIMATION=1、INSETS_ANIMATION=2、TRAVERSAL=3、COMMIT=4，源码核对），回调在普通 animation 之后、traversal 之前收到插值后的 Insets；生命周期是 `onPrepare()`、`onStart()`、`onProgress()`、`onEnd()`，由 dispatch mode 决定是否继续传给后代。成本取决于回调做了什么：改 `translationY`、alpha 等渲染属性通常不需要 measure，改 padding、margin、约束或列表结构才可能请求 layout；不能由可见 item 数推出固定毫秒。
 
@@ -346,7 +346,7 @@ TaskSnapshot 是对一个 Task 的 SurfaceControl 子树做 screen capture 得�
 Cached App Freezer 不承担触发源：A13 的 `CachedAppOptimizer` 冻结应用时不调用任何 snapshot 入口（源码核对无引用），"每次冻结前先截 Task"的通用 hook 不存在。同理，捕获、`onPause()` 与转场开始之间没有源码承诺的固定顺序，系统只尽量在 Task 关闭前保留可过渡的视觉状态，应用不应假设 `capture → onPause → transition` 的时序。
 
 
-**Q35: [learning] 什么时候会得到主题色卡片而不是真实截图？`setRecentsScreenshotEnabled(false)` 与 `FLAG_SECURE` 有什么区别？**
+**Q35: [learning] 什么时候会得到主题色卡片而不是真实截图？setRecentsScreenshotEnabled(false) 与 FLAG_SECURE 有什么区别？**
 
 A13 的 `getSnapshotMode` 逻辑（源码核对）：非 standard/assistant 类型 Task 返回 `SNAPSHOT_MODE_NONE`，不出快照；top Activity `shouldUseAppThemeSnapshot()` 为真时生成 `SNAPSHOT_MODE_APP_THEME`——该条件是 `setRecentsScreenshotEnabled(false)`（`!mEnableRecentsScreenshot`）或 Task 内任一窗口带 `FLAG_SECURE`（`isSecureLocked`）；否则 `SNAPSHOT_MODE_REAL` 捕获真实画面。主题占位由 system_server 用 `TaskDescription` 背景色与窗口背景绘制（`drawAppThemeSnapshot`），不含应用敏感像素，所以主题色卡片可能是预期行为而非截图失败。Recents 与屏保 Activity 不捕获；设备 overlay `config_disableTaskSnapshots = true` 可整体关闭能力（TV/IoT 常用）。
 

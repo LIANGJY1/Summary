@@ -16,7 +16,7 @@
 
 `InputReader` 与 `InputDispatcher` 是 `system_server` 中的原生线程（`libinputflinger` 库，不是独立进程）。`adb shell input tap` 走系统注入路径，可以绕过真实硬件与 evdev，注入成功只能说明注入点之后的链路可用。按 AAOS13 源码（`frameworks/native/services/inputflinger/InputManager.cpp`）核对，Android 13 的监听链是 `InputReader → UnwantedInteractionBlocker → InputClassifier → InputDispatcher`；Android 14 起分类组件改为 `InputProcessor`，Android 17 链上还增加了 `PointerChoreographer`、Rust 桥接的 `InputFilter` 等阶段，分析具体设备时按对应标签确认。
 
-**Q2: [learning] `MotionEvent.getEventTime()` 代表什么时间？为什么"eventTime 到回调结束"不等于端到端触摸延迟？**
+**Q2: [learning] MotionEvent.getEventTime() 代表什么时间？为什么"eventTime 到回调结束"不等于端到端触摸延迟？**
 
 `getEventTime()` 接近设备产生事件的时刻（内核事件时间 `eventTime`），它既不是应用收到事件的时间，更不是画面显示的时间。用"eventTime 到业务回调结束"测出的只是"输入到应用处理"这一段，端到端的触摸到显示（touch-to-photon）还要包含应用渲染、缓冲区提交、SurfaceFlinger 合成与面板呈现。
 
@@ -38,7 +38,7 @@
 
 套接字里也不只有按键和动作消息：`FOCUS`、`POINTER_CAPTURE`、`DRAG`、`TOUCH_MODE`、应用返回的 `FINISHED` 等都走同一协议。窗口创建时的主路径是 `WindowState.openInputChannel()` → `InputManagerService.createInputChannel()` → `InputDispatcher::createInputChannel()` → `openInputChannelPair()`，服务端点包装成 `Connection`，客户端点作为可跨进程传递的 `InputChannel` 返回。
 
-**Q4: [learning] InputDispatcher 中一条事件的 iq/oq/wq 三段队列如何迁移？`wq=1` 是否说明应用即将 ANR？**
+**Q4: [learning] InputDispatcher 中一条事件的 iq/oq/wq 三段队列如何迁移？wq=1 是否说明应用即将 ANR？**
 
 一条事件的典型迁移是 `inbound → pending → outbound → publish → wait → FINISHED → remove`：监听链交付的事件先进入全局输入队列（`iq`），选定目标连接后包装成 `DispatchEntry` 进入该连接的输出队列（`oq:<channel>`），经 `InputPublisher` 写入通道成功后转入等待队列（`wq:<channel>`），收到序列号匹配的 `FINISHED` 才移除。三者在 Perfetto 中是 `ATRACE_INT` 计数器轨道，不是执行片段。
 
@@ -62,7 +62,7 @@
 
 按键和动作事件使用单调时钟域，`SensorEntry` 使用启动时钟；注入端或驱动用错时钟基准会制造大量虚假过期事件。历史资料中的 `APP_SWITCH` 丢弃原因在 Android 13/17 的枚举中都已不存在，分析旧日志必须对照相应发布标签。
 
-**Q7: [learning] "点到谁就永远给谁"成立吗？`DOWN` 之后哪些情况会改变触摸目标并产生 `ACTION_CANCEL`？**
+**Q7: [learning] "点到谁就永远给谁"成立吗？DOWN 之后哪些情况会改变触摸目标并产生 ACTION_CANCEL？**
 
 只能作为粗略描述。初次 `DOWN` 执行窗口命中测试并建立触摸状态，后续 `MOVE`/`UP` 通常延续已有目标、不在每个采样点重新选窗；但过程中多种情况会改变目标或终止原手势：
 
@@ -74,7 +74,7 @@
 
 因此分析手势问题要同时看 `DOWN` 的命中结果、后续拦截决策、触点 ID 与 `CANCEL`，不能只看最终 `onTouchEvent()` 返回值。按键按焦点窗口分发（无屏幕坐标），指针动作按触摸状态分发，触摸目标不一定与键盘焦点相同。
 
-**Q8: [learning] `InputFilter`、`InputMonitor`（监视窗口）、无障碍按键过滤三类旁路拦截的权限边界分别是什么？普通应用能注册吗？**
+**Q8: [learning] InputFilter、InputMonitor（监视窗口）、无障碍按键过滤三类旁路拦截的权限边界分别是什么？普通应用能注册吗？**
 
 三类旁路能力作用不同，权限都在系统侧：
 
@@ -84,7 +84,7 @@
 
 版本边界：Android 17 的 `InputFilter` 是 C++ 包装层加 Rust 实现的辅助功能过滤器（防重复键、慢速键、粘滞键），`EventHub`/`InputReader`/`InputDispatcher` 仍是 C++；AAOS13 源码中不存在这套 Rust 过滤器，"InputFlinger 已用 Rust 重写"的说法不成立。无障碍触摸另有 API 34 起的 `setMotionEventSources()` 通用运动事件来源监听，与触摸探索的 `FLAG_SEND_MOTION_EVENTS` 不是同一开关。
 
-**Q9: [learning] `Instrumentation`、`UiAutomation`、`adb shell input`、无障碍 `dispatchGesture()` 四类注入入口有什么差异？应用能用 source 判断事件是注入的吗？**
+**Q9: [learning] Instrumentation、UiAutomation、adb shell input、无障碍 dispatchGesture() 四类注入入口有什么差异？应用能用 source 判断事件是注入的吗？**
 
 四类入口都最终经系统注入，但身份、目标与过滤器关系不同：
 
@@ -103,7 +103,7 @@
 
 高采样率的价值取决于下游怎么消费：多出的样本常被合并进同一个 `MotionEvent` 的历史记录，列表滚动只读当前坐标时收益有限；笔迹拟合、速度估计、轨迹预测和高帧率场景更能利用密集样本。显示帧数仍受渲染能力与刷新率限制，提高采样率不能直接推导端到端延迟缩短——事件能否进入最近一帧，取决于到达时刻与整条处理路径。验证设备实际采样节奏应从驱动事件时间或结构化输入跟踪统计相邻样本间隔，而不是只看规格表。
 
-**Q11: [learning] 应用收到的 `MotionEvent` 为什么会包含历史样本？批处理在 Perfetto 上如何识别？**
+**Q11: [learning] 应用收到的 MotionEvent 为什么会包含历史样本？批处理在 Perfetto 上如何识别？**
 
 当触摸采样率高于渲染帧率时，一个 VSYNC 周期内可能到达多个 `ACTION_MOVE` 样本。批处理（batching）让应用侧 `InputConsumer` 把设备、来源、动作、显示设备与指针属性都兼容的样本合成一次交付：第一条样本初始化 `MotionEvent`，后续样本经 `addSample()` 加入历史。它合并交付但不删除坐标——当前坐标用 `getX()/getY()` 读，较早样本用 `getHistorySize()` 和 `getHistorical*()` 读。
 
@@ -128,7 +128,7 @@ Perfetto 上的表现是：一个批只出现一次 Java `deliverInputEvent`；�
 
 版本边界：API 35 起可用 `MotionEvent.PointerCoords.isResampled()` 判断坐标是否由重采样生成；重采样坐标会作为批内新样本加入，事件中至少保留一个真实样本。Android 17 把批处理与重采样拆到 `InputConsumer.cpp`/`Resampler.cpp`，但常规 `ViewRootImpl` 路径的实际调用链仍以对应源码标签为准。急转弯、速度突变和稀疏样本仍可能产生偏差，评估时要同时比较真实样本、重采样标记与最终笔迹。
 
-**Q13: [learning] `requestUnbufferedDispatch` 与前缓冲渲染分别解决什么问题？轨迹预测（MotionPredictor）的可用边界是什么？**
+**Q13: [learning] requestUnbufferedDispatch 与前缓冲渲染分别解决什么问题？轨迹预测（MotionPredictor）的可用边界是什么？**
 
 两者作用于不同阶段，可组合但不能互相替代：
 
@@ -153,7 +153,7 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 性能敏感点：阈值判定涉及排除区、状态标志与可选 ML 分类，不适合同步 I/O；材料按 Android 17 核对 `gestures.back_timeout` 的 AOSP 默认值为 250 ms 且长按取消取其与 ViewConfiguration 的较小值，旧口径"400–500 ms"不适用。
 
-**Q16: [learning] Predictive Back 的回调接口有哪几层？`android:enableOnBackInvokedCallback` 在不同版本语义有何差异？**
+**Q16: [learning] Predictive Back 的回调接口有哪几层？android:enableOnBackInvokedCallback 在不同版本语义有何差异？**
 
 回调分三层（已与官方文档核对）：
 
@@ -173,7 +173,7 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 性能上进度回调每帧都可能执行，应避免在其中做 I/O、同步 Binder 或创建大量对象；掉帧时要同时检查当前应用、目标窗口、WM Shell 与 SurfaceFlinger，不能只看当前 Activity 的 RenderThread。跨 Activity/跨任务预览通常要求目标已有进程和窗口，系统不会为预览强行冷启动已死亡进程，此时回退到普通回调属安全行为。
 
-**Q18: [learning] `setSystemGestureExclusionRects` 申请的排除区一定生效吗？限制是什么？**
+**Q18: [learning] setSystemGestureExclusionRects 申请的排除区一定生效吗？限制是什么？**
 
 不保证。应用上报的矩形要经过两道裁剪：与窗口可触摸区域相交，并受每侧纵向高度预算限制。按 AAOS13 源码核对（`DisplayContent.java` 的 `mSystemGestureExclusionLimit`，源自 `WindowManagerConstants`），该值至少 200 dp，限制的是左右边缘各自可排除的纵向总高度，不限制横向宽度；超出预算的部分被裁掉，SystemUI 通过 `ISystemGestureExclusionListener` 收到的是限制后的区域。
 
@@ -181,7 +181,7 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 坐标以 View 布局后的局部坐标为准，View 移动或尺寸变化后要重新上报。排查"同一条边有些位置有效、有些仍触发返回"时，应结合 `dumpsys window` 的最终获批区域与 Perfetto 中指针流是否被抢占，不能只看应用传入的列表。
 
-**Q19: [learning] `VelocityTracker` 有哪些容易出错的使用细节？默认拟合策略是什么？**
+**Q19: [learning] VelocityTracker 有哪些容易出错的使用细节？默认拟合策略是什么？**
 
 常见错误集中在三处：
 
@@ -200,7 +200,7 @@ SystemUI 通过 `monitorGestureInput()` 建立名为 edge-swipe 的手势监视�
 
 TouchSlop 过大拖动启动显得迟钝，过小会把抖动误判为拖动；调整自定义控件时阈值来源应可随设备配置变化，业务代码不复制数字。
 
-**Q21: [learning] `GestureDetector` 的 `onDown` 返回值为什么重要？长按与双击有哪些机制细节？**
+**Q21: [learning] GestureDetector 的 onDown 返回值为什么重要？长按与双击有哪些机制细节？**
 
 `onDown()` 决定控件是否从 `DOWN` 起接受整个触摸序列：等到 `MOVE` 才返回 true，常导致后续事件没有按预期交给识别器。`GestureDetector` 是事件序列驱动的状态机，`DOWN` 时安排 `SHOW_PRESS`、`LONG_PRESS` 消息并调用 `onDown()`，位移超过 TouchSlop 取消点击/长按候选并转 `onScroll()`。
 
@@ -208,7 +208,7 @@ TouchSlop 过大拖动启动显得迟钝，过小会把抖动误判为拖动；�
 
 双击：启用 `OnDoubleTapListener` 后要区分 `onSingleTapUp()`（立即回调，适合即时反馈）与 `onSingleTapConfirmed()`（等待双击时间窗后确认）；第二次 `DOWN` 需同时满足时间在 `doubleTapMinTime` 到 `doubleTapTimeout` 之间、距离在双击容差内、首次点击未滑出区域才判定为双击。这些阈值来自运行时配置，业务不应自行复制框架后备的 40 ms/300 ms。
 
-**Q22: [learning] 父子容器的手势冲突如何仲裁？`requestDisallowInterceptTouchEvent` 有什么边界？**
+**Q22: [learning] 父子容器的手势冲突如何仲裁？requestDisallowInterceptTouchEvent 有什么边界？**
 
 View 分发没有通用的"谁先超过 TouchSlop 谁获胜"规则：`ACTION_DOWN` 时 `ViewGroup` 命中子 View 并记录为 `TouchTarget`，后续事件沿目标链分发；父容器在每次分发中仍可调用 `onInterceptTouchEvent()`，一旦由"不拦截"变为"拦截"，原子 View 收到 `ACTION_CANCEL`，之后事件交给父容器。诊断冲突要把同一序列的 `DOWN → MOVE → CANCEL/UP` 连起来看。
 
@@ -216,7 +216,7 @@ View 分发没有通用的"谁先超过 TouchSlop 谁获胜"规则：`ACTION_DOW
 
 需要父子协作分摊滚动距离时优先使用嵌套滚动协议：子 View `startNestedScroll()`，消费前 `dispatchNestedPreScroll()` 让父级先取走一部分，消费后 `dispatchNestedScroll()` 上报余量，结束时 `stopNestedScroll()`。嵌套回调本身不天然昂贵，只有性能跟踪显示父级回调或反复布局占主线程时才视为问题。横纵方向冲突的典型做法是父容器从 `DOWN` 保存坐标，位移超过 slop 且水平占优再拦截，并正确处理 `ACTION_CANCEL` 的清理。
 
-**Q23: [learning] `showSoftInput()` 返回 true 意味着什么？应用如何可靠确认软键盘可见？**
+**Q23: [learning] showSoftInput() 返回 true 意味着什么？应用如何可靠确认软键盘可见？**
 
 返回 true 只表示请求通过了前置条件、进入后续处理，不表示输入法已经显示。前置条件包括：目标 View 是当前服务目标（served view）、View 自身有焦点、所在窗口有窗口焦点。带 `ResultReceiver` 的重载在 API 36 已弃用，因为回调同样不能可靠代表屏幕最终状态；Android 16 起 `SHOW_IMPLICIT`、`SHOW_FORCED`、`HIDE_IMPLICIT_ONLY`、`HIDE_NOT_ALWAYS` 不再影响平台处理，Android 17 应传 0 或直接用 `WindowInsetsController.show()/hide()`。
 

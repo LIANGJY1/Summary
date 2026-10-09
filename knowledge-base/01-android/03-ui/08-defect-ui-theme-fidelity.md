@@ -250,7 +250,7 @@ SIR-7514 的按下无反馈就是按此顺序定位到同名遮蔽。selector �
 
 SIR-7382 中全屏背景设在 `elevation="32dp"` 的内容层容器上，根布局没有背景，窗口底色从顶部两侧透出；把背景移到根布局后，窗口铺底而内容容器阴影保留。`elevation="32dp"` 表示 32dp 的 Z 高度，省略时 elevation 默认为 0dp，容器不因该属性抬高。
 
-**Q16: [learning] 搜索结果列表写在 ConstraintLayout 里却用了 `layout_height="match_parent"`，为什么界面只露出最后一行，约束布局里该写什么？**
+**Q16: [learning] 搜索结果列表写在 ConstraintLayout 里却用了 layout_height="match_parent"，为什么界面只露出最后一行，约束布局里该写什么？**
 
 ConstraintLayout 中应使用 `0dp`（`MATCH_CONSTRAINT`）让尺寸由约束决定；`match_parent` 按父容器尺寸测量，不会表达“填满两侧约束之间的区域”。该案例的列表因此超出预期显示区，只露出最后一行，容易被误判为数据只同步了一条。
 
@@ -379,7 +379,7 @@ Android 28 起，Typeface 可请求 1–1000 的字重，因此 450、550 并非
 2. 多语言侧：资源存在 `values-*` 目录时，同步核对默认目录与每个 locale；CI 可检查各 locale 键集合和实际文案语言。
 3. 新增侧：从 SRS 条目生成 checklist，逐项检查文案、图标、副标题、toast、二次确认和置灰态是否落地。
 
-**Q27: [learning] 业务代码里用 `uiMode == 19` 这类数值比较判断夜间模式再手动选颜色，为什么是黑白适配的反模式？正确写法是什么？**
+**Q27: [learning] 业务代码里用 uiMode == 19 这类数值比较判断夜间模式再手动选颜色，为什么是黑白适配的反模式？正确写法是什么？**
 
 `Configuration.uiMode` 把 UI 类型位与夜间位组合在一个整数中，十进制 `19`（十六进制 `0x13`）对应 `UI_MODE_TYPE_CAR`（`0x03`）与 `UI_MODE_NIGHT_NO`（`0x10`），不是“夜间模式”标志。直接与 `19` 比较会把类型和夜间状态绑死，换成夜间值或其他 UI 类型就不匹配；更根本的是它把本该由资源系统处理的颜色选择搬进业务代码，而且只在设置颜色时判断一次，不响应后续模式变化。Setting 黑白适配清理提交把这类分支整体删除，颜色引用改为语义色令牌（节选自真实 diff）：
 
@@ -411,7 +411,7 @@ Android 28 起，Typeface 可请求 1–1000 的字重，因此 450、550 并非
 
 "先收敛色板、再改引用"的顺序是关键：旧库 values 与 values-night 两份并存且命名无语义，直接在引用处替换必然遗漏。代价是删除公共库色属于破坏性变更，同批所有引用方必须一起合入（该批次同日 8 个"黑白模式适配"提交就是同一次收敛的分布式落地）。换引用时令牌按语义选、按语义用——拿按压态令牌顶替正文次要色虽能跑，语义错位是下一轮走查的新 bug 源。判断规则：跨模块颜色重构用"删定义逼引用"，新颜色直接用语义令牌，不留以色值命名的私有色。
 
-**Q29: [learning] 用 `ChangeSkinManager.getColorResource("text_default_color")` 这类按字符串资源名运行时取色的换肤框架，为什么要迁移到 `R.color` 常量引用？**
+**Q29: [learning] 用 ChangeSkinManager.getColorResource("text_default_color") 这类按字符串资源名运行时取色的换肤框架，为什么要迁移到 R.color 常量引用？**
 
 字符串资源名是运行时映射：编译期不可查，黑白映射表要人工维护，资源改名或漏维护映射只会静默取不到值；换成 `R.color.xxx` 常量引用后编译器兜底，夜间值由 `values-night` 自动提供，换肤框架维护的皮肤包映射表失去存在必要。公共控件 SkinSwitchCardView 的迁移就三行（节选自真实 diff）：
 
@@ -446,7 +446,7 @@ Android 28 起，Typeface 可请求 1–1000 的字重，因此 450、550 并非
 
 手动清单会在控件增删时失同步，可沉淀为统一的 `refreshTheme()`；成对的黑/白 selector 也能让按钮主题切换只改引用。
 
-**Q31: [learning] 布局声明了 `textFontWeight`，代码又对同一批文本 `setTypeface(Typeface.DEFAULT_BOLD)`，字重为什么会失控？应从哪几处收敛？**
+**Q31: [learning] 布局声明了 textFontWeight，代码又对同一批文本 setTypeface(Typeface.DEFAULT_BOLD)，字重为什么会失控？应从哪几处收敛？**
 
 XML 的 `textFontWeight` 与代码的 `setTypeface` 是两套字重控制点，运行时 `setTypeface` 调用会覆盖布局声明——"代码设 DEFAULT_BOLD（700 档）+ 布局声明 400"叠加的观感就是明显偏粗，两处各自调整只会互相打架。蓝牙电话 tab 选中项过粗即此：修复同时移除三处 `setTypeface` 调用与布局里的 `textFontWeight` 属性，字重回归字体文件默认渲染，选中态改由颜色令牌区分（节选自真实 diff）：
 

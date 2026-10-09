@@ -2,7 +2,7 @@
 
 > Android 内核构建与验证资料，以 AAOS 13 x86_64 模拟器为案例，并补充平台构建与 Android Common Kernel 的边界。重点是让源码版本、配置、工具链、模块和运行目标保持一致。文中的版本号、commit、工具链目录和镜像文件名均为案例值，不是所有设备的固定值。维护者：session-to-knowledge。
 
-**Q1: [learning] 为什么定制 AAOS 模拟器内核时，不能只选相同的 Linux 主版本或随意使用 `gki_defconfig`？**
+**Q1: [learning] 为什么定制 AAOS 模拟器内核时，不能只选相同的 Linux 主版本或随意使用 gki_defconfig？**
 
 模拟器内核必须与目标模拟器的设备模型、预编译模块、配置和用户空间预期相容；仅有相同的 `5.15` 主次版本不保证兼容。配置缺失会让模拟器所需驱动未编入，版本/ABI 不一致则可能导致模块无法加载或虚拟设备通信失败。
 
@@ -18,7 +18,7 @@
 
 提交标识只是该案例的观测值；在其他分支、设备或更新后的预编译内核上，必须重新识别目标，不可复用此 commit。
 
-**Q3: [learning] 为什么应从目标预编译内核提取 `.config`，而不是拼凑 defconfig？**
+**Q3: [learning] 为什么应从目标预编译内核提取 .config，而不是拼凑 defconfig？**
 
 目标镜像的配置包含该设备需要的驱动、内核功能和模块边界；通用 `gki_defconfig` 或 `x86_64_defconfig` 不能保证包含模拟器启动所需配置。基于提取的配置修改可减少意外缺项。
 
@@ -26,7 +26,7 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 
 若目标镜像没有可提取配置或配置格式不匹配，应使用该产品正式提供的 defconfig/config fragment 与构建脚本，而非把提取失败后的空文件当作有效配置。
 
-**Q4: [learning] AAOS 13 内核案例中的 `ARCH`、`LLVM`、`LLVM_IAS` 和 `PATH` 各控制什么？**
+**Q4: [learning] AAOS 13 内核案例中的 ARCH、LLVM、LLVM_IAS 和 PATH 各控制什么？**
 
 `ARCH` 选择内核目标架构，`LLVM=1` 请求使用 LLVM 工具链，`LLVM_IAS=1` 请求 LLVM 集成汇编器，`PATH` 决定构建脚本能否找到对应 clang 等工具。它们必须与目标架构和内核构建约定相匹配。
 
@@ -34,13 +34,13 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 
 工具链错配会导致编译错误、产物差异或 ABI 不兼容。需要可复现构建时，把源码提交、`.config`、工具链版本和完整构建参数一起记录。
 
-**Q5: [learning] `make olddefconfig` 和 `make -jN` 在内核构建流程中各自解决什么问题？**
+**Q5: [learning] make olddefconfig 和 make -jN 在内核构建流程中各自解决什么问题？**
 
 `make olddefconfig` 根据当前 Kconfig 依赖更新已有配置并为新选项采用默认值；`make -jN` 并行编译配置好的目标。前者可能改变 `.config`，后者只有在配置与工具链已正确时才有意义。
 
 应先确保位于正确内核源码树、架构和工具链已设置，并为目标 `.config` 留存副本；再更新配置、检查差异并编译。`N` 根据机器资源设定，过高可能造成内存不足或系统失去响应，并不会修复配置错误。预期产物路径依架构而异；材料案例在 x86 下生成 `arch/x86/boot/bzImage`。
 
-**Q6: [learning] 在内核源码树内添加自定义驱动时，源码、Kconfig、Makefile 与 `.config` 如何关联？**
+**Q6: [learning] 在内核源码树内添加自定义驱动时，源码、Kconfig、Makefile 与 .config 如何关联？**
 
 驱动源文件需被相应 Kconfig 选项和 Kbuild Makefile 收录，配置项启用后构建系统才会编译该目标。若只在源码目录放入 `.c` 文件，通常不会自动进入内核。
 
@@ -59,7 +59,7 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 
 保留原始内核备份和校验信息，验证失败时恢复。替换构建输入会影响后续其他产品构建，因此应记录改动范围。
 
-**Q8: [learning] 为什么内核和 `.ko` 模块需要来自匹配的构建配置与源码版本？**
+**Q8: [learning] 为什么内核和 .ko 模块需要来自匹配的构建配置与源码版本？**
 
 `.ko` 不只是一个通用二进制；它依赖内核导出的符号、配置、版本信息和 ABI。内核与模块不匹配时，可能因 `vermagic`、符号版本、目标架构或 ELF 格式不符而拒绝加载，强制绕过检查也不能保证稳定运行。
 
@@ -76,7 +76,7 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 
 若日志显示虚拟设备驱动缺失，优先核查 `.config` 和内核版本；若内核启动但模块失败，核查模块构建配套；若启动日志和镜像均正确，再检查模拟器快照/缓存及产品启动参数。
 
-**Q10: [learning] 为什么 `emulator -show-kernel` 常用于捕获内核早期日志，设备运行后还可用哪些证据验证？**
+**Q10: [learning] 为什么 emulator -show-kernel 常用于捕获内核早期日志，设备运行后还可用哪些证据验证？**
 
 `-show-kernel` 将模拟器内核控制台输出到终端，适合观察早期启动阶段的信息；系统启动后的 `adb` 状态和设备侧命令则验证用户空间是否与内核正常协作。
 
@@ -84,7 +84,7 @@ Linux 内核的 `scripts/extract-ikconfig` 可尝试从支持的内核镜像中�
 
 单一信号不足以判定成功：镜像版本证明替换路径正确，内核日志证明启动过程，adb 状态与目标功能测试证明系统交互链可用。
 
-**Q11: [learning] 编译 Linux 内核时，`libelf`、`dwarves/pahole`、`flex`、`bison` 等主机依赖解决什么问题？**
+**Q11: [learning] 编译 Linux 内核时，libelf、dwarves/pahole、flex、bison 等主机依赖解决什么问题？**
 
 内核构建除目标编译器外，还会运行主机侧工具处理配置、目标文件、调试信息和生成代码；缺少这些依赖会在相应构建阶段报错。安装包名和必需项取决于源码分支、配置与主机发行版。
 

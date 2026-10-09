@@ -650,7 +650,7 @@ cc_binary {
 
 因此，查看 Soong 依赖时要从具体模块的属性向外追踪：例如请求 `init` 会关联到 `init_second_stage`，后者再依赖 `libinit`，而 `libinit` 的 `srcs` 和 defaults 决定参与编译的源码与公共配置。
 
-**Q11: [learning] 在 AAOS 产品中新增 C/C++ 命令行程序时，`cc_binary`、`PRODUCT_PACKAGES` 和 `m <模块名>` 分别做什么？**
+**Q11: [learning] 在 AAOS 产品中新增 C/C++ 命令行程序时，cc_binary、PRODUCT_PACKAGES 和 m <模块名> 分别做什么？**
 
 `cc_binary` 声明一个由 Soong 编译的本机可执行模块，`PRODUCT_PACKAGES` 请求产品安装它，`m <模块名>` 则构建该模块及其依赖。构建一个模块与把它打进最终镜像是不同动作。
 
@@ -665,7 +665,7 @@ cc_binary {
 
 产品 makefile 可添加 `PRODUCT_PACKAGES += hello`。随后在已 `lunch` 的构建环境执行 `m hello` 编译；把镜像同步到设备后，再按安装位置运行程序，例如 `adb shell hello`。`product_specific: true` 将模块归入 product 分区，设备路径仍应根据具体模块类型和安装规则核查。
 
-**Q12: [learning] 什么时候使用 `cc_prebuilt_binary` 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
+**Q12: [learning] 什么时候使用 cc_prebuilt_binary 导入 ELF，为什么不能把宿主机 Linux 程序直接塞进 AAOS？**
 
 只有已经针对 Android 目标 ABI 与运行时构建的 ELF 才适合作为 AAOS 预编译可执行文件导入。宿主机 Linux 程序通常依赖 GNU libc，而 Android 使用 Bionic；即使架构相同，也不能据此认为二进制可运行。
 
@@ -693,7 +693,7 @@ cc_binary {
 
 `export_include_dirs` 使依赖该库的模块能使用其公开头文件目录。共享库是否作为产品安装内容取决于依赖类型、模块属性和分区规则；可执行模块已加入产品后，一般不需要再把它的共享依赖重复列入 `PRODUCT_PACKAGES`。静态库代码会在链接时并入消费者，不能像 `.so` 一样单独加载。
 
-**Q14: [learning] 使用 `cc_prebuilt_library_shared` 时，如何保证 `.so` 的架构、文件名和头文件导出相互匹配？**
+**Q14: [learning] 使用 cc_prebuilt_library_shared 时，如何保证 .so 的架构、文件名和头文件导出相互匹配？**
 
 预编译共享库要按目标 ABI 提供正确二进制，并在 Soong 声明实际源文件、安装名与公开头文件目录。`arch` 分支应对应源码树中真实存在的 ABI 目录和文件，不能让模块名、`stem` 与文件路径互相矛盾。
 
@@ -716,7 +716,7 @@ cc_prebuilt_library_shared {
 
 模块名供 Soong 依赖引用，`stem` 控制安装文件名，`srcs` 指向仓库内真实文件。构建前检查 ABI、ELF 目标、SONAME/依赖库和头文件 ABI 一致；同名源码库与预编译库同时存在可能造成模块重名或选错实现，应明确只保留一个定义。
 
-**Q15: [learning] Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 `app_process`？**
+**Q15: [learning] Java 源码如何声明为可安装的设备侧可执行 JAR，运行时为什么还需要 app_process？**
 
 Soong 的 `java_library` 编译 Java 源码；设置 `installable: true` 可生成可安装的设备侧 JAR，产品包配置负责将其放入镜像。Android 设备并不把普通 JAR 名称当作 shell 命令直接执行，示例通过 `app_process` 启动运行时并指定主类。
 
@@ -732,7 +732,7 @@ java_library {
 
 在源码中给出含 `main` 的类，并把 `java-hello` 纳入产品包。设备上需要设置与实际安装位置相符的 `CLASSPATH`，再执行类似 `app_process /system/bin com.custom.hello.HelloJava`。`product_specific` 会影响分区位置；不要只凭示例路径推断所有产品都安装到同一目录。验证时先检查设备文件，再运行主类。
 
-**Q16: [learning] `java_library` 与 `java_import` 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
+**Q16: [learning] java_library 与 java_import 的区别是什么，源码库和预编译 JAR 怎样供另一个模块使用？**
 
 `java_library` 从源码构建 Java 模块，`java_import` 将已有 JAR 声明为 Soong 模块；消费者通过模块名建立依赖。一个 JAR 依赖是静态编入还是作为运行时依赖，必须结合 Soong 属性和产物检查，不能只看 `.jar` 后缀判断。
 
@@ -740,7 +740,7 @@ java_library {
 
 库若只供另一个 Java 模块编译使用，通常无需单独安装；最终可运行模块必须按设备侧运行方式配置安装和 classpath。运行预编译 JAR 前还要确认其中包含可用类、与设备运行时兼容，且产物有执行所需的 dex/运行时格式。
 
-**Q17: [learning] Java 的 `installable`、`product_specific` 和 `PRODUCT_PACKAGES` 分别控制什么？**
+**Q17: [learning] Java 的 installable、product_specific 和 PRODUCT_PACKAGES 分别控制什么？**
 
 `installable` 控制模块是否作为可安装产物生成，`product_specific` 指定模块的产品分区归属，`PRODUCT_PACKAGES` 将模块请求纳入某个产品。三者回答不同问题，不能互相替代。
 
@@ -750,7 +750,7 @@ java_library {
 
 编译成功只能证明模块可构建；还需确认它进入目标镜像、运行时 classpath 正确且主类/API 可加载。
 
-**Q18: [learning] 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 `PRODUCT_PACKAGES`？**
+**Q18: [learning] 产品已安装一个可执行文件时，它的共享库依赖是否还需要单独加入 PRODUCT_PACKAGES？**
 
 一般通过 Soong 的模块依赖关系，构建系统能构建并安装可执行模块所需的共享库依赖；产品包集合通常只需选择产品入口模块。但这依赖依赖声明正确且安装分区兼容。
 
@@ -767,7 +767,7 @@ java_library {
 
 出现问题时区分 Soong 声明错误、目标 ABI 不匹配、模块未进入产品、安装路径错误、动态库缺失与运行时 API/类加载失败，避免用一次成功编译代替端到端验证。
 
-**Q20: [learning] Android 的 `user`、`userdebug` 和 `eng` 构建变体有什么区别，车机调试和验收该怎么选？**
+**Q20: [learning] Android 的 user、userdebug 和 eng 构建变体有什么区别，车机调试和验收该怎么选？**
 
 一句话理解：`user` 面向量产，默认收紧调试能力并贴近消费者设备；`userdebug` 保留接近 `user` 的运行特征，同时开放更多调试手段；`eng` 面向开发，构建更快，性能和功耗不作为首要目标。AOSP `lunch` 目标的最后一段指定构建变体；新版目标还可能在产品名与变体之间带 release config。[AOSP 构建说明](https://source.android.com/docs/setup/build/building)
 
@@ -842,7 +842,7 @@ java_library {
 
 4. **Android.bp 条件：**Android.bp 不支持 Make 式 `if/ifndef`。配置差异写入 Soong 支持的模块属性（如 `soong_config_variables`），复杂逻辑由 Go 构建代码处理。
 
-**Q22: [learning] 如何结合 Android 13 源码判断项目的 `adb root` 权限和实际能力？**
+**Q22: [learning] 如何结合 Android 13 源码判断项目的 adb root 权限和实际能力？**
 
 判断 `adb root` 要沿着“构建属性 → root 请求 → `adbd` 降权 → 产品覆盖”检查。两个项目的 ADB 核心实现相同，但具体产品选用的构建变体和属性覆盖决定最终结果；源码树本身不能证明某个已编译镜像当前正在运行哪种变体。
 
@@ -862,7 +862,7 @@ java_library {
 
 8. **核对最终设备：**有设备或构建产物时，先查看 `ro.build.type`、`ro.debuggable`、`ro.secure`、`ro.adb.secure` 和 `service.adb.root`，再运行 `adb shell id` 确认实际 UID；`getenforce` 用于确认 SELinux 模式，`adb remount` 的结果用于确认分区写入能力。源码结论与设备属性不一致时，以实际产品配置和最终镜像为准。
 
-**Q23: [learning] 应用要在 Android 源码树中编译时，怎样判断 `platform_apis`、签名、特权身份和安装分区该如何配置？**
+**Q23: [learning] 应用要在 Android 源码树中编译时，怎样判断 platform_apis、签名、特权身份和安装分区该如何配置？**
 
 不要照抄其他应用的属性。先确认应用需要哪类 API、权限由谁授予、是否需要特权权限，以及产品要把应用安装到哪个分区；四项分别控制编译 API、签名身份、特权安装和安装位置。
 

@@ -6,7 +6,7 @@
 
 三种感受对应的系统行为与责任位置可能完全不同：渲染 jank 是画面节奏异常，从 FrameTimeline、Choreographer、RenderThread、SurfaceFlinger 到 HWC 的帧链路取证；响应延迟是输入到可见反馈过慢，画面可以完全稳定，从 Input 分发、主线程消息、Binder 与业务路径取证；ANR 是系统判定应用没有在规定时限内响应，要看 ANR reason、超时类型与主线程及相关进程栈。混淆口径的代价是修错位置：渲染慢帧不一定引发 ANR，平均 FPS 正常也不能排除输入延迟。三类问题可以在广义流畅性范围内一起治理，但诊断时必须保留各自边界。做法：先确认用户感知对应哪种口径（画面停顿、点击无反馈、还是系统弹窗），再选证据入口，而不是直接开 trace 找长 slice。
 
-**Q2: [learning] FrameTimeline 用什么结构记录一帧，`surface_frame_token` 与 `display_frame_token` 为什么不能互换？**
+**Q2: [learning] FrameTimeline 用什么结构记录一帧，surface_frame_token 与 display_frame_token 为什么不能互换？**
 
 FrameTimeline 从 Android 12（API 31）起为应用提交的 SurfaceFrame（某个 Surface 的一帧）与显示侧的 DisplayFrame（一次整屏合成）分别记录 expected timeline（调度器预留的时间窗口）与 actual timeline（实际开始与结束）；判断一帧要同时读取 `Present Type`、`On time finish`、`Jank Type`、`Prediction Type`、`GPU Composition` 与 layer 信息。token 是关联同一帧记录的标识：前者标识应用或 layer 的 SurfaceFrame，后者标识 SurfaceFlinger 组织的 DisplayFrame；一个 DisplayFrame 可以合成多个 layer frame，两类 token 属于不同命名空间，数值相等也不代表同一对象，可靠做法是沿 Perfetto flow 或两列 token 建立关系，不按时间接近猜测。边界：仅凭 actual slice 很长无法定责——应用可能按时交帧而显示末端仍晚；SurfaceView、视频 overlay、Camera 等路径可能缺少应用侧 FrameTimeline，此时要转向目标 layer、buffer 与 fence 取证。源码锚点按 AAOS13 核对位于 `frameworks/native/services/surfaceflinger/FrameTimeline/`（材料引用的 `Scheduler/FrameTimeline.cpp` 是 Android 17 的目录布局）。
 
@@ -20,7 +20,7 @@ JankType 是位标志，每一位代表一种原因，同一帧可同时携带�
 
 机制上，框架名与控件名只是 API 名称：同一个 Flutter 页面可以用 SurfaceView 或 TextureView 作宿主，同一个播放器也可能在普通 BufferQueue、独立 layer 与 tunneled 专用路径之间切换。线程名同样只是线索——trace 中出现 GLThread 不足以证明页面存在独立 layer，看到 SurfaceView 对象也不足以证明本帧被 HWC 作为 overlay 处理，必须用对象标识把线程、swapchain/BufferQueue、SurfaceControl 与目标 layer 对到同一条路径。做法：先用线程 slice、GPU submission、BufferQueue/SurfaceControl 与 layer dump 证据固定四坐标，再进入具体耗时归因。
 
-**Q5: [learning] `dequeueBuffer` 或 `queueBuffer` 变长为什么不能直接写成"SurfaceFlinger 正在合成"，buffer 背压如何传播延迟？**
+**Q5: [learning] dequeueBuffer 或 queueBuffer 变长为什么不能直接写成"SurfaceFlinger 正在合成"，buffer 背压如何传播延迟？**
 
 BufferQueue 在生产者与消费者之间传递图形缓冲区，背压指下游没有及时释放 buffer 或消费数据，导致上游拿不到可用槽位；在标准 BLAST App Window 中 BLASTBufferQueue 位于应用进程，buffer update 经 SurfaceControl transaction 送到 SurfaceFlinger，所以 `dequeueBuffer`/`queueBuffer` 变长可能在等待 slot、release fence 未 signal、生产者/消费者 IPC 或 transaction 排队，与 SF 主线程是否在合成无关。buffer 路径会把上游慢帧向后传播：前一 buffer 占用本帧期望的呈现周期即为 `BufferStuffing`，表现为帧间隔稳定、输入到显示延迟逐帧增加（Perfetto 的 high latency state）。区分不同等待要看补齐证据的方向：slot 状态与前几帧 present 解释 dequeue 等待，producer 线程与 transaction 时间解释 queueBuffer 变晚，fence 来源解释 acquire 未就绪。做法：对齐相邻 SurfaceFrame、DisplayFrame 与队列深度，确认延迟如何传播，而不是把单点等待记成根因。
 
@@ -32,7 +32,7 @@ vitals 对 View/Canvas 传统渲染统计的口径是：慢帧为渲染时间 16
 
 顺序是：复现单一场景并记录刷新率与显示模式；确认出图类型（Producer、Surface、layer 与合成方式）；在应用 Actual Timeline 选异常 SurfaceFrame 并读取两类 token 与 finish/present/jank 字段；沿 flow 找到 DisplayFrame 核对 SF 侧；按位标志选择线程与子系统分支；在已锁定的帧窗口内检查 Binder、调度、锁、I/O、GC、GPU queue 与 fence；最后观察相邻帧。误判的机制在于：Binder transaction、GC 或长 slice 只能说明它与帧窗口在时间上重叠，要写成根因还必须证明它位于责任线程或依赖路径，并且足以解释 finish/present 的偏差；背景线程数量、CPU 频率下降、温度升高同理，只是相关现象。做法：结论按证据强度分层——直接证据（责任线程在帧窗口内被同步 Binder 阻塞且服务端 flow 吻合）可定责，组合证据可给高可信假设，相关现象只保留为待验证项；修复后用相同设备状态与场景脚本复测，比较异常类型与帧间隔分布而非平均 FPS。
 
-**Q8: [learning] Perfetto 的线程状态里 Runnable、Sleeping、Uninterruptible Sleep 各意味着什么，为什么 Runnable 不等于等锁、`D` 状态不等于磁盘 I/O？**
+**Q8: [learning] Perfetto 的线程状态里 Runnable、Sleeping、Uninterruptible Sleep 各意味着什么，为什么 Runnable 不等于等锁、D 状态不等于磁盘 I/O？**
 
 按 Linux 调度语义：Running 是正在 CPU 上执行；Runnable（`R`）是已可运行但尚未被调度器选中；Sleeping（`S`)是可中断等待；Uninterruptible Sleep（`D`）是内核不可中断等待。Runnable 描述的是等待 CPU 的时间，测量调度延迟应使用 `thread_state` 的 Runnable 区间并结合 `sched_waking` 唤醒关系，而不是前一条 `sched_slice` 的时长；等锁的线程处于 Sleeping 并有 monitor contention 或 `blocked_function` 证据，两者语义不同。`D` 状态可能来自 fence、驱动、页错误等内核等待队列，只有 `blocked_function`、`io_wait` 与相邻事件共同支持时才能写明等待资源。常见误读是把"RenderThread 位于小核"直接当调度结论：单帧的 CPU 编号只说明"当时在哪里执行"，还需 wakeup 到 running 的等待、调度策略与优先级、核心容量与频率、同核抢占和温控状态同时成立。做法：结论里区分"线程在等 CPU""线程在等锁""线程在等内核资源"，三者对应完全不同的优化方向。
 
@@ -64,7 +64,7 @@ vitals 对 View/Canvas 传统渲染统计的口径是：慢帧为渲染时间 16
 
 帧在 deadline 前完成只证明调度与渲染没有触发 jank 判定，而 FrameTimeline 不保存 `scrollY`、`translationX`、相机视角或动画进度，画面对象是否沿预期轨迹移动还取决于输入采样、运动模型、数值精度、像素取整、buffer 提交与 present 节拍，因此连续绿色帧无法单独证明运动均匀。排查先按现象分类：FrameTimeline 按期而模型坐标相对目标曲线有周期残差，指向时间量化、插值或整数像素取整；模型坐标平稳而 Actual/Present 间隔波动，指向 buffer、SurfaceFlinger、刷新率切换等显示侧；跟手阶段异常而 fling 正常，指向输入采样与速度估算；反之指向 `OverScroller` 或自定义物理模型。做法：同时记录帧时间、运动模型输出、View 消费结果与 FrameTimeline 四组数据，用 surface/display token 把 UI 线程 counter 与对应显示帧关联，精度要求高时使用与 VSync 同步的高速相机；"无掉帧卡顿"只适合作为用户现象描述，不能直接当根因结论。
 
-**Q16: [learning] `OverScroller` 的 fling 轨迹里藏着哪三种离散化，120 Hz 下 8/9 ms 交替是随机抖动吗？**
+**Q16: [learning] OverScroller 的 fling 轨迹里藏着哪三种离散化，120 Hz 下 8/9 ms 交替是随机抖动吗？**
 
 不是随机抖动，是整数换算的量化结果。AAOS13 的 `OverScroller.java` 按源码核对包含三种离散化：`SplineOverScroller.update()` 经 `AnimationUtils.currentAnimationTimeMillis()` 取得整数毫秒时间（VSync 纳秒时间进入 legacy 动画时钟时被截断）；SPLINE 曲线使用固定采样表——`NB_SAMPLES = 100` 即 101 个采样点——并在相邻点之间线性插值；`mCurrentPosition` 经 `Math.round` 取整到整数像素。`Choreographer.doFrame()` 保留纳秒 `frameTimeNanos`，但调用 legacy 动画时钟时执行整数除法 `frameTimeNanos / NANOS_PER_MS`，理想的 120 Hz 周期约 8.333 ms 映射到整数毫秒后，相邻动画时间差必然分布在 8 ms 与 9 ms（60 Hz 常见 16/17 ms，90 Hz 常见 11/12 ms）。"1 ms 除以 8.33 ms 约等于 12%"只能描述两个时间数值的比例，不能直接写成位移误差或感知概率：只有当曲线正处于斜率较大的高速区间时，整数毫秒采样才可能形成不同的整数像素步幅。做法：是否可感知要靠轨迹采样判断，而不是从机制推导。
 
@@ -88,7 +88,7 @@ vitals 对 View/Canvas 传统渲染统计的口径是：慢帧为渲染时间 16
 
 阶段是：`NotifInflaterImpl` 把 entry 交给 row binder 创建或复用通知行；内容绑定任务在通知 inflation 工作线程上构建内容并加载图片（RemoteViews 新建走 `applyAsync()`、复用走 `reapplyAsync()`，异步失败会在 UI 回调路径同步重试）；完成后 row 进入 View 树，触发 measure/layout、动画与绘制。异步只把 Builder 恢复、模板生成与部分图片工作移出主线程，UI 线程仍要处理完成回调、把 View 加入界面树、`requestLayout()` 与动画状态——大量通知短时间到达时，常见时序是 worker 队列持续工作、多个异步结果相近时刻完成、UI 线程集中挂接 row、NSSL 与图标容器随后几帧反复更新。版本边界：AAOS13 的实现类是 `NotificationContentInflater.java`（含 `AsyncInflationTask#doInBackground`，已按 13 源码核对），Android 17 迁移为 Kotlin 的 `NotificationRowContentBinderImpl.kt` 但保留历史 trace 名，搜 trace 时要区分"兼容保留的 slice 名称"与"当前是否存在同名类"；"主线程没有 `RemoteViews.apply()`"不能排除通知绑定，因为异步的主要工作本来就在 worker 上。做法：App 侧合并高频进度更新、保持 ID 与模板稳定、控制大图与自定义 RemoteViews 层级；SystemUI 侧修复触发同步 fallback 的原因。
 
-**Q22: [learning] NSSL 的 `onMeasure` 为什么连 GONE 的子 View 也要测量，"屏幕上可见几条通知"与测量成本为什么不同？**
+**Q22: [learning] NSSL 的 onMeasure 为什么连 GONE 的子 View 也要测量，"屏幕上可见几条通知"与测量成本为什么不同？**
 
 AAOS13 的 `NotificationStackScrollLayout.java` 在 `onMeasure()` 中遍历全部 child 并明确测量 GONE child，源码注释写明"需要测量所有子 View（包括 GONE 的），以便算法计算可容纳的通知数量"——视觉上被隐藏不代表测量工作归零。一帧中的工作量随以下条件变化：entry 与 row 总数、分组展开/折叠与 heads-up 状态、contracted/expanded/public 等内容变体是否已绑定、OEM 增加的包装层，以及配置变化或字体缩放触发的重测；`updateChildren()` 还会运行堆叠布局算法、应用状态或启动状态动画并处理通知间重叠。因此"减少屏幕上可见的通知"与"减少参与测量的 row"是两个不同目标，NSSL measure 随通知总数增长时应减少参与测量的 row、内容形态与层级，`updateChildren` 变长时检查分组、heads-up 与同一帧中的更新次数。边界：A13 源码中该方法存在但没有 `NSSL#updateChildren` 这个 trace 名（材料按 Android 17 引用），具体 slice 名随版本变化，用 trace 前先在目标 build 上确认。
 
@@ -96,19 +96,19 @@ AAOS13 的 `NotificationStackScrollLayout.java` 在 `onMeasure()` 中遍历全�
 
 普通应用发布或更新通知只是通过 Binder 提交 Notification，Shade 展开、折叠与快捷设置的动画帧由 SystemUI 生成，动画期间内容不更新时应用进程可能完全不在关键路径上。取证顺序：先在 FrameTimeline 中选 missed DisplayFrame，定位 `NotificationShade` 的 SurfaceFrame；再看当前窗口的 UI 线程（legacy 路径看 `NotificationShadeWindowView#onMeasure`、NSSL measure 与 `updateChildren`，Scene 路径还要看 Compose 重组与 blur 请求）；UI 线程没有超预算时继续查 RenderThread、buffer queue、SurfaceFlinger 与 GPU；若 SystemUI 的 SurfaceFrame 按时而 DisplayFrame 迟到，再检查遮罩、壁纸、状态栏与其他高层 Surface 的合成。边界：应用自己的 App FrameTimeline 不能代表通知面板；RemoteViews 更新可能复用已有 View 也可能重新 apply，不能断言每次 `notify()` 都重新 inflate；以 Android 12 为目标的应用自定义通知会被放入标准模板，但复杂 RemoteViews、图片尺寸与更新频率仍影响 SystemUI。
 
-**Q24: [learning] HWC 的 `DEVICE` 与 `CLIENT` 合成类型分别是什么，为什么看到 `DEVICE` 不能断言该 layer 独占一个物理 overlay plane？**
+**Q24: [learning] HWC 的 DEVICE 与 CLIENT 合成类型分别是什么，为什么看到 DEVICE 不能断言该 layer 独占一个物理 overlay plane？**
 
 HWC 为每帧的每个 layer 决定合成类型：`DEVICE` 表示由显示硬件处理，`CLIENT` 表示先由 SurfaceFlinger 的 RenderEngine 把这些 layer 合成为 client target、再用 `setClientTarget` 交 HWC 一起 present。`Composition.aidl` 对 `DEVICE` 的定义刻意保留"hardware overlay or other similar means"的措辞，因此"看到 DEVICE 就是独占物理 plane""统计 DEVICE 数反推 plane 总数""这一帧是 DEVICE 下一帧也会是"三个推断都越过了公开证据边界：Composer 逐帧重新协商，layer 集合、属性、显示模式或资源竞争改变后结果可以不同；混合合成（一部分 CLIENT + 一部分 DEVICE）也很常见。影响 HWC 决策的因素包括 plane 与共享 DPU 资源、缩放、旋转、混合、色彩空间、HDR、受保护内容与带宽，具体可用 plane 由设备实现决定。边界：材料按 Android 17 的 Composer3 AIDL 列出八个枚举值（含 `REFRESH_RATE_INDICATOR`），AAOS13 树未含 `hardware/interfaces` 主线目录无法逐值核对，但 A13 的 SurfaceFlinger 已通过 `AidlComposerHal.cpp` 支持 Composer3；FrameTimeline 的 `gpu_composition = 1` 只说明该 DisplayFrame 用过 GPU 合成，不提供每个 layer 的 plane 分配结果。
 
-**Q25: [learning] Android 13 的 SurfaceFlinger 每帧怎样与 HWC 交互，`presentOrValidate` 的快速分支省掉了什么？**
+**Q25: [learning] Android 13 的 SurfaceFlinger 每帧怎样与 HWC 交互，presentOrValidate 的快速分支省掉了什么？**
 
 按 AAOS13 源码核对：`CompositionEngine/src/Output.cpp` 的 `chooseCompositionStrategy()` 经 `HWComposer::getDeviceCompositionChanges()` 调用 HWC；HWC 侧（`HWComposer.cpp`）可以走 `presentOrValidate()` 快速分支——当前条件允许时直接完成 present 并保存 present/release fences，否则只完成 validate；随后读取 changed types 与 requests、执行 `acceptChanges()` 把最终类型应用到 layer；`usesClientComposition` 为真时进入 `composeSurfaces()` 由 `RenderEngine::drawLayers()` 生成 client target，最后 `presentAndGetReleaseFences()` 收集栅栏。快速分支省掉的是"单独一次 validateDisplay 再 presentDisplay"的往返，而不是省掉协商本身；`PresentSucceeded` 表示本轮已经 present，后续只 flush 不再 present。排查含义：工具若同时展示"客户端原始请求类型"与"validate 后最终类型"，应采用最终被接受的类型；`dumpsys` 只提供执行时刻附近的状态快照，要证明某帧发生类型切换需要 Layer trace（开启 `TRACE_FLAG_COMPOSITION`）或 HWC 日志。
 
-**Q26: [learning] SurfaceView 视频加半透明控制栏后画面从 `DEVICE` 变 `CLIENT`，如何设计单变量实验找出触发属性？**
+**Q26: [learning] SurfaceView 视频加半透明控制栏后画面从 DEVICE 变 CLIENT，如何设计单变量实验找出触发属性？**
 
 视频 layer、宿主 UI、系统栏与弹窗一起参与 HWC 协商，改成 CLIENT 的原因可能是 blending、色彩、缩放或资源竞争，不能归结为"多了一个浮层"。实验设计：同一台设备固定视频分辨率、HDR 状态、刷新率与窗口尺寸，每轮只改变一个浮层（先无浮层，再依次加控制栏、字幕、弹幕），每组记录最终 composition、FrameTimeline、RenderEngine 耗时、GPU/DPU 频率与 fence；对照 TextureView 场景——它的视频 buffer 已被宿主 HWUI 采样进 App Window，HWC 看不到独立视频 layer，即使宿主窗口最终是 DEVICE 也不能宣称视频获得了 overlay。优化动作按证据选择：不需要独立更新的小 UI Surface 可并入宿主树减少 layer；视频/相机用 SurfaceView 保留 device composition 机会；缩小持续半透明、模糊、圆角遮罩的面积与时长；避免同一转场同时改变大比例 scale、rotation、crop 与 alpha；不能为追求 DEVICE 破坏 dataspace 正确性。验收标准是目标 DisplayFrame 改善、合成或 fence 证据按假设变化、同机复测可复现，且视觉与功耗没有新问题。
 
-**Q27: [learning] Accessibility 的事件上报与节点查询为什么方向相反，`oneway` 为什么不等于零成本？**
+**Q27: [learning] Accessibility 的事件上报与节点查询为什么方向相反，oneway 为什么不等于零成本？**
 
 事件上报是应用把变化推给系统：`IAccessibilityManager.aidl` 的 `sendAccessibilityEvent()` 声明为 `oneway`（AAOS13 源码核对），应用发出事务后不等待服务处理；但 `oneway` 省掉的只是等待时间，事件构造、字符串复制、Parcel 写入与 Binder 入队仍由调用链承担，高频事件照样消耗 UI 线程 CPU、Binder 缓冲与 system_server 资源。节点查询方向相反：服务调用 `getRootInActiveWindow()` 等接口时，服务侧 `AccessibilityInteractionClient` 先查 `AccessibilityCache`，未命中才跨进程请求，最终由目标应用的 `AccessibilityInteractionController` 在 ViewRoot looper 上生成节点——这就是应用没有主动刷新 UI、主线程仍出现无障碍节点构造的原因（发起者可能是别的进程的 AccessibilityService 或测试工具的 UiAutomation）。分析阻塞必须先判断走的是哪条路径：把事件上报的异步关系套到节点查询上，或反过来，都会得出错误归因；`ViewRootImpl.SendWindowContentChangedAccessibilityEvent` 与 `ViewConfiguration.getSendRecurringAccessibilityEventsInterval()` 在 View 侧还有一层内容变化节流（AAOS13 核对），对象复用减少分配、节流减少发送次数，两者不是一回事。
 
@@ -116,7 +116,7 @@ HWC 为每帧的每个 layer 决定合成类型：`DEVICE` 表示由显示硬件
 
 不会固定遍历整棵树。AAOS13 按源码核对的三项边界：单次预取上限 `MAX_NUMBER_OF_PREFETCHED_NODES = 50`（`AccessibilityNodeInfo.java`）；可中断的 prefetch 在 ViewRoot handler 中已有用户交互消息等待时停止；窗口正在滚动时客户端会清除 prefetch flags。查询请求先由服务连接找到目标窗口的 `IAccessibilityInteractionConnection`，普通 View 走 `onInitializeAccessibilityNodeInfo()`，虚拟节点（画布、自绘控件、WebView 内部内容）走 `AccessibilityNodeProvider`；服务侧最多等待 5000 ms（`AccessibilityInteractionClient` 的 `TIMEOUT_INTERACTION_MILLIS`），这段等待发生在服务线程，而目标应用承担的是另一类风险——ViewRoot looper 上新增节点创建任务，可能让同一线程上的输入分发、traversal 或帧回调延后。做法：定位成本时同时记录请求 API、prefetch flags、缓存命中、provider 与实际返回节点数；应用没有主动操作时出现的节点工作，应先找查询发起者，而不是在应用内找"谁在刷 UI"。
 
-**Q29: [learning] 应用侧做无障碍性能优化时，哪些做法安全、哪些会破坏语义，`minDurationBetweenContentChanges` 解决什么问题？**
+**Q29: [learning] 应用侧做无障碍性能优化时，哪些做法安全、哪些会破坏语义，minDurationBetweenContentChanges 解决什么问题？**
 
 安全底线是先保证语义正确再去掉无意义工作：纯装饰图片、分隔线和语义已由父控件表达的重复子元素适合 `importantForAccessibility="no"`，`NO_HIDE_DESCENDANTS` 会让整个子树从无障碍树消失、只在父节点能提供等价说明时使用；按钮图标、错误提示、金额与开关状态不能照此隐藏。节点回调（`onInitializeAccessibilityNodeInfo()`、provider 查询）处在 UI 工作路径上，应只读取已准备好的状态，把格式化提前到业务状态更新处（如滚动行情控件在 `updatePrice()` 里更新 `contentDescription`，查询时直接读取）；API 34 起 `setMinDurationBetweenContentChanges()` 可声明高频内容变化的最小通知间隔，适合进度、计时器、行情这类持续变化但无须逐次朗读的节点，焦点、错误与关键结果仍需及时上报。RecyclerView 侧用 DiffUtil 精确更新并复用稳定 delegate，避免全量 `notifyDataSetChanged()` 使语义大范围失效；不要临时用 `NO_HIDE_DESCENDANTS` 做批量更新，也不要在动画每帧写入语义属性。测量上做受控 A/B（无服务、只目标服务、多服务共存、精简订阅版本四组），线上产品不能为帧率自动关闭用户的辅助服务。
 
@@ -134,7 +134,7 @@ HWC 为每帧的每个 layer 决定合成类型：`DEVICE` 表示由显示硬件
 
 不能。普通 View 页面由事件触发 invalidate、Choreographer 驱动 traversal，而游戏由自有 game loop 主动生产帧：输入采样、simulation（物理与玩法更新）、render 准备、RHI 提交、present 各有节奏，很多引擎用固定时间步长更新物理、再用插值生成渲染快照（外部框架，未本地核对）。"游戏 60 FPS"只说明每秒完成约 60 帧，推不出 simulation 每秒 60 次，更推不出触控到显示只有一帧——CPU、GPU 与显示可以跨帧并行（game 准备第 N+1 帧时 render 处理第 N 帧、GPU 执行第 N-1 帧），队列中的在途帧会让输入结果晚一到两轮才显示。做法：分析从某次输入被哪一轮 simulation 读取开始，沿 Render/RHI、GPU、swapchain、BufferQueue、SurfaceFlinger 追到对应帧 present；给同一输入和同一帧分配稳定 ID 写入各阶段 marker；同时统计 frame-time 分布、P90/P99、present-to-present 间隔与输入到显示延迟，不只看平均 FPS。游戏仍运行在 Android 窗口系统中，自有 game loop 不会绕开 SurfaceFlinger。
 
-**Q33: [learning] Unity 的 `Gfx.WaitForPresentOnGfxThread` 变长能直接判定 GPU bound 吗？Perfetto 里为什么看不到 `PlayerLoop`？**
+**Q33: [learning] Unity 的 Gfx.WaitForPresentOnGfxThread 变长能直接判定 GPU bound 吗？Perfetto 里为什么看不到 PlayerLoop？**
 
 不能。该 marker 下的等待可能来自 VSync、frame pacer 主动等待、swapchain 或 BufferQueue 背压，也可能是 GPU 本身，要结合 GPU 完成时间、BufferQueue 深度与目标 interval 判断；短等待也可能是在主动限制 in-flight 深度，不能因为表现为 CPU idle 就一概当瓶颈删除（外部框架，未本地核对）。Perfetto 看不到 `PlayerLoop` 是数据源边界：Unity Profiler marker、Unreal Insights 的 task 事件属于引擎自己的 trace 体系，Perfetto 默认只显示 OS 线程、调度状态、futex、binder、图形与 GPU/SurfaceFlinger 信息——没有 `PlayerLoop` 不能证明 Unity 主线程没有工作。引擎线程要按职责识别（Game/Logic、Render、RHI、worker）再用线程名辅助确认：线程名随版本、渲染后端与构建变化，名为 RenderThread 的线程也不一定是引擎渲染。做法：Perfetto 看系统调度、频率、GPU 与 SF，Unity Profiler 或 Unreal Insights 看引擎阶段，两边写入统一 frame id，才能把某次触控对应到哪一帧。
 
