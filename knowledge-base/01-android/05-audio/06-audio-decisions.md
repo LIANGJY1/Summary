@@ -63,7 +63,7 @@
 外部媒体源应由 Android 应用代表，替它申请焦点并处理媒体按键。音频样本是否经过 Android 混音取决于硬件接入方案，不改变应用需要参与焦点协作这一点。
 
 1. **由 Android 路由外部输入：**广播调谐器等输入可通过 HwAudioSource/音频 patch 接入系统策略与输出路径。具体连接要求策略配置和 HAL 设备能力支持，音频样本可由 Android 音频链路继续处理。
-2. **由车载硬件在 Android 下游混音：**外部输入样本可以不进入 AudioFlinger。Android 应用仍需提供媒体会话、报告播放状态、管理媒体键并按真实用途（如 `USAGE_MEDIA`）申请焦点；HAL 还需通过 AudioControl HAL 的外部焦点接口等机制告知系统外部源状态，避免它与 Android 媒体互相覆盖。
+2. **由车载硬件在 Android 下游混音：**外部输入样本可以不进入 AudioFlinger。Android 应用仍需提供媒体会话、报告播放状态、管理媒体键并按真实用途（如 `USAGE_MEDIA`）申请焦点。HAL 还需通过 AudioControl HAL 的外部焦点接口等机制告知系统外部源状态，避免它与 Android 媒体互相覆盖。
 3. **保护安全提示：**焦点是应用和系统组件之间的协作协议，不是硬件静音开关。必须保证可听的车辆告警要由车型系统设计确定其优先级和最终输出保障。
 
 来源：[AAOS 音频概览的外部媒体源建议](https://source.android.com/docs/automotive/audio)、[AAOS 连接输入设备与 HwAudioSource](https://source.android.com/docs/automotive/audio/optional-player)、[AudioControl HAL 外部焦点](https://source.android.com/docs/automotive/audio/audio-control-hal)。

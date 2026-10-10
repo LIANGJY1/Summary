@@ -4,38 +4,38 @@
 
 **Q1: [learning] 端侧 LLM 推理的 TTFT 和 TPOT 应该怎么定义与测量，为什么平均 TPOT 不足以描述生成体验？**
 
-TTFT 等于首个 token 到达时间减请求进入时间，覆盖分词、排队和冷启动，对应用户实际等待；TPOT 等于最后一个 token 与首个 token 的时间差除以输出 token 数减 1，只在输出多于 1 个 token 时有定义。TPOT 是整段 decode 的平均值，会掩盖个别 token 的停顿，工程报告还应给出相邻 token 延迟的 P50、P95、最大值与随时间变化的曲线。
+TTFT 等于首个 token 到达时间减请求进入时间，覆盖分词、排队和冷启动，对应用户实际等待。TPOT 等于最后一个 token 与首个 token 的时间差除以输出 token 数减 1，只在输出多于 1 个 token 时有定义。TPOT 是整段 decode 的平均值，会掩盖个别 token 的停顿，工程报告还应给出相邻 token 延迟的 P50、P95、最大值与随时间变化的曲线。
 
-测量口径的关键边界：要分析执行后端时应单独报告 prefill 区间，并把模型文件读取、权重映射、后端初始化、计算图编译与首轮 kernel 预热分开统计，不能把预热后的时间称为冷启动 TTFT。采用推测解码或一次提交多 token 的运行时，输出回调与硬件 kernel 不再一一对应，此时 token 到达间隔仍可描述用户体验，但不能据此推断每个 token 的硬件执行周期。能耗同理要定分母：`prefill_energy/input_token` 反映长输入处理成本，`decode_energy/output_token` 适合比较连续生成，`request_energy/output_token` 包含加载与应用开销，`joules/successful_request` 还能反映取消与失败造成的浪费；不同口径可以同时报告，不能把其中一个简称"模型能效"后横向比较。
+测量口径的关键边界：要分析执行后端时应单独报告 prefill 区间，并把模型文件读取、权重映射、后端初始化、计算图编译与首轮 kernel 预热分开统计，不能把预热后的时间称为冷启动 TTFT。采用推测解码或一次提交多 token 的运行时，输出回调与硬件 kernel 不再一一对应，此时 token 到达间隔仍可描述用户体验，但不能据此推断每个 token 的硬件执行周期。能耗同理要定分母：`prefill_energy/input_token` 反映长输入处理成本，`decode_energy/output_token` 适合比较连续生成，`request_energy/output_token` 包含加载与应用开销，`joules/successful_request` 还能反映取消与失败造成的浪费。不同口径可以同时报告，不能把其中一个简称“模型能效”后横向比较。
 
 **Q2: [learning] Android 上 EAS 与 CPUFreq（schedutil）分别负责什么，为什么看到频率变化不能归因于调度器改了放置？**
 
-EAS 负责选核：内核 fair.c 的 `find_energy_efficient_cpu()` 借助 Energy Model 估算任务放到不同 CPU 的能量变化，回答"任务放在哪个可用 CPU 更合适"；schedutil 与 CPUFreq 负责选频：`get_next_freq()` 按调度器利用率映射目标频率，再受 policy 上下限、`freq_qos` 请求、热限制与可用频点约束。两条路径相互影响——任务落在哪个 cluster 决定可用容量与频点，频率又影响执行时间——但必须分开观察，任务迁核后变快不能直接归因于 governor 升频，看到 `cpu_frequency` 变化也不能断定 EAS 改变了放置。
+EAS 负责选核：内核 fair.c 的 `find_energy_efficient_cpu()` 借助 Energy Model 估算任务放到不同 CPU 的能量变化，回答“任务放在哪个可用 CPU 更合适”。schedutil 与 CPUFreq 负责选频：`get_next_freq()` 按调度器利用率映射目标频率，再受 policy 上下限、`freq_qos` 请求、热限制与可用频点约束。两条路径相互影响——任务落在哪个 cluster 决定可用容量与频点，频率又影响执行时间——但必须分开观察，任务迁核后变快不能直接归因于 governor 升频，看到 `cpu_frequency` 变化也不能断定 EAS 改变了放置。
 
-边界：Energy Model 只用于调度估算，不是测量整机功耗的仪器；GPU、内存 DVFS 多由 SoC 厂商驱动与策略管理，AOSP 没有让普通应用指定 GPU 或 DRAM 频点的统一 API，某台设备的 sysfs 节点不能当作跨设备接口。本组内核路径按材料 Android 17（android17-6.18 内核）语境转写，本地 AAOS13 树不含内核源码。
+边界：Energy Model 只用于调度估算，不是测量整机功耗的仪器。GPU、内存 DVFS 多由 SoC 厂商驱动与策略管理，AOSP 没有让普通应用指定 GPU 或 DRAM 频点的统一 API，某台设备的 sysfs 节点不能当作跨设备接口。本组内核路径按材料 Android 17（android17-6.18 内核）语境转写，本地 AAOS13 树不含内核源码。
 
 **Q3: [learning] LLM decode 阶段 CPU 与 GPU 利用率都不高，TPOT 却很差，可能有哪些原因？**
 
-decode 呈"CPU 短暂工作—提交—等待加速器—读取结果—采样"的交替过程，任一环节的等待都会拉长 token 间隔，而两侧的平均利用率都不高，所以单张利用率截图无法证明升频策略有问题。常见原因：
+decode 呈“CPU 短暂工作—提交—等待加速器—读取结果—采样”的交替过程，任一环节的等待都会拉长 token 间隔，而两侧的平均利用率都不高，所以单张利用率截图无法证明升频策略有问题。常见原因：
 
-1. **串行依赖**：CPU 必须等加速器结果才能采样并发起下一轮，任一侧空闲可能表示在等待前一阶段；
-2. **短时突发**：短 kernel 的利用率在采样窗口内被平均，频率尚未稳定升高工作已结束；
-3. **跨设备交接**：CPU 提交慢让 GPU 暂时没工作，GPU 执行慢又让 CPU 休眠；
-4. **带宽瓶颈**：计算单元升频后权重或 KV cache 受带宽限制，延迟改善很小；
-5. **热与功率上限**：观测到的低频来自 thermal clamp 或功率预算，不是 governor 低估；
+1. **串行依赖**：CPU 必须等加速器结果才能采样并发起下一轮，任一侧空闲可能表示在等待前一阶段。
+2. **短时突发**：短 kernel 的利用率在采样窗口内被平均，频率尚未稳定升高工作已结束。
+3. **跨设备交接**：CPU 提交慢让 GPU 暂时没工作，GPU 执行慢又让 CPU 休眠。
+4. **带宽瓶颈**：计算单元升频后权重或 KV cache 受带宽限制，延迟改善很小。
+5. **热与功率上限**：观测到的低频来自 thermal clamp 或功率预算，不是 governor 低估。
 6. **后台竞争**：相机、显示、网络与系统服务共同消耗 CPU、带宽与热余量。
 
 诊断应从 token 时间线开始，再关联 CPU 放置、频率、调度、内存与温度的同一时间轴。
 
 **Q4: [learning] 普通应用在端侧 LLM 能效上能做什么、不能做什么？**
 
-普通应用能改变工作负载并向系统描述时间目标：选择模型、量化格式、上下文长度、采样参数，选择运行时公开的 CPU/GPU/NPU 后端，调整线程数与请求队列，并在 API 支持时创建 ADPF hint session、查询 thermal status；不能指定硬件频率、修改 governor 或 thermal 配置，也不应直接调用 AIDL Power HAL——`IPower` 是系统与厂商实现之间的接口，Framework API 负责身份、权限与版本兼容。
+普通应用能改变工作负载并向系统描述时间目标：选择模型、量化格式、上下文长度、采样参数，选择运行时公开的 CPU/GPU/NPU 后端，调整线程数与请求队列，并在 API 支持时创建 ADPF hint session、查询 thermal status。不能指定硬件频率、修改 governor 或 thermal 配置，也不应直接调用 AIDL Power HAL——`IPower` 是系统与厂商实现之间的接口，Framework API 负责身份、权限与版本兼容。
 
-这条边界决定了优化的优先级：频率策略只能在既定工作量上取舍，减少每个请求必须完成的计算与数据传输通常更稳定。量化收益要确认后端是否原生支持该位宽、不支持的算子是否回退 CPU；KV cache 容量随上下文增长，应记录运行时真实分配而非只按模型配置推算；内存允许时应复用模型映射、已编译图与长期 session，避免每次对话重复加载编译。root 实验机上的固频实验（如 FUSE 论文在 root Pixel 7 上把最低/最高频率设为同一值）会绕过平台功耗与温控约束，其结论不能写成 SDK 能力。
+这条边界决定了优化的优先级：频率策略只能在既定工作量上取舍，减少每个请求必须完成的计算与数据传输通常更稳定。量化收益要确认后端是否原生支持该位宽、不支持的算子是否回退 CPU。KV cache 容量随上下文增长，应记录运行时真实分配而非只按模型配置推算。内存允许时应复用模型映射、已编译图与长期 session，避免每次对话重复加载编译。root 实验机上的固频实验（如 FUSE 论文在 root Pixel 7 上把最低/最高频率设为同一值）会绕过平台功耗与温控约束，其结论不能写成 SDK 能力。
 
 **Q5: [learning] 应用如何用 PerformanceHintManager 为 LLM decode 建立性能提示，Android 13 与 Android 17 的 API 差异是什么？**
 
-通过 `getSystemService(PerformanceHintManager.class)` 为一组长期 worker 线程创建 hint session，表达"这些线程周期性完成一轮工作并希望在目标时间内结束"：每个周期调用 `reportActualWorkDuration()` 报告实际时长，目标变化时用 `updateTargetWorkDuration()` 更新。`createHintSession()` 可能返回 `null`，应用必须保留没有 session 时仍可正确执行的路径。
+通过 `getSystemService(PerformanceHintManager.class)` 为一组长期 worker 线程创建 hint session，表达“这些线程周期性完成一轮工作并希望在目标时间内结束”：每个周期调用 `reportActualWorkDuration()` 报告实际时长，目标变化时用 `updateTargetWorkDuration()` 更新。`createHintSession()` 可能返回 `null`，应用必须保留没有 session 时仍可正确执行的路径。
 
 ```java
 PerformanceHintManager manager =
@@ -47,41 +47,41 @@ if (session != null) {
 }
 ```
 
-版本差异已按本地 AAOS13 源码（`frameworks/base/core/java/android/os/PerformanceHintManager.java`）核对：Android 13 提供 `createHintSession(tids, initialTargetWorkDurationNanos)`、`updateTargetWorkDuration(long)` 与 `reportActualWorkDuration(long)`，没有 `setThreads()` 与 `setPreferPowerEfficiency()` 等更新 API（Android 17 语境下可用于更新线程集合、表达能效偏好与按 CPU/GPU 分项上报）；target 线程 ID 必须来自真实执行线程，不能用 UI 线程代替。用法条件：session 覆盖长期 worker，不能每生成一个 token 就创建销毁；target 取产品可接受的 token 周期，不能长期填达不到的极小值；actual 的统计边界要固定，不能这轮只量 GPU、下一轮把采样与 UI 回调计入。prefill 若没有稳定分块周期，可为边界明确的 chunk 用独立 session，或只为 decode 建 session 并用 trace 单独评估 TTFT。
+版本差异已按本地 AAOS13 源码（`frameworks/base/core/java/android/os/PerformanceHintManager.java`）核对：Android 13 提供 `createHintSession(tids, initialTargetWorkDurationNanos)`、`updateTargetWorkDuration(long)` 与 `reportActualWorkDuration(long)`，没有 `setThreads()` 与 `setPreferPowerEfficiency()` 等更新 API（Android 17 语境下可用于更新线程集合、表达能效偏好与按 CPU/GPU 分项上报）。target 线程 ID 必须来自真实执行线程，不能用 UI 线程代替。用法条件：session 覆盖长期 worker，不能每生成一个 token 就创建销毁。target 取产品可接受的 token 周期，不能长期填达不到的极小值。actual 的统计边界要固定，不能这轮只量 GPU、下一轮把采样与 UI 回调计入。prefill 若没有稳定分块周期，可为边界明确的 chunk 用独立 session，或只为 decode 建 session 并用 trace 单独评估 TTFT。
 
 **Q6: [learning] 测 LLM 推理能耗时，整机电池电流与 power rails（部件能量轨道）各能说明什么？**
 
-电池电流与电压代表整机功耗，屏幕、调制解调器与后台任务都计入结果，USB 充电会改变计数器含义，边充电的数据不能与放电测试比较；power rails 是按部件计量的能量轨道，依赖设备 `IPowerStats` 实现，很多量产设备不提供可用 rail，此时应报告"不可用"，不能用估算值填补。
+电池电流与电压代表整机功耗，屏幕、调制解调器与后台任务都计入结果，USB 充电会改变计数器含义，边充电的数据不能与放电测试比较。power rails 是按部件计量的能量轨道，依赖设备 `IPowerStats` 实现，很多量产设备不提供可用 rail，此时应报告“不可用”，不能用估算值填补。
 
-按 `E_request = ∫ V(t) × I(t) dt` 积分前必须核对电流正负方向的定义；若要扣除空闲基线，应在相近时间用相同的屏幕、网络、温度与采样配置测量，并同时保留未扣除的整机能量——基线扣除会放大短请求的误差。每组配置需要多次重复并随机安排测试顺序，避免"高性能配置"都在设备未升温时运行而"节能配置"都在升温后运行；使用外置功耗仪时还要记录供电路径、采样频率、电池是否被旁路，拆机旁路电池的结论只适用于该实验条件。race to idle（尽快完成后空闲）只有在更高瞬时功率被更短执行时间抵消、且没有提前触发温控或占用其他部件预算时才有能效优势，判断依据是请求总能量、持续 TPOT、热状态与恢复时间，不能只看峰值频率。
+按 `E_request = ∫ V(t) × I(t) dt` 积分前必须核对电流正负方向的定义。若要扣除空闲基线，应在相近时间用相同的屏幕、网络、温度与采样配置测量，并同时保留未扣除的整机能量——基线扣除会放大短请求的误差。每组配置需要多次重复并随机安排测试顺序，避免“高性能配置”都在设备未升温时运行而“节能配置”都在升温后运行。使用外置功耗仪时还要记录供电路径、采样频率、电池是否被旁路，拆机旁路电池的结论只适用于该实验条件。race to idle（尽快完成后空闲）只有在更高瞬时功率被更短执行时间抵消、且没有提前触发温控或占用其他部件预算时才有能效优势，判断依据是请求总能量、持续 TPOT、热状态与恢复时间，不能只看峰值频率。
 
 **Q7: [learning] 传感器批处理（batching）到底省了哪部分电，为什么它不能减少采样？**
 
-batching 省的是"缓冲与搬运 + AP 唤醒"两段成本：事件暂存在 sensor hub 的硬件 FIFO 中合并交付，减少应用处理器（AP）的唤醒次数；它不改变采样频率，传感器本体（MEMS、ADC、融合算法）的功耗仍在，所以"采样频率越低越省电"只覆盖传感器本体一部分成本。
+batching 省的是“缓冲与搬运 + AP 唤醒”两段成本：事件暂存在 sensor hub 的硬件 FIFO 中合并交付，减少应用处理器（AP）的唤醒次数。它不改变采样频率，传感器本体（MEMS、ADC、融合算法）的功耗仍在，所以“采样频率越低越省电”只覆盖传感器本体一部分成本。
 
-传感器耗电来自三个位置：**采样与计算**（频率、传感器类型、融合复杂度，发生在 MEMS/hub/融合算法）；**缓冲与搬运**（FIFO 深度、事件大小、共享方式，发生在 hub SRAM、硬件 FIFO、HAL FMQ 与 SensorService 队列）；**AP 唤醒与处理**（wake-up 属性、批量窗口、回调工作量，发生在 SoC resume、SensorService 与应用线程）。关键边界：`batch()` 只是提交配置，真正的省电来自 hub/FIFO 在 AP 之外暂存事件；没有硬件 FIFO 或低功耗 hub 时，即使 `batch()` 返回成功，也可能无法减少 AP 唤醒。
+传感器耗电来自三个位置：**采样与计算**（频率、传感器类型、融合复杂度，发生在 MEMS/hub/融合算法）。**缓冲与搬运**（FIFO 深度、事件大小、共享方式，发生在 hub SRAM、硬件 FIFO、HAL FMQ 与 SensorService 队列）。**AP 唤醒与处理**（wake-up 属性、批量窗口、回调工作量，发生在 SoC resume、SensorService 与应用线程）。关键边界：`batch()` 只是提交配置，真正的省电来自 hub/FIFO 在 AP 之外暂存事件。没有硬件 FIFO 或低功耗 hub 时，即使 `batch()` 返回成功，也可能无法减少 AP 唤醒。
 
 **Q8: [learning] registerListener 的 samplingPeriodUs 与 maxReportLatencyUs 分别控制什么，请求 50 Hz 加 5 秒延迟会不会变成 0.2 Hz？**
 
-`samplingPeriodUs` 控制采样频率（单位是微秒，20,000 µs 约为 50 Hz，只有增大它才降低频率）；`maxReportLatencyUs` 控制事件允许在 FIFO 暂存的最长交付延迟，正数表示允许批量交付，0 表示尽快上报。所以四参数重载请求"20,000 µs + 5,000,000 µs"仍以约 50 Hz 采样，只是允许每批最多等 5 秒交付，不会变成 0.2 Hz；应用回调可能一次收到多个事件，其 timestamp 早于回调时刻。
+`samplingPeriodUs` 控制采样频率（单位是微秒，20,000 µs 约为 50 Hz，只有增大它才降低频率）。`maxReportLatencyUs` 控制事件允许在 FIFO 暂存的最长交付延迟，正数表示允许批量交付，0 表示尽快上报。所以四参数重载请求"20,000 µs + 5,000,000 µs"仍以约 50 Hz 采样，只是允许每批最多等 5 秒交付，不会变成 0.2 Hz。应用回调可能一次收到多个事件，其 timestamp 早于回调时刻。
 
-两个参数都有边界。采样周期是提示值：硬件只有离散的输出数据率（ODR）档位，HAL 会就近映射，应用不能假定回调严格等间隔；而且不同 reporting mode 下含义不同——continuous 是期望采样周期，on-change 是最快事件间隔，one-shot 直接忽略（应使用 `requestTriggerSensor()` 而非 `registerListener()`）。`maxReportLatencyUs` 不降低采样频率，也不保证事件等到窗口结束：FIFO 已满、其他 sensor 到期、应用调用 `flush()` 或 AP 因其他原因醒来都会提前交付。理论批量时长上限可用"可用 FIFO 事件数除以采样频率"估算，`getFifoMaxEventCount() == 0` 表示不支持硬件 batching，共享 FIFO 的实际容量介于 `getFifoReservedEventCount()` 与 max 之间——50 Hz sensor 若只有 100 个槽位，请求 5 秒延迟也可能在约 2 秒后提前上报。
+两个参数都有边界。采样周期是提示值：硬件只有离散的输出数据率（ODR）档位，HAL 会就近映射，应用不能假定回调严格等间隔。而且不同 reporting mode 下含义不同——continuous 是期望采样周期，on-change 是最快事件间隔，one-shot 直接忽略（应使用 `requestTriggerSensor()` 而非 `registerListener()`）。`maxReportLatencyUs` 不降低采样频率，也不保证事件等到窗口结束：FIFO 已满、其他 sensor 到期、应用调用 `flush()` 或 AP 因其他原因醒来都会提前交付。理论批量时长上限可用“可用 FIFO 事件数除以采样频率”估算，`getFifoMaxEventCount() == 0` 表示不支持硬件 batching，共享 FIFO 的实际容量介于 `getFifoReservedEventCount()` 与 max 之间——50 Hz sensor 若只有 100 个槽位，请求 5 秒延迟也可能在约 2 秒后提前上报。
 
 **Q9: [learning] 同一个传感器被多个应用以不同参数请求时，硬件最终采用谁的配置？**
 
-SensorService 的 `SensorDevice` 为每个连接保存 `BatchParams`，由 `Info::selectBatchParams()` 聚合出硬件参数：忽略已标记 disabled 的连接，采样周期取所有有效连接的最小值（满足最快请求），每个连接的有效批量周期不短于其自身采样周期，聚合批量周期取这些值的最小值；若聚合批量周期不大于聚合采样周期则置 0，明确要求实时流式交付。本地 AAOS13 源码（`frameworks/native/services/sensorservice/SensorDevice.cpp`）核对，该聚合与置 0 逻辑在 Android 13 已存在。
+SensorService 的 `SensorDevice` 为每个连接保存 `BatchParams`，由 `Info::selectBatchParams()` 聚合出硬件参数：忽略已标记 disabled 的连接，采样周期取所有有效连接的最小值（满足最快请求），每个连接的有效批量周期不短于其自身采样周期，聚合批量周期取这些值的最小值。若聚合批量周期不大于聚合采样周期则置 0，明确要求实时流式交付。本地 AAOS13 源码（`frameworks/native/services/sensorservice/SensorDevice.cpp`）核对，该聚合与置 0 逻辑在 Android 13 已存在。
 
-推论：一个请求 200 Hz 且 `maxReportLatencyUs = 0` 的客户端，会使同一 handle 的硬件采用高频实时交付配置，另一个 10 Hz、10 秒 batching 的应用无法用自己的参数覆盖它。排查时用 `adb shell dumpsys sensorservice` 看 selected 值——它才是聚合后实际传给硬件的参数：selected batching period 为 0 时先检查其他客户端的请求聚合；selected 较大但事件仍提前到达，再查 FIFO 容量、共享 FIFO、flush 与 AP resume。
+推论：一个请求 200 Hz 且 `maxReportLatencyUs = 0` 的客户端，会使同一 handle 的硬件采用高频实时交付配置，另一个 10 Hz、10 秒 batching 的应用无法用自己的参数覆盖它。排查时用 `adb shell dumpsys sensorservice` 看 selected 值——它才是聚合后实际传给硬件的参数：selected batching period 为 0 时先检查其他客户端的请求聚合。selected 较大但事件仍提前到达，再查 FIFO 容量、共享 FIFO、flush 与 AP resume。
 
 **Q10: [learning] 灭屏后 non-wake-up 传感器事件缺失，是 HAL 丢包吗？wake-up 传感器又是怎么工作的？**
 
-不一定是丢包。non-wake-up sensor 不能唤醒 AP：AP suspend 期间事件继续写入 non-wake-up FIFO，FIFO 满后按环形缓冲覆盖较老的 continuous 事件，没有 FIFO 则事件直接丢失，`maxReportLatency` 不会为它唤醒 AP，AP 因其他原因醒来后才交付仍保留的事件；灭屏测试出现事件缺口可能符合 suspend 规则，不能直接判定 HAL 丢数据包。
+不一定是丢包。non-wake-up sensor 不能唤醒 AP：AP suspend 期间事件继续写入 non-wake-up FIFO，FIFO 满后按环形缓冲覆盖较老的 continuous 事件，没有 FIFO 则事件直接丢失，`maxReportLatency` 不会为它唤醒 AP，AP 因其他原因醒来后才交付仍保留的事件。灭屏测试出现事件缺口可能符合 suspend 规则，不能直接判定 HAL 丢数据包。
 
-wake-up sensor 允许 AP suspend，但必须在事件达到最大上报延迟、wake-up FIFO 即将满或 one-shot wake-up 触发时唤醒 AP，正数 `maxReportLatencyUs` 可让多个事件共用一次 AP resume；设备从 suspend 恢复时会尽量交付 FIFO 中全部内容，减少刚回 suspend 又被唤醒的概率。两个关键边界：相同传感器类型可同时存在 wake-up 与 non-wake-up 两个独立实例，必须用 `Sensor.isWakeUpSensor()` 判断当前实例，不能按 `TYPE_ACCELEROMETER` 等类型名推断；on-change sensor（如 step counter）有"最新事件保存在共享 FIFO 之外、不被 continuous 事件覆盖"的特殊保证，累计值语义依赖它。业务若要求灭屏期间每个事件都不丢，只能持 partial wake lock 保活或改用 wake-up sensor，两者都会显著改变功耗模型，通常应先确认业务是否只需要最新状态或累计结果。
+wake-up sensor 允许 AP suspend，但必须在事件达到最大上报延迟、wake-up FIFO 即将满或 one-shot wake-up 触发时唤醒 AP，正数 `maxReportLatencyUs` 可让多个事件共用一次 AP resume。设备从 suspend 恢复时会尽量交付 FIFO 中全部内容，减少刚回 suspend 又被唤醒的概率。两个关键边界：相同传感器类型可同时存在 wake-up 与 non-wake-up 两个独立实例，必须用 `Sensor.isWakeUpSensor()` 判断当前实例，不能按 `TYPE_ACCELEROMETER` 等类型名推断。on-change sensor（如 step counter）有“最新事件保存在共享 FIFO 之外、不被 continuous 事件覆盖”的特殊保证，累计值语义依赖它。业务若要求灭屏期间每个事件都不丢，只能持 partial wake lock 保活或改用 wake-up sensor，两者都会显著改变功耗模型，通常应先确认业务是否只需要最新状态或累计结果。
 
 **Q11: [learning] Android 12 起的高采样率限制是什么，为什么声明了 HIGH_SAMPLING_RATE_SENSORS 还可能被限？**
 
-目标版本为 Android 12（API 31）及以上的应用访问六类运动/姿态传感器（加速度计、未校准加速度计、陀螺仪、未校准陀螺仪、磁场、未校准磁场）时，普通 listener 默认最多约 200 Hz，Sensor Direct Channel 默认最高 `RATE_NORMAL`（通常约 50 Hz）；需要更高频率要在 manifest 声明 `android.permission.HIGH_SAMPLING_RATE_SENSORS`。声明了权限也可能仍被限制：用户关闭麦克风访问权限时，这六类传感器即使已有高采样权限也会受限，因为高频运动/姿态数据可能泄露音频相关信息。
+目标版本为 Android 12（API 31）及以上的应用访问六类运动/姿态传感器（加速度计、未校准加速度计、陀螺仪、未校准陀螺仪、磁场、未校准磁场）时，普通 listener 默认最多约 200 Hz，Sensor Direct Channel 默认最高 `RATE_NORMAL`（通常约 50 Hz）。需要更高频率要在 manifest 声明 `android.permission.HIGH_SAMPLING_RATE_SENSORS`。声明了权限也可能仍被限制：用户关闭麦克风访问权限时，这六类传感器即使已有高采样权限也会受限，因为高频运动/姿态数据可能泄露音频相关信息。
 
 ```xml
 <uses-permission
@@ -92,42 +92,42 @@ wake-up sensor 允许 AP suspend，但必须在事件达到最大上报延迟、
 
 **Q12: [learning] 多线程分别更新相邻计数器导致变慢，怎样判断是不是 false sharing，缓解的优先顺序是什么？**
 
-false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写，线程操作的是不同字段，却因字段同 line 而产生大量一致性协议通信——"共享"的是硬件维护一致性的 cache line，业务数据本身没有被多线程共同修改。定性不能只凭"字段相邻"：锁竞争、atomic 重试、调度与内存带宽不足会产生相似症状；地址级证据（Arm SPE、`perf c2c`）在量产 Android 设备上经常无法全部满足，得不到时应把结论写成"现象与共享 cache line 竞争一致"。
+false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写，线程操作的是不同字段，却因字段同 line 而产生大量一致性协议通信——“共享”的是硬件维护一致性的 cache line，业务数据本身没有被多线程共同修改。定性不能只凭“字段相邻”：锁竞争、atomic 重试、调度与内存带宽不足会产生相似症状。地址级证据（Arm SPE、`perf c2c`）在量产 Android 设备上经常无法全部满足，得不到时应把结论写成“现象与共享 cache line 竞争一致”。
 
-缓解按代价从低到高排查：先减少共享写入（每线程/每 CPU 累积后批量归并）、避免无条件写相同值、把一起读取一起更新的字段分组、将高频写字段与高频只读字段分开，最后才为已证实的热点增加对齐或 padding。NDK 可以用 `alignas(64)` 控制布局并用 `sizeof`/`offsetof` 验证构建结果，但 padding 修复不了 data race，目标硬件一致性粒度更大时还要重新验证；Java/Kotlin 对象布局属于 ART 实现细节，添加若干 `long` 字段或 `@Contended` 都没有公共 SDK 契约，应用层更稳的方案是减少共享可变对象、分片计数、批量提交并用基准测试验证。
+缓解按代价从低到高排查：先减少共享写入（每线程/每 CPU 累积后批量归并）、避免无条件写相同值、把一起读取一起更新的字段分组、将高频写字段与高频只读字段分开，最后才为已证实的热点增加对齐或 padding。NDK 可以用 `alignas(64)` 控制布局并用 `sizeof`/`offsetof` 验证构建结果，但 padding 修复不了 data race，目标硬件一致性粒度更大时还要重新验证。Java/Kotlin 对象布局属于 ART 实现细节，添加若干 `long` 字段或 `@Contended` 都没有公共 SDK 契约，应用层更稳的方案是减少共享可变对象、分片计数、批量提交并用基准测试验证。
 
 **Q13: [learning] C/C++ 数据布局中 AoS（结构体数组）与 SoA（分字段数组）怎么选？**
 
-选择由访问模式决定：只处理少数字段时（如只更新位置）SoA 能避免把颜色、速度等无关数据一并载入 cache；每次处理一个元素的全部字段时 AoS 可能更紧凑；折中方案是 AoSoA，按 SIMD 宽度或 tile 分组，在向量化与单元素访问之间平衡。
+选择由访问模式决定：只处理少数字段时（如只更新位置）SoA 能避免把颜色、速度等无关数据一并载入 cache。每次处理一个元素的全部字段时 AoS 可能更紧凑。折中方案是 AoSoA，按 SIMD 宽度或 tile 分组，在向量化与单元素访问之间平衡。
 
 量化时注意比例计算：AoS 元素 40 字节、循环只读 `x/y/z` 共 12 字节时，有效数据约占对象流量的 30%（12/40），不是固定套用 cache line 得出的比例，且 cache line 可能跨越两个对象，边界与数组起始地址有关。SoA 的代价是多个数组的构造成本与内存占用。判断依据用测量而不是经验排名：目标循环端到端耗时、bytes processed/item、L1D refill/LLC miss/TLB miss、向量化报告与内存占用，并对照自己的结构运行 `sizeof`/`offsetof` 与布局 dump，不要用想象中的框架类布局论证方案。
 
 **Q14: [learning] 把热循环里的 List<Float> 换成 FloatArray，收益来自哪里，什么时候值得做？**
 
-收益通常同时来自三个方向：减少装箱、减少分配和改善空间局部性，报告改动时必须说明包含哪些因素，不能把全部收益归给 cache。机制：`List<Float>` 每个元素访问都要经过对象引用和装箱对象（pointer chasing），数据密度低于 `FloatArray`；`IntArray` 连续保存 primitive 值，而 `Array<MyObject>` 连续保存的只是引用，对象本体仍分散在堆中，Java 多维数组是"数组的数组"，每一行是独立对象。
+收益通常同时来自三个方向：减少装箱、减少分配和改善空间局部性，报告改动时必须说明包含哪些因素，不能把全部收益归给 cache。机制：`List<Float>` 每个元素访问都要经过对象引用和装箱对象（pointer chasing），数据密度低于 `FloatArray`。`IntArray` 连续保存 primitive 值，而 `Array<MyObject>` 连续保存的只是引用，对象本体仍分散在堆中，Java 多维数组是“数组的数组”，每一行是独立对象。
 
-边界：这只在性能分析确认是热点的计算环节（图像、音频、统计、几何运算）值得做；不在热点的业务代码可读性与正确性更重要，常见做法是保留清晰的业务对象，只在热点环节把数据转换为批量 buffer。`ByteArray`/`FloatArray` 适合紧凑的批量处理，`Array<Int>`/`List<Int>` 涉及装箱对象。
+边界：这只在性能分析确认是热点的计算环节（图像、音频、统计、几何运算）值得做。不在热点的业务代码可读性与正确性更重要，常见做法是保留清晰的业务对象，只在热点环节把数据转换为批量 buffer。`ByteArray`/`FloatArray` 适合紧凑的批量处理，`Array<Int>`/`List<Int>` 涉及装箱对象。
 
 **Q15: [learning] 线程迁移到另一个 CPU 后会发生什么，cpu-migrations 上升能说明什么？**
 
-迁移后新核心的私有 cache 可能没有该线程最近使用的数据，需要从共享层级或同一硬件一致性域内的其他 cache 获取；原核心的全部 L1/L2 不会因迁移被软件统一失效，硬件一致性协议仍负责维护共享数据的可见性。所以"迁移清空原核心 cache"是错误模型，正确理解是"新核心可能缺数据、代价取决于多个条件"。
+迁移后新核心的私有 cache 可能没有该线程最近使用的数据，需要从共享层级或同一硬件一致性域内的其他 cache 获取。原核心的全部 L1/L2 不会因迁移被软件统一失效，硬件一致性协议仍负责维护共享数据的可见性。所以“迁移清空原核心 cache”是错误模型，正确理解是“新核心可能缺数据、代价取决于多个条件”。
 
 `cpu-migrations` 上升只是一条线索，判断迁移是否破坏局部性还要同时比较 CPU time、周期数、cache refill（从低层级重新填入 cache line 的次数）、实际运行的核心和端到端延迟。迁移成本取决于：工作集是否仍在共享 cache、数据能否从同一 cluster 的其他 cache 获取、两个核心是否跨 cluster、迁移间隔与工作集大小、迁移前后核心的微架构与频率、同期内存带宽与其他任务。
 
 **Q16: [learning] 怎么用 Simpleperf 判断一段代码是不是 memory-bound（主要受内存访问限制）？**
 
-先确认设备支持哪些 PMU 事件，再做组计数，最后才做热点采样：`simpleperf list`/`list raw`/`stat --print-hw-counter` 列出内核封装事件、raw 事件与硬件 counter 数量；`stat` 时把 `cpu-cycles,instructions` 与 `cache-references,cache-misses` 分组（同组事件尽量同时调度，可计算 IPC 与 miss ratio，发生 multiplexing 时输出中的 enabled/running 时间和警告必须保留）；确认 cache 事件与慢样本相关后，再用 `record -e cache-misses:u` 配合 `report --sort dso,symbol` 定位符号。
+先确认设备支持哪些 PMU 事件，再做组计数，最后才做热点采样：`simpleperf list`/`list raw`/`stat --print-hw-counter` 列出内核封装事件、raw 事件与硬件 counter 数量。`stat` 时把 `cpu-cycles,instructions` 与 `cache-references,cache-misses` 分组（同组事件尽量同时调度，可计算 IPC 与 miss ratio，发生 multiplexing 时输出中的 enabled/running 时间和警告必须保留）。确认 cache 事件与慢样本相关后，再用 `record -e cache-misses:u` 配合 `report --sort dso,symbol` 定位符号。
 
-低 IPC 不能单独证明 memory-bound：branch miss、指令 cache/TLB 压力、长依赖链、锁等待附近的短运行片段、前端/后端 stall、不同核心宽度与频率、PMU multiplexing 都会拉低 IPC。判断 memory-bound 至少要观察 cache/TLB refill、backend stall、内存带宽或访问延迟采样中的一部分，并通过改变数据布局或工作集做可控实验，确认延迟或吞吐随之改善。边界：不存在"cache miss 超过 10% 就该优化"的通用阈值；不同 cluster 可能使用不同 PMU，线程迁移会影响结果解释；普通 cache-miss 采样只能提示热点指令附近，不能单独证实 false sharing。
+低 IPC 不能单独证明 memory-bound：branch miss、指令 cache/TLB 压力、长依赖链、锁等待附近的短运行片段、前端/后端 stall、不同核心宽度与频率、PMU multiplexing 都会拉低 IPC。判断 memory-bound 至少要观察 cache/TLB refill、backend stall、内存带宽或访问延迟采样中的一部分，并通过改变数据布局或工作集做可控实验，确认延迟或吞吐随之改善。边界：不存在“cache miss 超过 10% 就该优化”的通用阈值。不同 cluster 可能使用不同 PMU，线程迁移会影响结果解释。普通 cache-miss 采样只能提示热点指令附近，不能单独证实 false sharing。
 
 **Q17: [learning] Startup Profile 与 Baseline Profile 各做什么，DEX 布局优化从哪个 AGP 版本开始可用？**
 
-Baseline Profile 供 ART 对常用方法进行 AOT 编译；Startup Profile 在构建期指导 R8/D8 优化启动代码在 DEX 中的布局，让启动关键类和方法更集中并尽量放入首个 `classes.dex`，从而减少启动阶段需要触及的代码页。DEX layout optimization 从 AGP 8.1 可用（8.1–8.2 需在 Baseline Profile 配置中显式启用，8.3 起默认启用），release 构建需开启 R8、minification 与完整优化，启动场景通过 `includeInStartupProfile = true` 进入 Startup Profile。
+Baseline Profile 供 ART 对常用方法进行 AOT 编译。Startup Profile 在构建期指导 R8/D8 优化启动代码在 DEX 中的布局，让启动关键类和方法更集中并尽量放入首个 `classes.dex`，从而减少启动阶段需要触及的代码页。DEX layout optimization 从 AGP 8.1 可用（8.1–8.2 需在 Baseline Profile 配置中显式启用，8.3 起默认启用），release 构建需开启 R8、minification 与完整优化，启动场景通过 `includeInStartupProfile = true` 进入 Startup Profile。
 
-收益可能同时来自 DEX 页局部性、page fault 减少、解压或映射过程变化以及编译产物布局变化，不能全部归因于 instruction-cache miss。验证方法：用 APK Analyzer 查看启动类与方法是否进入预期 DEX；AGP 8.8 及以上检查 AAB 内 `r8.json` 的 `"startup": true`；用 Macrobenchmark 分别测冷启动、温启动和多个入口，并固定 APK、编译状态、设备温度与系统版本。Startup Profile 应覆盖 launcher、deep link、通知入口等真实启动路径，也要避免让大量与启动无关的 journey 占满首个 DEX。
+收益可能同时来自 DEX 页局部性、page fault 减少、解压或映射过程变化以及编译产物布局变化，不能全部归因于 instruction-cache miss。验证方法：用 APK Analyzer 查看启动类与方法是否进入预期 DEX。AGP 8.8 及以上检查 AAB 内 `r8.json` 的 `"startup": true`。用 Macrobenchmark 分别测冷启动、温启动和多个入口，并固定 APK、编译状态、设备温度与系统版本。Startup Profile 应覆盖 launcher、deep link、通知入口等真实启动路径，也要避免让大量与启动无关的 journey 占满首个 DEX。
 
 **Q18: [learning] Adreno、Mali/Xclipse 的架构名称与厂商 NPU 百分比能说明什么？GPU 或内存数据缺失时怎么避免误判？**
 
-架构名称只给出排查方向：Adreno 的 sliced architecture 与 FlexRender 是 Qualcomm 对自家 GPU 的描述，tile-based rendering 不能概括所有 Adreno 负载；Mali/Immortalis 是可配置 IP，同一代 IP 可以有 10–24 个着色器核心等不同规模，看到 Mali-G1 Ultra 仍要确认具体核心数与驱动；Xclipse 960 的 RDNA 代际官方未在产品页给出，要读实机 Vulkan/OpenGL ES 与驱动信息。API 支持由整机驱动决定：产品页列的是 IP 上限，应用能用哪些 Vulkan/OpenGL ES 扩展取决于量产驱动的 feature level。厂商 NPU 百分比用各自的模型、精度、功耗模式与上一代基线，缺少共同分母不能相加排序；端侧推理要看算子与动态形状是否被加速、计算图切成多少子图、哪些算子回退 CPU/GPU（NNAPI NDK 从 Android 15 起弃用，新方案选受支持的运行时与 delegate）。
+架构名称只给出排查方向：Adreno 的 sliced architecture 与 FlexRender 是 Qualcomm 对自家 GPU 的描述，tile-based rendering 不能概括所有 Adreno 负载。Mali/Immortalis 是可配置 IP，同一代 IP 可以有 10–24 个着色器核心等不同规模，看到 Mali-G1 Ultra 仍要确认具体核心数与驱动。Xclipse 960 的 RDNA 代际官方未在产品页给出，要读实机 Vulkan/OpenGL ES 与驱动信息。API 支持由整机驱动决定：产品页列的是 IP 上限，应用能用哪些 Vulkan/OpenGL ES 扩展取决于量产驱动的 feature level。厂商 NPU 百分比用各自的模型、精度、功耗模式与上一代基线，缺少共同分母不能相加排序。端侧推理要看算子与动态形状是否被加速、计算图切成多少子图、哪些算子回退 CPU/GPU（NNAPI NDK 从 Android 15 起弃用，新方案选受支持的运行时与 delegate）。
 
-数据缺失要防两类误判。GPU：Perfetto 的 gpu.renderstages、gpu.counters 数据依赖厂商 producer 注册，空轨道不能证明 GPU 空闲，采集前应查询设备公布的数据源并精确匹配名称，gpu_mem_total 是内存分配量不是带宽。内存："支持 LPDDR5X"只是控制器能力范围，5300 与 10667 未注明单位时不能直接比较，应用拿到的是受内存控制器、缓存与互连调度的有效带宽；Perfetto 没有所有设备通用的 DRAM bandwidth 轨道，没有计数器时用受控扰动实验（保持 GPU 场景不变、逐档增加 CPU 内存流量并观察帧时间与功耗）才能接近因果判断，时间相关性只能提出假设。
+数据缺失要防两类误判。GPU：Perfetto 的 gpu.renderstages、gpu.counters 数据依赖厂商 producer 注册，空轨道不能证明 GPU 空闲，采集前应查询设备公布的数据源并精确匹配名称，gpu_mem_total 是内存分配量不是带宽。内存：“支持 LPDDR5X”只是控制器能力范围，5300 与 10667 未注明单位时不能直接比较，应用拿到的是受内存控制器、缓存与互连调度的有效带宽。Perfetto 没有所有设备通用的 DRAM bandwidth 轨道，没有计数器时用受控扰动实验（保持 GPU 场景不变、逐档增加 CPU 内存流量并观察帧时间与功耗）才能接近因果判断，时间相关性只能提出假设。

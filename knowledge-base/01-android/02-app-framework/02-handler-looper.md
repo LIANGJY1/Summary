@@ -91,7 +91,7 @@ A/B 验证使用兼容性命令切换变更，并在每次切换后重启应用�
 
 兼容性开关适合开发验证与故障隔离，不应成为应用长期依赖的产品配置。
 
-**Q8: DeliQueue 用什么结构替代"一把锁加一条有序链表"？排序成本转移到了哪里？**
+**Q8: [learning] DeliQueue 用什么结构替代“一把锁加一条有序链表”？排序成本转移到了哪里？**
 
 生产者通过 VarHandle CAS 把消息压入共享的 `MessageStack`（Treiber 栈）。Looper 用 `heapSweep()` 将新消息整理到自己独占的两个最小堆：`mSyncHeap` 保存同步消息与屏障，`mAsyncHeap` 保存异步消息。删除消息时，代码先对 `Message.flags` 做 CAS 并设置 `FLAG_REMOVED`，将消息逻辑删除。墓碑节点进入无锁 freelist，再由 Looper 在 `drainFreelist()` 中物理移除。
 
@@ -115,7 +115,7 @@ Treiber 栈的单指针 CAS 无法自行消除 ABA 问题，而节点被回收�
 2. **墓碑生命周期：**删除标记节点必须保留到 Looper 物理清理，以免已删除节点又被当作新消息复用。
 3. **分配代价：**不复用全局池会比旧路径产生更多小对象。评估 DeliQueue 时应同时观察锁竞争、对象分配速率和 GC，不能只看队列操作时长。
 
-**Q10: 官方把 Android 17 的新队列称为"无锁 MessageQueue"，这意味着 MessageQueue 里没有任何锁、CAS 一定比锁快吗？**
+**Q10: [learning] 官方把 Android 17 的新队列称为“无锁 MessageQueue”，这意味着 MessageQueue 里没有任何锁、CAS 一定比锁快吗？**
 
 都不是。“无锁”指核心消息的并发提交、检查与移除不再依赖旧的单一全局监视器锁。它描述的是进展保证，即某个参与线程暂停时，其他线程仍可继续推进。Android 17 的组合实现仍保留多把锁，CAS 与锁的快慢也取决于竞争形态。
 

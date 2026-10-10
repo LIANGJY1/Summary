@@ -69,10 +69,10 @@ MVP 按职责拆分界面、业务协调和数据操作：View 展示界面并�
 
 **Q7: [learning] MVP 中 Presenter 持有 View 引用为什么容易造成内存泄漏？Fragment 场景下绑定与解绑的时点应怎么选？**
 
-Presenter 为了向页面发布状态，必须通过 View 接口持有页面的引用；泄漏发生在引用的存活期超过页面本身——Presenter 被比页面更长寿的对象（应用级仓库、单例、仍在执行的异步任务）持有时，Activity 或 Fragment 连同整棵视图树都被钉住无法回收。因此引用管理与任务取消必须跟随页面销毁时点：
+Presenter 为了向页面发布状态，必须通过 View 接口持有页面的引用。泄漏发生在引用的存活期超过页面本身——Presenter 被比页面更长寿的对象（应用级仓库、单例、仍在执行的异步任务）持有时，Activity 或 Fragment 连同整棵视图树都被钉住无法回收。因此引用管理与任务取消必须跟随页面销毁时点：
 
 1. **Activity 页面**：在 onDestroy 中 detach，让 Presenter 置空 View 引用，并取消属于该页面的任务。
-2. **Fragment 页面**：视图与实例的销毁是两段式，onDestroyView 早于 onDestroy，返回栈回退、ViewPager 切页等场景都只销毁视图而不销毁实例。View 绑定应在 onViewCreated 建立、onDestroyView 解除；属于页面的异步任务可以延后到 onDestroy 再取消。
-3. **任务侧**：RxJava 用 CompositeDisposable 统一收集订阅并在解绑时 clear；协程绑定明确的 CoroutineScope 并在销毁时 cancel，避免回调越过已销毁的页面。
+2. **Fragment 页面**：视图与实例的销毁是两段式，onDestroyView 早于 onDestroy，返回栈回退、ViewPager 切页等场景都只销毁视图而不销毁实例。View 绑定应在 onViewCreated 建立、onDestroyView 解除。属于页面的异步任务可以延后到 onDestroy 再取消。
+3. **任务侧**：RxJava 用 CompositeDisposable 统一收集订阅并在解绑时 clear。协程绑定明确的 CoroutineScope 并在销毁时 cancel，避免回调越过已销毁的页面。
 
-一种常见“修复”是用弱引用持有 View，但它通常不是首选：引用何时失效不可控，每次发布状态都要判空且可能已经为 null，等于把生命周期时序问题转嫁给零散的判空，泄漏只是变成“更新悄悄失效”，还掩盖了真正的所有权错误。时点明确的显式解绑可测试、可追踪，应优先采用；弱引用只适合确实无法介入销毁时序的遗留代码作为止血手段。
+一种常见“修复”是用弱引用持有 View，但它通常不是首选：引用何时失效不可控，每次发布状态都要判空且可能已经为 null，等于把生命周期时序问题转嫁给零散的判空，泄漏只是变成“更新悄悄失效”，还掩盖了真正的所有权错误。时点明确的显式解绑可测试、可追踪，应优先采用。弱引用只适合确实无法介入销毁时序的遗留代码作为止血手段。

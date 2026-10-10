@@ -21,7 +21,7 @@
 
 1. `FLAG_ACTIVITY_NEW_TASK`：要求系统在任务上下文中启动 Activity。系统会尝试选择合适的已有任务。没有可复用任务时才创建新任务。
 2. `FLAG_ACTIVITY_SINGLE_TOP`：目标实例已位于所选任务栈顶时复用它，并向 `onNewIntent()` 交付新 Intent。目标实例不在栈顶时通常创建新实例。
-3. `FLAG_ACTIVITY_CLEAR_TOP`：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。对 `standard` 目标且未加 `SINGLE_TOP` 时，目标实例自身也随上方页面一起出栈销毁并重建新实例；加上 `SINGLE_TOP` 才改为通过 `onNewIntent()` 复用现有实例。
+3. `FLAG_ACTIVITY_CLEAR_TOP`：在目标实例所在任务中清除它上方的 Activity。目标实例是否复用、收到 `onNewIntent()` 还是重新创建，还取决于 launchMode 及是否同时使用 `SINGLE_TOP`。对 `standard` 目标且未加 `SINGLE_TOP` 时，目标实例自身也随上方页面一起出栈销毁并重建新实例。加上 `SINGLE_TOP` 才改为通过 `onNewIntent()` 复用现有实例。
 
 判断结果时分别确认所选任务、目标实例在栈中的位置和最终回调。不能只依据单个 flag 名称推断完整返回栈。
 
@@ -113,7 +113,7 @@ AAOS 13 的 `ActivityTaskSupervisor.startSpecificActivity()` 体现了进程分�
 非 Activity 上下文不属于任何任务，框架无法决定新 Activity 的落点，因此要求 Intent 显式携带 `FLAG_ACTIVITY_NEW_TASK`，让系统按 taskAffinity 选择目标任务，找不到再新建。
 
 1. **报错条件**：Android 13 的 `ContextImpl.startActivity()` 在 Intent 未带 `FLAG_ACTIVITY_NEW_TASK`、`ActivityOptions` 也未指定目标任务 id 时抛出 `AndroidRuntimeException`，文案即 "Calling startActivity() from outside of an Activity context requires the FLAG_ACTIVITY_NEW_TASK flag"。
-2. **版本豁免**：targetSdk 介于 Android N 与 O MR1 之间时不抛出，源码注释说明这是为兼容该区间已存在的历史 bug 而保留；其余 targetSdk 均受此检查约束。
+2. **版本豁免**：targetSdk 介于 Android N 与 O MR1 之间时不抛出，源码注释说明这是为兼容该区间已存在的历史 bug 而保留。其余 targetSdk 均受此检查约束。
 3. **加上 flag 后的行为**：系统按目标 Activity 的 taskAffinity 查找可复用任务，复用规则与从 Activity 发起时相同。但新页面不在调用方的返回栈里，评估按返回的行为时要按任务归属单独判断。
 4. **Activity 为何不受限**：Activity 重写了 `startActivity()`，经 `Instrumentation` 发起启动并携带自身所属任务信息，不需要额外 flag。
 

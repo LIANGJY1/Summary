@@ -37,7 +37,7 @@ AudioManager 是应用侧代理。system_server 的 AudioService/MediaFocusContr
 
 **Q4: [learning] 一次短音效先返回 GRANTED，随后媒体没有停，是谁“没处理焦点”？**
 
-不能仅凭“音乐没停”判定有一方没有处理焦点。AAOS 13 默认矩阵允许 `MUSIC → SYSTEM_SOUND` 并发；实际车型可改音频配置，因此应先确认该设备的矩阵。
+不能仅凭“音乐没停”判定有一方没有处理焦点。AAOS 13 默认矩阵允许 `MUSIC → SYSTEM_SOUND` 并发。实际车型可改音频配置，因此应先确认该设备的矩阵。
 
 根据请求和旧持有者状态，可能出现不同结果：
 
@@ -45,4 +45,4 @@ AudioManager 是应用侧代理。system_server 的 AudioService/MediaFocusContr
 2. **交互要求旧媒体让位**：新请求的 gain 类型和旧媒体的 duck 行为会影响仲裁。若旧媒体配置为 duck 时暂停，或交互是 transient/exclusive，CarAudioFocus 可将媒体移入失焦者并分发相应 loss。
 3. **结果与预期不符**：依次核对两项请求的 gain、AudioAttributes/context、所属音区、旧媒体是否仍持焦，以及车机外部 AudioPolicy 是否已注册。否则单看应用包名或“播放中”状态不足以定位仲裁结果。
 
-焦点裁决和实际衰减是两件事：双方仍持焦时，应用不一定收到要求暂停的回调；应另查 CarDucking 与 HAL 的设备级 duck 决策。来源：[AAOS 13 FocusInteraction.evaluateRequest](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/FocusInteraction.java)、[AAOS 13 CarAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。
+焦点裁决和实际衰减是两件事：双方仍持焦时，应用不一定收到要求暂停的回调。应另查 CarDucking 与 HAL 的设备级 duck 决策。来源：[AAOS 13 FocusInteraction.evaluateRequest](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/FocusInteraction.java)、[AAOS 13 CarAudioFocus](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarAudioFocus.java)。

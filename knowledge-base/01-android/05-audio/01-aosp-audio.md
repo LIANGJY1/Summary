@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。主线：audioserver 守护进程与服务、AudioPolicyService 路由策略、AudioFlinger 输出线程与混音缓冲、Direct/Offload 接受约束、音量与效果链、AudioTrack/AAudio 数据路径、录音与诊断。平台机制按 Android 13 源码核对。HAL 接口迁移按 Android 官方文档核对。应用侧延迟、AAudio 与 offload 实践见 [04-audio-latency.md](./04-audio-latency.md)。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] audioserver 为什么独立成进程？里面固定跑哪些服务，AAudioService 为什么是"条件启动"？**
+**Q1: [learning] audioserver 为什么独立成进程？里面固定跑哪些服务，AAudioService 为什么是“条件启动”？**
 
 audioserver 是独立的 native 守护进程，固定运行 AudioFlinger（混音引擎）与 AudioPolicyService（路由策略），并启动 MediaLogService。AAudioService 只有在系统 MMAP 策略明确允许时才启动（main_audioserver.cpp 核对）。独立进程划分故障域：audioserver 崩溃时，init 可以单独重启音频服务，不必重启编解码、相机等其他媒体进程。
 
@@ -27,7 +27,7 @@ AAudioService 的条件启动在 main_audioserver.cpp：先经 AudioFlinger 查�
 1. **audioserver 崩溃**：init 按 audioserver 服务配置重启进程。Android 13 的 audioserver.rc 在 audioserver 重启时通过 `onrestart` 重启配置中的 Audio HAL 服务，具体服务名由产品配置决定。
 2. **请求重启 HAL**：框架或 VTS 将 `sys.audio.restart.hal` 设为 `1` 时，audioserver.rc 按当前分支配置停止并启动 HAL 服务，再把属性重置为 `0`。这是显式重启请求，不应与 audioserver 崩溃恢复流程混为一谈。
 3. **应用观察**：audioserver 死亡后，AudioTrack/AudioRecord 原有服务端音轨消失。AudioTrack 在 start、obtainBuffer、getPosition 等路径遇到 `DEAD_OBJECT` 后可调用 `restoreTrack_l()`，尝试在重启后的服务里重建音轨（AudioTrack.cpp 多处恢复分支核对）。恢复成功后播放可继续，但故障间隙的声音不会补播。
-4. **HAL 单独重启**：HAL 服务的 init 定义、AudioFlinger 与 HAL 的重连结果以及厂商实现都会影响在播流恢复方式。应用应检查播放/录音 API 的返回状态并准备重建流。若忽略错误，可能表现为"播着播着没声"。
+4. **HAL 单独重启**：HAL 服务的 init 定义、AudioFlinger 与 HAL 的重连结果以及厂商实现都会影响在播流恢复方式。应用应检查播放/录音 API 的返回状态并准备重建流。若忽略错误，可能表现为“播着播着没声”。
 
 **Q3: [learning] 一条流从 AudioAttributes 到具体设备，路由决策在哪完成？两个策略引擎差在哪？**
 
@@ -36,7 +36,7 @@ AAudioService 的条件启动在 main_audioserver.cpp：先经 AudioFlinger 查�
 1. **enginedefault**：策略映射与设备选择编译进代码。
 2. **engineconfigurable**：由 audio_policy_engine_configuration.xml 驱动，产品可用 XML 定制策略、设备与音量曲线。配置示例分别在 `frameworks/av/services/audiopolicy/enginedefault/config` 与 `engineconfigurable/config`（目录核对）。
 
-排查意义：要改"某用途走某设备/某配置档"，动的是引擎 XML（configurable 引擎）或 framework 默认逻辑，改 AudioFlinger 改不动选择。
+排查意义：要改“某用途走某设备/某配置档”，动的是引擎 XML（configurable 引擎）或 framework 默认逻辑，改 AudioFlinger 改不动选择。
 
 **Q4: [learning] Android 13 的 audio_policy_configuration.xml 四个顶层标签各描述什么？**
 
@@ -98,7 +98,7 @@ openOutput 创建线程时按 flags 顺序判断（AudioFlinger.cpp 分支核对
 2. **stream 级音量与 mute**：每条输出线程维护 `mStreamTypes[stream]` 的 volume 与 mute（setStreamVolume/setStreamMute 核对）。
 3. **master mute**：整条输出线程静音。
 
-"铃声随静音模式消失、媒体继续出声"落在 stream 级 mute。system_server 的 AudioService 按 ringer mode 对相应 stream 下发 mute，AudioFlinger 只执行，不理解"静音模式"语义。
+“铃声随静音模式消失、媒体继续出声”落在 stream 级 mute。system_server 的 AudioService 按 ringer mode 对相应 stream 下发 mute，AudioFlinger 只执行，不理解“静音模式”语义。
 
 另有一个独立开关。checkSilentMode_l 读取 `ro.audio.silent`，非 0 时直接置 master mute（日志为 "Silence is golden"）。该属性对 REMOTE_SUBMIX 输出刻意不生效（Threads.cpp 核对），因此投屏、录制回环等远程子混音路径不会被此属性静音。
 
@@ -107,7 +107,7 @@ openOutput 创建线程时按 flags 顺序判断（AudioFlinger.cpp 分支核对
 效果链按挂点分三类，影响范围不同：
 
 1. **session 链**：以（输出线程，audio session id）为单位，同 session 的效果串成链，位置在混音输出之后，只影响本 session 的音轨（Effects.h 注释核对 "EffectChain represents a group of effects associated to one audio session"）。
-2. **aux 效果**：EffectModule 为它提供独立输入 buffer，各音轨把信号累积进去（Effects.h 核对）。这是"多轨共享一个效果输入"的特殊形态。
+2. **aux 效果**：EffectModule 为它提供独立输入 buffer，各音轨把信号累积进去（Effects.h 核对）。这是“多轨共享一个效果输入”的特殊形态。
 3. **设备级效果**：由 DeviceEffectManager 管理，挂在输出设备而非 session 上，影响该设备的全部输出（文件核对）。
 
 使用含义：应用创建 AudioEffect 时指定 session id 即挂 session 链，多音轨共享同一链。均衡器等全局行为要走设备效果路径，挂在单个 session 上无法覆盖全局输出。
@@ -139,10 +139,10 @@ STATIC 适合 UI 短音效、按键音这类时长已知、体量小、重复播
 
 两个 dumpsys 各管一面（服务注册名核对）：
 
-1. `dumpsys media.audio_flinger`（AudioFlinger，数据面）：每个输出/输入线程的当前配置（采样率、格式、flags）、tracks 列表（活动状态、音量、underrun 计数）与效果链——回答"声音现在处于什么数据状态"。
-2. `dumpsys audio`（AudioService，策略面）：设备与路由、各 stream 音量与 mute、焦点请求与 players 登记——回答"系统为什么这么路由与判定"。
+1. `dumpsys media.audio_flinger`（AudioFlinger，数据面）：每个输出/输入线程的当前配置（采样率、格式、flags）、tracks 列表（活动状态、音量、underrun 计数）与效果链——回答“声音现在处于什么数据状态”。
+2. `dumpsys audio`（AudioService，策略面）：设备与路由、各 stream 音量与 mute、焦点请求与 players 登记——回答“系统为什么这么路由与判定”。
 
-联合用法：无声问题先看 AudioFlinger 对应线程有没有 active track、underrun 是否增长，以区分"没送数据"与"送了没出声"。再看 AudioService 中该流的焦点是否被拒，以及路由是否落在预期设备。只看一边会把策略问题误判成数据问题，或反之。
+联合用法：无声问题先看 AudioFlinger 对应线程有没有 active track、underrun 是否增长，以区分“没送数据”与“送了没出声”。再看 AudioService 中该流的焦点是否被拒，以及路由是否落在预期设备。只看一边会把策略问题误判成数据问题，或反之。
 
 **Q13: [learning] MixerThread 一个混音周期内部经过哪几块缓冲？**
 
@@ -177,7 +177,7 @@ FastMixer 是 AudioFlinger 中独立的高优先级输出线程。它把应用 f
 
 源码线索：Threads.cpp 中的 MonoPipe、MonoPipeReader 和 mPipeSink 成员，以及 FastMixerState 中的 track 槽位约定。同步实现细节应以对应平台分支的 StateQueue 代码为准，不能仅凭社区文章推广到所有版本。
 
-**Q16: [learning] 普通混音线程上音轨采样率与输出不一致会被拒绝吗？"混音器只接受不超过输出 2 倍采样率"的说法对吗？**
+**Q16: [learning] 普通混音线程上音轨采样率与输出不一致会被拒绝吗？“混音器只接受不超过输出 2 倍采样率”的说法对吗？**
 
 普通 MixerThread 会把普通音轨重采样到输出采样率，因此输入采样率和输出采样率不同本身不会导致拒绝。Android 13 的源码以 `AUDIO_RESAMPLER_DOWN_RATIO_MAX` 限制过高的输入/输出比例，该常量为 256。“只接受输出采样率 2 倍以内”不是这段代码的约束。
 
@@ -203,7 +203,7 @@ AudioTimestamp 将音轨帧位置与单调时钟时间配对，表示该帧已�
 
 依据：Android AudioTrack 与 AudioTimestamp API 文档。
 
-**Q19: [learning] 无声问题想确认"系统内部哪一段开始没数据"，AudioFlinger 有什么抓音手段？**
+**Q19: [learning] 无声问题想确认“系统内部哪一段开始没数据”，AudioFlinger 有什么抓音手段？**
 
 Tee Sink 是 AudioFlinger 的调试功能，可保留混音链若干位置的短音频片段，供开发者比较数据在哪个阶段变成静音或失真。它默认关闭，启用需要自定义编译和运行时配置，并且只适合 userdebug/eng 等调试环境。音频文件可能包含敏感内容，分析和分享时必须按调试数据处理。
 

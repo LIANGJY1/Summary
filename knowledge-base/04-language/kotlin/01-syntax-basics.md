@@ -4,9 +4,9 @@
 
 ## 目录
 
-1. [第 1 章 基础语法](#第-1-章-基础语法)
-2. [第 2 章 函数与集合](#第-2-章-函数与集合)
-3. [第 3 章 类型系统](#第-3-章-类型系统)
+- [第 1 章 基础语法](#第-1-章-基础语法)
+- [第 2 章 函数与集合](#第-2-章-函数与集合)
+- [第 3 章 类型系统](#第-3-章-类型系统)
 
 ## 第 1 章 基础语法
 
@@ -90,7 +90,7 @@ buildXml {                        // 调用方：不用声明参数名
 | 函数体触发 lambda | `emit(builder)` | `builder.emit()`（或等价的 `emit(builder)`） |
 | 裸调用的解析 | lambda 内没有隐式接收者，访问对象必须写 `sb.` | 先查 lambda 自身参数/局部变量，再查 `this` 的成员 |
 
-两种写法的对象都是**函数体在调用 lambda 时传入的**，写 lambda 的人从不提供它——这是最容易忽略的一点：`buildXml { append(...) }` 里那个能 `append` 的对象，来自 `builder.emit()` 这一行。写法 B 中若裸名字与 lambda 自身参数撞名，参数优先，访问接收者成员须显式写 `this.append(...)`；需要区分内外两层 `this` 时用 `this@外层类名`。
+两种写法的对象都是**函数体在调用 lambda 时传入的**，写 lambda 的人从不提供它——这是最容易忽略的一点：`buildXml { append(...) }` 里那个能 `append` 的对象，来自 `builder.emit()` 这一行。写法 B 中若裸名字与 lambda 自身参数撞名，参数优先，访问接收者成员须显式写 `this.append(...)`。需要区分内外两层 `this` 时用 `this@外层类名`。
 
 这套机制与扩展函数相同：`fun StringBuilder.hello()` 体内能省略 `this` 调成员，写法 B 的 lambda 体内同理——相当于把扩展函数的函数体位置开放给调用方填写。
 
@@ -117,7 +117,7 @@ preferences.edit {
 
 Kotlin 的 `if` 是表达式：带 `else` 的 `if` 整体求值为实际执行的那个分支的值，因此可以出现在任何需要值的位置——`+` 的操作数、`=` 的右侧或 `return` 的结果。这行代码的含义是：按条件从两个调用中选出一个执行，再对它的返回值与 `interrupted` 做 `+` 运算并返回。
 
-理解的基础是表达式与语句的区分：表达式产生值，语句只执行动作。Java 的 `if` 是语句，想在表达式中取值必须借助三元运算符 `cond ? a : b`；Kotlin 没有三元运算符，`if/else` 直接承担这个角色。
+理解的基础是表达式与语句的区分：表达式产生值，语句只执行动作。Java 的 `if` 是语句，想在表达式中取值必须借助三元运算符 `cond ? a : b`。Kotlin 没有三元运算符，`if/else` 直接承担这个角色。
 
 ```kotlin
 fun main() {
@@ -128,7 +128,7 @@ fun main() {
 }
 ```
 
-两个分支的类型必须有公共类型，整个 `if` 表达式的类型就是这个公共类型；上例两个分支都是 `Int`，因此能与 `Int` 的 `base` 相加。作为表达式使用时 `else` 不能省略——条件为假时没有值可取，编译器报错 "'if' must have both main and 'else' branches if used as an expression"；不使用求值结果的 `if`（如只在条件成立时执行副作用）是语句用法，可以没有 `else`。`for` 与 `while` 在 Kotlin 中始终是语句，没有求值结果。
+两个分支的类型必须有公共类型，整个 `if` 表达式的类型就是这个公共类型。上例两个分支都是 `Int`，因此能与 `Int` 的 `base` 相加。作为表达式使用时 `else` 不能省略——条件为假时没有值可取，编译器报错 "'if' must have both main and 'else' branches if used as an expression"。不使用求值结果的 `if`（如只在条件成立时执行副作用）是语句用法，可以没有 `else`。`for` 与 `while` 在 Kotlin 中始终是语句，没有求值结果。
 
 `else` 换到下一行只是排版：`if` 在 `else` 分支出现前尚未完成，语法允许在 then 分支与 `else` 之间换行。按语句展开，它等价于：
 
@@ -137,11 +137,11 @@ val selected = if (cond) a() else b()
 return interrupted + selected
 ```
 
-`+` 的含义由左侧操作数的类型决定：左侧是 `Int` 时是算术加法；触发本问题的真实代码里，`interrupted` 与两个分支都是 `List<PetCommand>`，此时的 `+` 是列表拼接，返回一个新列表而不修改原列表。
+`+` 的含义由左侧操作数的类型决定：左侧是 `Int` 时是算术加法。触发本问题的真实代码里，`interrupted` 与两个分支都是 `List<PetCommand>`，此时的 `+` 是列表拼接，返回一个新列表而不修改原列表。
 
 **Q4: [learning] Kotlin 中 val 与 var 分别限制什么？为什么 val 不代表对象不可变？**
 
-`val` 只禁止变量重新赋值，`var` 允许重新赋值；二者都不自动保证所引用对象不可变。选择时看绑定是否需要改指向，以及对象本身是否暴露可变操作。
+`val` 只禁止变量重新赋值，`var` 允许重新赋值。二者都不自动保证所引用对象不可变。选择时看绑定是否需要改指向，以及对象本身是否暴露可变操作。
 
 ```kotlin
 val names = mutableListOf("Ada")
@@ -152,11 +152,11 @@ var count = 1
 count += 1                      // 合法：var 可以重新赋值
 ```
 
-编译器根据初始化表达式推断类型；需要明确接口边界时可写类型标注，例如 `val names: List<String> = mutableListOf("Ada")`。这会限制当前引用能调用的操作，但底层对象仍可能被其他 `MutableList` 引用修改。跨线程共享时，`val` 也不提供同步或线程安全保证。
+编译器根据初始化表达式推断类型。需要明确接口边界时可写类型标注，例如 `val names: List<String> = mutableListOf("Ada")`。这会限制当前引用能调用的操作，但底层对象仍可能被其他 `MutableList` 引用修改。跨线程共享时，`val` 也不提供同步或线程安全保证。
 
 **Q5: [learning] Kotlin 的 when 什么时候需要 else？把它作为表达式时，分支覆盖如何影响编译？**
 
-`when` 可以作为语句执行分支，也可以作为表达式产生值；作为表达式时必须穷尽所有可能输入。对封闭的 enum 或 sealed 类型，编译器能检查分支完整性；对开放或一般类型，通常需要 `else`。
+`when` 可以作为语句执行分支，也可以作为表达式产生值。作为表达式时必须穷尽所有可能输入。对封闭的 enum 或 sealed 类型，编译器能检查分支完整性。对开放或一般类型，通常需要 `else`。
 
 ```kotlin
 enum class Mode { AUTO, MANUAL }
@@ -167,11 +167,11 @@ fun label(mode: Mode): String = when (mode) {
 }
 ```
 
-`when (val input = readInput())` 可在判断中声明 subject，其作用域限于该 `when`。条件可以是常量、类型检查或任意布尔表达式；多个条件可用逗号合并。将 `else` 加到本来可穷尽的 enum 或 sealed 分支，会让未来新增成员不再触发缺失分支错误，因此只有“其余所有情况确实采用同一行为”时才保留它。判断来自 Kotlin 条件与循环文档中的 `when` 规则。
+`when (val input = readInput())` 可在判断中声明 subject，其作用域限于该 `when`。条件可以是常量、类型检查或任意布尔表达式。多个条件可用逗号合并。将 `else` 加到本来可穷尽的 enum 或 sealed 分支，会让未来新增成员不再触发缺失分支错误，因此只有“其余所有情况确实采用同一行为”时才保留它。判断来自 Kotlin 条件与循环文档中的 `when` 规则。
 
 **Q6: [learning] 遍历集合时应该选 for 还是 while？Kotlin 的 for 如何处理范围端点和循环控制？**
 
-遍历已有集合或区间时优先用 `for (item in items)`，它直接表达逐项迭代并避免手工维护下标；只有循环条件需要由循环体逐步改变时，才使用 `while`。Kotlin 的 `for` 遍历 iterable、数组或范围，不提供 C 风格的三段式循环。
+遍历已有集合或区间时优先用 `for (item in items)`，它直接表达逐项迭代并避免手工维护下标。只有循环条件需要由循环体逐步改变时，才使用 `while`。Kotlin 的 `for` 遍历 iterable、数组或范围，不提供 C 风格的三段式循环。
 
 ```kotlin
 val names = listOf("Ada", "Lin")
@@ -185,11 +185,11 @@ while (remaining > 0) {
 }
 ```
 
-`withIndex()` 同时提供索引和值；如果只需要索引，用 `indices`，只需元素就直接遍历元素。`break` 结束最近一层循环，`continue` 跳到最近一层循环的下一轮；带标签的 `break@outer` / `continue@outer` 可指向外层循环，但嵌套层级复杂时拆成函数通常更清楚。范围端点要特别检查：`..` 包含终点，遍历集合下标应使用 `indices` 或左闭右开的 `until`，不能把 `size` 当成合法下标。
+`withIndex()` 同时提供索引和值。如果只需要索引，用 `indices`，只需元素就直接遍历元素。`break` 结束最近一层循环，`continue` 跳到最近一层循环的下一轮。带标签的 `break@outer` / `continue@outer` 可指向外层循环，但嵌套层级复杂时拆成函数通常更清楚。范围端点要特别检查：`..` 包含终点，遍历集合下标应使用 `indices` 或左闭右开的 `until`，不能把 `size` 当成合法下标。
 
 **Q7: [learning] Kotlin 普通字符串、原始多行字符串和模板表达式分别怎样处理转义与插值？**
 
-双引号字符串支持 `\n` 等转义和 `$name` / `${expression}` 模板；三引号原始字符串保留换行且不处理反斜杠转义，但仍支持模板。`String` 是不可变值，所谓“修改字符串”的操作会返回新字符串。
+双引号字符串支持 `\n` 等转义和 `$name` / `${expression}` 模板。三引号原始字符串保留换行且不处理反斜杠转义，但仍支持模板。`String` 是不可变值，所谓“修改字符串”的操作会返回新字符串。
 
 ```kotlin
 val name = "Kotlin"
@@ -201,7 +201,7 @@ val raw = """
 """.trimIndent()
 ```
 
-第一项字符串包含字面量 `\n`，不会在该位置换行；原始字符串保留多行布局，`trimIndent()` 返回移除公共缩进后的新字符串。模板只插入变量时写 `$name`，紧跟其他标识符或需要表达式时用 `${...}`。处理用户输入的数字时，`toInt()` 对无效文本会抛异常；不可信输入应考虑 `toIntOrNull()` 并显式处理 `null`。以上行为见 Kotlin 官方 Strings 文档。
+第一项字符串包含字面量 `\n`，不会在该位置换行。原始字符串保留多行布局，`trimIndent()` 返回移除公共缩进后的新字符串。模板只插入变量时写 `$name`，紧跟其他标识符或需要表达式时用 `${...}`。处理用户输入的数字时，`toInt()` 对无效文本会抛异常。不可信输入应考虑 `toIntOrNull()` 并显式处理 `null`。以上行为见 Kotlin 官方 Strings 文档。
 
 ## 第 2 章 函数与集合
 
@@ -219,13 +219,13 @@ private fun vehicleService(): VehicleService {
 }
 ```
 
-`VehicleService::class` 得到 Kotlin 的 `KClass<VehicleService>`；`.java` 将它转换为 Java 的 `Class<VehicleService>`，用于调用接收 `Class` 的 Java 风格 API。末尾的 `!!` 把可空结果断言为非空，值为 `null` 时在该处抛出 `NullPointerException`。
+`VehicleService::class` 得到 Kotlin 的 `KClass<VehicleService>`。`.java` 将它转换为 Java 的 `Class<VehicleService>`，用于调用接收 `Class` 的 Java 风格 API。末尾的 `!!` 把可空结果断言为非空，值为 `null` 时在该处抛出 `NullPointerException`。
 
 仅凭这段代码无法判断 `BaseManager` 是否缓存、懒创建或始终返回同一实例。
 
 **Q9: [learning] 调用最后一个参数为函数类型的函数时，为什么 lambda 可以移到圆括号外，甚至省略圆括号？**
 
-当函数的最后一个参数是函数类型时，可以把对应的 lambda 实参移到圆括号外；如果括号内没有其他参数，圆括号也可以省略。这只是调用语法的变化。
+当函数的最后一个参数是函数类型时，可以把对应的 lambda 实参移到圆括号外。如果括号内没有其他参数，圆括号也可以省略。这只是调用语法的变化。
 
 ```kotlin
 fun observe(initial: Boolean, onChanged: (Boolean) -> Unit) {
@@ -244,20 +244,20 @@ observe(true) { value -> println(value) }
 (Int, String) -> Boolean
 ```
 
-lambda 写作 `{ 参数 -> 表达式 }`。单参数可以省略名称并使用 `it`；嵌套 lambda 中的 `it` 容易互相遮蔽，此时应显式命名。
+lambda 写作 `{ 参数 -> 表达式 }`。单参数可以省略名称并使用 `it`。嵌套 lambda 中的 `it` 容易互相遮蔽，此时应显式命名。
 
 判断 `function { ... }` 的含义时，应先查看函数签名：花括号通常是最后一个函数类型参数的实参。
 
 **Q10: [learning] 创建可变 Map 时，mutableMapOf、linkedMapOf 与 HashMap 分别是否保证遍历顺序，应该怎样选择？**
 
-在 Kotlin/JVM 中，`mutableMapOf` 当前返回保留插入顺序的 `LinkedHashMap`；直接构造 `HashMap` 则不承诺遍历顺序。业务逻辑不应依赖未声明的顺序；需要稳定遍历顺序时，应把这个意图明确写出来。
+在 Kotlin/JVM 中，`mutableMapOf` 当前返回保留插入顺序的 `LinkedHashMap`。直接构造 `HashMap` 则不承诺遍历顺序。业务逻辑不应依赖未声明的顺序。需要稳定遍历顺序时，应把这个意图明确写出来。
 
 ```kotlin
 val ordered = linkedMapOf<String, Int>()
 val unordered = HashMap<String, Int>()
 ```
 
-如果遍历顺序不重要，`mutableMapOf` 和 `HashMap` 都可以；如果顺序是契约的一部分，优先用 `linkedMapOf` 明确表达。
+如果遍历顺序不重要，`mutableMapOf` 和 `HashMap` 都可以。如果顺序是契约的一部分，优先用 `linkedMapOf` 明确表达。
 
 **Q11: [learning] 使用列表大小生成下标区间时，为什么 0..list.size 会多遍历一次并导致越界？**
 
@@ -271,7 +271,7 @@ for (index in 0..names.size) {
 }
 ```
 
-遍历下标时优先使用 `indices`；确实需要左闭右开区间时使用 `until`：
+遍历下标时优先使用 `indices`。确实需要左闭右开区间时使用 `until`：
 
 ```kotlin
 for (index in names.indices) println(names[index])
@@ -292,16 +292,16 @@ for (index in 0 until names.size) println(names[index])
 主要用途：
 
 1. **成员判断**：`in` 检查值是否落在区间内，`if (battery in 0..100)` 等价于 `battery >= 0 && battery <= 100`，端点与方向由区间统一表达，不易写反。
-2. **循环遍历**：`for (i in 0 until size)` 按左闭右开范围遍历下标；`downTo` 递减、`step n` 改变步长，组合出等差数列。
+2. **循环遍历**：`for (i in 0 until size)` 按左闭右开范围遍历下标。`downTo` 递减、`step n` 改变步长，组合出等差数列。
 3. **边界比较**：对日期、时间等 `Comparable` 类型直接做范围检查，如 `if (now in start..end)`。
 
-`..` 创建闭区间，永远包含右端点；`until` 创建左闭右开区间，Kotlin 1.9 起可用运算符 `..<` 表示同样含义。用 `0..size` 遍历下标会多出一次越界访问，下标遍历优先使用 `indices`。
+`..` 创建闭区间，永远包含右端点。`until` 创建左闭右开区间，Kotlin 1.9 起可用运算符 `..<` 表示同样含义。用 `0..size` 遍历下标会多出一次越界访问，下标遍历优先使用 `indices`。
 
-Java 语言没有区间语法：没有 `..` 与 `in` 运算符，范围判断要手写两个比较，循环要手写边界与步进（`for (int i = 0; i < n; i++)`）。Java 8 起的 `IntStream.range(0, n)` 提供左闭右开的数值流，第三方库（如 Guava 的 `Range`）提供区间类型；Kotlin 把这一能力内置进语言与标准库。
+Java 语言没有区间语法：没有 `..` 与 `in` 运算符，范围判断要手写两个比较，循环要手写边界与步进（`for (int i = 0; i < n; i++)`）。Java 8 起的 `IntStream.range(0, n)` 提供左闭右开的数值流，第三方库（如 Guava 的 `Range`）提供区间类型。Kotlin 把这一能力内置进语言与标准库。
 
 **Q13: [learning] 接收者可能为 null，调用结果也可能为 null 时，如何用安全调用与 Elvis 运算符统一提供默认值？**
 
-`?.` 在接收者为 `null` 时停止调用，并让整个表达式得到 `null`；`?:` 在左侧为 `null` 时提供默认结果。两者组合可以把多个空值来源统一处理。
+`?.` 在接收者为 `null` 时停止调用，并让整个表达式得到 `null`。`?:` 在左侧为 `null` 时提供默认结果。两者组合可以把多个空值来源统一处理。
 
 ```kotlin
 val initial: Boolean = store?.readSwitch() ?: true
@@ -314,7 +314,7 @@ val initial: Boolean = store?.readSwitch() ?: true
 
 无论哪条路径发生，结果都是 `true`，并且表达式最终类型为非空的 `Boolean`。
 
-`?.` 也可能掩盖错误。读取可选数据时，静默跳过通常符合语义；写存储、发指令、释放资源等副作用操作如果被静默跳过，可能造成难以追踪的状态错误。此时应根据契约选择记录日志、提前返回或明确失败。
+`?.` 也可能掩盖错误。读取可选数据时，静默跳过通常符合语义。写存储、发指令、释放资源等副作用操作如果被静默跳过，可能造成难以追踪的状态错误。此时应根据契约选择记录日志、提前返回或明确失败。
 
 **Q14: [learning] 循环处理多个元素时，为什么不应在每轮都执行与循环变量无关的 filter？**
 
@@ -328,7 +328,7 @@ for (id in pendingIds) {
 }
 ```
 
-判断标准不是“集合操作不能写在循环中”，而是：**本轮结果是否依赖循环变量**。依赖就必须逐轮计算；不依赖就只计算一次。
+判断标准不是“集合操作不能写在循环中”，而是：**本轮结果是否依赖循环变量**。依赖就必须逐轮计算。不依赖就只计算一次。
 
 **Q15: [learning] 用 object : 实现单方法 Java 接口时，为什么 IDE 建议转换为 lambda？转换有什么前提？**
 
@@ -346,9 +346,9 @@ val sam = OnReady { println("ready") } // SAM 转换：省略方法名与 overri
 
 使用前提与边界：
 
-1. 接口只有**一个抽象方法**时才能转换；新增第二个抽象方法后，lambda 写法编译失败，需改回对象表达式。
+1. 接口只有**一个抽象方法**时才能转换。新增第二个抽象方法后，lambda 写法编译失败，需改回对象表达式。
 2. Kotlin 声明的接口不适用这条规则，需显式声明为 `fun interface`（Kotlin 1.4+）才允许 SAM 转换。
-3. lambda 内的 `this` 指向外围类，而不是对象表达式创建的匿名对象；需要引用匿名对象自身时保留 `object :` 写法。
+3. lambda 内的 `this` 指向外围类，而不是对象表达式创建的匿名对象。需要引用匿名对象自身时保留 `object :` 写法。
 
 ## 第 3 章 类型系统
 
@@ -378,7 +378,7 @@ println(view) // [1, 2, 3]
 
 **Q17: [learning] 可空表达式后面的 !! 是什么意思，值为 null 时会发生什么？**
 
-`!!` 是 Kotlin 的**非空断言**：它把可空表达式按非空类型使用；运行时值如果是 `null`，就在断言位置抛出 `NullPointerException`。
+`!!` 是 Kotlin 的**非空断言**：它把可空表达式按非空类型使用。运行时值如果是 `null`，就在断言位置抛出 `NullPointerException`。
 
 ```kotlin
 val name: String? = findName()
@@ -386,7 +386,7 @@ val length: Int = name!!.length
 // name 为 null 时，第二行抛出 NullPointerException
 ```
 
-它适用于“这里为 `null` 就违反程序约定”的情况。若 `null` 是正常分支，应使用安全调用 `?.`、Elvis 运算符 `?:` 或显式判空；需要让状态错误携带说明时，可以使用 `checkNotNull(value) { "错误原因" }`。需要区分责任归属时，参数非法用 `requireNotNull`、状态非法用 `checkNotNull`，失败分别抛出 `IllegalArgumentException` 与 `IllegalStateException`。
+它适用于“这里为 `null` 就违反程序约定”的情况。若 `null` 是正常分支，应使用安全调用 `?.`、Elvis 运算符 `?:` 或显式判空。需要让状态错误携带说明时，可以使用 `checkNotNull(value) { "错误原因" }`。需要区分责任归属时，参数非法用 `requireNotNull`、状态非法用 `checkNotNull`，失败分别抛出 `IllegalArgumentException` 与 `IllegalStateException`。
 
 **Q18: [learning] 使用 Int 计算百分比时，为什么 battery / total * 100 可能得到 0，应该怎样保留正确精度？**
 
@@ -403,7 +403,7 @@ val precisePercent = battery.toDouble() / total * 100 // 50.0
 
 如何选择取决于结果类型：
 
-1. 只要整数百分比：先乘后除；数值可能很大时先转为 `Long`，避免乘法溢出。
+1. 只要整数百分比：先乘后除。数值可能很大时先转为 `Long`，避免乘法溢出。
 2. 需要小数：除法前把至少一个操作数转为 `Double` 或 `Float`。
 3. 需要向下取整而不是向零截断：使用 `Math.floorDiv`。
 
@@ -429,7 +429,7 @@ fun render(view: View) {
 
 | 声明形式 | smart cast 条件 |
 |---|---|
-| 局部 `val` | 通常可以；委托属性除外 |
+| 局部 `val` | 通常可以。委托属性除外 |
 | 局部 `var` | 检查后未修改，且未被可能修改它的 lambda 捕获 |
 | 成员 `val` | 属性不可重写、无自定义 getter，且可见性或模块边界允许编译器证明稳定 |
 | 成员 `var` | 不可以，因为其他代码可能随时修改它 |
@@ -456,10 +456,10 @@ fun schedule(delayMs: Long) {
 }
 ```
 
-1. `require(condition)`：调用方传入了非法参数；失败时抛出 `IllegalArgumentException`。
-2. `check(condition)`：当前对象或程序状态不允许继续；失败时抛出 `IllegalStateException`。
+1. `require(condition)`：调用方传入了非法参数。失败时抛出 `IllegalArgumentException`。
+2. `check(condition)`：当前对象或程序状态不允许继续。失败时抛出 `IllegalStateException`。
 3. `error(message)`：直接抛出 `IllegalStateException`，适合明确终止当前逻辑的分支。
 
-`error` 不只用于理论上不可达的代码。对于外部输入或未来可能新增的协议值，应先决定业务策略：拒绝输入、忽略并记录，还是立即失败；不能用“不可达”掩盖尚未定义的行为。
+`error` 不只用于理论上不可达的代码。对于外部输入或未来可能新增的协议值，应先决定业务策略：拒绝输入、忽略并记录，还是立即失败。不能用“不可达”掩盖尚未定义的行为。
 
 `requireNotNull` 和 `checkNotNull` 分别表达相同的责任归属，并在正常返回后得到非空值。

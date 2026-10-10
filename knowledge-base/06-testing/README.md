@@ -14,7 +14,7 @@
 
 ## 文档索引
 
-1. [Testing Fundamentals](./01-testing-basics.md) — Q1–Q10 cover smoke testing, unit test structure, JUnit, Mockito, parameterization and static mocks.
+1. [Testing Fundamentals](./01-testing-basics.md)（12 题）— 冒烟与回归的关系、单元测试的隔离与层级选择、JUnit 4 结构、Mockito（Mock/Spy/Captor/Answer/静态 Mock）、参数化测试、测试金字塔与测试选择。
 
 ## 写作规范
 

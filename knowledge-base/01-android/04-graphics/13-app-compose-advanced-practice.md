@@ -107,7 +107,7 @@ RecyclerView 中的 `ComposeView` 应依赖池化容器感知的默认策略，F
 5. **状态恢复**：列表项含 `remember` 状态时提供稳定 key、将状态提升到列表模型或明确设计保存恢复。多个静态 ComposeView 需要唯一 View ID 才能恢复 `savedInstanceState`。
 6. **宿主条件**：自定义宿主或手工窗口需确认 `ViewTreeLifecycleOwner` 与 `SavedStateRegistryOwner` 已设置。
 
-**Q11: [learning] 同一窗口里多个 ComposeView 是共享一个 Recomposer 还是各有一个，"每个 ComposeView 都很轻"为什么不成立？**
+**Q11: [learning] 同一窗口里多个 ComposeView 是共享一个 Recomposer 还是各有一个，“每个 ComposeView 都很轻”为什么不成立？**
 
 同一窗口的多个 `ComposeView` 通常解析到同一个 Recomposer，但每个实例仍有自己的 Composition、槽位表、AndroidComposeView、LayoutNode 树、语义管理、状态注册和测量边界，因此不能视为“多个 View 都很轻”。
 
@@ -176,7 +176,7 @@ RecyclerView 中的 `ComposeView` 应依赖池化容器感知的默认策略，F
 4. **身份匹配**：`SharedTransitionScope` 按 key 和 `AnimatedVisibilityScope` 可见性匹配两端。两端应从同一业务 ID 派生 key，例如 `article-image:42`，并用 `rememberSharedContentState(key)` 保持状态。
 5. **父布局占位**：placeholder 默认 `ContentSize`，退出端报告初始尺寸、进入端报告目标尺寸，父布局不随动画 bounds 每帧变化。切为 `AnimatedSize` 会让周边内容跟随，并可能增加重排。
 
-**Q18: [learning] 共享元素过渡的 Lookahead 布局是不是"第二次 GPU 渲染"，GraphicsLayer 是不是 Bitmap 缓存，元素数量有平台阈值吗？**
+**Q18: [learning] 共享元素过渡的 Lookahead 布局是不是“第二次 GPU 渲染”，GraphicsLayer 是不是 Bitmap 缓存，元素数量有平台阈值吗？**
 
 Lookahead/approach 是 Compose 布局阶段的节点树遍历，不是第二次 GPU 绘制。`GraphicsLayer` 记录绘制命令，也不是把源 Composable 截成 Bitmap。源码没有共享元素数量上限或“最多五个”的建议。
 

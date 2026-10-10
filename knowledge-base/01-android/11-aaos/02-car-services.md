@@ -13,7 +13,7 @@
 5. **多屏多用户底座**：`CarOccupantZoneService`（座位↔屏幕↔音频区↔用户映射）、`CarActivityService`（任务栈监控与 setPersistentActivity）。
 6. **实验与代理**：`CarExperimentalFeatureServiceController`（绑定 ExperimentalCarService 的实验特性框架）、`CarOemProxyService`（OEM 定制逻辑代理）。
 
-**Q2: [learning] CarMediaService 管什么？"开机恢复上次媒体源"是怎么实现的？媒体应用要注意什么？**
+**Q2: [learning] CarMediaService 管什么？“开机恢复上次媒体源”是怎么实现的？媒体应用要注意什么？**
 
 CarMediaService 为当前用户管理活动媒体源，并按 PLAYBACK 和 BROWSE 两种模式记录选择。它决定车机媒体界面当前选中的源，不等同于 MediaSessionManager 的活动 MediaSession 集合。
 
@@ -22,30 +22,30 @@ CarMediaService 为当前用户管理活动媒体源，并按 PLAYBACK 和 BROWS
 3. **开机恢复链：**用户解锁后，服务读取保存的播放源，再按 `config_mediaBootAutoplay` 决定是否恢复播放。Android 14 源码中该整数配置的有效值含义为：0 表示不自动播放，1 表示始终自动播放，2 表示按当前媒体源保存的上次播放状态恢复，3 表示沿用切换前媒体源的播放状态。框架默认资源值是 2。产品资源 overlay 可覆盖它。未覆盖时使用框架默认值。服务随后绑定目标应用的 MediaBrowser，并用 AUTOPLAY 参数告知恢复意图，因此目标媒体应用需提供可连接的 MediaBrowserService。
 4. **权限边界：**查询和设置活动源的 CarMediaManager 接口受 `MEDIA_CONTENT_CONTROL` 保护，主要供系统 UI 或媒体中心使用。媒体应用通过正常实现 MediaSession 和 MediaBrowserService 被系统管理，不需要调用这些受保护的管理接口。
 
-**Q3: [learning] CarBluetoothService 管什么？"上车自动连蓝牙"的触发条件是什么？应用还能配优先级吗？**
+**Q3: [learning] CarBluetoothService 管什么？“上车自动连蓝牙”的触发条件是什么？应用还能配优先级吗？**
 
 CarBluetoothService 管理当前用户的蓝牙设备与 profile 连接：为每个用户维护按优先级排序的已知设备列表、profile 抑制（inhibit）管理与默认自动连接策略（策略可通过 resource overlay 换成 OEM 实现）。
 
 1. **触发时机**：蓝牙开启、收到 SEAT_OCCUPANCY 座椅占用事件、init 完成时触发自动连接——且注释明确**只在 parked（P 挡）状态触发**，防止驾驶中操作并过滤行驶中的假占用信号。
 2. **API 变化**：`CarBluetoothManager` 在 Android 14 的 car-lib 中已移除（Android 13 起废弃优先级设置接口）——应用侧只剩标准蓝牙 API，自动连接由系统策略接管。
-3. **多用户**：设备优先级列表按用户持久化——多用户车机上"换了驾驶员蓝牙列表就变了"是设计行为。
+3. **多用户**：设备优先级列表按用户持久化——多用户车机上“换了驾驶员蓝牙列表就变了”是设计行为。
 4. **边界**：它不实现蓝牙协议栈，只是设备管理 + 连接时机策略层，底层仍用标准各 Profile。
 
 **Q4: [learning] CarTelemetryService 是干什么的？为什么三方应用用不了？**
 
 CarTelemetryService 是 OEM 遥测的收集与处理服务：客户端推送 MetricsConfig（带 name+version 的脚本配置），由独立的 ScriptExecutor APK 执行 Lua 订阅脚本产出报告，客户端经 ReportReadyListener 提醒后拉取。
 
-1. **谁能用**：全部 API 是 `@SystemApi @hide`，需要 signature/privileged 级的 `USE_CAR_TELEMETRY_SERVICE` 权限，manager 文档原话是"唯一的消费者是 OEM 云端应用"——三方应用不在设计范围内。
+1. **谁能用**：全部 API 是 `@SystemApi @hide`，需要 signature/privileged 级的 `USE_CAR_TELEMETRY_SERVICE` 权限，manager 文档原话是“唯一的消费者是 OEM 云端应用”——三方应用不在设计范围内。
 2. **契约要点**：同 name 高版本覆盖旧版并清空历史。add 最常见的失败是 `SIGNATURE_VERIFICATION_FAILED`（配置签名须与调用应用匹配）。脚本运行错误只体现在返回的 telemetryError 字段。
 3. **易混淆**：同仓库的 `cartelemetryd`（C++ 守护进程）是面向 EVS/原生客户端的另一条遥测通道，与 Java 侧服务并存，别当成同一个东西。
 4. **版本**：Android 14 已定型为上述形态。脚本结果直传服务端（server-side telemetry）是 Android 15 才引入的。
 
-**Q5: [learning] CarDiagnosticService 暴露什么数据？为什么"实现了也不一定有"？**
+**Q5: [learning] CarDiagnosticService 暴露什么数据？为什么“实现了也不一定有”？**
 
 它把 VHAL 里的 OBD-II 式诊断数据（live frame 实时帧 / freeze frame 冻结帧）以统一 API 暴露给特权应用——能力完全取决于 VHAL 是否实现了 OBD2_LIVE_FRAME/OBD2_FREEZE_FRAME 等属性，很多参考 VHAL 只给最小实现。
 
 1. **权限分级**：读取（注册监听/取帧）要 `CAR_DIAGNOSTIC_READ_ALL`。清除冻结帧是破坏性操作、单独要 `CAR_DIAGNOSTIC_CLEAR`——普通应用拿不到这两个特权权限。
-2. **可选特性**：诊断服务是 `@OptionalFeature`，OEM 可整体关闭——排查"接口不存在"先确认特性开关。
+2. **可选特性**：诊断服务是 `@OptionalFeature`，OEM 可整体关闭——排查“接口不存在”先确认特性开关。
 3. **应用侧**：CarDiagnosticManager 为 `@hide`，提供实时帧监听、冻结帧时间戳枚举/读取/清除——OBD2 帧内容是 sensor 索引值对，不通过公开 SDK API 暴露。
 
 **Q6: [learning] 车机版的 bugreport 服务和标准 BugreportManager 有什么区别？**
@@ -56,9 +56,9 @@ CarBugreportManagerService 走车机专用的 `carbugreportd`/`cardumpstatez` �
 2. **约束**：同一时刻只允许一个 bugreport（并发返回 IN_PROGRESS）。进度经 onProgress(0–100) 回调、错误按 DUMPSTATE_FAILED/CONNECTION_FAILED 等码区分。
 3. **边界**：标准 BugreportManager 走 framework dumpstate 加用户确认 UI——两条通道不要混为一谈。
 
-**Q7: [learning] CarDevicePolicyService 管什么？"驾驶中限制拨出电话"是它做的吗？**
+**Q7: [learning] CarDevicePolicyService 管什么？“驾驶中限制拨出电话”是它做的吗？**
 
-CarDevicePolicyService 是 DevicePolicyManager 在车机上的受限子集（创建/移除用户走 CarUserService 且强制 caller restrictions），外加车机特有的"新用户设备管理免责声明"转发——每个新用户要看一次通知。
+CarDevicePolicyService 是 DevicePolicyManager 在车机上的受限子集（创建/移除用户走 CarUserService 且强制 caller restrictions），外加车机特有的“新用户设备管理免责声明”转发——每个新用户要看一次通知。
 
 1. **驾驶中限拨的责任边界：**拨号限制不能笼统归到 CarDevicePolicyService。车辆行驶状态对应的 UX 限制可让拨号界面禁用受限操作，CarInputService 根据产品配置处理 CALL 键，拨号应用还需遵守车载 UX 策略。实际行为由平台配置和应用实现共同决定。
 2. **权限**：用户管理接口要 `MANAGE_USERS` 或 `INTERACT_ACROSS_USERS`——同样是特权面。
@@ -97,7 +97,7 @@ AAOS CarWatchdog 通过内核 /proc/uid_io/stats 的 per-UID I/O 统计跟踪应
 
 **Q11: [learning] 挂 R 后倒车影像出得慢甚至黑屏——CarEvsService 的触发链有哪两条？延迟差在哪？**
 
-实现中可见两种触发链：`EVS_SERVICE_REQUEST` 属性可直接通知 EVS 服务，另一种是通过 `GEAR_SELECTION==REVERSE` 变化间接触发。后者要经过"VHAL 事件 → CarPropertyService → 状态机 → 启动 EvsActivity → 分配 Surface → 首帧"，链路明显更长。
+实现中可见两种触发链：`EVS_SERVICE_REQUEST` 属性可直接通知 EVS 服务，另一种是通过 `GEAR_SELECTION==REVERSE` 变化间接触发。后者要经过“VHAL 事件 → CarPropertyService → 状态机 → 启动 EvsActivity → 分配 Surface → 首帧”，链路明显更长。
 
 1. **状态机**：UNAVAILABLE → INACTIVE → REQUESTED → ACTIVE。客户端拿到 REQUESTED 后必须在限时内发起视频流，超时回到 INACTIVE。
 2. **直通优先**：VHAL 实现了 `EVS_SERVICE_REQUEST` 属性时走直通（不再依赖挡位订阅），延迟显著更短。传统链还会用时间戳丢弃过期挡位事件。

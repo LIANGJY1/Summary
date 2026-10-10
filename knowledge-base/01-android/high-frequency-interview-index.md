@@ -69,4 +69,4 @@
 7. **UI 与分心（AAOS 向）**：03-ui 基础与排查专题——01（Activity 启动到首帧/生命周期与配置变化/状态保存）、02（View 测量布局绘制/MeasureSpec/requestLayout 与 invalidate/脏区和 child drawing order/Layer 与 SurfaceFlinger 可见边界/SurfaceView 打洞及独立合成/TextureView 双 BufferQueue 与 SurfaceTexture 所有权/GLSurfaceView 渲染节奏）、03（资源限定符/深色主题/字号与 RTL/多显示 Configuration）、04（窗口层级与 token/addWindow/relayout 与遍历/Insets/IME/多窗口与窗口排查）、05（Compose 组合与状态/derivedStateOf/稳定性与 strong skipping/Effect/View 互操作）、06（CarService 与 car-lib/occupant zone 与多显示归属/模板与原生应用/多用户隔离/电源策略/旋钮与仪表/投影）、07（驾驶状态与 UX 限制映射/restriction mode/应用声明/乘员屏/受限交互/安全验证）、09（白屏与黑屏/首帧和掉帧归因/诊断工具/重绘与 Insets/输入超时/多显示和电源策略/回归检查）
 8. **多用户与乘员**：04-car-power-users Q2–Q3；09-app-sandbox Q3；02-system-boot Q30；02-system-boot Q43（用户启动与 AAOS headless system user）；03-ui/06 Q9
 9. **其余服务速览**：02-car-services 全册（媒体源/蓝牙/遥测/诊断/bugreport/投影）
-10. **车辆信号链路与五层映射**：01-vehicle-links Q1（33 条链路总表）；网络地基机制见 ../../网络/01-network-fundamentals（分层模型/DNS 层级递归/TLS 握手/TCP 状态机/IP 分片/NAT 与 conntrack/全链路走读/分层校验）
+10. **车辆信号链路与五层映射**：01-vehicle-links Q1（33 条链路总表）；网络地基机制见 [../03-network/01-network-fundamentals.md](../03-network/01-network-fundamentals.md)（分层模型/DNS 层级递归/TLS 握手/TCP 状态机/IP 分片/NAT 与 conntrack/全链路走读/分层校验）

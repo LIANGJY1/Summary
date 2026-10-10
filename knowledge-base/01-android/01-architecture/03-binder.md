@@ -2,9 +2,9 @@
 
 > 学习资料（文章模式沉淀）。主线：Binder 架构与数据传输、AIDL 接口契约、事务调度与缓冲区，以及排查工具和常见原生故障。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: Binder 的整体架构由哪几部分组成？"一次拷贝"到底省在哪里？**
+**Q1: [learning] Binder 的整体架构由哪几部分组成？“一次拷贝”到底省在哪里？**
 
-Binder 由用户态 libbinder、内核 Binder 驱动和 servicemanager 名称注册表三部分完成传输，AIDL 在其上提供接口契约；"一次拷贝"指驱动把事务数据从发送方用户空间直接复制到接收方 mmap 映射的缓冲区，省去了传统 IPC"用户空间→内核→用户空间"的两次拷贝。
+Binder 由用户态 libbinder、内核 Binder 驱动和 servicemanager 名称注册表三部分完成传输，AIDL 在其上提供接口契约。“一次拷贝”指驱动把事务数据从发送方用户空间直接复制到接收方 mmap 映射的缓冲区，省去了传统 IPC“用户空间→内核→用户空间”的两次拷贝。
 
 1. **libbinder**（`ProcessState`/`IPCThreadState`）：管理接收事务的映射区和 Binder 线程池，封装事务。Java 层 Binder 经 JNI 落到这里。
 2. **内核驱动**：`/dev/binder`（框架）、`/dev/hwbinder`（旧 HAL）等独立设备节点维护各自上下文。Binder 驱动是 Linux 内核软件，不是硬件。它负责路由事务、管理缓冲区映射、请求用户态增减线程和唤醒目标线程。
@@ -13,9 +13,9 @@ Binder 由用户态 libbinder、内核 Binder 驱动和 servicemanager 名称注
 
 一次同步调用的端到端延迟还包含线程排队、上下文切换、权限与 SELinux 检查、目标服务执行和下游依赖。因此“一次拷贝”不能推出调用一定快。
 
-**Q2: 为什么"Binder 单次调用可以安全传接近 1MB"是错误结论？**
+**Q2: [learning] 为什么“Binder 单次调用可以安全传接近 1MB”是错误结论？**
 
-因为约 1MB 是一个进程的接收映射区总大小，不是单笔事务的配额：精确值为 `1 MiB − 2×页大小`（4KiB 页设备约 1016KiB，16KiB 页设备约 992KiB），进程内所有在途事务——并发请求、回复、oneway、对象元数据——共享这块空间。`TransactionTooLargeException` 也无法区分是请求没有发出还是回复过大，只能按"操作可能部分完成"处理。
+因为约 1MB 是一个进程的接收映射区总大小，不是单笔事务的配额：精确值为 `1 MiB − 2×页大小`（4KiB 页设备约 1016KiB，16KiB 页设备约 992KiB），进程内所有在途事务——并发请求、回复、oneway、对象元数据——共享这块空间。`TransactionTooLargeException` 也无法区分是请求没有发出还是回复过大，只能按“操作可能部分完成”处理。
 
 1. `BINDER_VM_SIZE = (1×1024×1024) − sysconf(_SC_PAGE_SIZE)×2` 是 libbinder 请求的映射长度。内核驱动另有 mmap 上限 `min(请求长度, 4 MiB)`，它是保护性上限，不代表默认分配 4 MB。
 2. 请求 buffer 分配在目标进程的 `binder_alloc` 中。B 回复 A 时占用 A 的映射空间。多个中等事务并发也可能共同耗尽缓冲区。
@@ -32,11 +32,11 @@ Binder 由用户态 libbinder、内核 Binder 驱动和 servicemanager 名称注
 4. **300 KiB**：`kLogTransactionsOverBytes` 是大事务告警线，不是硬上限。`BpBinder` 可记录 `Large outgoing transaction`，`BBinder` 可记录 `Large data transaction` 或 `Large reply transaction`。出现告警应检查是否把大块数据、无界列表或图片直接塞进 Parcel。
 5. **1000 ms**：`BBinder` 慢事务日志观察服务端 `onTransact()` 执行区间，不含到达前的排队，因此不是端到端耗时。
 
-**Q4: 普通 AIDL、Stable AIDL 与 HIDL 在接口稳定性和传输模型上有什么区别？**
+**Q4: [learning] 普通 AIDL、Stable AIDL 与 HIDL 在接口稳定性和传输模型上有什么区别？**
 
 AIDL 是接口描述语言，Stable AIDL 是带跨版本兼容契约的 AIDL 用法，HIDL 是 Treble 引入的上一代 HAL 接口语言与运行时。跨 system/vendor 边界时应使用 Stable AIDL，维护现有 HIDL HAL 时才沿用 HIDL。
 
-1. **传输与进程**：普通 AIDL 与 Stable AIDL 跨进程调用时使用 `/dev/binder` 和 libbinder。AIDL 本身不强制必须拆成独立服务进程。HIDL 的服务化实现使用 `/dev/hwbinder` 和 libhwbinder；passthrough 实现可作为共享库加载进调用方进程。
+1. **传输与进程**：普通 AIDL 与 Stable AIDL 跨进程调用时使用 `/dev/binder` 和 libbinder。AIDL 本身不强制必须拆成独立服务进程。HIDL 的服务化实现使用 `/dev/hwbinder` 和 libhwbinder。passthrough 实现可作为共享库加载进调用方进程。
 2. **稳定性契约**：Stable AIDL 使用 `@VintfStability`、版本化接口和 VINTF 清单约束跨分区兼容。接口可以通过新增方法或枚举值演进，但不能任意改变既有定义。普通 AIDL 不承诺独立于系统镜像的跨版本兼容，不能拿它代替跨 system/vendor 的稳定接口。HIDL 使用 `@1.0`、`@1.1` 等版本继承规则维持兼容。
 3. **语言后端**：Stable AIDL 支持 Java、NDK C++ 和 Rust 后端。HIDL 生成 C++ 与 Java 后端。
 4. **平台演进**：Android 11 起支持用 AIDL 实现 HAL，并要求跨 framework/vendor 的 AIDL HAL 使用稳定契约。Android 17 语境下，新 HAL 通常优先 Stable AIDL，存量 HIDL 仍可能因厂商实现与兼容性继续存在。不能仅凭系统版本推断设备上的 HAL 已全部迁移。
@@ -77,24 +77,24 @@ IPC 按职责可分为接口语义、控制面传输、数据面传输和通知�
 
 **Q8: [learning] oneway 调用到底保证了什么、没保证什么？BR_TRANSACTION_COMPLETE 代表服务端执行完成吗？**
 
-oneway 只保证"调用方不等待业务回复"与"发往同一个 Binder 节点的异步事务按发送顺序逐个分发"；它不保证服务端已执行、不保证跨节点全局有序、也不保证不会失败。`BR_TRANSACTION_COMPLETE` 只表示驱动完成了本次提交——目标进程可能尚未被调度，事务可能仍在 `proc->todo` 或 `node->async_todo` 中排队。
+oneway 只保证“调用方不等待业务回复”与“发往同一个 Binder 节点的异步事务按发送顺序逐个分发”。它不保证服务端已执行、不保证跨节点全局有序、也不保证不会失败。`BR_TRANSACTION_COMPLETE` 只表示驱动完成了本次提交——目标进程可能尚未被调度，事务可能仍在 `proc->todo` 或 `node->async_todo` 中排队。
 
 1. **排队结构**：同一 Binder node 的异步事务串行执行。第一笔事务处理时，后续事务进入该 node 的 `async_todo`，当前 buffer 释放后才取下一笔。不同 node 的异步事务可以并行。
 2. **优先级**：oneway 事务不继承调用方线程优先级，使用目标进程默认优先级。目标 node 自身配置的 `min_priority` 仍参与服务端执行优先级。
 3. **失败面**：提交仍要在目标进程分配 buffer，异步空间不足会得到 `-ENOSPC` 或 `FAILED_TRANSACTION`。目标进程死亡或冻结也可能导致失败。服务端 oneway 方法的异常不会写回调用方，需要业务确认时应设计独立回调并带超时。
 4. **协议设计**：A 必须先于 B 生效时，让 A、B 经过同一个串行执行点，或为消息增加序列号与状态校验。不能只因两者都是 oneway 就推断顺序。用 oneway 掩盖服务端过载只会把延迟转移到队列。
 
-**Q9: oneway 事务在驱动里如何排队？异步空间紧张时调用方会看到什么？**
+**Q9: [learning] oneway 事务在驱动里如何排队？异步空间紧张时调用方会看到什么？**
 
-oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同一 Binder node 串行、不同 node 并行。当目标进程剩余异步预算低于总映射的 10%，且当前发送进程占用超过 50 个异步 buffer 或总占用超过总映射的 1/4 时，该笔事务被标记 `oneway_spam_suspect`：发送线程收到 `BR_ONEWAY_SPAM_SUSPECT`，libbinder 打印发送侧调用栈。这是诊断信号，不做限流，事务本身通常仍成功。
+oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行。同一 Binder node 串行、不同 node 并行。当目标进程剩余异步预算低于总映射的 10%，且当前发送进程占用超过 50 个异步 buffer 或总占用超过总映射的 1/4 时，该笔事务被标记 `oneway_spam_suspect`：发送线程收到 `BR_ONEWAY_SPAM_SUSPECT`，libbinder 打印发送侧调用栈。这是诊断信号，不做限流，事务本身通常仍成功。
 
 1. **记账模型**：`free_async_space` 初始化为 `buffer_size/2`，同步和异步事务从同一棵空闲树分配。异步分配前检查并扣减预算，释放后归还。它不是专供 oneway 使用的一半物理内存池。
 2. **治理方式**：触发 spam 检测时，目标进程异步预算已经很紧张。应在协议层合并可覆盖的状态更新、限制频率、为事件队列设置容量与丢弃策略，不能等驱动告警才处理。
 3. **buffer 生命周期**：oneway buffer 不一定比同步事务短。没有 reply 触发释放，它要到服务端处理完成并释放 Parcel 后才归还。高频发送会同时占据目标进程的接收地址池。
 
-**Q10: "Binder 线程池默认 15 个线程"该怎么准确理解？怎样判断服务端真的发生了线程池饥饿？**
+**Q10: [learning] “Binder 线程池默认 15 个线程”该怎么准确理解？怎样判断服务端真的发生了线程池饥饿？**
 
-15（`DEFAULT_MAX_BINDER_THREADS`）是 libbinder 经 `BINDER_SET_MAX_THREADS` 告诉驱动"最多可按需请求启动的 lazy 线程"上限；`startThreadPool()` 还会主动创建 1 个主线程池线程，显式 `joinThreadPool()` 与服务自设上限再叠加。因此"每个进程固定 15 或 16 条 Binder 线程"都会误导容量分析。饥饿判定要看组合证据，而不是数线程或单看一条日志。
+15（`DEFAULT_MAX_BINDER_THREADS`）是 libbinder 经 `BINDER_SET_MAX_THREADS` 告诉驱动“最多可按需请求启动的 lazy 线程”上限。`startThreadPool()` 还会主动创建 1 个主线程池线程，显式 `joinThreadPool()` 与服务自设上限再叠加。因此“每个进程固定 15 或 16 条 Binder 线程”都会误导容量分析。饥饿判定要看组合证据，而不是数线程或单看一条日志。
 
 1. 驱动在没有未兑现线程请求、`waiting_threads` 为空且已启动线程数低于 `max_threads` 时返回 `BR_SPAWN_LOOPER`，libbinder 才按需创建线程。线程创建后通常存活到进程结束。
 2. AOSP Android 17 的 system_server 设置 `sMaxBinderThreads = 31`，另有 1 个主动线程，总量上界通常可到 32。应用主线程默认不加入 Binder 池。
@@ -103,7 +103,7 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 
 **Q11: [learning] 大数据跨进程传输应该如何设计？writeBlob 的 16KiB 分界、SharedMemory.setProtect() 和 FMQ 各自的边界是什么？**
 
-原则是 Binder 只传控制信息与句柄，持续数据走共享内存、文件描述符或专用队列。C++ `Parcel::writeBlob()` 以 16KiB 为分界：不超过 16KiB 直接内联写入 Parcel；超过且允许传 fd 时改走兼容 ashmem 区域并用 fd 传递。Java `SharedMemory.setProtect()` 只能移除权限不能加回，应按"写入 → 解除映射 → 降为只读 → 交给对端"的最小权限顺序使用。FMQ 是共享内存上的有界单向队列，单个队列只有一个写入方；双向协议要建两条方向相反的队列。
+原则是 Binder 只传控制信息与句柄，持续数据走共享内存、文件描述符或专用队列。C++ `Parcel::writeBlob()` 以 16KiB 为分界：不超过 16KiB 直接内联写入 Parcel。超过且允许传 fd 时改走兼容 ashmem 区域并用 fd 传递。Java `SharedMemory.setProtect()` 只能移除权限不能加回，应按“写入 → 解除映射 → 降为只读 → 交给对端”的最小权限顺序使用。FMQ 是共享内存上的有界单向队列，单个队列只有一个写入方。双向协议要建两条方向相反的队列。
 
 1. `writeBlob` 分流只作用于二进制块路径。普通字节数组和集合仍会被内联编组，因此不是所有大 `byte[]` 都自动走共享内存。
 2. 共享内存不是端到端零拷贝。生产方写入、缺页与缓存同步、消费方读取复制仍可能发生。共享页也没有消息边界与顺序，需要自行定义版本、长度、状态和校验规则。
@@ -131,7 +131,7 @@ oneway 事务仍要在目标进程分配 buffer 并由 Binder 线程执行；同
 
 **Q14: [learning] 跨进程 Bundle 中的自定义 Parcelable 为什么会在读取时抛 ClassNotFoundException，怎样避免相关 Parcel 错误？**
 
-Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读取 Parcelable 才执行反序列化。因此发送调用成功并不证明接收端类加载器能解析该对象；若自定义类不在接收端 classpath 或加载器不正确，异常会出现在读取位置。
+Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读取 Parcelable 才执行反序列化。因此发送调用成功并不证明接收端类加载器能解析该对象。若自定义类不在接收端 classpath 或加载器不正确，异常会出现在读取位置。
 
 1. **确认读写两端类型一致**：检查发送端放入 Bundle 的 Parcelable 实际类、接收进程依赖与类加载器。接收端应在读取前设置适当的 class loader。
 2. **区分异常位置**：首次 `getParcelable` 才 `unparcel()` 时出现的 `ClassNotFoundException` 或 `BadParcelableException` 属于接收端解析问题，不一定是 Binder 事务发送失败。
@@ -145,14 +145,14 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 1. binderfs `features`：列出驱动编译或启用的能力，例如 `oneway_spam_detection`、`extended_error`、`freeze_notification`。它说明功能可用，不表示该功能当前发生。
 2. **冻结状态**：`BINDER_GET_FROZEN_INFO` 返回 `sync_recv` 和 `async_recv` 位标志，不提供累计次数或耗时。`sync_recv == 3` 表示两个状态位都为 1，不是发生三次同步事务。`async_recv` 也不是单调计数。
 3. **扩展错误**：`BINDER_GET_EXTENDED_ERROR` 返回线程级一次性信息（`id`、`command`、`param`），读取后立即重置。libbinder 只对 `ENOSPC` 提供专门解释。
-4. **AIDL trace**：`ATRACE_TAG_AIDL` 可提供 `AIDL::cpp::<接口>::<方法>::server` 形式的方法时间片，不含参数内容。方法名依赖轨迹映射；只采集内核 Binder 事件时 `interface` 或 `method_name` 可能为空，映射缺失时切片名可退化为 `UNKNOWN_CODE_<n>`。
+4. **AIDL trace**：`ATRACE_TAG_AIDL` 可提供 `AIDL::cpp::<接口>::<方法>::server` 形式的方法时间片，不含参数内容。方法名依赖轨迹映射。只采集内核 Binder 事件时 `interface` 或 `method_name` 可能为空，映射缺失时切片名可退化为 `UNKNOWN_CODE_<n>`。
 5. **Perfetto Binder 表**：`android_binder_txns` 可关联事务两端和同步类型，但没有 `dispatch_dur` 列。服务端开始延迟需结合 `server_ts − client_ts` 自行计算，并解释所选时间戳口径。
 6. **内核 tracepoint**：可见事件包括 `binder_transaction`、`binder_transaction_received`、`binder_transaction_alloc_buf` 和 `binder_txn_latency_free`。不存在名为 `binder_reply` 或 `binder_freeze` 的 tracepoint，不要用虚构事件名标注区间。
 7. **调试节点快照**：debugfs/binderfs 状态文件只反映读取时刻。两次读取之间完成的事务可能完全不在快照中。
 
 **Q16: [learning] RecordedTransaction 能做什么？为什么不能当线上常驻监控？**
 
-`RecordedTransaction` 是 libbinder 的事务录制能力，可保存接口名、事务码、flags、返回状态与请求/回复 Parcel 内容，适合受控环境下复现协议问题与离线检查。它同时受三个条件限制：libbinder 编译期定义 `BINDER_ENABLE_RECORDING`、使用内核 Binder、发起录制的调用方 UID 为 root；源码明确标记文件格式仍在开发、不稳定，录制内容可能包含令牌等敏感数据，序列化与写文件还会改变被测路径的时延。
+`RecordedTransaction` 是 libbinder 的事务录制能力，可保存接口名、事务码、flags、返回状态与请求/回复 Parcel 内容，适合受控环境下复现协议问题与离线检查。它同时受三个条件限制：libbinder 编译期定义 `BINDER_ENABLE_RECORDING`、使用内核 Binder、发起录制的调用方 UID 为 root。源码明确标记文件格式仍在开发、不稳定，录制内容可能包含令牌等敏感数据，序列化与写文件还会改变被测路径的时延。
 
 1. 录制时间戳在服务端 `onTransact()` 返回后采集，不能当作事务开始时间。发送路径没有对称的客户端录制入口，不能把“两端各录一次”拼成端到端耗时。
 2. 端到端时间应由 Perfetto Binder flow 分析。录制文件可能含敏感数据，应按敏感数据管理并在分析完成后清理。
@@ -168,6 +168,8 @@ Bundle 可以先保存尚未解包的 Parcel 数据，直到接收端首次读�
 4. **权限**：userdebug + root 才能读驱动节点（`su 0 cat`）。
 
 **Q18: [learning] 怎么确认某个 Binder/AIDL 服务在设备上注册了？service call 能做什么？**
+
+确认注册有两类入口：枚举类命令看全局注册表，service call 按接口描述直接发一次事务。常用手段如下：
 
 1. **列服务**：`dumpsys -l` 或 `service list` 可列出当前注册的服务名，不会自动 dump 每个服务的详细内容。`service check <名>` 可检查指定名称是否注册。
 2. **探活**：`service call <名> <事务码>` 手动发送一笔事务。事务码通常对应生成接口的方法编号，但编号与参数编码受接口版本影响，不应当作稳定 shell API。只有正确构造参数并选择无副作用的方法时，响应结果才适合作为探活证据。

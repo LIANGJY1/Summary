@@ -46,7 +46,7 @@ Keystore 的生物识别定时授权和单次操作授权要求 Class 3（`BIOME
 
 HAL 匹配成功时，framework 会先记录已认证的传感器、暂存 Strong HAT 并通知 SystemUI 更新 Prompt。若还需用户确认，系统会等用户确认。不要求确认时，也要等 SystemUI 报告成功关闭。随后 `AuthSession` 才把 HAT 交给 Keystore、通知应用认证成功并清理传感器。因此，HAL success 不等于 App callback 已执行。
 
-三个"完成"时间点不能混用：
+三个“完成”时间点不能混用：
 
 1. **HAL success：**安全 matcher 已接受样本并向 framework 报告成功。
 2. **SystemUI success：**Prompt 显示认证成功。配置需要显式确认时，用户还须完成确认操作。

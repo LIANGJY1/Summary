@@ -132,7 +132,7 @@ key 对应业务身份（承担 stable ID 的角色，要求稳定、唯一且�
 
 **Q14: [learning] Compose 状态在 Composable 函数体、placement lambda、draw lambda 与 graphicsLayer lambda 中被读取，变化后分别触发哪个阶段的工作？**
 
-运行时按读取位置记录依赖：函数体读取走 Composition（结果变化可继续进入 Layout/Drawing），placement（`Modifier.offset { }`）读取只重新放置，draw lambda 只重新绘制，`graphicsLayer { }` 回调只更新图层属性。把高频值延后到满足 UI 语义的最晚阶段是控制重组范围的基本手段。机制（Compose 1.12.0，AndroidX 外部库材料口径）：三阶段是失效的起点，不代表每个显示帧都完整执行三遍——Composition 输出没变时 Layout/Drawing 可跳过。`LazyColumn`、`BoxWithConstraints`、`SubcomposeLayout` 在布局过程中才决定子内容，不能套用"组合总在布局前一次完成"的模型。
+运行时按读取位置记录依赖：函数体读取走 Composition（结果变化可继续进入 Layout/Drawing），placement（`Modifier.offset { }`）读取只重新放置，draw lambda 只重新绘制，`graphicsLayer { }` 回调只更新图层属性。把高频值延后到满足 UI 语义的最晚阶段是控制重组范围的基本手段。机制（Compose 1.12.0，AndroidX 外部库材料口径）：三阶段是失效的起点，不代表每个显示帧都完整执行三遍——Composition 输出没变时 Layout/Drawing 可跳过。`LazyColumn`、`BoxWithConstraints`、`SubcomposeLayout` 在布局过程中才决定子内容，不能套用“组合总在布局前一次完成”的模型。
 
 ```kotlin
 Modifier
@@ -144,20 +144,20 @@ Modifier
 
 **Q15: [learning] Strong Skipping 默认开启后，List 这类 unstable 参数的 Composable 还能跳过吗，@Stable/@Immutable 注解还承担什么？**
 
-能跳过——Strong Skipping 自 Kotlin 2.0.20 起默认启用（编译器行为，随 Kotlin 版本而非平台 API），所有可重启 Composable 都生成跳过逻辑，稳定参数用 `equals()` 比较、不稳定参数用引用 `===` 比较。注解不再是"能否跳过"的开关，而是开发者契约：公开属性变化必须能被 Compose 观察、同一对实例的 `equals` 结果保持一致。机制：传入内容相同但新建的 `List` 时引用不同，仍会重组。原地修改同一个可变集合并保持引用时可能被跳过，且普通集合不向 Snapshot 系统发通知，界面可能保留旧内容——修复方向是不可变 UI 模型、`SnapshotStateList` 或新实例流转，不是虚假注解。边界：`skippable` 只表示"允许跳过"，是否真跳过还取决于重启组是否失效、参数比较结果、组结构与内部状态读取，不能用编译器 CSV 统计运行时跳过率。lambda 会被自动记忆（稳定捕获按 equals、unstable 捕获按 `===`，`@DontMemoize` 可退出）。对象含不可观察的可变字段时不能标注 `@Immutable`，错误契约导致应执行的更新被跳过。非 `Unit` 返回值或 `@NonSkippableComposable` 的函数不生成跳过逻辑。
+能跳过——Strong Skipping 自 Kotlin 2.0.20 起默认启用（编译器行为，随 Kotlin 版本而非平台 API），所有可重启 Composable 都生成跳过逻辑，稳定参数用 `equals()` 比较、不稳定参数用引用 `===` 比较。注解不再是“能否跳过”的开关，而是开发者契约：公开属性变化必须能被 Compose 观察、同一对实例的 `equals` 结果保持一致。机制：传入内容相同但新建的 `List` 时引用不同，仍会重组。原地修改同一个可变集合并保持引用时可能被跳过，且普通集合不向 Snapshot 系统发通知，界面可能保留旧内容——修复方向是不可变 UI 模型、`SnapshotStateList` 或新实例流转，不是虚假注解。边界：`skippable` 只表示“允许跳过”，是否真跳过还取决于重启组是否失效、参数比较结果、组结构与内部状态读取，不能用编译器 CSV 统计运行时跳过率。lambda 会被自动记忆（稳定捕获按 equals、unstable 捕获按 `===`，`@DontMemoize` 可退出）。对象含不可观察的可变字段时不能标注 `@Immutable`，错误契约导致应执行的更新被跳过。非 `Unit` 返回值或 `@NonSkippableComposable` 的函数不生成跳过逻辑。
 
 **Q16: [learning] Compose 编译器报告里 skippable=1 且 unstable 数量下降，能据此宣布重组性能改善吗？各报告文件分别能回答什么？**
 
-不能。编译器报告只回答"编译器生成了什么"——类型稳定性推断、函数是否 restartable/skippable、模块统计与 featureFlags，运行时重组次数要 Layout Inspector 或 Composition Tracing，用户可见结果要 FrameTimeline 或 Macrobenchmark。文件分工（Kotlin 2.3.20/2.4.10 材料口径）：`reportsDestination` 输出 `*-classes.txt`（类型及属性稳定性）与 `*-composables.txt`/CSV（函数标签、参数稳定性）。`metricsDestination` 输出 `*-module.json`（模块统计与 `featureFlags`，是解释其他数字的必要条件）。解析细节：CSV 布尔列用 0/1、没有名为 `params` 的列，首列虽名为 package 写的是函数完全限定名。做法：报告应在 release 变体上生成，比较前固定 Kotlin 版本、变体与 featureFlags。Kotlin 升级可能改变稳定性判定（2.4.10 修正了部分 stable 判定为运行时稳定性或 Uncertain），升级后必须重新生成基线再解释标签变化。反例：unstable 数量下降但热点函数每次重组都新建 List 实例，运行时重组可能不降反升。优化结论至少包含一项静态证据加一项运行时证据，"全模块全部 skippable"的门禁不值得追求。
+不能。编译器报告只回答“编译器生成了什么”——类型稳定性推断、函数是否 restartable/skippable、模块统计与 featureFlags，运行时重组次数要 Layout Inspector 或 Composition Tracing，用户可见结果要 FrameTimeline 或 Macrobenchmark。文件分工（Kotlin 2.3.20/2.4.10 材料口径）：`reportsDestination` 输出 `*-classes.txt`（类型及属性稳定性）与 `*-composables.txt`/CSV（函数标签、参数稳定性）。`metricsDestination` 输出 `*-module.json`（模块统计与 `featureFlags`，是解释其他数字的必要条件）。解析细节：CSV 布尔列用 0/1、没有名为 `params` 的列，首列虽名为 package 写的是函数完全限定名。做法：报告应在 release 变体上生成，比较前固定 Kotlin 版本、变体与 featureFlags。Kotlin 升级可能改变稳定性判定（2.4.10 修正了部分 stable 判定为运行时稳定性或 Uncertain），升级后必须重新生成基线再解释标签变化。反例：unstable 数量下降但热点函数每次重组都新建 List 实例，运行时重组可能不降反升。优化结论至少包含一项静态证据加一项运行时证据，“全模块全部 skippable”的门禁不值得追求。
 
 **Q17: [learning] remember(keys)、derivedStateOf、produceState 与 snapshotFlow 各适合什么场景，混用会出什么问题？**
 
 `remember(keys)` 按显式 key 缓存一次计算，`derivedStateOf` 把高频输入收敛为低频 State，`produceState` 把外部数据转成 State（key 变化取消旧 producer、启动新 producer），`snapshotFlow` 把 Snapshot 状态读取转成冷流驱动副作用。各自边界（Compose 1.12.0 材料口径）：
 
 1. **remember**：key 是缓存身份，传入原地修改的普通列表时不会重新计算——问题在数据所有权与可观察性，不在多加一层 remember。
-2. **derivedStateOf**：适合"输入每次变、输出只在跨界变"（如滚动是否越过首项）。它维护依赖表与缓存，本身有成本，字符串拼接、数值乘法这类输出每次都变的表达式直接计算更省。每次重组新建派生状态同样错误，应配合 `remember` 保留实例。
-3. **produceState**：返回的 State 由 `remember` 保留，key 变化不会把它重置为 `initialValue`，切换用户要立即显示"加载中"须在新 producer 开头显式赋值。State 合并相等值，连续快速写入时观察者可能跳过中间值。回调式数据源用 `awaitDispose` 注销。
-4. **snapshotFlow**：代码块在只读 Snapshot 中执行、按 `equals` 过滤、可能跳过中间状态，适合观察"当前状态"，不适合统计每次点击或传感器样本。
+2. **derivedStateOf**：适合“输入每次变、输出只在跨界变”（如滚动是否越过首项）。它维护依赖表与缓存，本身有成本，字符串拼接、数值乘法这类输出每次都变的表达式直接计算更省。每次重组新建派生状态同样错误，应配合 `remember` 保留实例。
+3. **produceState**：返回的 State 由 `remember` 保留，key 变化不会把它重置为 `initialValue`，切换用户要立即显示“加载中”须在新 producer 开头显式赋值。State 合并相等值，连续快速写入时观察者可能跳过中间值。回调式数据源用 `awaitDispose` 注销。
+4. **snapshotFlow**：代码块在只读 Snapshot 中执行、按 `equals` 过滤、可能跳过中间状态，适合观察“当前状态”，不适合统计每次点击或传感器样本。
 
 Strong Skipping 不管理 producer 协程，协程的启动、取消与异常处理仍由 Effect key 与作用域生命周期决定。
 
@@ -175,15 +175,15 @@ NodeChain 对新旧 Element 序列做差分：相等则复用 Node 且不调 `up
 
 **Q20: [learning] 自定义 Compose Layout 里对同一个子节点用两组约束连续调用 measure() 会发生什么，单遍测量协议包含哪些约束？**
 
-运行时会抛异常——单遍测量协议要求每个 `Measurable` 在一次布局过程中只被 `measure()` 一次：父节点传一组 `Constraints`，保存返回的 `Placeable`，再在 `layout(width, height) { }` 块中放置。机制（Compose 1.12.0 材料口径）：`Placeable` 保存测得宽高供放置阶段使用，为它建列表是实现的明确成本，不必为"零对象"删掉必要状态。宿主层面 `AndroidComposeView.onMeasure()` 把 View 的 `MeasureSpec` 转成 Compose `Constraints` 并触发根测量，`onLayout()` 与 `dispatchDraw()` 前完成待处理的测量放置，Compose 三阶段嵌在宿主 ViewRootImpl 遍历中，与平台各用一套 API 名称。做法与边界：需要两遍协商（先测主体再决定覆盖层、按内容定父尺寸）时用 `SubcomposeLayout` 或固有尺寸查询表达，不要绕过协议。测量 lambda 内不做业务取数、排序、字符串解析、图片解码与日志格式化。父节点读取子节点的 `AlignmentLine` 对齐线时会建立依赖，子节点对齐线变化会触发父级重新测量或放置，排查父布局频繁重测时要检查是否读取了对齐线，不能只看传入约束。
+运行时会抛异常——单遍测量协议要求每个 `Measurable` 在一次布局过程中只被 `measure()` 一次：父节点传一组 `Constraints`，保存返回的 `Placeable`，再在 `layout(width, height) { }` 块中放置。机制（Compose 1.12.0 材料口径）：`Placeable` 保存测得宽高供放置阶段使用，为它建列表是实现的明确成本，不必为“零对象”删掉必要状态。宿主层面 `AndroidComposeView.onMeasure()` 把 View 的 `MeasureSpec` 转成 Compose `Constraints` 并触发根测量，`onLayout()` 与 `dispatchDraw()` 前完成待处理的测量放置，Compose 三阶段嵌在宿主 ViewRootImpl 遍历中，与平台各用一套 API 名称。做法与边界：需要两遍协商（先测主体再决定覆盖层、按内容定父尺寸）时用 `SubcomposeLayout` 或固有尺寸查询表达，不要绕过协议。测量 lambda 内不做业务取数、排序、字符串解析、图片解码与日志格式化。父节点读取子节点的 `AlignmentLine` 对齐线时会建立依赖，子节点对齐线变化会触发父级重新测量或放置，排查父布局频繁重测时要检查是否读取了对齐线，不能只看传入约束。
 
 **Q21: [learning] Compose 节点上一帧测过的尺寸什么时候会被复用，@Stable 注解会影响布局缓存吗？**
 
-`MeasurePassDelegate` 在节点没有 `measurePending` 标记、且本次 `Constraints` 与上次相同时直接复用已有结果，否则执行 `performMeasure()` 并通过 Snapshot 观察器记录测量代码读取的状态。这套机制跨帧生效，不是"同一帧缓存一个结果"。`@Stable` 属编译器稳定性契约，不参与约束比较、也不清除 `measurePending`，只可能通过减少重组间接减少布局失效。错误标注反而会让 UI 漏更新。机制与边界（Compose UI 1.12.0 材料口径）：标记分两组——`measurePending`（尺寸需重算）与 `layoutPending`（位置需重算），由 `MeasureAndLayoutDelegate` 按树深维护，父节点已处于待测状态时子节点通常不再重复登记。约束相同也不保证子树无工作，子节点因自身状态读取失效时由 `forceMeasureTheSubtree()` 处理。失效传播没有固定的逐级父链，取决于节点是否放置过、尺寸是否变化与对齐线、前瞻布局依赖。排查顺序：先确认状态读取阶段，再检查约束是否稳定（窗口、Insets、字体缩放），最后才考虑稳定性注解。
+`MeasurePassDelegate` 在节点没有 `measurePending` 标记、且本次 `Constraints` 与上次相同时直接复用已有结果，否则执行 `performMeasure()` 并通过 Snapshot 观察器记录测量代码读取的状态。这套机制跨帧生效，不是“同一帧缓存一个结果”。`@Stable` 属编译器稳定性契约，不参与约束比较、也不清除 `measurePending`，只可能通过减少重组间接减少布局失效。错误标注反而会让 UI 漏更新。机制与边界（Compose UI 1.12.0 材料口径）：标记分两组——`measurePending`（尺寸需重算）与 `layoutPending`（位置需重算），由 `MeasureAndLayoutDelegate` 按树深维护，父节点已处于待测状态时子节点通常不再重复登记。约束相同也不保证子树无工作，子节点因自身状态读取失效时由 `forceMeasureTheSubtree()` 处理。失效传播没有固定的逐级父链，取决于节点是否放置过、尺寸是否变化与对齐线、前瞻布局依赖。排查顺序：先确认状态读取阶段，再检查约束是否稳定（窗口、Insets、字体缩放），最后才考虑稳定性注解。
 
 **Q22: [learning] 对 LazyColumn 或 BoxWithConstraints 查询 IntrinsicSize.Min 为什么会直接失败，固有尺寸查询的真实成本怎么评估？**
 
-`SubcomposeLayout` 使用 `NoIntrinsicsMeasurePolicy`，父级经 `IntrinsicSize.Min/Max` 查询会直接失败——这类组件在测量时才决定组合哪些内容，组合之前不存在可靠的固有尺寸。普通自定义 Layout 未覆写固有尺寸方法时得到的是近似默认实现。机制：固有尺寸查询发生在正式测量之前，官方保证它不会把同一子节点正式测量两次，但查询本身要递归询问相关子树，文本固有尺寸会运行段落宽高计算，成本取决于布局实现、查询方向与节点数量，不能统一写成 O(depth) 或"一次完整子树测量"。做法与边界：需要"与父尺寸匹配"时改外层布局的测量顺序或给组件明确约束，对 `LazyColumn` 调 `height(IntrinsicSize.Min)` 得不到低成本的列表总高度。覆写固有尺寸方法要与正式测量语义一致、同输入同结果、不含 I/O 或可变集合访问，并注意字体缩放与布局方向造成的失效。把固有尺寸结果缓存在业务层要考虑 `Density`、`fontScale`、文本内容等失效输入。结构只在少数尺寸断点变化时，先归纳为紧凑/展开模式统一处理，避免每个列表项各自套一层 `BoxWithConstraints`。
+`SubcomposeLayout` 使用 `NoIntrinsicsMeasurePolicy`，父级经 `IntrinsicSize.Min/Max` 查询会直接失败——这类组件在测量时才决定组合哪些内容，组合之前不存在可靠的固有尺寸。普通自定义 Layout 未覆写固有尺寸方法时得到的是近似默认实现。机制：固有尺寸查询发生在正式测量之前，官方保证它不会把同一子节点正式测量两次，但查询本身要递归询问相关子树，文本固有尺寸会运行段落宽高计算，成本取决于布局实现、查询方向与节点数量，不能统一写成 O(depth) 或“一次完整子树测量”。做法与边界：需要“与父尺寸匹配”时改外层布局的测量顺序或给组件明确约束，对 `LazyColumn` 调 `height(IntrinsicSize.Min)` 得不到低成本的列表总高度。覆写固有尺寸方法要与正式测量语义一致、同输入同结果、不含 I/O 或可变集合访问，并注意字体缩放与布局方向造成的失效。把固有尺寸结果缓存在业务层要考虑 `Density`、`fontScale`、文本内容等失效输入。结构只在少数尺寸断点变化时，先归纳为紧凑/展开模式统一处理，避免每个列表项各自套一层 `BoxWithConstraints`。
 
 **Q23: [learning] padding + background + clickable 组合会创建几个 LayoutNode，调整 Modifier 顺序为什么属于行为变更而不是纯性能优化？**
 
@@ -195,14 +195,14 @@ NodeChain 对新旧 Element 序列做差分：相等则复用 Node 且不调 `up
 
 **Q25: [learning] 用 rememberTextMeasurer 在 drawWithCache 里绘制文本时，TextMeasurer 的缓存键包含哪些内容，容量怎么设置才合理？**
 
-缓存键是全部布局输入：文字、布局样式、占位内容、行数、换行、溢出、密度、布局方向、字体解析器与约束。颜色、画刷、阴影等绘制属性不参与键比较，所以只改颜色能复用布局，动画字号或宽度会产生新键。机制（Compose UI 1.12.0 材料口径）：`TextMeasurer` 用 LRU 策略缓存 `TextLayoutInput` 到 `TextLayoutResult` 的映射。`drawWithCache` 的构建块在尺寸、density、layout direction、lambda 身份或其读取的 Snapshot 状态变化时重建，返回的绘制块读取状态只请求重绘——因此颜色高频变化时把颜色读取移进绘制 lambda、保持测量输入不变，可同时复用缓存。容量按"会重复出现的布局输入数量"设置：少量静态标签覆盖重复输入。每帧只测同一段文本容量 1 即可。输入几乎每次都不同时评估 `skipCache = true`。不要把 `TextMeasurer` 当全文缓存，长文分页由业务管理。边界：普通 `Text` 组件已有节点级段落缓存，无需再包一层 `TextMeasurer`。它只在 `Canvas`、`drawBehind`、`drawWithCache` 等自定义绘制场景使用。全屏逐帧重绘文本时，缓存省的是排版，逐像素栅格成本仍在。
+缓存键是全部布局输入：文字、布局样式、占位内容、行数、换行、溢出、密度、布局方向、字体解析器与约束。颜色、画刷、阴影等绘制属性不参与键比较，所以只改颜色能复用布局，动画字号或宽度会产生新键。机制（Compose UI 1.12.0 材料口径）：`TextMeasurer` 用 LRU 策略缓存 `TextLayoutInput` 到 `TextLayoutResult` 的映射。`drawWithCache` 的构建块在尺寸、density、layout direction、lambda 身份或其读取的 Snapshot 状态变化时重建，返回的绘制块读取状态只请求重绘——因此颜色高频变化时把颜色读取移进绘制 lambda、保持测量输入不变，可同时复用缓存。容量按“会重复出现的布局输入数量”设置：少量静态标签覆盖重复输入。每帧只测同一段文本容量 1 即可。输入几乎每次都不同时评估 `skipCache = true`。不要把 `TextMeasurer` 当全文缓存，长文分页由业务管理。边界：普通 `Text` 组件已有节点级段落缓存，无需再包一层 `TextMeasurer`。它只在 `Canvas`、`drawBehind`、`drawWithCache` 等自定义绘制场景使用。全屏逐帧重绘文本时，缓存省的是排版，逐像素栅格成本仍在。
 
 **Q26: [learning] 自定义 Modifier.Node 的 onAttach、onDetach、onReset 与 coroutineScope 分别该承担什么生命周期工作？**
 
 Node 的附着生命周期管理 owner 访问和协程，复用回调则负责清除与旧列表项绑定的状态。不要把两者混为一次性销毁。
 
 1. **附着与协程**：`onAttach()` 后可访问 owner 和 Node 的 `coroutineScope`。作用域在 `onDetach()` 返回后取消，同一 Node 之后仍可能重新附着。
-2. **复用清理**：`onReset()` 在节点仍附着时、即将进入复用池前调用，例如 Lazy 列表项离开视口时；随后 Node 会 detach。清除焦点、按压和拖拽进度等条目级状态，避免新数据项继承旧状态。
+2. **复用清理**：`onReset()` 在节点仍附着时、即将进入复用池前调用，例如 Lazy 列表项离开视口时。随后 Node 会 detach。清除焦点、按压和拖拽进度等条目级状态，避免新数据项继承旧状态。
 3. **状态观察**：Node 中不能使用 `LaunchedEffect`。`onAttach()` 同轮其他节点未必已完成处理，需要观察整棵树最终状态时用 Node 的 `sideEffect` 延后。
 4. **CompositionLocal**：实现 `CompositionLocalConsumerModifierNode` 后，通过 `currentValueOf()` 读取附着位置的值。阶段外读取可用 `observeReads` 订阅变化，收到通知后重新读取并应用新值。
 

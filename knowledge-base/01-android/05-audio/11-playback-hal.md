@@ -35,13 +35,13 @@ Audio HAL 承载音频设备与流的数据接口，AudioControl HAL 承载车�
 
 **Q4: [learning] 为什么“duck 指令发了，媒体却没变小”要查 HAL 版本和配置？**
 
-CarDucking 计算的是建议给硬件的设备地址列表，不是直接修改任意应用的播放器音量。需要同时满足 CarService 发出 duck 信号、AudioControl HAL 暴露并实现相应接口、地址匹配实际输出，以及 DSP/功放执行衰减；少任何一项，都可能在焦点与播放正常时听不到 duck 效果。
+CarDucking 计算的是建议给硬件的设备地址列表，不是直接修改任意应用的播放器音量。需要同时满足 CarService 发出 duck 信号、AudioControl HAL 暴露并实现相应接口、地址匹配实际输出，以及 DSP/功放执行衰减。少任何一项，都可能在焦点与播放正常时听不到 duck 效果。
 
 按以下顺序取证：
 
 1. 确认 CarAudioFocus 是否允许双方并发持焦，以及 CarDucking 计算出的目标地址。
-2. 检查 CarService 配置 `audioUseHalDuckingSignals`。AAOS 13 AOSP 默认值为 `true`；设为 `false` 时不会调用 duck 通知，车型 overlay 可以覆盖该默认值。
-3. 确认 AudioControl HAL 接口实际版本与实现。HIDL `IAudioControl@2.0` 可用于外部声音焦点请求，但 AAOS 13 wrapper 明确不支持其设备 duck/mute 回调；设备级 `onDevicesToDuckChange` 由 AIDL AudioControl 接口提供，AIDL 2.0 在 Android 13 增加了播放元数据。
+2. 检查 CarService 配置 `audioUseHalDuckingSignals`。AAOS 13 AOSP 默认值为 `true`。设为 `false` 时不会调用 duck 通知，车型 overlay 可以覆盖该默认值。
+3. 确认 AudioControl HAL 接口实际版本与实现。HIDL `IAudioControl@2.0` 可用于外部声音焦点请求，但 AAOS 13 wrapper 明确不支持其设备 duck/mute 回调。设备级 `onDevicesToDuckChange` 由 AIDL AudioControl 接口提供，AIDL 2.0 在 Android 13 增加了播放元数据。
 4. 核对 HAL 是否收到 `onDevicesToDuckChange`、地址是否映射到实际 bus，以及 DSP/功放增益是否改变。
 
 不要把 AIDL 2.0 新增的播放元数据当成 AAOS 13 启用设备 ducking 的必要条件。来源：[AudioControl HAL 版本与 duck](https://source.android.com/docs/automotive/audio/audio-control-hal)、[AAOS 13 CarDucking](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/CarDucking.java)。

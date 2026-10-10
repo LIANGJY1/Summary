@@ -31,7 +31,7 @@ AudioAttributes 的 usage 有几十种，但车的路由、音量、焦点只需
 2. **音量组**：context 映射到音量组。
 3. **焦点矩阵**：持焦 context 与请求 context 组成有序对，再映射到裁决结果。
 
-因此应用选错 usage 的后果在车机上被放大：`USAGE_MEDIA` 与 `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` 落不同 context，会走不同 bus、受不同音量组控制、在焦点矩阵里有不同裁决——手机上"usage 只影响策略细节"的直觉在车机不成立。
+因此应用选错 usage 的后果在车机上被放大：`USAGE_MEDIA` 与 `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` 落不同 context，会走不同 bus、受不同音量组控制、在焦点矩阵里有不同裁决——手机上“usage 只影响策略细节”的直觉在车机不成立。
 
 **Q4: [learning] CarAudioService 怎样把 context 路由到 bus？静态 XML 与动态 AudioMix 各负责什么？**
 
@@ -73,7 +73,7 @@ CarAudioService 注册 CarAudioPolicyVolumeCallback（继承 `AudioPolicy.AudioP
 1. **只作用于主区**：副驾、后排的音量不受物理音量键影响。
 2. **组随播报状态切换**：主区同时有导航和媒体出声时，键调的是建议 context 对应的组，因此音量键有时调媒体组，有时调导航组。
 
-**Q8: [learning] 车机焦点裁决与手机"栈式"行为差在哪？矩阵怎么工作？**
+**Q8: [learning] 车机焦点裁决与手机“栈式”行为差在哪？矩阵怎么工作？**
 
 车机按持焦者与请求者的 context 对查矩阵，而不是维护单一全局焦点栈。FocusInteraction 的 13×13 `sInteractionMatrix[持焦者 context][请求者 context]` 返回三种裁决：`REJECT`、`EXCLUSIVE` 或 `CONCURRENT`。
 
@@ -106,7 +106,7 @@ CarAudioService 注册 CarAudioPolicyVolumeCallback（继承 `AudioPolicy.AudioP
 4. **共享设备**：若同一 bus 上仍有未被 duck 的持焦 context，该设备会从 duck 列表移除，避免连带压低不该被压制的声音。
 5. **执行边界**：AudioControl HAL/车型实现负责执行设备 duck。应用无需自行调低播放器音量。应用侧可在收到焦点或状态变化时调整界面呈现。
 
-**Q11: [learning] 车机的 mute 与"音量调零"、AudioFlinger master mute 差在哪？**
+**Q11: [learning] 车机的 mute 与“音量调零”、AudioFlinger master mute 差在哪？**
 
 车机组 mute 是按区、按音量组计算的静音状态，再经 AIDL AudioControl HAL 的 `onDevicesToMuteChange` 通知 HAL。Android 13 AOSP 默认关闭 `audioUseCarVolumeGroupMuting`，省略 OEM overlay 时使用 master mute。启用组 mute 需将该资源设为 `true`，并由 AIDL HAL 实现通知回调。它与组增益置零及 AudioFlinger master mute 的差别如下：
 
@@ -114,7 +114,7 @@ CarAudioService 注册 CarAudioPolicyVolumeCallback（继承 `AudioPolicy.AudioP
 2. **mute 与 master mute**：master mute 是 audioserver 内的全局软静音，不分区不分设备。
 3. **走哪条由配置决定**：开启 `audioUseCarVolumeGroupMuting` 时，Android 13 要求 `audioVolumeAdjustmentContextsVersion` 显式解析为 2，否则 CarAudioService 构造时抛出 IllegalArgumentException。AAOS 13 AOSP 该版本资源默认值为 2。OEM overlay 若改成 1，启用组 mute 就会启动失败。关闭组 mute 时使用 `audioPersistMasterMuteState` 控制是否在启动时恢复全局 master mute。AAOS 13 AOSP 默认开启该持久化资源。
 
-排查"某区突然全静"按链路顺序查：组 mute 状态 → HAL mute 指令 → master mute。
+排查“某区突然全静”按链路顺序查：组 mute 状态 → HAL mute 指令 → master mute。
 
 **Q12: [learning] 车外系统（雷达、ECU）的声音怎样进入 Android 焦点裁决？**
 
@@ -153,7 +153,7 @@ Android 13 的能力边界要按 HIDL 与 AIDL 两条接口演进线区分。HID
 
 版本号只表明接口契约，不证明厂商实现已经正确接通 DSP、功放或整车控制链路。排查 duck/mute 未生效、HAL 焦点未进入 Android、车外音量变化未同步时，依次核对 CarService 选中的接口封装、资源开关、HAL 声明和实现、车辆侧执行结果。能力演进依据 Android Automotive Audio control HAL 文档及 Android 13 `AudioControlWrapperV2` 实现。
 
-**Q15: [learning] Android 13 的车机音频有哪些"还做不到"？哪些要等 14+？**
+**Q15: [learning] Android 13 的车机音频有哪些“还做不到”？哪些要等 14+？**
 
 Android 13 的 car audio 框架不支持以下 Android 14 能力：
 

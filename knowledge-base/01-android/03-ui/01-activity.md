@@ -117,7 +117,7 @@ onCreate 执行时根 View 通常还没有完成首次 layout，因此 getWidth(
 
 A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创建与恢复，因此 `onPause()` 里的耗时操作会直接推迟 B 的 `onResume()` 与首帧呈现。
 
-1. **顺序的来源**：切换时系统先向 A 发送暂停事务，等应用上报暂停完成后才恢复下一个 Activity。Android 13 的 `TaskFragment.startPausing()` 注释明确返回时系统正等待客户端上报暂停完成，`completePause()` 收尾后才触发恢复逻辑；B 的 `onCreate()`、`onStart()`、`onResume()` 都排在这个完成点之后。
+1. **顺序的来源**：切换时系统先向 A 发送暂停事务，等应用上报暂停完成后才恢复下一个 Activity。Android 13 的 `TaskFragment.startPausing()` 注释明确返回时系统正等待客户端上报暂停完成，`completePause()` 收尾后才触发恢复逻辑。B 的 `onCreate()`、`onStart()`、`onResume()` 都排在这个完成点之后。
 2. **耗时后果**：`onPause()` 中的同步 I/O、大对象释放或复杂计算占用的是两页切换的关键路径，B 的首帧随之延后，用户感知为切换卡顿。
 3. **正确做法**：`onPause()` 只做轻量工作，例如停止动画、保存轻量临时状态。较重的资源释放推迟到 `onStop()`，此时 A 已完全不可见，不再阻塞 B 的显示。
 
@@ -126,7 +126,7 @@ A 的 `onPause()` 先执行，并且系统要等它执行完才推进 B 的创�
 保存时机以 targetSdk 的 API 28（Android 9.0）为分界：达到 28 时固定在 `onStop()` 之后调用，低于 28 时在 `onStop()` 之前、与 `onPause()` 的先后没有保证。恢复推荐 `onRestoreInstanceState()`，它只在确有状态可恢复时回调，参数 Bundle 必有值。
 
 1. **保存时机的版本分界**：targetSdk 达到 API 28 后，`onSaveInstanceState()` 固定在 `onStop()` 之后，应用可以安全地在 `onStop()` 里提交 Fragment 事务。低于 28 时发生在 `onStop()` 之前，无法保证与 `onPause()` 的先后（`Activity.onSaveInstanceState()` 注释口径，已按 Android 13 本地源码核对）。
-2. `onCreate()` 恢复：正常启动时传入的 Bundle 为 null，必须判空后才能使用；适合恢复不依赖 View 树的业务数据。
+2. `onCreate()` 恢复：正常启动时传入的 Bundle 为 null，必须判空后才能使用。适合恢复不依赖 View 树的业务数据。
 3. `onRestoreInstanceState()` 恢复：系统只在携带了保存状态时才回调（`ActivityThread.handleStartActivity()` 中 `r.state` 非空才调用），位于 `onStart()` 之后、`onResume()` 之前。无需判空，适合恢复界面相关状态。
 
 需要区分“从未保存”与“有保存状态”时走 `onCreate()` 判空路径。界面状态统一放 `onRestoreInstanceState()` 可以省掉判空样板。

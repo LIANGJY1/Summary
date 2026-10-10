@@ -17,12 +17,12 @@
 
 **Q2: [learning] android 中的 system-as-root 怎么理解？**
 
-system-as-root（SAR）指根文件系统就是 system 分区本身：挂载后 system 镜像根部的内容直接出现在 `/` 下。init 二进制在镜像里位于 `system/bin/init`，成为根之后它在设备上的路径就是 `/system/bin/init`；构建时由 rootdir 模块（`system/core/rootdir`）在镜像根部创建指向它的符号链接，于是挂载后 `/init` 指向 `/system/bin/init`。内核启动第一个用户态进程的入口就是根下的 `/init`，保留这条路径使内核、既有工具和脚本都无需改动。该布局 Android 9 引入，Android 10 起成为新发布设备的要求；ramdisk 仍然存在，但只负责 first-stage 启动，不再提供根文件系统。
+system-as-root（SAR）指根文件系统就是 system 分区本身：挂载后 system 镜像根部的内容直接出现在 `/` 下。init 二进制在镜像里位于 `system/bin/init`，成为根之后它在设备上的路径就是 `/system/bin/init`。构建时由 rootdir 模块（`system/core/rootdir`）在镜像根部创建指向它的符号链接，于是挂载后 `/init` 指向 `/system/bin/init`。内核启动第一个用户态进程的入口就是根下的 `/init`，保留这条路径使内核、既有工具和脚本都无需改动。该布局 Android 9 引入，Android 10 起成为新发布设备的要求。ramdisk 仍然存在，但只负责 first-stage 启动，不再提供根文件系统。
 
 1. **和旧布局比：**旧布局由 ramdisk 提供初始根文件系统，`/init` 是 ramdisk 内的实体文件，system 作为普通分区挂载到 `/system`。SAR 下 system 同时承担根，init 再把根绑定到 `/system` 路径，按 `/system` 开头的旧访问方式继续可用。
-2. **为什么 Android 10 起必须采用：**动态分区下 system 是 `super` 内的逻辑分区，内核只挂载物理块设备，无法把它挂为根；必须由 ramdisk 中的 first-stage init 解析 `super` 元数据、创建设备映射后再挂载。根从 ramdisk 换成 system，与 first-stage init 承担根挂载是同一变化的两面。
-3. **怎么确认：**`ls -l /init` 第一列为 `l`，输出形如 `init -> /system/bin/init`——符号链接是一种内容为路径的特殊文件，访问它等于访问目标文件；`findmnt /` 应显示根来自 system 逻辑分区。两者同时成立即可判定设备采用 SAR。
-4. **注意：**升级设备保留原有启动布局，非 SAR 设备上 `/init` 是实体文件；recovery 的根布局可能与正常启动不同。判断以设备 fstab 和分区表为准，不按 Android 版本反推。
+2. **为什么 Android 10 起必须采用：**动态分区下 system 是 `super` 内的逻辑分区，内核只挂载物理块设备，无法把它挂为根。必须由 ramdisk 中的 first-stage init 解析 `super` 元数据、创建设备映射后再挂载。根从 ramdisk 换成 system，与 first-stage init 承担根挂载是同一变化的两面。
+3. **怎么确认：**`ls -l /init` 第一列为 `l`，输出形如 `init -> /system/bin/init`——符号链接是一种内容为路径的特殊文件，访问它等于访问目标文件。`findmnt /` 应显示根来自 system 逻辑分区。两者同时成立即可判定设备采用 SAR。
+4. **注意：**升级设备保留原有启动布局，非 SAR 设备上 `/init` 是实体文件。recovery 的根布局可能与正常启动不同。判断以设备 fstab 和分区表为准，不按 Android 版本反推。
 
 
 **Q3: [learning] Android 动态分区怎样把 system、vendor 等逻辑分区放进 super？它解决了什么容量问题？**
@@ -62,9 +62,9 @@ bootloader 负责加载启动所需的物理镜像并启动内核，不负责解
 
 **Q6: [learning] Android 的配置文件为什么放在 /system/etc，根目录下为什么没有独立的 /etc？**
 
-两层原因叠加。/etc 是 Unix 世界放配置文件的传统位置，名字来自 et cetera（其他杂项），约定的意义在于任何程序找配置都有一个人人皆知的固定位置；而 Android 的根目录被各分区挂载点占满，没有独立的 /etc，于是把这个角色交给系统分区里的 /system/etc。
+两层原因叠加。/etc 是 Unix 世界放配置文件的传统位置，名字来自 et cetera（其他杂项），约定的意义在于任何程序找配置都有一个人人皆知的固定位置。而 Android 的根目录被各分区挂载点占满，没有独立的 /etc，于是把这个角色交给系统分区里的 /system/etc。
 
 1. **/etc 的传统：**早期 Unix 把不方便归类的文件都放进 /etc，久而久之演变成配置文件目录的约定——fstab、hosts、passwd 都在那里。约定省去每个程序自创路径：程序知道去哪儿找，管理员知道东西放哪。
-2. **Android 为什么没有独立 /etc：**根目录被 /system、/vendor、/data 等分区挂载点占满，只读与可写内容按分区组织。出厂自带的配置文件随系统分区走，/etc 的角色由 /system/etc 承担——init 的 rc 文件、权限 XML、音频策略都在这里；早期版本还用 /etc 到 /system/etc 的软链接兼容旧习惯。
+2. **Android 为什么没有独立 /etc：**根目录被 /system、/vendor、/data 等分区挂载点占满，只读与可写内容按分区组织。出厂自带的配置文件随系统分区走，/etc 的角色由 /system/etc 承担——init 的 rc 文件、权限 XML、音频策略都在这里。早期版本还用 /etc 到 /system/etc 的软链接兼容旧习惯。
 3. **路径是契约：**现代 Android 的 init.rc 位于 /system/etc/init/hw/init.rc，各服务自己的 rc 文件在 /system/etc/init/ 下。init 的代码写死了这个约定路径，配置文件必须放在那里等它来读——放置位置不是可选建议。
-4. **暂存目录到运行时的映射：**制作系统镜像时，暂存目录（如 system_root）里那一层 system/ 对应运行时挂载到 /system 的目录树。因此暂存区中的 system_root/system/etc/init.rc，打包开机后就是 /system/etc/init.rc；bin/init 对应 /system/bin/init。镜像树整体复刻真机布局，路径学到的知识才能直接迁移。
+4. **暂存目录到运行时的映射：**制作系统镜像时，暂存目录（如 system_root）里那一层 system/ 对应运行时挂载到 /system 的目录树。因此暂存区中的 system_root/system/etc/init.rc，打包开机后就是 /system/etc/init.rc。bin/init 对应 /system/bin/init。镜像树整体复刻真机布局，路径学到的知识才能直接迁移。

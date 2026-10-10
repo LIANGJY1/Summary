@@ -28,7 +28,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 
 **Q4: [learning] JNI 中反复调用 GetStringUTFChars 或 GetByteArrayElements 后 Native Heap 线性增长，怎样确认并修复泄漏？**
 
-`GetStringUTFChars`、`GetByteArrayElements` 等接口可能返回副本，也可能返回 VM 管理的直接访问指针。无论是否复制，调用方都必须用对应的 Release 接口结束访问；遗漏 Release 会让高频或长驻路径持续占用 native 资源。
+`GetStringUTFChars`、`GetByteArrayElements` 等接口可能返回副本，也可能返回 VM 管理的直接访问指针。无论是否复制，调用方都必须用对应的 Release 接口结束访问。遗漏 Release 会让高频或长驻路径持续占用 native 资源。
 
 1. **确认增长类型**：用 `dumpsys meminfo` 观察操作次数增加时 Native Heap 或 Native PSS 是否同步增长，并确认 Java Heap 没有相同趋势。单看进程总内存不能证明问题来自 JNI。
 2. **检查 API 配对**：每个 Get 都应在所有返回路径上与对应 Release 配对。不要依赖 `isCopy` 判断是否需要 Release。
@@ -38,7 +38,7 @@ JNI 是应用框架与原生库及 ART 运行时之间的实际调用边界。�
 
 **Q5: [learning] Android 的 @FastNative 和 @CriticalNative 分别减少什么调用开销？它们有哪些限制？**
 
-两种注解都针对短小、高频的 JNI 调用，减少托管代码与 native 之间的转换开销。执行期间 GC 不能为关键工作挂起该线程，因而长时间运行或阻塞会延误 GC。`@FastNative` 保留常规 JNI 参数能力；`@CriticalNative` 更严格，适用的方法不能访问 Java 对象，ABI 中也没有 `JNIEnv*` 和 `jclass` 参数。
+两种注解都针对短小、高频的 JNI 调用，减少托管代码与 native 之间的转换开销。执行期间 GC 不能为关键工作挂起该线程，因而长时间运行或阻塞会延误 GC。`@FastNative` 保留常规 JNI 参数能力。`@CriticalNative` 更严格，适用的方法不能访问 Java 对象，ABI 中也没有 `JNIEnv*` 和 `jclass` 参数。
 
 1. `@FastNative`：ART 在 native 调用期间延迟挂起检查，因此方法应快速返回。不要在其中执行阻塞 I/O、长时间等待或回调 Java，否则会延迟 GC 和其他线程的挂起。
 2. `@CriticalNative`：仅用于静态方法，参数与返回值不能含 Java 对象。调用 ABI 不传 `JNIEnv*` 和 `jclass`，native 函数签名必须与这种约定匹配。
@@ -53,7 +53,7 @@ native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始
 1. **预缓存应用类**：在 `JNI_OnLoad` 或具有正确应用类加载器上下文的 Java 调用中取得 `Class`，创建全局引用并缓存所需 method/field ID。native 线程随后使用缓存，不要依赖它重新按名称查找应用类。
 2. **区分 VM 与环境指针**：`JavaVM` 在进程内共享，可用于获取当前线程的 JNI 环境。`JNIEnv*` 是线程私有，不能把一个线程的指针传给另一个线程复用。
 3. **附着和分离线程**：native 创建的线程调用 Java 前先 attach。线程退出时若仍由 native 管理，应 detach，避免线程状态和资源遗留。
-4. **管理引用生命周期**：局部引用通常在 native 方法返回时释放；自建线程上的局部引用要到 detach 或显式删除才释放。长循环应及时 `DeleteLocalRef`。全局引用跨调用和线程存活，必须显式 `DeleteGlobalRef`。
+4. **管理引用生命周期**：局部引用通常在 native 方法返回时释放。自建线程上的局部引用要到 detach 或显式删除才释放。长循环应及时 `DeleteLocalRef`。全局引用跨调用和线程存活，必须显式 `DeleteGlobalRef`。
 
 统一在有 Java 类加载器上下文的阶段准备全局引用与 ID，线程入口只使用缓存，并在完成时清理引用和线程附着。
 
@@ -70,6 +70,6 @@ native 自建线程通过 `AttachCurrentThread` 附着到 ART 后，没有原始
 `Get<Type>ArrayElements` 可能返回 pin 住的数组存储，也可能返回副本。Release 时要按是否提交修改和是否结束访问选择模式。
 
 1. `0`：提交修改并释放访问资源。常规读写完成后要让结果生效时使用。
-2. `JNI_ABORT`：不提交对副本所做的修改并释放访问资源。只读访问适合用它避免不必要的回写；若 VM 给出的是直接数组存储，则修改已发生，不能把它当作撤销修改。
+2. `JNI_ABORT`：不提交对副本所做的修改并释放访问资源。只读访问适合用它避免不必要的回写。若 VM 给出的是直接数组存储，则修改已发生，不能把它当作撤销修改。
 3. `JNI_COMMIT`：提交对副本的修改，但保留访问资源，之后仍须再调用一次 Release 结束访问。适用于需要阶段性提交、但还要继续使用指针的场景。
 4. **配对规则**：每次成功取得的 Elements 指针最终都必须释放。不要跨 Release 保存指针，因为 VM 可能使用临时副本或移动后的存储。

@@ -34,7 +34,7 @@ aconfig 是 Android 特性发布流程使用的开关基础设施，贯穿 flag 
 1. `is_fixed_read_only`：声明标志固定为只读，不允许运行期改值。
 2. `is_exported`：允许访问超出其默认 container 边界的 flag 使用场景，仍须满足构建和代码生成规则。
 3. `metadata.purpose`：描述功能开关或 bug 修复用途，供评审、策略或测试流程参考，不会自动改变运行期值或权限。
-4. `metadata.storage`：描述运行时值后端选择。后端与模板适用条件见 Q4，运行期读取细节见配套运行时文档。
+4. `metadata.storage`：描述运行时值后端选择。运行期读取细节见配套运行时文档。
 5. `type`：目标分支支持时描述 flag 值类型。Android 17 AOSP 开始出现布尔与整数类型 schema，但这不代表整数访问器链路已完整支持。
 
 `description` 用于说明 flag 控制的功能或变更。`bug` 用于关联代码贡献或本地跟踪事项。对自建镜像而言，关联项关闭是重新评估 flag 生命周期的信号，不等于 flag 会自动删除。
