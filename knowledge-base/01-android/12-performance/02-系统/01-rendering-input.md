@@ -1,0 +1,112 @@
+# Android 合成与输入系统
+
+合成和输入依赖内核调度与驱动；底层路径见 [内核调度与 CPU 频率](../03-底层/01-cpu-scheduler.md) 与 [图形、显示与传感器驱动](../03-底层/03-graphics-sensor-drivers.md)。Perfetto FrameTimeline 的采集与分析见[Perfetto 工具主题](../04-工具/perfetto/01-trace-capture-and-analysis.md)。SurfaceView 合成实验、持续温控策略与触控到显示的端到端测量由[应用渲染主题](../01-应用/rendering/rendering.md)保留完整主题。
+
+**Q1: [learning] FrameTimeline 用什么结构记录一帧，surface_frame_token 与 display_frame_token 为什么不能互换？**
+
+FrameTimeline 从 Android 12（API 31）起为应用提交的 SurfaceFrame（某个 Surface 的一帧）与显示侧的 DisplayFrame（一次整屏合成）分别记录 expected timeline（调度器预留的时间窗口）与 actual timeline（实际开始与结束）。判断一帧要结合完成时间、呈现类型、jank 归因、合成方式与目标 layer，不能只看一个颜色。
+
+token 是关联同一帧记录的标识：前者标识应用或 layer 的 SurfaceFrame，后者标识 SurfaceFlinger 组织的 DisplayFrame。一个 DisplayFrame 可以合成多个 layer frame，两类 token 属于不同命名空间，数值相等也不代表同一对象，可靠做法是沿 Perfetto flow 或两列 token 建立关系，不按时间接近猜测。边界：仅凭 actual slice 很长无法定责——应用可能按时交帧而显示末端仍晚。
+
+SurfaceView、视频 overlay、Camera 等路径可能缺少应用侧 FrameTimeline，此时要转向目标 layer、buffer 与 fence 取证。源码锚点按 AAOS13 核对位于 `frameworks/native/services/surfaceflinger/FrameTimeline/`（材料引用的 `Scheduler/FrameTimeline.cpp` 是 Android 17 的目录布局）。
+
+**Q2: [learning] JankType 位标志怎样指引 App、SurfaceFlinger 与显示侧归因？**
+
+JankType 是位集合，一帧可同时携带多种原因。AAOS13 的 `frameworks/native/libs/gui/include/gui/JankInfo.h` 已核对到 0x100；按责任层先读这些位：
+
+1. **应用侧：**`AppDeadlineMissed`（0x8）表示应用或其 GPU 工作未按时准备好，继续检查 UI、RenderThread、应用 GPU 与 buffer 提交。
+2. **SurfaceFlinger 侧：**`SurfaceFlingerCpuDeadlineMissed`（0x2）、`SurfaceFlingerGpuDeadlineMissed`（0x4）与 `SurfaceFlingerScheduling`（0x20）指向合成线程、RenderEngine、HWC 调用和调度。
+3. **显示侧：**`DisplayHAL`（0x1）表示 SF 按时完成但显示末端 present 偏离，继续检查 Composer HAL、present fence、显示模式与电源切换。
+4. **跨帧状态：**`PredictionError`（0x10）、`BufferStuffing`（0x40）、`Unknown`（0x80）和 `SurfaceFlingerStuffing`（0x100）须结合相邻帧判断，不能由单个位直接定责。
+
+材料中的 `Dropped`（0x200）、`NonAnimating`、`AppResyncedJitter`、显示状态位和 `calculateJankSeverity()` 的 None/Partial/Full 分级属于 Android 13 之后至 Android 17 的语境。AAOS13 的 `Dropped` 只是 PresentState，不是 JankType；引用高位标志须注明版本。
+
+HWC 在 validate 阶段为各 layer 选择 DEVICE 或 CLIENT composition：CLIENT 表示 SurfaceFlinger 的 RenderEngine 先合成 client target，再交给 HWC 显示；格式、混合、缩放、色彩和带宽约束都会影响选择，不能只凭 layer 数量或“超过 plane 数”下结论。TextureView 的内容已由宿主 HWUI 绘入应用窗口，HWC 看不到独立视频 layer；SurfaceView 才保留独立 layer 的 DEVICE 机会。应用侧单变量实验见[渲染主题](../01-应用/rendering/rendering.md)。
+
+**Q3: [learning] dequeueBuffer 或 queueBuffer 变长为什么不能直接写成“SurfaceFlinger 正在合成”，buffer 背压如何传播延迟？**
+
+BufferQueue 在生产者与消费者之间传递图形缓冲区，背压指下游没有及时释放 buffer 或消费数据，导致上游拿不到可用槽位。在标准 BLAST App Window 中 BLASTBufferQueue 位于应用进程，buffer update 经 SurfaceControl transaction 送到 SurfaceFlinger。因此 `dequeueBuffer`/`queueBuffer` 变长可能来自以下等待：
+
+1. 等待可用 slot。
+2. 等待 release fence signal。
+3. 等待生产者或消费者 IPC。
+4. 等待 transaction 排队。
+
+这些情况都不能单独证明 SF 主线程正在合成。
+
+buffer 路径会把上游慢帧向后传播：前一 buffer 占用本帧期望的呈现周期即为 `BufferStuffing`，表现为帧间隔稳定、输入到显示延迟逐帧增加（Perfetto 的 high latency state）。区分不同等待要看补齐证据的方向：slot 状态与前几帧 present 解释 dequeue 等待，producer 线程与 transaction 时间解释 queueBuffer 变晚，fence 来源解释 acquire 未就绪。做法：对齐相邻 SurfaceFrame、DisplayFrame 与队列深度，确认延迟如何传播，而不是把单点等待记成根因。
+
+**Q4: [learning] dequeueBuffer 长时间等待时，为什么不能直接得出「队列深度不够、应该加 buffer」的结论？**
+
+等待原因要按阻塞点逐项排查：
+
+1. 没有满足约束的 FREE slot，或已达到 maxDequeued/maxAcquired 上限。
+2. 候选 slot 的 release fence 尚未 signal，或 Consumer 消费偏慢。
+3. buffer 因尺寸与格式变化正在重分配。Producer 可以选择任何满足约束的 FREE slot，只有所有候选都被状态、上限或 fence 挡住时才会等待，所以「等上一帧那块 buffer」只是特例而非全部。
+
+确认根因要把同队列的可用 slot、Consumer 持有量与上一轮 release 对上：fence 迟到查 Consumer 或 HWC 的归还节奏，触顶查配置与提交节奏，而不是先动队列深度。结果层面，加深队列确实降低 Producer 阻塞概率，但同时增加内存占用与 in-flight 帧数，可能抬高输入到显示延迟——用时延换吞吐并不总是划算。实时交互更关心旧帧是否堆积，离线处理才更关心 Producer 不被抖动打断。做法：只有证据指向容量不足、且业务接受时延代价时才调整 buffer 数量。
+
+**Q5: [learning] 触摸重采样的 5 ms 回退与 8 ms 外推上限各是什么语义，“等于触摸固定慢 5 ms”错在哪？**
+
+按 AAOS13 源码核对，`frameworks/native/libs/input/InputTransport.cpp` 定义 `RESAMPLE_LATENCY = 5 ms` 与 `RESAMPLE_MAX_PREDICTION = 8 ms`（材料按 Android 17 引用 `InputConsumer.cpp`，是后续版本的文件拆分）：批量消费事件时，目标采样时刻从目标 frame time 回退 5 ms。存在 future sample 时在前后样本间插值，只有历史样本时外推，外推上限同时受最近样本间隔一半和 8 ms 限制，样本间隔过小或超出范围则不外推。
+
+5 ms 是算法选择重采样时刻的偏移量，不是端到端响应固定增加 5 ms——实际效果取决于触控采样率、VSync 时序、历史样本与工具类型，端到端延迟必须测量从输入到显示的完整过程。边界：`ro.input.resampling` 是系统只读产品属性，OEM 与 userdebug 构建可以做 A/B，普通应用没有运行时开关，只能采集原始 MotionEvent、消费时刻、模型坐标与 present 证据来评估影响。
+
+系统路径上，触控控制器与驱动决定事件采样，InputReader/InputDispatcher 决定事件何时进入应用通道，SurfaceFlinger 与显示模式决定最终 present 节奏；采样频率不等于应用收到 MotionEvent 的频率。60 Hz 与 120 Hz 的显示周期约为 16.67 ms 与 8.33 ms，但刷新率只缩短按时出帧时的显示等待，不能清空应用积压。应用侧触摸到显示的分段测量见[渲染与响应主题](../01-应用/rendering/rendering.md)。
+
+**Q6: [learning] Android 13 上 App 窗口的 dequeueBuffer 什么时候会等？一条长 dequeue slice 应该怎么读？**
+
+按 AAOS13 源码核对（`BufferQueueProducer.cpp`），等待集中在 `waitForFreeSlotThenRelock()`，有两类等待条件：
+
+1. 有界队列里没有可复用的 free buffer：优先复用 `mFreeBuffers` 中已分配的 buffer，耗尽后才在 `mFreeSlots` 上新建。
+2. 快速断开重连等场景造成 `mQueue.size() > getMaxBufferCountLocked()`，需要防止队列继续膨胀。
+
+边界返回与真正等待要区分：
+
+1. 非阻塞或 async 模式挤不出槽时立即返回 `WOULD_BLOCK`。
+2. 已 dequeue 到 `mMaxDequeuedBufferCount` 上限且已有 buffer 入队过时返回 `INVALID_OPERATION`；这是调用状态不合法，不是在等释放。
+3. 其余等待路径让生产者线程睡在条件变量 `mCore->mDequeueCondition` 上，调用 `wait` 或带超时的 `wait_for`；Consumer 释放时通过 `notify` 唤醒。
+
+版本边界：Android 13 没有 Android 17 的 `waitForBufferRelease()` 虚函数与 `BufferReleaseChannel`（本地树无该文件），`BBQBufferQueueProducer` 只覆盖 `connect` 与 `query`，BLAST 窗口与普通队列共用同一条条件变量路径。release 通道是 Android 16 引入分支、Android 17 无条件化（材料核对 A15–A17 tag）。trace 判读：`dequeueBuffer` slice（源码带 `ATRACE_CALL`）变长时，看同线程 `thread_state`——条件变量等待通常落在 futex 路径、表现为 `S`。再结合 FrameTimeline 的 Buffer Stuffing 与 BLAST 计数器判断是否下游积压传导，不能把一切长 dequeue 都读成背压。
+
+**Q7: [learning] FrameTimeline 的 Expected slice 宽度等于刷新周期吗？Android 13 是怎么计算唤醒时间的？**
+
+不等。Expected slice 是系统为该帧安排的调度预算（官方文档：表示分配给应用渲染该帧的时间。已与官方文档核对），材料示例中应用 Expected 约 20.5 ms、SF Expected 约 10.5 ms，都不能用“90 Hz 就应固定 11.1 ms”来校验——动态刷新率、工作预算与 VSync 重同步都会改变预算。按 AAOS13 源码核对（`VSyncDispatchTimerQueue.cpp`），唤醒时间由两段预算倒推：
+
+```text
+nextReadyTime  = nextVsyncTime - readyDuration   // 应当就绪的时刻
+nextWakeupTime = nextReadyTime - workDuration    // 唤醒时刻
+```
+
+即先从预测的目标 VSYNC 减去 `readyDuration` 得到应当就绪的时间，再向前减去 `workDuration` 得到唤醒时间。固定的“VSYNC 提前固定毫秒数”模型无法描述动态刷新率、不同预算与重同步。Actual slice 的起点是 `Choreographer#doFrame` 或 `AChoreographer_vsyncCallback` 开始运行的时刻，终点取 GPU 完成与提交 SF 的较晚者（官方文档核对）。Android 13 的 trace 名是 `Choreographer#doFrame <vsyncId>`（本地核对 `Choreographer.java` 拼接 `preferredFrameTimeline().vsyncId`）。`doFrame` 较短不能证明帧在 ready deadline 前就绪——Actual 还覆盖异步 GPU 工作与提交时刻。
+
+**Q8: [learning] AOSP 的 Game Mode 给了系统什么信号、没给什么？“游戏事件在 InputDispatcher 有专属优先级”为什么不成立？**
+
+Game Mode 提供的是模式与场景信号，不是输入优先级。用户可选 Standard/Performance/Battery（Android 14 加 Custom），游戏在每次 onResume 重新读取 getGameMode()（可能返回 GAME_MODE_UNSUPPORTED）自行调整画质帧率。厂商干预（backbuffer resize、FPS throttling、ANGLE）面向未适配游戏，不定义输入事件顺序，游戏声明 supportsBatteryGameMode/supportsPerformanceGameMode 后平台会清除此前对该模式施加的干预。GAME_LOADING（Android 13 引入）与 GAME（Android 14 引入）是发给 Power HAL 的电源模式：按 AAOS13 源码核对，GameManagerService 只在 GAME_MODE_PERFORMANCE 时把 isLoading 经 Mode.GAME_LOADING 传给 PowerManager 并带超时限制。Mode.GAME 为 Android 14 引入、本地树未见，A17 口径由“TOP 进程全部是游戏”触发。Power HAL 收到信号后可以提高 CPU 频率或游戏线程调度优先级，但这是性能温控策略，不改窗口路由。
+
+“游戏事件有专属优先级”不成立的直接证据：按 AAOS13 源码核对，本地 frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp 对 GameManager/GAME_MODE 的引用为 0。触摸目标由逻辑显示屏、坐标命中测试、窗口可接收性与触摸序列状态决定，从窗口栈前端向后遍历选首个能接收触点且非 spy window 的窗口，游戏模式不参与该函数。InputTarget.Flags.FOREGROUND 只表示该目标是本次事件的主要前台目标，不表示性能优先级。策略回调 interceptKey/MotionBeforeQueueing 也不接收游戏模式参数。厂商“触控增强”可能改触控采样、驱动、调度、刷新率或游戏工具任意一层，判断某设备是否在 inputflinger 重排事件需要厂商源码差异或跟踪数据。
+
+**Q9: [learning] App 侧没有长任务、SurfaceFlinger 的 GPU 合成区间却变长，这类卡顿在 Android 17 语境下如何重建证据链？**
+
+从目标 DisplayFrame 沿合成链反查六项：
+
+1. App SurfaceFrame 是否按时提交。
+2. `SurfaceFlingerCpuDeadlineMissed` 或 `SurfaceFlingerGpuDeadlineMissed` 是否对应用户看到的帧。
+3. HWC validate 后哪些 layer 走 DEVICE、哪些进入 CLIENT。
+4. CLIENT 帧的 `RenderEngine::drawLayers()` 与 GPU fence 等待是否变长。
+5. 同窗口可见 layer 的集合、格式、alpha、transform、dataspace 与保护属性是否变化。
+6. present fence 在何时 signal。
+
+机制上 CLIENT composition 是正常且受支持的路径（RenderEngine 把相关 layer 画进 client target 再交 HWC），只有 CLIENT 分配变化、RenderEngine 耗时与 missed DisplayFrame 时间上相互对应，才能归因到合成方式或 GPU 合成压力。不能按“屏幕上有五层、硬件只有四个 plane”推断根因——AOSP 没有向普通应用提供 plane 数量查询接口，HWC 决策还受格式、缩放、带宽与厂商策略影响。旧 Systrace 截图只能证明当时现象，当前结论必须由目标 build 的 Perfetto 与 Winscope 重新验证。
+
+候选修复是减少无视觉收益的独立 Surface 与半透明/模糊层，并固定显示条件做前后 trace。
+
+**Q10: [learning] 通知面板掉帧时怎样确认是否由 SystemUI 出图？**
+
+Shade 展开、折叠和快捷设置的动画由 SystemUI 生成；发布通知的应用通过 Binder 提交内容后可能已退出本次帧关键路径。应从显示帧沿对象身份逐层查：
+
+1. 在 FrameTimeline 选 missed DisplayFrame，定位 `NotificationShade` 对应的 SurfaceFrame，而不是查看发布应用的 App FrameTimeline。
+2. 检查目标窗口 UI 线程。legacy 路径看 `NotificationShadeWindowView#onMeasure`、NSSL measure 与 `updateChildren`；Scene 路径还要看 Compose 重组与 blur 请求。
+3. UI 线程未超预算时，检查 RenderThread、buffer queue、SurfaceFlinger 与 GPU。SystemUI SurfaceFrame 按时而 DisplayFrame 迟到时，再看遮罩、壁纸、状态栏等高层 Surface 的合成。
+
+RemoteViews 更新可复用 View，也可能重新 apply，不能认定每次 `notify()` 都重新 inflate。Android 12 目标应用的自定义通知有标准模板约束，但复杂 RemoteViews、图片尺寸和更新频率仍会影响 SystemUI。

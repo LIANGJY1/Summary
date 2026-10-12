@@ -1,6 +1,6 @@
 # 稳定性治理：资源泄漏与进程恢复
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把"内存不足"拆成 Java 堆、Native、线程、地址空间与 FD 的独立失败路径，先分类再选工具，并按独立进程边界处理 WebView renderer 的退出与恢复。lmkd、整理回调与 MemoryLimiter 的机制层见 [../06-memory-storage/01-memory-management.md](./01-memory-management.md)；ANR 机制层见 [../12-performance/08-anr.md](../12-performance/08-anr.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把"内存不足"拆成 Java 堆、Native、线程、地址空间与 FD 的独立失败路径，先分类再选工具，并按独立进程边界处理 WebView renderer 的退出与恢复。lmkd、整理回调与 MemoryLimiter 的机制层见 [../06-memory-storage/01-memory-management.md](./01-memory-management.md)；ANR 机制层见 [../12-performance/02-系统/04-anr-crash.md](../12-performance/02-系统/04-anr-crash.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 一条“内存不足”告警可能来自哪几类资源失败？哪些会抛出 Java OutOfMemoryError？**
 

@@ -1,19 +1,19 @@
 # 面试高频索引
 
-> 编排产物（非蒸馏，无 Q 块）：把本目录的高频面试主题按热度编排成"主题 → 册·Q"速查。热度为通用 Android/AAOS 面试经验判断：★ 必备（几乎每轮会问）、★★ 高频（大厂/平台岗常问）、★★★ 加分项（有区分度）。2026-10-04 学习顺序重排后，册名和题号按本轮映射更新；2026-10-05 QA 题库沉淀的新增题已并入对应条目；2026-10-06 章 12 章重排后路径与册号已同步（输入册为 03-ui/10–16）；检索仍以 atlas 全文为准。AAOS 岗位重点见文末专项段。
+> 编排产物（非蒸馏，无 Q 块）：把本目录的高频面试主题按热度编排成主题速查。热度为通用 Android/AAOS 面试经验判断：★ 必备、★★ 高频、★★★ 加分项。性能知识已按基础、应用、系统、底层和工具重构；本索引链接到稳定目录入口，具体题号以各文章当前编号为准。检索仍以 atlas 全文为准。AAOS 岗位重点见文末专项段。
 
 ## ★ 必备热题
 
-1. **Handler/消息机制与卡顿**：02-handler-looper Q6–Q7；02-handler-looper Q8–Q9；02-handler-looper Q10–Q11；08-app-thread-ipc-stability Q21；03-binder Q7；03-binder Q8（队列/锁/futex）；12-performance/07-app-startup-optimization Q10（IdleHandler）
+1. **Handler/消息机制与卡顿**：02-handler-looper Q6–Q7；02-handler-looper Q8–Q9；02-handler-looper Q10–Q11；08-app-thread-ipc-stability Q21；03-binder Q7；03-binder Q8（队列/锁/futex）；应用启动见[性能优化/应用](12-performance/01-应用/README.md)
 2. **Binder 架构与"一次拷贝"**：03-binder Q1；Q18；缓冲区与线程池细节见 03-binder Q2；Q10；03-binder Q3；03-binder-driver Q2
-3. **ANR 家族与定位**：08-anr 全册（29 题）；入门对照 02-app-framework/08-app-thread-ipc-stability Q14
+3. **ANR 家族与定位**：[性能优化/系统](12-performance/02-系统/README.md)；入门对照 02-app-framework/08-app-thread-ipc-stability Q14
 4. **内存泄漏/OOM/FD**：06-memory-storage/03-app-memory-stability 全册；内存口径见 06-memory-storage/01 Q1–Q2
-5. **启动优化与启动指标**：12-performance/07-app-startup-optimization 全册；平台侧见 12-platform-optimization Q2；12-performance/03-performance-tools Q38；12-platform-optimization Q3；02-system-boot Q22
-6. **进程被杀/保活**：12-performance/22-app-power-governance Q3–Q5（OEM 差异）、Q26（Freezer 长连接）；06-memory-storage/01 Q15–Q19（lmkd）
-7. **渲染卡顿/掉帧**：05-smoothness Q1、Q4；01-render-pipeline-vsync Q32；02-gpu-composition-display Q32–Q33；05-smoothness Q31；01-render-pipeline-vsync Q33；01-render-pipeline-vsync Q34–Q35；04-graphics/01（VSync 调度）
+5. **启动优化与启动指标**：[性能优化/应用](12-performance/01-应用/README.md)；平台侧见[性能优化/系统](12-performance/02-系统/README.md)；基准测试与编译状态见[性能优化/工具](12-performance/04-工具/README.md)；02-system-boot Q22
+6. **进程被杀/保活**：[性能优化/应用](12-performance/01-应用/README.md)与[性能优化/系统](12-performance/02-系统/README.md)；06-memory-storage/01 Q15–Q19（lmkd）
+7. **渲染卡顿/掉帧**：[性能优化/应用](12-performance/01-应用/README.md)、[性能优化/系统](12-performance/02-系统/README.md)与[性能优化/工具](12-performance/04-工具/README.md)；01-render-pipeline-vsync Q32；02-gpu-composition-display Q32–Q33；04-graphics/01（VSync 调度）
 8. **View/Compose 渲染实战**：04-graphics/09–10 与 04-graphics/12–13 按题型查
-9. **协程/线程池治理**：02-app-framework/08-app-thread-ipc-stability Q1–Q8；线程优先级与 cpuset 见 12-performance/01 Q2/Q6/Q7
-10. **网络与弱网**：11-network-performance；07-network/09-app-network-practice
+9. **协程/线程池治理**：02-app-framework/08-app-thread-ipc-stability Q1–Q8；线程可运行 CPU 与 Android 调度约束见[性能优化/底层](12-performance/03-底层/README.md)
+10. **网络与弱网**：[性能优化/应用](12-performance/01-应用/README.md)；07-network/09-app-network-practice
 
 ## ★★ 高频（大厂/平台岗）
 
@@ -21,16 +21,16 @@
 2. **Zygote 与 fork 模型**：02-system-boot Q19–Q27（Zygote 角色、启动、预加载、fork 与进程模型）
 3. **system_server 运行机制**：04-system-server Q2–Q3（创建与装配）；Q5–Q6（Watchdog 看护与恢复）；Q8–Q11（线程纪律、AMS 双锁与 WMS/SurfaceFlinger 边界）；02-system-boot Q30（systemReady）
 4. **init/启动链**：02-system-boot Q1–Q2；02-system-boot Q3–Q4；02-system-boot Q5–Q6；02-system-boot Q7–Q8；02-system-boot Q9–Q10；02-system-boot Q11–Q12；02-system-boot Q13–Q14；02-system-boot Q15–Q16；02-system-boot Q17–Q18（启动链与 init 各阶段）；2026-10-06 扩充 Q47–Q96（boot 镜像与 AVB/dm-verity/动态分区 Q47–Q54、A/B slot 状态机与 OTA 回退 Q53/Q55、recovery/BCB/充电模式 Q56–Q57、servicemanager 与启动顺序 Q58–Q59、init 机制层 Q60–Q73、度量与杂症 Q74–Q96）
-5. **应用进程诞生**：02-system-boot Q29；应用侧冷启动指标见 12-performance/07-app-startup-optimization Q1–Q2；12-performance/07-app-startup-optimization Q3–Q4
+5. **应用进程诞生**：02-system-boot Q29；应用侧冷启动指标见[性能优化/应用](12-performance/01-应用/README.md)；启动监控工具见[性能优化/工具](12-performance/04-工具/README.md)
 6. **SELinux 拒绝与策略书写**：11-selinux 全册 28 题（基础概念与开发者视角 Q1–Q5；avc 与启动期校验 Q6–Q8；规则、标签与属性配置 Q9–Q14；service_manager 检查和案例 Q15–Q23；ioctl、工作模式与验证 Q24–Q28）；启动期装载见 02-system-boot Q11
-7. **多进程/多用户**：09-app-sandbox Q3（UID 公式与跨用户）；12-performance/07-app-startup-optimization Q13；Q16（初始化分流）；02-app-framework/08-app-thread-ipc-stability Q22–Q23（android:process 命名与单进程假设失效）
-8. **前台服务与后台限制**：12-performance/22-app-power-governance Q7–Q9、Q27（FGS 类型与 BOOT_COMPLETED 豁免）；02-system-boot Q37
-9. **Freezer 冻结机制**：01-system-architecture Q9；01-memory-management Q27；01-memory-management Q28（冻结中 Binder 语义）；12-performance/22-app-power-governance Q26
-10. **Native crash 与符号化**：12-performance/13-app-stability Q15–Q20；07-jni Q2；03-binder Q18（RefBase abort）
+7. **多进程/多用户**：09-app-sandbox Q3（UID 公式与跨用户）；应用启动与逐进程初始化见[性能优化/应用](12-performance/01-应用/README.md)；02-app-framework/08-app-thread-ipc-stability Q22–Q23（android:process 命名与单进程假设失效）
+8. **前台服务与后台限制**：[性能优化/应用](12-performance/01-应用/README.md)与[性能优化/系统](12-performance/02-系统/README.md)；02-system-boot Q37
+9. **Freezer 冻结机制**：01-system-architecture Q9；01-memory-management Q27；01-memory-management Q28（冻结中 Binder 语义）；[性能优化/应用](12-performance/01-应用/README.md)
+10. **Native crash 与符号化**：[性能优化/应用](12-performance/01-应用/README.md)与[性能优化/工具](12-performance/04-工具/README.md)；07-jni Q2；03-binder Q18（RefBase abort）
 11. **Watchdog 与软重启**：04-system-server Q5–Q6；启动链死亡层级见 02-system-boot Q42
 12. **广播队列与投递**：01-broadcast 全册
-13. **线程优先级/实时调度误区**：12-performance/01 Q2/Q6/Q7；01-kernel-gki Q5（vendor hooks 观测）
-14. **主线程 Binder ANR 实案**：02-app-framework/08-app-thread-ipc-stability Q14；02-app-framework/09-defect-main-thread-async Q1、Q6–Q7；08-anr Q11、Q17
+13. **线程优先级/实时调度误区**：[性能优化/底层](12-performance/03-底层/README.md)；01-kernel-gki Q5（vendor hooks 观测）
+14. **主线程 Binder ANR 实案**：02-app-framework/08-app-thread-ipc-stability Q14；02-app-framework/09-defect-main-thread-async Q1、Q6–Q7；[性能优化/系统](12-performance/02-系统/README.md)
 15. **窗口系统与 relayout**：03-ui/04（窗口三副面孔、addWindow 校验与返回码、relayout 与遍历调度分工、WindowState·Token·DisplayContent、z 序与 surface placement、Insets 体系与 WindowInsetsController）；窗口管理总览另见 04-window-system
 16. **Activity 生命周期与首帧**：03-ui/01（生命周期两对正交维度、回调分场景顺序、onPause 时序约束、启动到首帧时序、四个可观测时点、setContentView 与 DecorView、透明主题尺寸陷阱、配置变化与 relaunch、状态保存时机与版本分界、View 层次保存委托链、切换动画双窗口、首帧度量、时序缺陷排查）；启动模式、任务栈与 Intent 匹配见 02-app-framework/10
 17. **View 绘制与失效语义**：03-ui/02（MeasureSpec 尺寸契约、layout vs onLayout、requestLayout vs invalidate 分工、display list 与"不 invalidate 就不重绘"、脏区传播、绘制顺序与裁剪、图层类型、SurfaceView vs TextureView、SurfaceView 打洞与 mDrawFinished 边界、TextureView 双队列与 TextureView/GLSurfaceView 帧时序）；渲染实践见 04-graphics/09–10 与 04-graphics/12–13
@@ -55,7 +55,7 @@
 10. **CarPower 电源状态机**：04-car-power-users Q1
 11. **APEX/odsign 与启动**：02-system-boot Q18；06-art-runtime Q6（odrefresh 重建）
 12. **分心限制 UXR（AAOS）**：07-driving-safety Q16–Q17；07-driving-safety Q18；机制与验证方法见 03-ui/07
-13. **FGS 类型与超时**：12-performance/22-app-power-governance Q8、Q27；08-anr Q7
+13. **FGS 类型与超时**：[性能优化/应用](12-performance/01-应用/README.md)与[性能优化/系统](12-performance/02-系统/README.md)
 14. **Compose 运行期与稳定性**：03-ui/05（组合期写状态、remember 与 rememberSaveable 边界、derivedStateOf、稳定性推断与 strong skipping、延迟读取、列表键、ComposeView 组合策略、自定义宿主帧时钟、重组归因）
 
 ## AAOS 岗位专项（结合求职方向必看）

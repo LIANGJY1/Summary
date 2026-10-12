@@ -160,3 +160,11 @@ lock 段可能等待 FREE slot、等待返回 buffer 的 release fence，或因�
 因为 lock 时系统要把上一块已提交 buffer 中需要保留的像素复制回当前 back buffer，小脏区节省的重画量可能小于这笔复制的内存流量。AAOS13 的 Surface::lock 会比较本轮 back buffer 与上一块 mPostedBuffer：尺寸与格式兼容时，计算旧有效区域与本轮新脏区的差集，通过 copyBlt 执行 copyback，再用最终脏区 lockAsync。无法 copyback 时把新脏区扩成整个 buffer 边界（AAOS13 的 `frameworks/native/libs/gui/Surface.cpp` 可核对）。
 
 copyback 的前提是「上一帧内容仍有有效部分且两块 buffer 几何兼容」：resize、format 变化、Surface 重建、buffer discard 或大范围脏区都会削弱甚至消除收益。因此「只重画脏区」既可能减少 CPU 重画，也可能增加旧 buffer 到新 buffer 的内存复制。做法：判断 Dirty Rect 是否有效要同时测量 CPU draw 与 copyback 的内存流量，不能只看脏区面积变小。
+
+**Q37: [learning] 应用请求 120 Hz 就等于面板运行在 120 Hz 吗？Android 的刷新率由谁决定，Surface.setFrameRate() 承诺了什么？**
+
+不等于。显示链路有四个不同频率：应用产生新 buffer 的速率、Choreographer/VSync 驱动 UI 的节奏、SurfaceFlinger 合成与提交的节奏、面板物理刷新率——30 fps 的视频可以由 120 Hz 面板重复帧显示。支持自适应刷新率（ARR）的设备还会在同一面板模式内改变 VSync 节奏。实验报告必须分别记录“请求值”与“观察值”（VSync 间隔、显示模式、面板观察值），把“请求 120 Hz”写成“持续 120 Hz”是常见混淆。
+
+决策链：`DisplayModeDirector`（AAOS13 源码核对存在）汇集用户设置、应用请求、可见内容帧率、亮度与 HBM、省电、thermal 与 OEM 配置等多个 vote，生成显示模式与刷新率范围。材料按 Android 17 核对的 `RefreshRateSelector` 在 SurfaceFlinger 内结合 Layer 需求选候选刷新率——AAOS13 树中对应实现是 `RefreshRateConfigs.cpp`，命名不同但分层一致。应用 API 表达的是提示或兼容性要求，不独占控制权。
+
+版本边界：`Surface.setFrameRate()` 自 Android 11（API 30）提供，系统可评估切换模式或采用兼容倍频，暂停更新的 Surface 应撤销不再需要的 frame-rate vote，调用成功也不代表面板已切换。`View.setRequestedFrameRate()`（API 35）与 `Display.hasArrSupport()`（API 36）在 Android 13 上不存在，ARR 还依赖显示硬件、Composer HAL 与 OEM 配置——系统版本到 Android 17 也推不出设备支持 ARR。省电模式常收窄刷新率范围，但“固定限制到 60 Hz”不是所有设备的 SDK 合同。

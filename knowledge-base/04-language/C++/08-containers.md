@@ -111,7 +111,36 @@ v.push_back("abc");       // 构造临时 string，再移动入容器
 v.emplace_back("abc");    // 在容器存储内直接构造
 ```
 
-**Q8: [learning] clear 之后 capacity 为什么不缩小，怎样才能真正释放内存？**
+**Q8: [learning] push_back 存入记录后，如何用 back() 修改最后一条？**
+
+back() 返回最后一个元素的引用，通过它赋值就直接改在容器里。配合 push_back 存入，就得到先存入、后回头修改最后一条的模式。back() 要求容器非空，调用前先用 empty() 判断。
+
+存入与修改分两步：
+
+1. **存入：**push_back 把参数的副本追加到末尾，容器保存自己的副本，原对象之后销毁或修改都不影响已存入的元素。解析 init.rc 时，每条 service 行解析出的对象就是这样进入 services 列表的。
+2. **取引用修改：**back() 返回最后一个元素的引用。引用是已存在对象的别名，不是新对象，所以 `services.back().oneshot = true` 直接作用于容器内的元素。如果取到的是副本，赋值只会修改临时对象，容器毫无变化。
+
+用最小例子看这个模式：
+
+```cpp
+std::vector<int> values;
+values.push_back(10);
+values.push_back(20);
+if (!values.empty()) {
+    values.back() = 99;
+}
+```
+
+执行后 values 为 {10, 99}：两次 push_back 依次存入 10 和 20，back() 取到最后的 20 并原地改成 99。把 back() 的返回值存进引用再赋值，同样修改容器内的元素，实测 `int& last = values.back(); last = 77;` 之后 back() 得到 77。init.rc 的 oneshot 行用的是同一模式：它排在被修饰的 service 行之后，back() 取到的正是最近一次 push_back 进去的那条。
+
+边界与注意点：
+
+1. **空容器调用 back() 是未定义行为：**没有最后一个元素可引用时，标准不保证任何结果。先用 `empty()` 判断。init.rc 的解析代码对没有前置 service 的 oneshot 行选择静默忽略，格式要求严格时也可以报错。
+2. **引用不能跨后续 push_back 保存：**扩容时元素整体搬移，之前取得的引用全部失效，不扩容时保持有效。上面的例子和解析代码每轮单独调用 back() 并立即用完，不受影响。
+
+要让后出现的步骤修改前一条已存入容器的记录，模式是 push_back 存入后用 back() 取引用原地赋值，并用 empty() 确认容器非空。
+
+**Q9: [learning] clear 之后 capacity 为什么不缩小，怎样才能真正释放内存？**
 
 clear() 析构全部元素并把 size 归零，capacity 和堆上存储原样保留，这是为“清空后继续装填”的复用场景避免再次分配。真正缩小占用需要显式请求：`shrink_to_fit()` 或与空 vector 交换。
 
@@ -119,7 +148,7 @@ clear() 析构全部元素并把 size 归零，capacity 和堆上存储原样保
 2. **shrink_to_fit 是请求不是命令：**标准称之为非绑定请求，实现可以拒绝。一旦执行就是一次重新分配，全部迭代器、指针和引用失效。
 3. **交换惯用法：**`std::vector<T>().swap(v)` 让 v 与一个空的临时 vector 交换，v 立刻得到空存储，旧存储随临时对象析构释放。这是 shrink_to_fit 出现之前的经典写法。
 
-**Q9: [learning] 删除 vector 中所有满足条件的元素，为什么常用 erase-remove 惯用法？**
+**Q10: [learning] 删除 vector 中所有满足条件的元素，为什么常用 erase-remove 惯用法？**
 
 因为 `std::remove` 和 `std::remove_if` 是算法，手里只有迭代器，无法改变容器长度：它们把不删除的元素依次前移，返回新序列的逻辑尾，size 和尾部遗留值都不动。必须再由容器调用 erase，把逻辑尾之后的区间真正删掉。
 
@@ -135,7 +164,7 @@ auto new_end = std::remove(v.begin(), v.end(), 5);
 v.erase(new_end, v.end());   // 此刻才真正变短：{1, 2, 3}
 ```
 
-**Q10: [learning] operator[] 与 at() 越界访问的行为有何不同？**
+**Q11: [learning] operator[] 与 at() 越界访问的行为有何不同？**
 
 operator[] 的前置条件是下标小于 size()，违反前置条件就是未定义行为，结果不可预期。at() 检查下标并在越界时抛出 `std::out_of_range`。检查被设计成可选，是为了不让每次下标访问都付出一次分支判断的代价，把选择权交给调用方。
 
@@ -143,7 +172,7 @@ operator[] 的前置条件是下标小于 size()，违反前置条件就是未�
 2. **at()：**实测越界抛出 `std::out_of_range`，`what()` 给出下标与 size 的具体数值。每次访问多一次范围检查，性能敏感的内层循环不宜使用。
 3. **同类边界：**对空 vector 调用 front()、back() 同样是未定义行为。`data()` 对空 vector 返回空指针（实测为 nullptr），不能解引用。
 
-**Q11: [learning] vector 的 bool 特化与其他 vector 有什么本质区别？**
+**Q12: [learning] vector 的 bool 特化与其他 vector 有什么本质区别？**
 
 `vector<bool>` 是按位压缩的特化：每个元素只占 1 位，`operator[]` 返回的不是 `bool&`，而是一个代理类对象，通过它间接读写对应的位。它因此不满足标准对其他 vector 的连续存储承诺，取元素地址和依赖 `bool&` 的泛型代码都会失效。
 

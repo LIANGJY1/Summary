@@ -1,6 +1,6 @@
 # Android 系统启动流程
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：从按下开机键到 Launcher 上屏的完整启动链——init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制；2026-10-06 扩充 Q47–Q96：镜像与校验层（boot 镜像/AVB/dm-verity/动态分区）、A/B slot 状态机与 OTA 验证、init 机制层（rc 模型/属性服务/触发阶段）、启动度量与实战杂症（含车机 ACC 唤醒、Car API/VHAL 时序）。配套架构主题见 [01-system-architecture.md](01-system-architecture.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：从按下开机键到 Launcher 上屏的完整启动链——init、.rc、Zygote、system_server 与应用进程的诞生与恢复机制；2026-10-06 扩充 Q47–Q97：镜像与校验层（boot 镜像/AVB/dm-verity/动态分区）、A/B slot 状态机与 OTA 验证、init 机制层（rc 模型/属性服务/触发阶段）、启动度量与实战杂症（含车机 ACC 唤醒、Car API/VHAL 时序）。配套架构主题见 [01-system-architecture.md](01-system-architecture.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] [tags:系统启动] Android 设备从上电到桌面可交互，启动链经过哪些阶段？**
 
@@ -16,10 +16,6 @@
 
 定位启动故障时，先辨别停在哪一层和哪一个里程碑：进程创建、HOME Activity 启动、首帧、动画退出、全局 boot 属性、用户解锁及用户级广播不能互相替代。此处 Boot ROM/Bootloader/内核依据文档已核对的官方资料。Framework 与 AAOS 行为以 Android 13 `AAOS13_study` 源码锚点 `abec84ef9` 为准。
 
-
-
-
-
 **Q2: [done] [tags:init] init 进程的入口是什么，是如何拉起的？**
 
 ramdisk 的 `/init` 是可执行文件，不是进程。内核创建 PID 1 的 `kernel_init` 内核线程后，通过 `kernel_execve("/init")` 装载它。执行切到 ELF 入口 `_start` 时，同一个 PID 1 才开始运行用户态 init。Bionic 初始化后再调用 C++ `main()`。这是转换已有任务，不是 `fork` 新进程。
@@ -29,8 +25,6 @@ ramdisk 的 `/init` 是可执行文件，不是进程。内核创建 PID 1 的 `
 2. **系统 init 如何构建：**`system/core/init/Android.bp` 将 `main.cpp` 编入 `init_second_stage` 模块，并链接 `libinit`。`stem: "init"` 将产物命名为 `init`。若省略，文件名默认取模块名 `init_second_stage`。产物安装到 `/system/bin/init`。启动时，动态链接器先装载依赖，再进入程序的 `_start`，由 Bionic 调用 `main.cpp` 中的 `main()`。
 
 3. **main() 如何分流阶段：**`main()` 收到 `selinux_setup` 时调用 `SetupSelinux()`。SELinux 初始化完成后，再通过 `execv` 传入 `second_stage`，进入 `SecondStageMain()`。`execv` 替换 PID 1 的程序映像，不创建新进程。System-as-root 布局下，`/init` 可指向 `/system/bin/init`，无阶段参数时直接进入 `FirstStageMain()`。
-
-
 
 **Q3: [learning] [tags:init] init 进程都做了什么？**
 
@@ -44,8 +38,6 @@ init 是内核启动的第一个用户态进程（PID 1）、所有用户态进�
 4. **服务监督与子进程回收**：作为 PID 1，init 通过 `waitpid()` 回收子进程，并按 `.rc` 定义决定服务退出后的处理方式。
 
 理解它的用处：所有“谁负责重启某个服务”的答案最终都落在 init 的服务监督上——system_server 崩溃后 Zygote 自杀，再由 init 重启 Zygote、重新 fork system_server，这条恢复链的管理者就是 init。
-
-
 
 **Q4: [learning] [tags:init] init 进程 first_stage_init 详解？**
 
@@ -61,8 +53,6 @@ first_stage_init 是第一阶段的执行体：`first_stage_main.cpp` 的 `main(
 6. **切根与接力**：`ForceNormalBoot`（如 recovery ramdisk 被要求正常启动）时先 `PrepareSwitchRoot()` 再 `SwitchRoot("/first_stage_ramdisk")`。收尾把首阶段起点计时写入环境（exec 不清环境，第二阶段可读），最后 `execv("/system/bin/init", "selinux_setup")`——同一 PID 1 替换映像进入 `main()` 的阶段分发，接力机制本身在上一题已展开。
 
 两个边界：其一，system-as-root 布局没有独立 ramdisk，`/init` 直接指向 `/system/bin/init`，无阶段参数时同样进入 `FirstStageMain()`，但入口 ELF 不同。其二，这一阶段的失败除控制台模式外都是终态——此刻既没有服务可重启，也没有文件系统可供回退。
-
-
 
 **Q5: [learning] [tags:系统启动] verified boot（AVB）是怎么保证“启动运行的代码没有被篡改”的？**
 
@@ -87,10 +77,6 @@ Android Verified Boot（AVB）用签名元数据和分区摘要建立从 Bootloa
 
 fork 复制已有进程，而此时没有用户态进程可供复制。execve 让内核线程进入 init 用户态映像。此后 Android 的 Zygote、system_server 和应用等用户态进程才由 init 启动的进程链派生。
 
-
-
-
-
 **Q7: [learning] [tags:系统启动] 内核把控制权交给 init 的那一刻，系统精确处于什么状态？**
 
 内核已把控制权交给 `/init`，但 init 第一阶段的工作尚未完成。此刻不能把 init 后续挂载、装载的内容算作内核已完成的状态。此时的状态如下：
@@ -105,10 +91,6 @@ fork 复制已有进程，而此时没有用户态进程可供复制。execve �
 
 收束：这份清点就是 init“建设者”职责的完整清单——它要补的每一项空白（窗口、真根、策略、服务、Java 世界）都对应上面一行。
 
-
-
-
-
 **Q8: [learning] [tags:系统启动] init 为什么要在启动中途 execv 自己两次？三个阶段各自做什么？**
 
 init 是同一个二进制以三个不同进程映像接力：第一阶段在 ramdisk 上搭最小环境，之后 execv 切入 selinux_setup 镜像装载策略，再 execv 切入 second_stage 常驻形态——中间两次 exec 是因为 SELinux 域转换只发生在 exec 时刻，这是把“同一程序不同阶段需要不同信任级别”交由内核保证的做法。
@@ -120,10 +102,6 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 3. `execv("second_stage")` 与 SecondStageMain：执行 PropertyInit 与 SelinuxRestoreContext，建立 epoll、signalfd、属性 socket 等事件源，解析 rc 后进入常驻主循环。
 
 三个阶段通过 `execv` 接力，因此全局变量与静态状态不会从前一阶段自动带到后一阶段。跨阶段数据可通过环境变量（如 `INIT_AVB_VERSION`）或文件传递。exec 接力适合需要程序映像或安全域边界的阶段划分。若只是逻辑分层，函数调用更简单，也更容易调试。
-
-
-
-
 
 **Q9: [learning] /dev、/proc、/sys 三个伪文件系统分别提供什么信息？init 为什么要先挂载它们？**
 
@@ -143,10 +121,6 @@ init 是同一个二进制以三个不同进程映像接力：第一阶段在 ra
 
 init 在第一阶段挂载这些文件系统。`/dev` 的大部分设备节点随后由 ueventd 补齐。
 
-
-
-
-
 **Q10: [learning] [tags:系统启动] GKI 时代，为什么内核模块要放在 vendor ramdisk 里而不是编进内核？**
 
 GKI（Generic Kernel Image，通用内核镜像）把通用内核与符合 KMI（内核模块接口）的厂商模块分开交付，降低通用内核更新与设备专属驱动之间的耦合。设备驱动并非全部都是模块：部分可以内建，部分可在对应分区挂载后加载。只有挂载关键分区前就必须可用的模块，才需要放在早期可读取的 vendor ramdisk 等位置。
@@ -154,10 +128,6 @@ GKI（Generic Kernel Image，通用内核镜像）把通用内核与符合 KMI�
 需要早于 vendor/system 挂载的模块放进 vendor ramdisk，是启动顺序的要求，不意味着所有厂商驱动都必须外置到这里。若某个存储驱动正是挂载相应分区的前置条件，就会形成“先挂分区才能取模块、先有模块才能挂分区”的依赖环。init 第一阶段从 ramdisk 加载该类模块来打破这个环。
 
 因此判断模块放置位置应问“它是否是早期挂载的前置依赖”，而不是笼统按“厂商驱动”归类。`LoadKernelModules` 的具体模块集合由设备配置决定。
-
-
-
-
 
 **Q11: [learning] [tags:系统启动] fstab 是什么？init 第一阶段怎么按它挂载分区？**
 
@@ -180,10 +150,6 @@ fstab 每行由块设备路径、挂载点、文件系统类型、内核挂载�
 
 启动早期使用的 fstab 副本位于 ramdisk 可访问范围，供第一阶段读取。完整版常位于 vendor 等分区配置目录。条目集合、文件名和阶段选择受 Android 版本与设备配置影响。
 
-
-
-
-
 **Q12: Android 启动时如何装载 SELinux 策略？预编译策略校验失败时怎样回退？**
 
 Treble 设备的 system 与 vendor 可独立更新，但内核最终只装载一份二进制 SELinux 策略。init 的 `SetupSelinux` 汇集 system、system_ext、product、vendor、odm 和 apex 等来源的 CIL 策略，校验后装载并切换到 enforcing。预编译策略与当前分区不匹配时，系统尝试用 `secilc` 现场编译。
@@ -198,10 +164,6 @@ Treble 设备的 system 与 vendor 可独立更新，但内核最终只装载一
 
 具体哈希文件集合、可选 CIL 输入和 OTA 阶段顺序受 Android 分支影响，排查时应对照设备对应的 init 源码与启动日志。
 
-
-
-
-
 **Q13: [learning] [tags:系统启动] init 的属性服务是怎么工作的？为什么系统里到处都在用属性？**
 
 属性服务是 init 维护的系统级键值服务。启动时各分区的 prop 文件提供初始值，进程读取共享属性区，写入则经属性 socket 提交给 init，由 init 按 SELinux 策略校验并更新属性，再通知监听方。
@@ -210,10 +172,6 @@ Treble 设备的 system 与 vendor 可独立更新，但内核最终只装载一
 2. **启动编排**：init 可把服务状态写入 `init.svc.*` 供进程读取，也可在属性变化时触发 rc 动作，例如 `on property:xxx=yyy`。组件因此能通过“设置属性—匹配动作”协调启动顺序，而不必彼此直接调用。
 3. **完成信号**：Android Framework 在全局启动收尾时设置 `sys.boot_completed=1`。监听方可据此判断全局启动阶段到达，但它不代表每个用户的开机广播均已送达。
 4. **权限与容量**：SELinux 控制哪些执行域能写哪些属性前缀。属性有长度和数量上限，不适合承载大块数据。
-
-
-
-
 
 **Q14: [learning] [tags:系统启动] .rc 文件怎么理解？**
 
@@ -241,10 +199,6 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 `.rc` 把启动进程、启动参数、socket 和重启动作声明化，init 按触发器和服务配置执行。分析开机耗时与进程拉起顺序时，`.rc` 是第一手材料。
 
-
-
-
-
 **Q15: init 第二阶段主循环如何处理事件？每轮只执行一条命令有什么作用？**
 
 第二阶段 init 使用单线程事件循环。epoll、signalfd 和属性 socket 等事件源把工作送入主循环，循环每轮只推进一条 `Command`，其间处理 SIGCHLD、属性变化和 ctl 控制消息。单轮限制是为了避免长动作长期占住循环，使关机请求和子进程回收仍有机会及时处理。
@@ -255,10 +209,6 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 4. **等待属性限制**：全局同时只允许一个 `wait_for_prop` 等待。rc 中连续写两条等待会串行等待，前一条完成后才进入后一条。
 
 该循环适合管理常驻服务和启动时序，不适合承载需要高吞吐的后台任务。
-
-
-
-
 
 **Q16: [tags:系统启动] ueventd 是怎么把空的 /dev 填满的？**
 
@@ -271,10 +221,6 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 3. **权限规则**：ueventd.rc 规则声明设备路径、属主、组和权限位。例如 `/dev/binder` 可配置为 root 所有、binder 组、权限 `0660`。
 
 创建设备节点的前提是驱动已注册。遇到节点缺失时，应区分驱动未加载或未匹配，与 ueventd 未按规则创建节点这两类原因。
-
-
-
-
 
 **Q17: [tags:系统启动] init 是怎么把一个服务进程拉起来的？Service::Start 里有哪些容易忽略的细节？**
 
@@ -293,10 +239,6 @@ ueventd 是 init 同一二进制的另一种运行形态，主要职责是监听
 
 fd 继承适用于有亲缘关系且 fork 顺序明确的进程树，不能替代无亲缘进程间的显式 fd 传递。
 
-
-
-
-
 **Q18: [learning] [tags:系统启动] init.rc 的 service 块还有哪些关键选项？class_start/class_stop/class_reset 有什么区别？**
 
 service 选项决定单个进程的退出、重启和分组启动行为。`class_start`、`class_stop`、`class_reset` 则管理整组服务。排查时要分别判断服务自身策略和 class 操作的效果。
@@ -308,10 +250,6 @@ service 选项决定单个进程的退出、重启和分组启动行为。`class
 5. **版本演进**：`writepid` 已由 init 文档标记为过时，应按目标版本迁移到 `task_profiles`。Android 14 起相关 task profile 可作用于整个进程。`updatable` 允许 APEX 中的同名服务定义覆盖基础定义，并会延迟该服务直到 APEX 激活。
 6. **排查入口**：`getprop | grep init.svc` 可查看服务状态属性。调试时可按目标分支支持情况使用 `init.svc_debug.no_fatal.<name>`，不要把调试属性留在量产配置中。
 
-
-
-
-
 **Q19: [learning] [tags:系统启动] APEX 在启动链的哪一步激活？APEX 损坏时设备表现成什么样？**
 
 在该 Android 13 启动配置中，init 会在 Zygote/system_server 启动前等待 apexd 的激活状态。apexd 扫描内置和数据分区中的候选包，完成校验与挂载后更新状态属性。激活失败时是否回退、重试或阻塞后续启动取决于失败类型与恢复策略，不能概括成所有 APEX 错误都永久卡在同一个状态。
@@ -319,10 +257,6 @@ service 选项决定单个进程的退出、重启和分组启动行为。`class
 1. **两段激活**：早期 bootstrap 阶段先处理启动关键依赖。`/data` 可用后再处理活动 APEX 并完成后续激活阶段。具体组件与属性状态以目标分支实现为准。
 2. **故障表现**：验签或哈希错误可能触发回退、重试或失败状态，影响哪些服务继续启动取决于 rc 对状态属性的等待条件。“卡动画/黑屏”是可能症状，不足以单独证明 APEX 损坏。
 3. **排查入口**：`getprop apexd.status`、`logcat -s apexd`、`ls /apex`、`pm list packages --apex`。日志锚点 "Bootstrapping done" / "Marking APEXd as activated/ready"。
-
-
-
-
 
 **Q20: [learning] [tags:系统启动] Zygote 在 Android 进程模型里扮演什么角色？为什么应用进程要用 fork 而不是各自独立启动？**
 
@@ -338,10 +272,6 @@ init 第二阶段解析 `.rc` 后启动 Zygote。Zygote 完成预加载后由主
 
 COW 不等于零成本，后续写入和应用初始化会逐步产生私有页。主 Zygote 在初始化期间调用 `forkSystemServer()` 创建 `system_server`。普通应用由 `system_server` 经 Zygote 请求创建。
 
-
-
-
-
 **Q21: [learning] [tags:系统启动] Zygote 是怎么被拉起的？启动后依次做什么？**
 
 Zygote 由 init 按服务配置启动，随后在自身启动流程中预加载运行环境、创建 `system_server` 并开始接收应用进程请求。Android 17 的主线如下：
@@ -355,10 +285,6 @@ Zygote 由 init 按服务配置启动，随后在自身启动流程中预加载�
 
 `system_server` 是主 Zygote 启动流程直接 fork 的子进程，不是 init 通过应用请求 socket 创建的服务。init 监督 Zygote 服务。system_server 的崩溃恢复由 Zygote 与 init 的上层恢复链处理。
 
-
-
-
-
 **Q22: [learning] [tags:系统启动] Zygote 的 preload 到底预加载了哪些东西？为什么所有应用进程能直接共享？**
 
 preload 阶段把“每个应用都需要的公共物”只加载一次：preloaded-classes 清单里的常用框架类、系统资源（drawable/color 资源表）、图形相关初始化与 JCA 安全 Provider。此后所有 fork 出的进程靠写时复制物理共享这些页——读到的都是同一份内存，谁写了那一页才真正复制。
@@ -371,10 +297,6 @@ preload 阶段把“每个应用都需要的公共物”只加载一次：preloa
 
 收束：排查应用首帧慢时，“目标类不在 preload 清单、首次加载要自己付全部成本”是一个常被忽略的取证点。
 
-
-
-
-
 **Q23: [learning] [tags:系统启动] Zygote preload 用开机成本换取什么？删减预加载清单或使用 lazy preload 分别要注意什么？**
 
 预加载把一部分应用启动工作转移到 Zygote 启动阶段，并让 fork 后代通过 COW 共享相应内存。调优时要同时衡量开机成本、共享内存收益和首启延迟。
@@ -385,10 +307,6 @@ preload 阶段把“每个应用都需要的公共物”只加载一次：preloa
 4. **评估方法**：在干净开机和多应用场景记录 Zygote 预加载时长、`system_server` ready 时间、Zygote PSS、代表应用 TTID/TTFD，以及低内存设备上的重启与 swap。Boot image profile 调优会同时考虑 boot classpath Profile、system_server Profile 与预加载清单，数据应来自真实 CUJ 并随系统镜像发布。
 5. **lazy preload 的边界**：`--enable-lazy-preload` 跳过启动时的 preload，但首次收到 preload 请求时，`ZygoteInit.lazyPreload()` 仍执行同一套完整预加载。因此它改变支付时间，不是增量拆分。AAOS 13 材料中的主 64 位 Zygote 不传该参数，32 位 secondary Zygote 传入。验证时分别记录 primary 的 ZygotePreload、secondary 的 ZygoteInitTiming_lazy，以及首个 32 位进程请求前后的延迟。
 6. **应用专属类**：业务应用自己的类通常不属于系统 Zygote 的通用预加载集合，不应通过扩展系统预加载解决单个应用的启动问题。
-
-
-
-
 
 **Q24: [learning] [tags:系统启动] Zygote 的 fork 模型有哪些硬约束？“zygote 本体没有 Binder”是怎么来的？**
 
@@ -401,10 +319,6 @@ Zygote fork 会复制地址空间和线程状态，因此 Android 必须在 fork
 3. **请求方身份校验**：应用创建请求依据 socket 对端凭据（SO_PEERCRED）校验调用方，不能只相信请求内容自报的身份。具体权限仍由本地 socket 的访问控制与 Zygote 侧校验共同决定。
 
 边界：“模板进程 + N 个派生进程”的架构才适合 fork 模型，差异大的负载（独立工具进程）fork 反而拖累（继承整个 VM）。Android 13 批注还勘误了一处上游过时注释：现行代码用普通 return 退栈，不是历史上的抛异常方式。
-
-
-
-
 
 **Q25: [learning] [tags:系统启动] USAP 池与“厂商预启动”是什么关系？为什么 trace 里没看到 fork 不能证明系统预启动了应用？**
 
@@ -430,10 +344,6 @@ trace 中没有看到 fork 不能单独证明应用被厂商预启动，至少�
 
 厂商预测策略可能触发 ART 编译或 profile 维护、文件页预取、保留 cached 进程、填充 USAP 池、创建私有预热进程，或短时调整调度与 I/O 优先级。要确认策略来源需查产品文档、日志或调用链。trace 用来证明实际动作和耗时效果。对照命中与未命中组时还要固定网络、温度、编译状态和页缓存条件，不能以“点击后很快”推断系统提前创建了目标进程。
 
-
-
-
-
 **Q26: [learning] [tags:系统启动] 主 Zygote 和次 Zygote 怎么分工？preload 与 USAP 池各有什么坑？**
 
 双 ABI 设备通常由 64 位主 Zygote 服务 64 位应用并创建 `system_server`，32 位次 Zygote 服务 32 位应用。具体实例由设备 ABI 列表和 zygote rc 配置决定，不能仅凭“Android 有主次 Zygote”推断每台设备都运行两个实例。
@@ -446,10 +356,6 @@ trace 中没有看到 fork 不能单独证明应用被厂商预启动，至少�
 
 排查应用创建路径时，先确认设备是否实际运行双 Zygote、USAP 是否配置启用，以及请求是否处于调试或其他回退场景。
 
-
-
-
-
 **Q27: [learning] [tags:系统启动] USAP 为什么默认关闭？开启前要确认什么？开了以后还能用 PostFork trace 诊断吗？**
 
 USAP 默认关闭是为了让设备显式评估进程创建收益、资源占用和路径兼容性后再启用。启用前要核实属性优先级、池配置、请求覆盖范围和目标 Zygote 类型。开启后仍可用 PostFork trace 分析 specialize 与类加载耗时。
@@ -459,29 +365,17 @@ USAP 默认关闭是为了让设备显式评估进程创建收益、资源占用
 3. **PostFork 诊断**：USAP 被取用后仍会执行 PostFork 相关处理、specialize 和后续类加载，因此 trace 可继续观察这些阶段。应先确认 trace 标记的进程创建来源，避免把填池 fork 与请求命中的 specialize 混为一谈。
 4. **收益判断**：USAP 预先支付的是空壳 fork 成本。如果 PostFork 之后的 specialize 或类加载占主要耗时，开启 USAP 对该部分帮助有限。这是由它提前 fork、但仍需 specialize 的机制推导出的判断，需用目标设备数据验证。
 
-
-
-
-
 **Q28: [learning] [tags:系统启动] fork 派生模型的内核成本省在哪？16 KB 页会改变 COW 的什么？**
 
 省在 COW（写时复制）：fork 时内核 dup_mmap 只复制页表并清除写权限，子进程首次写触发缺页、走 do_wp_page/wp_page_copy 才复制页面——预加载的类、资源与驱动初始化状态因此被全部 app 共享，只有被写的页付复制成本。
 
 16 KB 页改变的是 COW 粒度：单次复制页从 4 KB 变 16 KB，不改变 VMA（虚拟内存区域）数量。机制推导：同样写入模式下，16 KB 设备的页级写放大更大、缺页次数更少，内存账与 4 KB 设备不可直接对比。做法：评估 Zygote 派生收益读 Private_Dirty——共享页 RSS 高而 Private_Dirty 低是健康态。跨页大小比较时分别测量。
 
-
-
-
-
 **Q29: [learning] [tags:系统启动] App Zygote（ZygotePreload）适合什么场景？它和系统 Zygote 的预加载边界怎么分？**
 
 App Zygote 是应用自己的“应用级 zygote”：API 29 起，manifest 配 `useAppZygote="true"` 并用 `android:zygotePreloadName` 指定实现 ZygotePreload 的类，先孵化一个持有应用公共状态的进程，再由它 fork 出实际服务进程（如 isolated 进程、WebView 渲染进程）。
 
 分界原则：预加载只有被 N 个子进程共享才有收益——全 app 公共内容放系统 Zygote（preload 一次全场共享），应用专属公共内容放 App Zygote（池内共享），单进程独享的放进程自己的启动路径。机制：App Zygote 池内 COW 共享，子进程崩溃可回池再 fork。32 位 WebView 可由 secondary Zygote 按需预载其 provider 代码。
-
-
-
-
 
 **Q30: [learning] [tags:系统启动] 普通应用进程是怎么诞生的？它和 system_server 的诞生路径差在哪？**
 
@@ -499,10 +393,6 @@ App Zygote 是应用自己的“应用级 zygote”：API 29 起，manifest 配 
 
 排查边界：拿到 PID 只说明 Zygote/USAP 侧创建完成，`bindApplication`、组件生命周期、首帧都是后面的事——发起进程启动、返回 PID、attach 完成三个时间点要分开取证。
 
-
-
-
-
 **Q31: [learning] [tags:系统启动] Android 13 的 systemReady 回调怎样协调 system_server 服务就绪与当前用户启动？**
 
 `systemReady()` 是 AMS 与 SystemServer 的启动交接点，不等于“回调一结束就由 AMS 给所有设备的 user 0 拉起桌面”。AMS 先打开进程和 Activity 管理的就绪门闩，再运行 `goingCallback` 让 SystemServer 推进后续服务阶段。回调返回后才重新读取当前用户，并按用户模式决定 HOME 启动路径。
@@ -514,10 +404,6 @@ App Zygote 是应用自己的“应用级 zygote”：API 29 起，manifest 配 
 
 这里的 HOME 请求仍不是指定启动 CarLauncher：ATMS 要针对用户和显示区域解析 HOME 候选，设备配置、默认 HOME 和包状态决定最终组件。`systemReady()` 也不等于桌面首帧或系统 boot 完成。Activity idle、动画退出和每用户广播仍各有独立门槛。
 
-
-
-
-
 **Q32: AAOS 在标准 Android 启动链的哪三个挂点接入车机服务、SystemUI 与 HOME？**
 
 AAOS 沿用通用 Android 启动链，并在服务绑定、SystemUI 依赖图和 HOME 组件解析三个位置接入车机实现。具体实现取决于产品配置与当前前台用户。
@@ -528,10 +414,6 @@ AAOS 沿用通用 Android 启动链，并在服务绑定、SystemUI 依赖图和
 
 这三处是宿主接入点，不代表每个产品必须使用同一组应用或在同一时刻启动座舱用户。
 
-
-
-
-
 **Q33: [learning] AAOS 的 CarService APK 启动后怎样连接 VHAL、初始化车机服务并注册 Binder 接口？**
 
 Framework 通过 CarServiceHelperService 绑定 CarService APK。CarService 建立 VHAL 客户端和车机子服务后，注册 `car_service` Binder 实例。具体绑定实现受产品版本影响。
@@ -541,10 +423,6 @@ Framework 通过 CarServiceHelperService 绑定 CarService APK。CarService 建�
 3. **发布服务**：CarService 经 ServiceManager 注册 `car_service`，并置 `boot.car_service_created=1`。CarServiceHelperService 持有服务端 Binder 连接，CarService 持有 framework 侧接口，以便双方调用。
 4. **VHAL 死亡恢复**：Android 13 实现中的 `VehicleDeathRecipient` 检测到 VHAL Binder 死亡后会终止 CarService 进程，再由绑定路径重建。该故障策略是该源码分支的实现，不应推广为普通应用服务的通用生命周期规则。
 5. **版本边界**：服务表内容、AIDL/HIDL backend 选择和 CarServiceHelperService 重试细节可能随分支和产品配置变化。核对设备分支源码与实际 Binder 服务状态。
-
-
-
-
 
 **Q34: [learning] AAOS 的 CarSystemUI 怎样通过 AppComponentFactory 接入车机组件？**
 
@@ -557,10 +435,6 @@ CarSystemUI 通过合并构建和 `AppComponentFactory` 替换依赖图来复用
 5. `CarSystemUIInitializer` 只为 system user 注入 `RootTaskDisplayAreaOrganizer`。此隔离与驾驶员用户的桌面内容不是一回事。
 6. `car_service` 进程死亡不会按此机制直接杀死 CarSystemUI。客户端会经历 Binder 断连并尝试重连，依赖 CarService 的 UI 能力可能暂时不可用。排查时分别观察服务端重启和客户端恢复状态。
 
-
-
-
-
 **Q35: [learning] AAOS 的 CarLauncher 怎样用 TaskView 嵌入地图任务？**
 
 CarLauncher 是 ATMS 发起通用 HOME 请求后可能被 PackageManager 选中的组件。选中后，它可用 TaskView 将地图应用作为受控任务嵌入桌面，并通过 HomeCardModule 装配顶部和底部卡片。是否实际启动仍取决于用户、显示区域和 HOME 解析结果。
@@ -570,10 +444,6 @@ CarLauncher 是 ATMS 发起通用 HOME 请求后可能被 PackageManager 选中�
 3. **多用户边界**：CarLauncher 对 headless system user 的地图 TaskView 有单独限制。这不表示前台驾驶员用户的桌面也没有地图卡片。
 4. **定位方法**：检查目标用户和显示上的 HOME 解析结果、TaskView 宿主状态、地图任务状态及依赖包状态。仅凭 CarLauncher Manifest 声明不能证明它已被选中或地图任务已创建。
 
-
-
-
-
 **Q36: [learning] [tags:系统启动] 误删或禁用了桌面应用，设备开机会怎样？FallbackHome 是干什么的？**
 
 禁用当前用户的真实桌面不必然导致 boot loop，但也不能假定任意设备、任意用户都必定有同一个 fallback。AOSP 可通过 Settings 的 `FallbackHome` 在凭据加密存储尚不可用时提供过渡 HOME。Framework 还会按 system user 设置条件启用 `SystemUserHomeActivity`。实际候选和回退顺序由系统版本、用户类型、包状态及产品配置决定。
@@ -581,10 +451,6 @@ CarLauncher 是 ATMS 发起通用 HOME 请求后可能被 PackageManager 选中�
 1. **FallbackHome**：以低优先级 HOME 候选常驻。解锁前它就是 resolve 结果，`onCreate` 注册 `ACTION_USER_UNLOCKED` 广播，解锁后 `finish()` 让系统重新 resolve 到真桌面。
 2. **SystemUserHomeActivity**：Framework 中的占位 HOME 组件，作用范围是 system user。AMS 按 split system user 的 setup 状态或系统属性决定是否启用它。它不是任意前台用户都可用的通用桌面。
 3. **实用**：`cmd package query-activities -a android.intent.action.MAIN -c android.intent.category.HOME` 可查询 HOME 候选。禁用桌面前应在目标 Android 版本和目标用户下核实实际解析结果。
-
-
-
-
 
 **Q37: [learning] [tags:系统启动] 开机动画由谁拉起、怎么退出？“开机动画卡死不退出”这个经典回归怎么查？**
 
@@ -595,10 +461,6 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 3. **卡死排查**：`desc.txt` 中 `c` 类 part 会在退出前播完未完成的 `c` part，`p` 类可在退出时中止。退出属性已设置但进程仍运行时，检查当前 part 类型、帧循环是否继续，以及 WMS 是否仍在等待系统装饰窗口或显示策略。
 4. **自定义资源**：动画帧需按序命名为 PNG，分辨率要与 `desc.txt` 首行一致。`zip -0qry` 使用 store 模式打包，避免压缩动画帧。参数具体含义按目标主机的 zip 工具版本确认。
 
-
-
-
-
 **Q38: [learning] [tags:系统启动] FBE 设备重启后、用户还没输锁屏密码，闹钟类应用怎么才能正常响？LOCKED_BOOT_COMPLETED 和 BOOT_COMPLETED 是什么关系？**
 
 `directBootAware="true"` 的组件在用户解锁前就能被系统拉起并收到 `LOCKED_BOOT_COMPLETED`，但此时只能访问设备加密（DE）存储。用户输完锁屏收到 `ACTION_USER_UNLOCKED` 后，凭据加密（CE）存储才可用——FBE 的 DE/CE 密钥机制见 [../06-memory-storage/06-storage-io.md](../06-memory-storage/06-storage-io.md)。
@@ -608,10 +470,6 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 3. **访问 DE 存储**：`createDeviceProtectedStorageContext()` 返回设备保护存储上下文。`moveSharedPreferencesFrom()` 和 `moveDatabaseFrom()` 可用于迁移对应数据。迁移应在目标用户解锁、CE 可访问后按应用数据策略执行。
 4. **恢复持久任务**：重启不会保留进程内的 alarm/job 对象。Direct Boot 接收器应在 DE 中保存“重启前存在待恢复任务”的必要信息，之后在 CE 可用时读取所需用户数据并重建任务。
 5. **常见故障**：若只在 `BOOT_COMPLETED` 恢复闹钟，用户尚未解锁时不会执行该恢复逻辑。Direct Boot 组件若直接访问 CE 路径，也可能遇到文件不可用或数据库打不开的问题。FBE 下 CE 密钥何时可用取决于用户解锁。
-
-
-
-
 
 **Q39: [learning] [tags:系统启动] 开机广播 BOOT_COMPLETED 有时收不到、有时收到就 ANR——它的送达条件、超时和限制到底是什么？**
 
@@ -625,10 +483,6 @@ bootanim 是 init 声明的 `disabled + oneshot` 服务：SurfaceFlinger 初始�
 
 `onReceive()` 应只做轻量调度。需要异步处理时，按 API 契约调用 `goAsync()` 并及时调用 `PendingResult.finish()`。可延期的持久工作可交给 WorkManager。启动前台服务仍须符合目标版本的服务启动和类型限制。
 
-
-
-
-
 **Q40: [learning] [tags:系统启动] webview_zygote 是什么？应用声明 isolatedProcess 的服务跑在什么进程里？**
 
 webview_zygote 是供 WebView 渲染进程使用的专用 Zygote。应用声明 `android:isolatedProcess="true"` 的服务则使用隔离 UID 和对应 SELinux 域。二者都涉及隔离进程，但普通 isolated service 不因此变成 WebView renderer，也不必由 webview_zygote 孵化。
@@ -636,10 +490,6 @@ webview_zygote 是供 WebView 渲染进程使用的专用 Zygote。应用声明 
 1. **webview_zygote**：它按目标 ABI 预载 WebView provider 代码并孵化 renderer 进程。provider 更换时系统会按其更新流程重建相应孵化器。`ps -A | grep zygote` 可检查相关进程，`dumpsys webviewupdate` 可查看 provider 与 zygote 状态。
 2. **isolatedProcess**：`android:isolatedProcess="true"` 请求系统把 Service 放入隔离 UID 和相应 SELinux 域，限制其权限与资源访问。省略或设为 false 时，服务不会因该属性获得隔离进程。是否仍因其他组件规则分进程需另行判断。WebView renderer 也受隔离策略约束，但启动用途不同。
 3. **进程孵化器选择**：主/次 Zygote 由 `ro.zygote` 与设备 ABI 配置决定。应用可用 `android:useAppZygote="true"` 请求应用专属 Zygote，该属性省略时不请求此路径。不能仅凭 `isolatedProcess="true"` 推断服务来自 webview_zygote。
-
-
-
-
 
 **Q41: [learning] [tags:系统启动] 服务崩溃后 init 的 Reap 裁决按什么顺序处理？哪些情况会放大成整机重启？**
 
@@ -659,10 +509,6 @@ Reap 会触发的系统级后果分三类，不能把“写入故障属性”和
 
 服务状态由可组合的 SVC_* 位标志表示，而不是互斥枚举，因此 oneshot、disabled、critical 等状态可能并存。oneshot 服务正常退出后会进入 disabled，不会再被 `class_start` 拉起，需要显式 `start`。stop 后立即 start 时的 RESTART 中间态会跳过置 disabled 的步骤，否则服务可能无法重新启动。
 
-
-
-
-
 **Q42: [learning] [tags:系统启动] 设备反复重启进不了桌面（boot loop）——init 对关键服务反复崩溃的判据是什么？adb 不可用时怎么拿到上一次崩溃的日志？**
 
 init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口内计数超过 4，也就是第 5 次崩溃时触发 fatal。开机完成前崩溃同样进入计数逻辑。触发后的重启目标由服务配置决定，不能概括为所有设备都进 bootloader。
@@ -671,10 +517,6 @@ init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口
 2. **排查动作**：在保留的日志中搜索 `avc: denied`、`critical process`、`Fatal signal` 和 `service exited`。pstore 不可读时，尝试从 recovery 获取日志。
 3. **调试逃生口**：在设备构建和调用权限允许时，`setprop init.svc_debug.no_fatal.<service> true` 可临时关闭指定服务的 critical fatal 处理，以便收集日志。这不是量产设备上的通用恢复方案。
 4. **边界**：Verified Boot 镜像校验失败发生在用户态日志可用之前，应查 Bootloader、串口或 recovery 证据。它与 init 运行后的服务崩溃循环属于不同阶段。
-
-
-
-
 
 **Q43: [learning] [tags:系统启动] 设备“突然重启/黑屏”，怎么从日志快速判断死在哪一层——内核、init、Zygote 还是 system_server？**
 
@@ -685,10 +527,6 @@ init 对 `critical` 服务的崩溃计数有明确门槛：默认 4 分钟窗口
 3. **Zygote 服务退出**：若 logcat 中 init 报告 `Service 'zygote' ... received signal`，观察 init 是否重启 Zygote，以及 `system_server` PID 是否随新 Zygote 改变。Zygote 服务的 `onrestart` 配置可能连带重启其他 native 服务。
 4. **system_server Watchdog：`* WATCHDOG KILLING SYSTEM PROCESS` 和 `Blocked in ...` 是 Watchdog 证据。结合 `pre_watchdog`/`watchdog` DropBox 记录及线程栈找阻塞点。它通常表现为 Framework 重启，不等于内核重启。
 5. **区分内核重启与 Framework 重启**：对比 `/proc/sys/kernel/random/boot_id`、进程 PID、`sys.boot_completed` 和 pstore。boot_id 改变说明经历内核启动。PID 或 Framework 状态变化但 boot_id 未变时，应优先查用户态恢复链。`BOOT_COMPLETED` 是否再次出现不能单独作为判据。
-
-
-
-
 
 **Q44: [learning] [tags:系统启动] AAOS 13 的 headless system user 模式下，AMS 为什么不从 systemReady 直接启动 user 0 的桌面？**
 
@@ -701,10 +539,6 @@ headless system user 模式把 user 0 作为系统服务用户，不把它当作
 
 Framework 源码锚点是 `frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java` 的 `systemReady()` 和 `frameworks/base/services/core/java/com/android/server/am/UserController.java` 的前台切换路径。具体何时创建驾驶员用户、何时切换前台用户由产品的 CarUserService/用户策略决定。不能仅凭 headless 模式断言每台设备都在同一时刻创建 CarLauncher。
 
-
-
-
-
 **Q45: [learning] [tags:系统启动] AAOS 13 启动 HOME 时，PackageManager 怎样决定是否运行 CarLauncher，进程又怎样进入 Activity？**
 
 AMS/ATMS 发出的是带用户和显示上下文的 HOME 请求，不是对 CarLauncher 类名的硬编码启动。ATMS 解析出目标组件后，才走通用 Activity 启动链。若目标进程不存在，AMS 才请求 Zygote 创建进程，之后通过 ActivityThread 创建 Activity。
@@ -716,10 +550,6 @@ AMS/ATMS 发出的是带用户和显示上下文的 HOME 请求，不是对 CarL
 5. 子进程进入 ActivityThread 并 attach 到 system_server 后，客户端事务才创建目标 Activity。只有解析结果为 CarLauncher，控制流才会进入它的 `onCreate()`。
 
 定位“Launcher 没起来”时，先用目标用户查询实际 HOME 解析结果，再查 ActivityTaskManager 启动记录和进程状态。Manifest 声明只能证明组件有资格成为候选，不能证明 PackageManager 最终选中了它。源码锚点包括 `RootWindowContainer.java`、`ActivityTaskManagerService.java`、`ActivityStartController.java`、`ProcessList.java`、`ActivityThread.java` 和 CarLauncher 的 `AndroidManifest.xml`，均按 Android 13 checkout `abec84ef9` 核对。
-
-
-
-
 
 **Q46: [learning] [tags:系统启动] HOME Activity 已启动后，Android 13 还要满足哪些条件才设置 sys.boot_completed？**
 
@@ -873,7 +703,20 @@ Android Init Language 的核心结构是 action（`on <trigger>` 下的命令序
 2. **关键约束**：critical 服务按“窗口期内的崩溃次数”判定（默认 4 分钟 4 次），超限触发整机重启——这是 boot loop 的机制源头。
 3. **实践**：服务“起来又立刻退、反复重启”时，先读 init 日志里的退出码与 onrestart 执行记录，再查它依赖的前置服务是否就绪。
 
-**Q64: [learning] [tags:系统启动] init 对 critical 服务的“4 分钟 4 次”判定是怎么实现的？进入重启前后发生什么？**
+**Q64: [learning] [tags:系统启动] init.rc 中 oneshot 服务退出后会发生什么？**
+
+oneshot 的含义只有一句话：退出后不重启。AAOS13 `system/core/init/README.md` 对它的定义是 "Do not restart the service when it exits"。省略 oneshot 的服务退出后由 init 自动重启，两者的差别全在退出这一刻。
+
+退出时的动作在 Reap 里完成（`service.cpp`）：代码先判断服务带 SVC_ONESHOT 且不处于 SVC_RESTART、SVC_RESET，满足则置 SVC_DISABLED，通知状态变为 stopped，然后直接返回，不进入重启分支。所以 oneshot 服务退出后进入 disabled 状态，后果有两个：
+
+1. **不会被 class_start 拉起：**disabled 服务不随所属 class 的批量启动命令启动，之后只能显式 start 或 enable。
+2. **例外是手动重启：**SVC_RESTART 和 SVC_RESET 被排除在置 disabled 的条件外，手动 restart 或 reset 过的服务退出时不置 disabled，因为重启意图是显式发出的。
+
+典型用法是只该跑一次的任务。开机动画 bootanim 用 disabled 加 oneshot：SurfaceFlinger 按需拉起，放完退出即止，不该再被拉起。需要反复运行的服务不要用 oneshot，应配 restart_period 指定重启间隔（默认 5 秒），去掉 oneshot 并不能让它按需重启。
+
+oneshot 标志还能在运行时切换：ctl.oneshot_on 和 ctl.oneshot_off 属性可打开或关闭指定服务的 oneshot，lazy HAL 按需实例化服务用的就是这个机制。
+
+**Q65: [learning] [tags:系统启动] init 对 critical 服务的“4 分钟 4 次”判定是怎么实现的？进入重启前后发生什么？**
 
 init 为每个 critical 服务维护崩溃计数与时间窗：服务意外退出时计数加一，init 会等待一个退避间隔（指数增长）再重启。若计数在窗口内达到阈值（默认 4 分钟内 4 次），init 判定系统进入不可恢复状态，执行有序重启流程——同步属性、通知关键进程，最后触发整机重启（reboot），并在下次开机继续监督。
 
@@ -881,7 +724,7 @@ init 为每个 critical 服务维护崩溃计数与时间窗：服务意外退�
 2. **排障**：init 日志中 "critical process ... exiting" 与 "rebooting because critical process" 是直接证据。崩溃服务自身的 tombstone 说明根因。
 3. **边界**：阈值是 init 编译期/属性口径，不随服务声明变化。非 critical 服务崩溃不会触发整机重启，只按策略重启自身。
 
-**Q65: [learning] [tags:系统启动] 属性服务（property service）是怎么实现的？谁能写哪些属性由什么决定？**
+**Q66: [learning] [tags:系统启动] 属性服务（property service）是怎么实现的？谁能写哪些属性由什么决定？**
 
 属性是 init 维护的一块共享内存区域（属性域）加一个 Unix 域 socket 服务：读取方直接 mmap 共享内存零拷贝读取。写入方（任何进程）把写请求发到 init 的属性 socket，由 init 校验后统一写内存并持久化。权限模型由 SELinux 决定——每个属性前缀对应可写的域（`ctl.*` 控制命令、`ro.` 不可改、`persist.*` 落盘、vendor 前缀归 vendor 域），策略不允许时写入被静默拒绝。
 
@@ -889,7 +732,7 @@ init 为每个 critical 服务维护崩溃计数与时间窗：服务意外退�
 2. **排障**：“setProperty 不生效”先区分三种失败：SELinux 拒绝（avc 日志）、前缀权限不符、属性根本不存在（`ro.` 误当可写）。
 3. **边界**：persist 属性的落盘与开机恢复是独立机制，见本册 persist 题。
 
-**Q66: [learning] [tags:系统启动] on property 触发器如何编排启动时序？late_start 为什么是经典案例？**
+**Q67: [learning] [tags:系统启动] on property 触发器如何编排启动时序？late_start 为什么是经典案例？**
 
 init 在属性变化时检查所有以 `on property:<name>=<value>` 声明的 action，满足则把其中的命令入队执行——启动时序因此可以完全用属性当“就绪信号”来编排。经典案例是 `late_start`：加密设备开机时 /data 尚不可用，vold 完成解密后设置属性，init 命中对应触发器执行 `class_start late_start`，一次性拉起所有依赖 /data 的服务（网络、UI 服务群等）。
 
@@ -897,7 +740,7 @@ init 在属性变化时检查所有以 `on property:<name>=<value>` 声明的 ac
 2. **排障**：某类服务“开机不启动”，先查它所属 class 是否已被 class_start（加密分支漏触发是最常见根因），再看属性链是否走到。
 3. **边界**：属性触发是启动编排手段，不是通用 IPC——高频通知应走 Binder 或 socket，而非刷属性。
 
-**Q67: [learning] [tags:系统启动] vold 在启动链里处于什么位置？加密设备的解密流程怎么走？**
+**Q68: [learning] [tags:系统启动] vold 在启动链里处于什么位置？加密设备的解密流程怎么走？**
 
 vold（volume daemon）由 init 在 core 阶段启动，负责 /data 的挂载、FBE 密钥管理与存储事件。加密设备的开机分支：非凭据部分（DE，device-encrypted 存储）在 init 阶段即可挂载，框架以“直接启动”（directBootAware）模式运行有限服务。用户输锁屏凭据后 vold 用凭据派生密钥解开 CE（credential-encrypted）存储，解密完成后 vold 设置状态属性，init 命中 late_start 触发器启动完整框架，随后发出 LOCKED_BOOT_COMPLETED 与 BOOT_COMPLETED 两级广播。
 
@@ -905,7 +748,7 @@ vold（volume daemon）由 init 在 core 阶段启动，负责 /data 的挂载�
 2. **排障**：卡在解密阶段看 vold 日志与凭据校验路径。DE/CE 混淆导致的数据“不可见”是常见误判。
 3. **边界**：FBE 两级广播对应用的影响见本册 FBE 题。密钥体系细节归存储与安全专题。
 
-**Q68: [learning] [tags:系统启动] apexd 在启动序列的什么位置？APEX 挂载失败或需要回滚时发生什么？**
+**Q69: [learning] [tags:系统启动] apexd 在启动序列的什么位置？APEX 挂载失败或需要回滚时发生什么？**
 
 apexd 由 init 早期启动（main 类、先于 zygote）：它在 /data 的 APEX 会话目录与预置 APEX 之间决定本此开机激活哪一套，把选定的 APEX 以 bind/dm-verity 方式挂载到 `/apex/<name>`，激活完成后置状态属性，之后的 zygote、system_server 与应用看到的运行库（如 Conscrypt、ART 相关模块）就是 APEX 版本——BOOTCLASSPATH 与 linker 配置也依赖激活结果（linkerconfig 据此生成 ld.config）。
 
@@ -913,7 +756,7 @@ apexd 由 init 早期启动（main 类、先于 zygote）：它在 /data 的 APE
 2. **排障**：运行库版本“没生效/突然回退”，先看 `/apex` 挂载清单与 apexd 日志里的会话决策，再查是否处于回滚。
 3. **边界**：APEX 的打包与交付归构建与 Mainline 专题，本册只讲它在启动链的位置与决策。
 
-**Q69: [learning] [tags:系统启动] vendor 分区的 init 脚本与属性是怎么注入启动的？vendor_init 是什么？**
+**Q70: [learning] [tags:系统启动] vendor 分区的 init 脚本与属性是怎么注入启动的？vendor_init 是什么？**
 
 init 的 rc 加载目录包含 `/vendor/etc/init`（及 odm 等层级），厂商的服务声明、触发器随分区加载，与 system 的 rc 用同一套模型协作。vendor 域属性（`vendor.`、`ro.vendor.` 等）同样由 init 管理，写入权限按 SELinux 限定在厂商域。vendor_init 这个名字还特指早年的一个机制：vendor 分区在 /data 解密前就能读取，因此厂商属性经由专门的 vendor_default 处理路径在早期可用——现代版本已由 init 统一处理，理解上记住“vendor 属性与 system 属性分域、但同一条 init 管道”即可。
 
@@ -921,7 +764,7 @@ init 的 rc 加载目录包含 `/vendor/etc/init`（及 odm 等层级），厂�
 2. **排障**：厂商服务“没起来/起来了但系统找不到”，按 rc 是否被加载（init 日志有解析记录）、SELinux 域是否正确、vintf 是否匹配三条查。
 3. **边界**：HAL 的接口与注册细节归平台服务与 SELinux 专题。
 
-**Q70: [learning] [tags:系统启动] init 的关键触发阶段（early-init → boot）各对应什么动作？**
+**Q71: [learning] [tags:系统启动] init 的关键触发阶段（early-init → boot）各对应什么动作？**
 
 init 的内置触发器构成启动的“主干时间轴”，rc 里所有 action 都挂在这些阶段上：
 
@@ -936,7 +779,7 @@ init 的内置触发器构成启动的“主干时间轴”，rc 里所有 actio
 
 把卡点定位到“某个阶段”是开机排障的第一步：读 init 日志的 "processing action (early-init)" 等行即可画出时间轴。
 
-**Q71: [learning] [tags:系统启动] persist.* 属性是怎么持久化的？开机后什么时候恢复可用？**
+**Q72: [learning] [tags:系统启动] persist.* 属性是怎么持久化的？开机后什么时候恢复可用？**
 
 带 `persist.` 前缀的属性由 init 在 /data 的属性服务目录（`/data/property/persistent_properties`）中持久保存：写入时 init 校验 SELinux 权限后落盘。因为依赖 /data，persist 属性在 /data 挂载完成（post-fs-data 语义）之前不可用——早期服务读 persist 属性会得到空值，这是“开机早期读配置读不到”的经典原因。
 
@@ -944,7 +787,7 @@ init 的内置触发器构成启动的“主干时间轴”，rc 里所有 actio
 2. **设计推论**：必须在直启动期使用的配置不能用 persist 属性承载，应改用 DE 存储文件或 ro.boot cmdline 参数。
 3. **边界**：属性内存布局与 hash 检索是实现细节。跨进程“改了但没生效”优先查 SELinux 与时机两类原因。
 
-**Q72: [learning] [tags:系统启动] 启动期 SELinux 域经历了哪几次转换？每个阶段 init 跑在什么域里？**
+**Q73: [learning] [tags:系统启动] 启动期 SELinux 域经历了哪几次转换？每个阶段 init 跑在什么域里？**
 
 init 的一组进程映像在不同阶段运行在不同 SELinux 域：first stage 的 init 运行在 `init` 域。exec 进入 selinux_setup 后按策略切换到 `selinux_setup` 域——该域只被授权做策略装载与最小文件操作。策略装载完成、exec 第二阶段时再转换到 `u:r:init:s0` 的常规 init 域，此后由它启动的各服务按 rc 里的 seclabel 进入各自域。
 
@@ -952,7 +795,7 @@ init 的一组进程映像在不同阶段运行在不同 SELinux 域：first sta
 2. **验证方式**：启动早期 dump 内核日志或用 `ls -Z /proc/1` 观察域标签变化。
 3. **边界**：各服务的域规则书写与 avc 处置归 SELinux 专题册，本册只关心“域随启动阶段流转”这一骨架。
 
-**Q73: [learning] [tags:系统启动] /data 挂载失败时开机会表现成什么样？按哪三类原因排查？**
+**Q74: [learning] [tags:系统启动] /data 挂载失败时开机会表现成什么样？按哪三类原因排查？**
 
 /data 挂载失败会使启动停在“依赖数据的阶段”：加密设备表现为等待凭据/解密循环，非加密设备表现为 post-fs-data 之后的服务成批失败、框架反复重启直至 boot loop。原因按层分三类：
 
@@ -962,7 +805,7 @@ init 的一组进程映像在不同阶段运行在不同 SELinux 域：first sta
 
 取证顺序：内核日志挂载报错 → vold 日志 → init 卡住的 action。三类原因的修复路径完全不同（重置凭据/修文件系统/查映射），不能混着试。
 
-**Q74: [learning] [tags:系统启动] 安全模式（safemode）是怎么进入和退出的？它对系统做了什么？**
+**Q75: [learning] [tags:系统启动] 安全模式（safemode）是怎么进入和退出的？它对系统做了什么？**
 
 进入方式随产品而异：手机典型为长按电源 → 长按“关机”菜单项确认，或特定按键组合在开机时按住。车机多由工厂菜单或诊断命令触发。进入后包管理器把第三方应用整体禁用（仅系统与预装应用可运行），桌面会显示“安全模式”角标。
 
@@ -970,7 +813,7 @@ init 的一组进程映像在不同阶段运行在不同 SELinux 域：first sta
 2. **退出**：重启即退出安全模式，回到正常加载。
 3. **边界**：安全模式不改变数据、不解密差异。它是诊断态而非修复态，修复动作仍在正常模式验证。
 
-**Q75: [learning] [tags:系统启动] 开机画面其实有三层——bootloader Logo、内核输出、SurfaceFlinger 上的开机动画，时序怎么衔接？**
+**Q76: [learning] [tags:系统启动] 开机画面其实有三层——bootloader Logo、内核输出、SurfaceFlinger 上的开机动画，时序怎么衔接？**
 
 三层画面由不同主体在不同时刻接管：bootloader 在校验与装载阶段直接刷屏显示静态 Logo。内核接管后若未配置静默，控制台字符可能覆盖画面（所以量产 cmdline 带 quiet）。SurfaceFlinger 起来之后，bootanim 作为 SF 的客户端把自己的图层提交合成，显示动画。框架就绪、Home 首帧可显示时 bootanim 退出，画面自然过渡到桌面。
 
@@ -978,14 +821,15 @@ init 的一组进程映像在不同阶段运行在不同 SELinux 域：first sta
 2. **排查入口**：每一段的“接管者”不同，日志与截图要按段取，不能凭一张黑屏照片下结论。
 3. **边界**：bootanim 的服务退出条件与经典“动画不消失”排查见本册开机动画题。
 
-**Q76: [learning] [tags:系统启动] 怎么系统地度量“开机耗时”？有哪些现成的度量设施？**
+**Q77: [learning] [tags:系统启动] 怎么系统地度量“开机耗时”？有哪些现成的度量设施？**
 
 度量要按阶段拆，各阶段有对应设施：bootloader 段看其串口日志的内部计时。内核段用 dmesg 时间戳（可开 initcall_debug 看内建驱动初始化耗时）。init 段读 init 日志的 action 处理记录与它导出的首阶段计时环境变量。框架段用 `logcat -b events` 里的 boot 进度事件（boot_progress_start、ams_start 等）与 BootReceiver 记录。整机横断面可用 bootchart 采集进程 CPU/IO 时间线。
 
 1. **口径统一**：所有时间要先换算到同一时基——内核单调时钟与 wall time 的换算点在初始化早期，跨段对比必须对齐。
 2. **产出**：一条“上电 → 内核 → init 各阶段 → zygote → system_server → boot_completed → Home 首帧”的时间线，才是可讨论的优化基线。
 3. **边界**：优化手段归启动优化专题册，本册只解决“怎么量得准”。
-**Q77: [learning] [tags:系统启动] 从上电到桌面，按时间序应当出现哪些关键日志行？**
+
+**Q78: [learning] [tags:系统启动] 从上电到桌面，按时间序应当出现哪些关键日志行？**
 
 一条可背的“检查清单”，用于快速判断开机走到了哪一步（各产品措辞略有差异）：
 
@@ -997,26 +841,30 @@ init 的一组进程映像在不同阶段运行在不同 SELinux 域：first sta
 6. `Enabled bootstep`/sys.boot_completed 置位与 Home 进程启动——接近完成。
 
 反向排查：清单断在哪一行，问题就在那一段。这比“看 logs 大海捞针”快得多。
-**Q78: [learning] [tags:系统启动] 重启原因（boot reason）是怎么一级级传到应用的？warm、cold、hard 重启差在哪？**
+
+**Q79: [learning] [tags:系统启动] 重启原因（boot reason）是怎么一级级传到应用的？warm、cold、hard 重启差在哪？**
 
 bootloader 把本次复位的原因（按键、kernel panic、watchdog、OTA、充电插拔等）编码后经 cmdline/bootconfig 传入（`androidboot.bootreason`），init 转成 `ro.boot.bootreason` 属性，框架再映射为 Readable 版本。语义区分：cold 是完全断电再上电。hard 是不保留更多状态的强制复位。warm 是复位但保留部分硬件状态——对启动的影响主要是外设初始化路径与部分 SoC 状态。
 
 1. **用途**：复盘“设备为什么自己重启了”的第一证据就是 boot reason。它决定往内核（panic/watchdog）还是往用户态（framework 请求重启）查。
 2. **陷阱**：reason 字符串是 OEM 自由扩充区，跨设备比对要先核对平台定义。kernel panic 类要看 pstore 印证，不能只信字符串。
-**Q79: [learning] [tags:车机] [系统启动] 车机的 ACC ON 唤醒（STR）和冷启动有什么区别？它算一次“开机”吗？**
+
+**Q80: [learning] [tags:车机] [系统启动] 车机的 ACC ON 唤醒（STR）和冷启动有什么区别？它算一次“开机”吗？**
 
 车机常见两种路径：冷启动（cold boot）走完整启动链，从 bootloader 到 Home 全程重建。挂起待机（STR，suspend-to-RAM）下系统整体冻结在内存里，ACC ON 只是唤醒——CPU 恢复现场、屏幕点亮，进程与状态原样保留，不走 init/zygote。
 
 1. **辨析**：判断“这次是唤醒还是开机”看日志——唤醒路径没有 init 的 action 序列，只有内核 resume 打印。用户感知的“秒开”多半是唤醒。
 2. **疑难定位**：唤醒后功能异常（服务假死、信号 stale）归电源与休眠专题（Freezer、 suspend 相关），不按开机链排查。但用户报障常把两者混为一谈，先分类再查。
 3. **边界**：挂起策略、冻结与功耗权衡归 CPU/功耗章，本册只建立“唤醒不是开机”的边界。
-**Q80: [learning] [tags:系统启动] 非正常断电后再开机，系统会多做哪些事？checkpoint 在其中起什么作用？**
+
+**Q81: [learning] [tags:系统启动] 非正常断电后再开机，系统会多做哪些事？checkpoint 在其中起什么作用？**
 
 异常断电可能让 /data 处于“写了一半”的崩溃一致状态。开机挂载前文件系统层先自检（ext4 走 e2fsck 类检查修复。F2FS 依赖日志式结构在线恢复），耗时与脏数据量成正比——这是“断电后开机变慢”的常见原因。OTA 引入的 checkpoint（用户数据检查点）则更进一步：在“待验证”启动期把 /data 置于检查点会话，若本次开机验证失败可整体回滚到检查点，防止新版本把用户数据写坏。
 
 1. **现象映射**：断电后首次开机慢（fsck）与 OTA 后回滚（checkpoint）是两条不同机制，日志分别落在文件系统驱动与 checkpoint 服务。
 2. **排障**：怀疑数据损坏按“挂载前检查日志 → 文件系统类型 → 是否处于 checkpoint 未提交期”三步定位，不要直接恢复出厂。
-**Q81: [learning] [tags:系统启动] 出厂首次开机和日常开机有什么差异？为什么第一次开机格外慢？**
+
+**Q82: [learning] [tags:系统启动] 出厂首次开机和日常开机有什么差异？为什么第一次开机格外慢？**
 
 首次开机（或恢复出厂后）多出几类一次性工作：
 
@@ -1030,87 +878,101 @@ bootloader 把本次复位的原因（按键、kernel panic、watchdog、OTA、�
 1. **日常开机不再做的**：格式化与初始化、provisioning 标记。dexopt 转为按需与空闲期维护。
 2. **排障口径**：对比“首次 vs 日常”的耗时差异要分开采集——把一次性工作的开销算进日常开机基线会得出错误的优化结论。
 3. **边界**：dexopt/odrefresh 的触发与产物细节归 ART 专题册。
-**Q82: [tags:系统启动] SetupWizard（开机引导）和 PROVISION 标记在启动链里怎么生效？'
+
+**Q83: [tags:系统启动] SetupWizard（开机引导）和 PROVISION 标记在启动链里怎么生效？'
 
 首次开机时系统启动 SetupWizard 引导用户完成语言、网络、账号等设置。完成与否由系统标记记录（user setup complete / device provisioned）。该标记在启动链上有实际约束：未完成 provisioning 前，部分系统行为受到限制（如 Home 与关键交互的放行策略、某些广播与服务的启动策略），以避免用户在未初始化完成时进入不完整环境。
 
 1. **位置**：SetupWizard 通常作为首个大规模交互界面出现在 Home 就绪前后，完成时写入标记。
 2. **排障**：设备“卡在引导无法跳过/重复进入引导”，先查 provision 标记是否写入成功，再看 SetupWizard 自身是否崩溃。
 3. **边界**：车机的引导体验（如首次启动的免责声明页）多为厂商定制流程，机制同源。
-**Q83: [tags:系统启动] 开机后多久能 adb？adbd 的启动与授权时机在哪里？'
+
+**Q84: [tags:系统启动] 开机后多久能 adb？adbd 的启动与授权时机在哪里？'
 
 adbd 由 init 按 USB 状态触发启动（usb rc 与 `sys.usb.config` 状态机），启动早于框架。能否连上还要过授权关：user 构建上 `ro.adb.secure=1`，新主机第一次连接需要用户在屏幕上确认 RSA 指纹，授权信息保存在 /data 的 adb 目录中。
 
 1. **时机结论**：init 阶段 adbd 即可运行（USB 驱动与配置就绪后），但 FBE 设备在数据解密前功能受限，涉及 /data 的授权与部分命令要等解锁。
 2. **排障**：开机后 adb 连不上按“USB 配置状态机 → adbd 是否运行 → 授权弹窗/已授权列表 → /data 是否可用”顺序查。`adb devices` 显示 unauthorized 与 offline 是不同问题。
-**Q84: [tags:系统启动] bootloader 解锁设备开机时会看到“警告屏”，这个状态机有哪些级别？'
+
+**Q85: [tags:系统启动] bootloader 解锁设备开机时会看到“警告屏”，这个状态机有哪些级别？'
 
 AVF 校验与锁定状态的组合决定开机提示级别：锁定且校验通过 → 正常无提示。解锁（orange 状态）→ 每次开机显示解锁警告数秒后才继续。校验失败但设备解锁 → 允许继续但仍警告。锁定且校验失败 → 拒绝启动（red 状态，部分平台还有损坏提示的 yellow/epsilon 变体，按平台实现）。
 
 1. **开发影响**：解锁设备是开发与刷机的常态，警告屏等待是固定开销。验证类测试必须回到锁定状态做，否则校验路径根本没被执行。
 2. **排障**：“设备突然多了一个警告屏”通常意味着 bootloader 被解锁或校验链损坏——先确认锁定状态再查 flash 历史。
-**Q85: [learning] [tags:系统启动] 内核的 initcall 机制是什么？它对开机耗时分析有什么用？**
+
+**Q86: [learning] [tags:系统启动] 内核的 initcall 机制是什么？它对开机耗时分析有什么用？**
 
 内核把内建代码的初始化函数按级别（early、core、postcore、arch、subsys、fs、device、late）组织为 initcall，启动时由内核按序执行——各驱动的探测（probe）大多发生在 device 级附近。打开 `initcall_debug=1` 后，每个 initcall 的名字与耗时都会打印，可直接量化“内核初始化阶段哪个驱动最慢”。
 
 1. **分析价值**：内核段开机慢的问题，用它能把“内核总共 2 秒”拆到具体驱动，而不是停在黑盒。
 2. **边界**：initcall 只覆盖内建代码。模块的加载在 init/用户态阶段由 modprobe 完成，耗时记在 init 段——两段要分开归因。
-**Q86: [learning] [tags:系统启动] 开机最早期日志抓不到怎么办？earlycon 与 loglevel 怎么用？**
+
+**Q87: [learning] [tags:系统启动] 开机最早期日志抓不到怎么办？earlycon 与 loglevel 怎么用？**
 
 内核最早的日志（解压后初始化驱动之前）只有控制台驱动就绪后才能输出，量产 cmdline 常配 `quiet` 与低 `loglevel` 把输出压掉。抓早期日志的两个手段：其一，`earlycon=<驱动>,<地址>` 让内核在极早期就通过串口输出（需要 bootloader 传参与地址映射配合）。其二，临时调高 `loglevel=` 或去掉 quiet 复现问题。
 
 1. **取舍**：earlycon 是诊断设施的“第一批日志”，车机串口日志看不全时先核对这两个参数。
 2. **边界**：earlycon 只覆盖串口通道，不进入 pstore。两者配合才能覆盖“最早”与“崩溃时”两类场景。
-**Q87: [learning] [tags:系统启动] 各启动阶段的耗时“应该”是多少？这类预算怎么定才合理？**
+
+**Q88: [learning] [tags:系统启动] 各启动阶段的耗时“应该”是多少？这类预算怎么定才合理？**
 
 业界没有统一标准，合理的预算来自产品自身的分解与测量：把“上电到 Home 首帧”切成 bootloader、内核、init（至 zygote 前）、zygote+system_server、Home 首帧五段，以当前实测为基线，再按硬件代际与产品目标设相对预算（例如某段占比异常高于同类设备即为嫌疑）。社区流传的“bootloader 应小于 N 秒”类数字是经验口径而非平台承诺。
 
 1. **用法**：预算用于发现异常段，不用于对外承诺。每代硬件、每次内核大版本升级都应重测基线。
 2. **配套**：预算必须与度量设施绑定（本册度量题的各段设施），否则预算只是口号。
-**Q88: [learning] [tags:系统启动] SurfaceFlinger 在启动链的什么位置就绪？它就绪前后画面由谁负责？**
+
+**Q89: [learning] [tags:系统启动] SurfaceFlinger 在启动链的什么位置就绪？它就绪前后画面由谁负责？**
 
 SurfaceFlinger 由 init 在框架之前启动（依赖图形驱动与 GPU 用户态就绪）：它就绪后才有“合成”能力，开机动画作为它的客户端把图层提交上来显示。在此之前画面是 bootloader/内核刷的静态内容。框架的窗口（Home 首帧）同样经 SF 合成显示——所以“开机动画消失、桌面出现”的本质是 bootanim 图层退出、Home 窗口图层就位，SF 一直在场。
 
 1. **排障**：动画出来了但桌面永远不出现，SF 已就绪，问题在框架与 Home。连动画都没有，则 SF 或其依赖（GPU、drm）没起来。
 2. **边界**：SF 的合成机制与帧调度归图形管线章，本册只关心它作为“画面接管者”的时点。
-**Q89: [learning] [tags:系统启动] zygote 反复崩溃的日志有什么特征？系统怎么恢复？**
+
+**Q90: [learning] [tags:系统启动] zygote 反复崩溃的日志有什么特征？系统怎么恢复？**
 
 zygote 属于关键服务：它崩溃后 init 按重启策略拉起，崩溃次数在窗口内超限则触发整机重启——日志特征是重复出现的 zygote 退出与重启记录，随后紧跟 reboot 动作。system_server 由 zygote fork 而来，其崩溃也可能连带 zygote 自杀重启（自恢复设计），日志上表现为成对的退出记录。
 
 1. **与 boot loop 的衔接**：每次开机都在同一处崩溃即形成循环。循环根因通常在 preload 阶段加载的类/资源或 system_server 早期初始化，用 tombstone 与 dropped 日志定位。
 2. **取证**：init 日志的重启记录 + zygote 的 stderr + tombstone 三者对时间线，即可区分“zygote 自身问题”与“被 system_server 连累”。
-**Q90: [tags:车机][系统启动] 车机应用开机早期调用 Car API 拿不到服务而异常，根因和正确姿势是什么？'
+
+**Q91: [tags:车机][系统启动] 车机应用开机早期调用 Car API 拿不到服务而异常，根因和正确姿势是什么？'
 
 CarService 由 system_server 在启动后期绑定并初始化，完成前应用调用 `Car.createCar()` 后再 `getCarManager()` 会拿到 null 或进入未就绪分支——车控/仪表类应用在 BOOT_COMPLETED 前后抢跑时高发。正确姿势是显式等待就绪：用 `Car.createCar(context, handler, waitTimeout)` 的就绪回调或监听 CarService 就绪状态，就绪后再取 manager 发起车辆操作。
 
 1. **根因链**：应用收到 BOOT_COMPLETED（甚至更早的自启动）→ 框架服务尚未完成 CarService 装配 → 调用失败。这不是 CarService 的 bug，而是启动时序的固有窗口。
 2. **实战**：早期只允许“读缓存/显示占位”，一切车辆操作挂起至就绪回调。超时未就绪要有可观测日志而不是静默失败。
-**Q91: [learning] [tags:车机] [系统启动] VHAL 什么时候就绪？“开机前几秒读车辆信号失败”该怎么解释与处理？**
+
+**Q92: [learning] [tags:车机] [系统启动] VHAL 什么时候就绪？“开机前几秒读车辆信号失败”该怎么解释与处理？**
 
 信号链是 应用 → CarService（property 服务）→ VHAL HAL → 车辆总线。开机早期 CarService 初始化时会连接 VHAL 并批量读取/订阅属性，这一过程在 system_server 启动后期才完成。在此之前任何车辆属性读取都会失败或返回不可用。因此“开机前几秒读不到信号”是时序现象，不是故障。
 
 1. **应用侧处理**：与 Car API 就绪回调合并处理——就绪前显示默认态或占位，注册监听后以第一次回调刷新真实值。
 2. **区分真故障**：长时间（远超启动窗口）读不到、且 CarService 日志显示 VHAL 连接失败或属性超时，才是 VHAL/总线侧问题。两者用时间窗区分。
 3. **边界**：VHAL 的属性语义与订阅契约归 VHAL 专题册。
-**Q92: [tags:车机][系统启动] 多用户车机开机时，各用户的 BOOT_COMPLETED 按什么顺序发出？'
+
+**Q93: [tags:车机][系统启动] 多用户车机开机时，各用户的 BOOT_COMPLETED 按什么顺序发出？'
 
 用户启动由 system_server 的用户管理服务按策略调度：系统用户（user 0 或 headless 模式下的 system user）先完成启动并进入 BOOT 阶段，随后按配置与乘员/显示绑定关系逐个启动其他用户。每个用户走完自身的用户级启动阶段后才收到属于该用户的 BOOT_COMPLETED。因此多用户设备上不同用户空间里的应用收到开机广播的时刻可以相差很远。
 
 1. **应用影响**：把“开机即同步”的假设建立在 user 0 时刻的广播上，在其他用户空间会失效。应依赖各自用户空间的广播与就绪信号。
 2. **排障**：某乘客屏应用“没收到开机广播”，先确认其所在用户是否已启动、广播是否已发到该用户，而不是断言广播丢失。
-**Q93: [learning] [tags:系统启动] VINTF 兼容性校验在启动期起什么作用？校验失败会怎样？**
+
+**Q94: [learning] [tags:系统启动] VINTF 兼容性校验在启动期起什么作用？校验失败会怎样？**
 
 VINTF（Vendor Interface）把“framework 期望的 HAL/接口版本”与“设备实际提供的 manifest”做兼容性匹配：启动期系统按 manifest 与 compatibility matrix 校验设备提供的接口集合，不匹配时相关 HAL 无法被框架消费、依赖它的服务启动失败，OTA 升级前也会先行校验以阻止不兼容组合上线。
 
 1. **排障**：厂商服务“编译进来了却没生效”，查 vintf 校验日志与 manifest 是否声明了对应接口/版本。OTA 失败场景核对 matrix 增补（FCM 版本）。
 2. **边界**：manifest 的书写与 FCM 生命周期归构建与平台专题，本册只关心它作为“启动期准入检查”的角色。
-**Q94: [tags:系统启动] 内核镜像的压缩格式对启动时间有影响吗？Image 与 Image.gz 怎么选？'
+
+**Q95: [tags:系统启动] 内核镜像的压缩格式对启动时间有影响吗？Image 与 Image.gz 怎么选？'
 
 有影响但量级可控：压缩镜像（gzip/lz4 等）体积小、从存储加载更快，但要付出解压时间。未压缩 Image 加载慢、免解压。GKI 时代 boot 分区空间与加载速度的平衡由产品决定，选择依据是实测的“加载时间 + 解压时间”总和，而不是“压缩一定快”或“不压缩一定快”的单边结论。
 
 1. **实测方法**：分别量 bootloader 加载镜像的时间（其串口日志）与内核解压/启动的 dmesg 时间差，合并对比。
 2. **边界**：内核镜像的构建配置归内核专题。启动分析中只需要知道“解压开销发生在内核 banner 之前”。
-**Q95: [tags:系统启动] “开机后第一次打开应用特别慢”，完整的归因链怎么拆？'
+
+**Q96: [tags:系统启动] “开机后第一次打开应用特别慢”，完整的归因链怎么拆？'
 
 首次启动慢是多层一次性成本叠加，按发生位置拆：
 
@@ -1119,10 +981,16 @@ VINTF（Vendor Interface）把“framework 期望的 HAL/接口版本”与“�
 3. **系统层**：开机后系统整体处于高负载（大量服务与广播并发），CPU/IO 竞争放大首启耗时。
 
 归因方法是分别采集“首次”与“二次”启动的启动耗时与系统状态，差异即一次性成本的位置。优化则分属启动优化（系统竞争）与应用（数据初始化）两个专题，本册提供的是拆解框架。
-**Q96: [tags:系统启动] init 代建的 socket 是怎么用的？为什么很多守护进程的通信入口由 init 创建？'
+
+**Q97: [tags:系统启动] init 代建的 socket 是怎么用的？为什么很多守护进程的通信入口由 init 创建？'
 
 service 声明里的 socket 选项让 init 在服务启动前创建抽象或文件系统的 Unix 域 socket，并把 fd 作为环境变量（`ANDROID_SOCKET_xxx`）注入服务进程：这让“创建、监听、权限（SELinux 标签与文件上下文）”由 init 统一在正确的时机完成，服务只管 accept——避免了服务自己建 socket 的时序竞争与标签错误。
 
 1. **典型使用**：zygote 的 zygote socket、vold 与框架之间的 cryptd 通道、logd 的控制通道都走这套机制。
 2. **实践推论**：服务间“谁先起”导致的连接失败，若走的是 init socket（连接会排队/阻塞语义按实现）与自建 socket（直接失败）表现不同。分析时先确认 socket 的创建者。
 
+**Q98: [learning] bootanalyze、bootio 与 bootstat 各自回答什么问题？使用时有哪些容易踩的坑？**
+
+三者分工：bootanalyze 把 logcat/dmesg 中的稳定事件转成阶段时间。bootio 用内核 taskstats 回答启动窗口里哪个进程 I/O 最多。bootstat 把启动事件与相对时间持久化，适合版本看板与长期回归。证据层级应逐层缩小：先用分位数确认回归是否稳定，再用阶段时间定位慢段，最后用 Perfetto/ftrace 把慢段细分到调度、Binder、锁、缺页与块 I/O——单份 trace 解释一次慢启动，统计才能证明版本回归。
+
+bootanalyze 的坑（工具位于 system/extras/boottime_tools/bootanalyze/，本地 AAOS13 树未包含 system/extras，用法按材料核对）：events 记录事件第一次出现的时间点，timings 要用带 name 与 time 命名捕获组的正则从日志提取子阶段耗时，正则要先在目标版本的原始 logcat 上回放。README 与脚本有漂移（README 写 Python 2.7 而脚本 shebang 已是 python3），脚本默认等 BootComplete 与 LauncherStart 两个事件，产品定制 config.yaml 要保留脚本使用的事件键，Launcher 日志格式变化会让采集一直等到超时。wrapper 环境变量是源码固化的 CONFIG_YMAL 拼写，且会无条件执行 touch /data/bootchart/enabled，做低扰动基线要评估 bootchart 的影响。时间上，logcat 的 wall clock 在启动早期可能被校时（默认配置按 Updating system time 修正），dmesg 用内核起算时间，两类时钟不能直接相减。bootio 依赖 CONFIG_TASKSTATS 等 4 项内核配置，start 控制文件 /data/misc/bootio/start 不会自动删除。bootstat 的 ro.boottime.event.* 字段只有在 init event timestamp flag 开启时才有值，bootloader 没提供 ro.boot.boottime 时它补不出上电到 kernel 的时间。Perfetto 要在重启前安装 trace 配置并确认 session 已开始，否则会漏掉 kernel、first-stage init 与 Zygote 前半段。system_server 的 Perfetto producer buffer（材料口径 4 MiB）只服务于该 producer，不是整份 trace 的全局 buffer。

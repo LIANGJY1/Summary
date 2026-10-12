@@ -96,7 +96,11 @@ MAILBOX 允许新 image 替换尚未显示的旧 image，但可用 image 更多�
 
 queue 数量只表示接口可独立提交，不保证硬件并行执行。多条 queue 仍可能争用内存带宽、cache 或同一图形引擎，驱动也可能交错或串行执行。AAOS13 主线程同步创建大图仍会依次等待解码、分配、上传和 GPU 完成。HARDWARE Bitmap 首次创建会把 CPU 源像素复制到 gralloc 分配的 AHardwareBuffer，不是 zero-copy。分析上传与绘制的相互影响时，先按目标版本源码确认 queue 拓扑，再用 trace 观察争用，不把 queue 数量当作并行度保证。
 
-**Q9: [learning] ASurfaceControl_createFromWindow 创建的是什么，它与 parent window 的 BufferQueue 是什么关系？**
+**Q9: [learning] Swappy、Frame Rate API、ADPF Hint Session、Game Mode、Game State 各管什么？哪些能力在 Android 13 上还没有？**
+
+各管一段：Swappy 或引擎 pacer 控制每帧何时提交、swap interval 与 in-flight 深度，不保证 CPU/GPU 资源。Frame Rate API（`Surface.setFrameRate()`）只声明内容帧率供系统选显示模式，不是强制刷新率，游戏应使用 `FRAME_RATE_COMPATIBILITY_DEFAULT` 而非面向固定帧率视频的 `FIXED_SOURCE`。Performance Hint Session 用 target/actual work duration 反馈帮助系统调度 CPU，不能锁核、锁频或绕过 thermal，session 不受支持时 `createHintSession()` 可返回 null。Game Mode（STANDARD/PERFORMANCE/BATTERY）是用户选择的目标，OEM 可为未适配游戏配置 intervention，Android 13+ 的 FPS throttling intervention 只能限制帧率、不能把 60 FPS 提升到 120 FPS。Game State 报告 loading 与 gameplay 状态，与 Game Mode 是两个维度，Power HAL 的 `GAME_LOADING`/`GAME` mode 只向电源层描述场景，具体策略由 OEM 实现。版本边界（AAOS13 核对）：STANDARD/PERFORMANCE/BATTERY、`setGameState(GameState)` 与 Hint Session 基础 API 在 Android 13 已有。`GAME_MODE_CUSTOM`（API 34）、`WorkDuration` 与 `setPreferPowerEfficiency()`（API 35）、CPU/GPU headroom（API 36）在 AAOS13 树中不存在，按材料口径转写。
+
+**Q10: [learning] ASurfaceControl_createFromWindow 创建的是什么，它与 parent window 的 BufferQueue 是什么关系？**
 
 `ASurfaceControl_createFromWindow()` 在指定节点下创建新 layer。它从 `ANativeWindow` 取得已有 SurfaceControl handle 作为父节点。新节点不复用原 window 的 BufferQueue，而是可通过 transaction 修改的子节点。Android 13 头文件中该 API 和 `setBuffer()` 均为 API 29 引入。
 
@@ -109,7 +113,7 @@ queue 数量只表示接口可独立提交，不保证硬件并行执行。多�
 
 NDK 创建的节点不能套用 Java `SurfaceControl.Builder` 的 layer 类型分类。公开创建函数没有 layer type 选项。`ASurfaceControl_release()` 只释放调用方的本地引用。只要父节点仍在显示树中，子树仍可能显示。移除子树时先 hide 或 reparent 到 NULL，再释放句柄。直接向 SurfaceView 的 BufferQueue 渲染时，使用其 ANativeWindow 的 EGL/Vulkan/MediaCodec producer 路径。只有要在宿主节点下组织额外 layer 时才用 `createFromWindow()`。
 
-**Q10: [learning] ASurfaceTransaction 的原子性保证覆盖到哪里，OnCommit、OnComplete 与 API 36 的 OnBufferRelease 各能证明什么？**
+**Q11: [learning] ASurfaceTransaction 的原子性保证覆盖到哪里，OnCommit、OnComplete 与 API 36 的 OnBufferRelease 各能证明什么？**
 
 事务原子性表示其中状态一起生效，SurfaceFlinger 不会只应用一部分。同一线程调用 `apply()` 的多个事务按提交顺序应用。但这不保证 `apply()` 返回时 buffer 已 latch、事务赶上下一个 VSync 或 acquire fence 已 signal，也不识别多个独立 producer 的 buffer 是否属于同一业务帧。
 
@@ -121,7 +125,7 @@ NDK 回调能证明的状态不同：
 
 `ASurfaceControl_createFromWindow()` 创建的 layer 默认允许新提交覆盖尚未展示的旧 buffer。需要保留提交帧序时可调用 `ASurfaceTransaction_setEnableBackPressure(true)`，但服务端可能暂存更多提交，增加排队与内存。需要 pacing 反馈时用 OnCommit。buffer 回收则按 API 等级使用 OnBufferRelease 或 OnComplete 中的 previous release fence，不要在 OnCommit 中查询 fence。
 
-**Q11: [learning] setBuffer 传入 acquire fence fd 后所有权归谁，API 29–35 与 API 36–37 的「buffer 可复用依据」为何不同？**
+**Q12: [learning] setBuffer 传入 acquire fence fd 后所有权归谁，API 29–35 与 API 36–37 的「buffer 可复用依据」为何不同？**
 
 framework 接管 `setBuffer()` 传入的 acquire fence fd。调用后，调用方不能再次关闭或复用同一 fd。要保留诊断副本时应先 `dup`。fd 所有权与 AHardwareBuffer 引用计数相互独立，持有对象引用不代表同步条件已经满足。
 
@@ -132,7 +136,7 @@ framework 接管 `setBuffer()` 传入的 acquire fence fd。调用后，调用�
 
 两类 fence 方向相反：acquire fence 约束 consumer 何时可读，release fence 约束 producer 何时可再写。`ASurfaceTransaction_apply()` 返回后立即复写 buffer 是撕裂和同步错误的常见来源。usage 与 fence 也不能互换：usage 声明哪些模块可访问内存。NDK 的 `ASurfaceTransaction_setBuffer()` 要求 buffer 支持 `AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE`，因为 SurfaceControl 可能经 GPU 合成，Java `SurfaceControl.Transaction.setBuffer()` 的公开契约则要求 `COMPOSER_OVERLAY` 与 `GPU_SAMPLED_IMAGE`。提交时记录 buffer id 和 generation，并把回收绑定到对应回调与 fence，signal 后再放回 buffer pool。
 
-**Q12: [learning] HardwareBufferRenderer 适合什么问题，它与 lockHardwareCanvas 的边界在哪，AAOS13 上能用吗？**
+**Q13: [learning] HardwareBufferRenderer 适合什么问题，它与 lockHardwareCanvas 的边界在哪，AAOS13 上能用吗？**
 
 HardwareBufferRenderer（HBR）把 RenderNode 场景树光栅化到调用方持有的 HardwareBuffer。调用方决定将 buffer 交给 SurfaceControl、其他进程、GPU 或媒体 consumer，并管理 presentation、release fence 和 buffer pool。它是 API 34（Android 14）新增的 Java API，Android 13 没有该类。需要类似能力时可用 EGL/Vulkan 写入 HardwareBuffer，或使用 AndroidX 兼容封装。
 
@@ -144,7 +148,7 @@ HardwareBufferRenderer（HBR）把 RenderNode 场景树光栅化到调用方持�
 
 当 CPU 软件光栅化已是主要耗时、结果本来就要作为独立 HardwareBuffer 消费，或已有合法 SurfaceControl layer 需要原子提交时，可实测 HBR。目标只是画到现成 Surface 时，优先考虑 `lockHardwareCanvas()` 或面向 Surface 的 HardwareRenderer。
 
-**Q13: [learning] Jetpack WebGPU 是 Android 17 的系统组件吗？它与 WebView 里的 navigator.gpu 是同一条路径吗？**
+**Q14: [learning] Jetpack WebGPU 是 Android 17 的系统组件吗？它与 WebView 里的 navigator.gpu 是同一条路径吗？**
 
 都不是。Jetpack WebGPU 是应用依赖 `androidx.webgpu`，不是 Android 17 系统组件。截至 2026 年 10 月，公开发行记录显示最新版本为 alpha05，最低 API 为 24。其 Kotlin API 通过 JNI 使用 AAR 内的 Dawn 原生库，随 APK 发布，不随系统 OTA 更新。
 
@@ -153,7 +157,7 @@ HardwareBufferRenderer（HBR）把 RenderNode 场景树光栅化到调用方持�
 3. 平台仍负责 Surface、ANativeWindow、BufferQueue、SurfaceFlinger 与 HWC。WebGPU 图形结果经 GPUSurface 进入公共显示路径，不绕过系统合成器。纯计算任务不需要 Surface，执行到 GPU 资源与结果读回即可。
 4. Android 13 AOSP 树中没有 Jetpack WebGPU。Android 17 也不要求它必须使用 Vulkan 1.4。官方文档将 Vulkan 1.1+ 列为首选后端，Compatibility 档可覆盖 OpenGL ES 路径。
 
-**Q14: [learning] WebGPU 的 Core/Compatibility 与 Vulkan/OpenGLES 是同一组分类吗？使用 subgroup 这类能力前要查什么？**
+**Q15: [learning] WebGPU 的 Core/Compatibility 与 Vulkan/OpenGLES 是同一组分类吗？使用 subgroup 这类能力前要查什么？**
 
 不是同一组。`featureLevel`（Core/Compatibility）描述应用可依赖的 WebGPU 能力档。`backendType`（Vulkan/OpenGLES 等）描述 Dawn 选择的原生后端，两者不能一一对应。Core 常配 Vulkan。为扩大设备覆盖也可请求 Compatibility 并由 OpenGLES backend 实现。实际 backend 应读取 `GPUAdapterInfo.backendType` 和 adapter info，不能按 GPU 商品名或 Android 大版本推断。
 
@@ -165,7 +169,7 @@ HardwareBufferRenderer（HBR）把 RenderNode 场景树光栅化到调用方持�
 
 Compatibility 不能概括成“不支持 compute 或 storage texture”。它会补充少量 vertex/fragment stage 上限字段。`maxImmediateSize` 也不能直接解释为 Vulkan push constant 支持，底层寄存器映射取决于 Dawn 和驱动实现。WGSL 是稳定的 shader 输入口。中间表示和编译路径随 Dawn commit 与 backend 变化，不能描述成固定管线。
 
-**Q15: [learning] WebGPU 的 surface.present() 返回表示上屏了吗？AndroidExternalSurface 与 AndroidEmbeddedExternalSurface 差在哪？**
+**Q16: [learning] WebGPU 的 surface.present() 返回表示上屏了吗？AndroidExternalSurface 与 AndroidEmbeddedExternalSurface 差在哪？**
 
 没有。`present()` 只把当前 surface texture 交给后端呈现路径。其后仍有 GPU 完成、BufferQueue 交接、SurfaceFlinger latch、HWC 合成和 display present。
 

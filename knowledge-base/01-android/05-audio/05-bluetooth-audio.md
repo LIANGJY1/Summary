@@ -1,6 +1,6 @@
 # 蓝牙音频
 
-> 本文按延迟测量、LE Audio 传输模式、编解码卸载、应用控制、助听器配置、经典蓝牙通话切换和音量同步整理蓝牙音频问题。Q1 从 `03-ui/04-window-system.md` 的音频部分迁入，Q2–Q6 由 `12-performance/21-energy-efficiency.md` 的 LE Audio 内容整理；原始问题与补充说明均在本册保留并重新划分边界。本文的 Android 接口说明以公开 API 契约为准，AOSP 实现细节需结合目标分支和厂商实现核对。
+> 本文按延迟测量、LE Audio 传输模式、编解码卸载、应用控制、助听器配置、经典蓝牙通话切换和音量同步整理蓝牙音频问题。Q1 从 `03-ui/04-window-system.md` 的音频部分迁入，Q2–Q6 由 `12-performance/03-resource-energy-performance.md` 的 LE Audio 内容整理；原始问题与补充说明均在本册保留并重新划分边界。本文的 Android 接口说明以公开 API 契约为准，AOSP 实现细节需结合目标分支和厂商实现核对。
 
 **Q1: [learning] 用 LDAC 或 aptX 时，为什么不能按编解码器名称套固定延迟？必须经蓝牙出声的产品该怎样验证？**
 

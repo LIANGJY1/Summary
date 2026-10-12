@@ -41,3 +41,9 @@ ftrace 事件里有网络相关探针：TCP 重传、连接状态迁移、网卡
 **Q10: [learning] 带宽怎么实测？iperf3 的用法与测速陷阱有哪些？**
 
 iperf3 是双端工具：对端起 `iperf3 -s`，本端 `iperf3 -c <对端> -t 30` 测 TCP 吞吐，`-u -b <带宽>` 测 UDP 吞吐并报告丢包与抖动。TCP 单流可能受单连接窗口限制，`-P` 多流才能逼近链路上限（工具通用口径）。四个陷阱：测的是全链路最小段——中间任何一段（热点、NAT、modem）是瓶颈时结果只反映瓶颈段。多客户端共享热点/链路时互相分抢，测速值随并发漂移。本机 CPU 或接口本身是瓶颈的车机（低端模组）先排除端侧瓶颈。测速流量会与真实业务互相挤占——台架上在 netem 矩阵之外单独跑基线，量产现场不做压测。结论用法：iperf3 得到的是“当前链路段的可用吞吐”，用于基线对比与硬件验收，不能当作用户真实体验速率对外承诺。
+
+**Q11: [learning] DNS 故障诊断应收集哪些系统证据？resolver 的 querylog 与 server 统计能回答什么、不能回答什么？**
+
+先确认请求是否真的停在 DNS：按顺序记录 DNS 开始/结束/失败、connect 开始与目标地址、TLS 握手、HTTP 首字节、取消与切网事件——复用已有连接时没有 DNS 事件属正常。DNS 快而 connect 超时应查路由与地址族，TLS 慢回 TLS 专项。系统侧三组证据：`dumpsys connectivity` 核对当前网络、`LinkProperties`、能力标志与 Private DNS 状态。`dumpsys dnsresolver` 列出各网络的缓存、DNS server 统计、搜索域与参数。`dumpsys dnsresolver querylog` 输出查询记录（Android 17 的 `DnsQueryLog` 会遮蔽 hostname 与地址，仍属受限诊断数据）。resolver dump 需要 `DUMP` 权限，普通第三方应用不能在生产设备自行执行。
+
+`ResolverController::dump()` 的 server 统计（查询总数、成功、错误、超时、平均 RTT、server 状态）能回答“设备当前 resolver 是否集中失败”，不能替代应用侧分段计时——应用可能命中自己的缓存、等待线程调度或复用既有连接。`NetworkDiagnostics`（材料按 Android 17 核对）把探测 socket 绑定到指定 `Network`，对网关、DNS server 与测试地址做 ICMP、UDP DNS 与 DoT 探测，能缩小系统网络故障范围，但不能证明业务域名、CDN 或应用 HTTPDNS 正常。现象分流举例：`UnknownHostException` 增长先查解析入口与 resolver/HTTPDNS 结果，不推 NXDOMAIN。`.local` 失败先核对 targetSdk 37 的 `ACCESS_LOCAL_NETWORK` 权限与目标网络（Android 17 起 .local 解析受本地网络权限限制，A13 无此权限），再判断 resolver 故障。VPN 下公网正常内网失败，查 VPN DNS、split DNS 与绑定的 `Network`。指标按解析来源、缓存状态、传输类型、查询类型与 rcode 分组聚合，分位数服务于 SLO——低流量域名的 p99 波动大，固定套用制造噪声。`netId` 会被系统复用，长期聚合用进程内递增的网络会话号，无盐哈希 hostname 在候选域名很少时可被离线枚举，不算匿名化。

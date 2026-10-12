@@ -57,3 +57,21 @@ TLS 1.3 允许会话恢复时在第一个飞行包里就携带应用数据（0-R
 **Q14: [learning] HTTP 缓存与条件请求怎么用？车机上省流量的正确姿势是什么？**
 
 两层机制：新鲜度——服务端用 `Cache-Control: max-age` 声明可缓存时长，期内客户端直接用本地副本不发请求。条件请求——缓存过期后带 `If-None-Match`（ETag）或 `If-Modified-Since` 重验，资源未变服务端回 304 空体，省的是响应体流量（HTTP 语义，官方文档口径）。落地：OkHttp 配置 Cache 目录即自动实现条件请求与存储。静态资源（配置、包索引、素材清单）是最该缓存的对象。纪律三条：敏感数据响应带 `no-store` 防落盘。接口别滥用 no-cache（它要求每次重验而不是不缓存，语义常被误解）。URL 是缓存键——同一资源不同 URL（多一个无意义参数）是两份缓存，多端 URL 拼接要稳定。车机价值：计费网络下（配合计费网络适配与连接池治理）缓存命中就是真金白银的流量节约，静态清单类接口全走条件请求是低成本高收益的标准动作。
+
+**Q15: [learning] targetSdk 决定的明文流量默认值是什么？Network Security Config 还能管什么，证书固定为什么不是默认推荐？**
+
+Android 9（API 28）起 targetSdk 28 及以上的应用默认 `cleartextTrafficPermitted=false`，targetSdk 27 及以下默认 true。Network Security Configuration 自 Android 7 起可按域名配置明文、信任锚、调试证书与证书固定。注意这是 targetSdk 默认值：第三方库或 native 网络实现是否查询 `NetworkSecurityPolicy` 要核对对应代码，不能假定所有网络路径都遵守。从 HTTP 迁移应直接配置 HTTPS URL——先 HTTP 再跟随 301/302 会多一次明文请求并在重定向前暴露请求元数据。WebView 的 mixed content 是另一组配置。
+
+证书固定（certificate pinning）官方不建议作为一般应用的默认方案：服务端证书或 CA 轮换处理不当会让应用失联。威胁模型确需 pinning 时，要准备备用 pin、失效时间、轮换演练与远端恢复方案。删除证书校验、信任所有证书或放宽主机名校验都不属于性能优化。HPKE 的版本层次：Android 15 加 `HpkeSpi`（provider 实现 SPI），Android 17 才有应用层 `Hpke`/`Sender`/`Recipient` API 且只支持 base mode（不认证发送方）——两条路径在 Android 13 上都不存在，按材料转写。
+
+**Q16: [learning] Android 17 的 Encrypted Client Hello 解决什么问题？一次连接真正发出 ECH 要同时满足哪些条件，“失败会静默降级”可靠吗？**
+
+普通 TLS ClientHello 明文暴露 SNI（目标主机名）等元数据。ECH（RFC 9849）把敏感内容放进加密的 inner ClientHello，外层保留路由与兼容协商所需信息——ECH 不等于隐藏全部访问行为，观察者仍可依据 IP、流量形态和 DNS 看到部分元数据。生效需要四个条件同时成立（按材料核对 Android 17 行为，Android 13 无 ECH）：网络库已接入平台 ECH 能力。DNS 或网络库拿到服务端可用的 ECHConfig（含公钥与算法参数，常由 DNS HTTPS 资源记录分发）。终止 TLS 的 CDN、代理或服务节点支持对应配置。连接路径没有绕过平台网络安全策略。`<domainEncryption>` 提供 enabled/disabled 模式，enabled 在有 ECHConfig 时要求使用 ECH、没有时发送 ECH GREASE 占位扩展。disabled 则两者都不做。
+
+“静默降级”不可靠：材料按 AOSP `android-17.0.0_r1` 核对，Conscrypt 的 `SSLParametersImpl.getEchOptions()` 依据网络安全策略生成选项，`Platform` 把配置不匹配包装为 `EchConfigMismatchException`（可携带服务端返回的重试配置）——网络库可能按重试配置重连，也可能把失败交给调用者，应用不应假定平台总会回退普通 TLS。性能评估分两段：HTTPS 资源记录查询是否增加等待取决于缓存与解析器实现（不能统一写成“多一次 DNS RTT”）。ClientHello 的 HPKE 加密只在新握手中执行。
+
+**Q17: [learning] Android 17 的 Certificate Transparency 什么条件下默认开启？为什么“至少两个 SCT”不是完整策略？**
+
+CT 通过公开日志与 SCT（签名证书时间戳）留下可审计的签发记录，用于发现误签或恶意签发。CA 签名本身只能证明证书追溯到受信根。默认值由运行系统与 targetSdk 共同决定（按材料核对）：Android 16 允许应用选择启用（opt-in）。应用运行在 Android 17 且 targetSdk 37 及以上时平台默认启用。运行在旧系统上的同一 APK 拿不到 Android 17 的平台 CT 验证，targetSdk 低于 37 也不能凭“设备是 Android 17”推断已开启——Android 13 上两者都不适用。
+
+Network Security Config 有一个容易遗漏的分支：当前域显式启用 CT 才执行。当前域使用用户证书或应用配置了自定义信任锚时默认不执行 CT。其余继承上层。私有 PKI 与抓包调试环境常落入第二种情况——同一应用的公网站点执行 CT、企业根证书的内网站点不执行。完整策略按 SCT 交付方式、证书有效期、日志状态与运营者判断：嵌入证书在有效期不超过 180 天时需要 2 个不同合格日志的 SCT、超过 180 天需要 3 个，且覆盖至少 2 个日志运营者。OCSP stapling 或 TLS 扩展方式需要至少 2 个合格日志的 SCT——日志清单会变化，不要把数字固化成永久服务端规则。CT 检查在本地验证握手携带的证书、OCSP 响应或扩展，不应按“额外一次网络请求”估算。迁移期更常见的影响是握手直接失败（SCT 缺失、日志状态不满足、证书链发送错误）。

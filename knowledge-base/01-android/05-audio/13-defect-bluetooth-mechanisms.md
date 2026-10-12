@@ -1,6 +1,6 @@
 # 蓝牙机制：缺陷模式与修复范式
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。本文按五组机制组织车载蓝牙缺陷：连接/回连/扫描操作的互斥与补偿、跨进程状态及单设备事件冒充全局状态、PBAP 协议计数/授权结果/联系人数据一致性、多音源媒体状态及重复输入、并发通话状态与界面同步。蓝牙扫描与连接的能效视角见 [../12-performance/21-energy-efficiency.md](../12-performance/21-energy-efficiency.md)。防抖吞请求、超时取消纪律、乐观更新确认等异步时序通用范式见 [09-defect-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md)，占位通话与 Loading 卡死的排查清单见 [14-app-crash-patterns.md](../12-performance/14-app-crash-patterns.md)。本文于 2026-09-26 补充代码级讲解与深案例，并校订中英文间距和术语。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。本文按五组机制组织车载蓝牙缺陷：连接/回连/扫描操作的互斥与补偿、跨进程状态及单设备事件冒充全局状态、PBAP 协议计数/授权结果/联系人数据一致性、多音源媒体状态及重复输入、并发通话状态与界面同步。蓝牙扫描与连接的能效视角见 [../12-performance/01-应用/energy-background/energy-background.md](../12-performance/01-应用/energy-background/energy-background.md)。防抖吞请求、超时取消纪律、乐观更新确认等异步时序通用范式见 [09-defect-main-thread-async.md](../02-app-framework/09-defect-main-thread-async.md)，占位通话与 Loading 卡死的排查清单见 [../12-performance/02-系统/04-anr-crash.md](../12-performance/02-系统/04-anr-crash.md)。本文于 2026-09-26 补充代码级讲解与深案例，并校订中英文间距和术语。
 
 **Q1: [learning] 副蓝牙自动回连执行期间，用户点击“刷新”发起设备扫描为什么会立即无响应？正确的打断与补偿方案是什么？（SIR-7390）**
 

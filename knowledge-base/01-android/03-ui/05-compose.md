@@ -119,7 +119,7 @@ AndroidView 将一棵传统 View 子树纳入 Compose 的布局与绘制，因�
 
 按工具证据区分重组、布局和绘制阶段，再选择优化方向：
 
-1. **观察范围**：Layout Inspector 查看重组次数和具体 composable。Compose trace API 标出自定义慢逻辑耗时。帧时间线/帧指标判断是否超过目标刷新率对应的预算，度量口径见 [流畅性度量](../12-performance/05-smoothness.md)。
+1. **观察范围**：Layout Inspector 查看重组次数和具体 composable。Compose trace API 标出自定义慢逻辑耗时。帧时间线/帧指标判断是否超过目标刷新率对应的预算，度量口径见 [流畅性度量](../12-performance/01-应用/rendering/rendering.md)。
 2. **重组次数高**：检查不稳定参数、状态读取位置和无稳定 key 的列表。
 3. **单次组合耗时高**：检查组合期重计算、列表筛选和排序。
 4. **布局或绘制耗时高**：布局检查测量复杂度和深层结构。绘制检查重复记录、绘制期分配和大面积渐变/模糊。

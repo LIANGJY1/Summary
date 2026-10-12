@@ -1,6 +1,6 @@
 # 广播队列与投递
 
-> 学习资料（文章模式沉淀）。边界：本文回答"BroadcastQueue 的队列模型、超时契约、缓存态延后与投递语义"。ANR 诊断归 12-performance/03，应用侧广播用法归 02-app-framework/01。源文档：android-internals-wiki §1.14。实现细节对照 frameworks/base android17-release 中的 BroadcastQueueImpl、BroadcastProcessQueue 和 BroadcastConstants，公开行为对照 Android Developers 广播文档。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"BroadcastQueue 的队列模型、超时契约、缓存态延后与投递语义"。ANR 诊断归 12-performance/01，应用侧广播用法归 02-app-framework/01。源文档：android-internals-wiki §1.14。实现细节对照 frameworks/base android17-release 中的 BroadcastQueueImpl、BroadcastProcessQueue 和 BroadcastConstants，公开行为对照 Android Developers 广播文档。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 17 还有前台/后台两条广播队列吗？FLAG_RECEIVER_FOREGROUND 到底影响什么？**
 

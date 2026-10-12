@@ -206,3 +206,7 @@ AIDL 生成代理与分派样板代码。手写 Binder IPC 时，调用方和服
 1. **编码契约**：约定事务码、Parcel 字段顺序与类型、返回值和异常格式。
 2. **演进契约**：维护接口版本、兼容规则和权限检查，避免一端升级后另一端误解数据。
 3. **运行边界**：自行处理线程模型、阻塞、服务死亡和调用失败。AIDL 能减少重复编码，但不替代接口设计。
+
+**Q23: [learning] 目标进程被冻结时同步与 oneway 事务的内核行为差在哪，为什么 server_dur = 0 查不到 frozen rejection？**
+
+这里的 frozen 指被 Freezer 暂停的 cached process。按 AAOS13 的 UAPI（`bionic/libc/kernel/uapi/linux/android/binder.h`）核对，`BR_FROZEN_REPLY = _IO('r', 18)` 已存在：同步事务发往 frozen 目标会被驱动直接拒绝入队并返回该命令，libbinder 收到后按开关返回 `FROZEN_OBJECT` 或兼容的 `FAILED_TRANSACTION`。oneway 事务允许进入异步队列但报告 pending——材料的 `BR_TRANSACTION_PENDING_FROZEN`（`_IO('r', 20)`）与 `TF_UPDATE_TXN`（frozen 目标同 node 的 pending oneway 可被同参数新事务替换）在 13 的 UAPI 中尚不存在，属于后续内核（r6 语境）新增，引用时必须标注版本。`android_binder_txns` 依赖客户端到服务端的 flow 配对：frozen rejection 没有服务端 receive/reply slice，标准表里通常没有这一行，所以在标准表过滤 `server_dur = 0` 或把 `client_dur > 0 AND server_dur = 0` 计成 frozen 次数都无效。正确做法是保留 raw `binder_return` 事件，把十六进制 cmd 按 UAPI 映射回命令名，再与目标进程状态对齐。排查方向上，前台应用调用 system_server 一般遇不到 system_server 被冻结，更常见的是系统或前台进程访问 cached/frozen 的应用、Provider 或 Service。
