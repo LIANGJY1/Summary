@@ -6,6 +6,7 @@
 
 1. [版本控制与 Git](./01-version-control-git.md)（8 题）— Git 整体原理、快进语义与产生条件、--no-ff 与 --squash 的取舍、cherry-pick 语义与冲突流程、pull 协作、Gerrit 评审推送。
 2. [Android Bench 代码代理评测](./02-android-bench.md)（3 题）— Android 代码代理基准的任务构造、复现协议、verifier 状态与分数解读；不属于应用运行时性能基准。
+3. [clangd 语言服务器](./03-clangd.md)（1 题）— clangd 的定位与 LSP 链路、编译参数三级来源（compile_commands.json、.clangd、fallback）、能力边界与 cpptools/ccls 取舍。
 
 ## 内容边界
 

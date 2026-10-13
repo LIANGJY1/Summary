@@ -1,6 +1,6 @@
 # 虚拟机与虚拟化
 
-> 学习资料。主线：虚拟机监控程序两类的资源访问路径 → QEMU 的模拟范围与 CPU 执行方式 → pKVM 的受保护内存模型与代价 → 全虚拟化与半虚拟化的取舍 → virtio-blk 的协议本质、两侧形态与属性协商 → virtqueue 的请求流转、缓存语义与布局版本 → virtio-pci 的发现链路与 virtio-mmio 替代。依据：QEMU 官方文档、kernel.org 与 source.android.com（pKVM/AVF）、内核 5.15 UAPI（virtio_blk.h、virtio_ring.h、virtio_ids.h、virtio_pci.h）、virtio 规范与 QEMU 6.2 设备清单（2026-10 核对）。Android 专属集成（AVF/Crosvm/Microdroid）归 ../../01-android/08-platform-services/06-avf-virtualization.md。题序即文档结构。
+> 学习资料。主线：虚拟机监控程序两类的资源访问路径 → QEMU 的模拟范围与 CPU 执行方式 → pKVM 的受保护内存模型与代价 → 全虚拟化与半虚拟化的取舍 → virtio 的标准定义、三层组成与标准化历程 → virtio-blk 的协议本质、两侧形态与属性协商 → virtqueue 的请求流转、缓存语义与布局版本 → virtio-pci 的发现链路与 virtio-mmio 替代。依据：QEMU 官方文档、kernel.org 与 source.android.com（pKVM/AVF）、内核 5.15 UAPI（virtio_blk.h、virtio_ring.h、virtio_ids.h、virtio_pci.h）、OASIS virtio 规范（1.2 正文的引言、术语与设备类型清单，1.0/1.1/1.3 版本沿革）、kernelnewbies 的 Linux 2.6.24 变更日志与 QEMU 6.2 设备清单（2026-10 核对）。Android 专属集成（AVF/Crosvm/Microdroid）归 ../../01-android/08-platform-services/06-avf-virtualization.md。题序即文档结构。
 
 **Q1: [learning] 第一类和第二类虚拟机监控程序有什么区别？**
 
@@ -65,7 +65,31 @@ QEMU 不等同于 KVM。QEMU 提供机器模型和设备模拟，并决定客体
 1. **驱动是前提：**老系统、闭源系统常缺少 virtio 前端驱动，只能使用模拟设备，这是全虚拟化设备仍然存在的原因。
 2. **选型规则：**先看 guest 能否安装驱动，再看是否需要性能。现代平台默认 virtio，模拟设备作兼容兜底。
 
-**Q9: [learning] virtio 虚拟磁盘（virtio-blk）是什么，为什么说它是协议约定出来的磁盘？**
+**Q9: [learning] virtio 是什么？**
+
+virtio（Virtual I/O）是半虚拟化 I/O 的开放标准接口：它不照抄任何真实芯片，而是定义一族虚拟设备，guest 内使用规范规定的前端驱动，VMM（虚拟机监控程序，如 QEMU、Crosvm）提供后端，双方按统一协议经共享内存队列交换数据。规范由标准组织 OASIS（Organization for the Advancement of Structured Information Standards）以 Virtual I/O Device（VIRTIO）为名发布，目标是给虚拟环境提供简单、高效、标准、可扩展的虚拟设备机制，取代各平台自建的私有接口。
+
+1. **三层组成：**每类 virtio 设备都由三层拼合：
+
+    1. **设备类型层：**规范为每类设备规定 virtqueue、特性位、配置空间与操作流程。virtio 1.2 按章节共定义 19 类设备：网卡、块设备、控制台、熵源、传统内存气球、SCSI 主机、GPU、输入、加密、套接字、文件系统、RPMB、IOMMU、声音、内存、I2C、SCMI（System Control and Management Interface）、GPIO、PMEM，最常用的是 virtio-net（网卡）与 virtio-blk（块设备）。
+    2. **公共机制层：**所有设备类型共用同一套基础——virtqueue 是两端共享的内存队列，负责批量搬运数据。特性位逐位协商能力。配置空间存放设备的静态属性。
+    3. **传输层：**决定设备怎样被 guest 发现和访问，规范给出 PCI、MMIO（Memory-Mapped I/O）和 Channel I/O（IBM s390 大型机的 I/O 总线）三种，同一设备协议可跑在不同传输上。
+
+2. **四条设计目标：**规范引言用四个性质刻画 virtio：
+
+    1. **简单：**只用中断、DMA 这类常规总线机制，驱动作者眼中它就是一台普通设备，没有特殊的页翻转或写时复制机制。
+    2. **高效：**数据走描述符环，环的布局避免两端同时写同一缓存行的争用。
+    3. **标准：**不假设任何虚拟化环境，只要求支持设备所挂的总线。
+    4. **可扩展：**特性位由设备提供、驱动确认，双方只使用共同认可的子集，前向和后向兼容都由此而来。
+
+3. **由来与标准化：**Rusty Russell 提出 virtio 并撰写早期规范草案，首版随网卡、块设备、控制台驱动合入 Linux 2.6.24（2008-01 发布），1.0 之前的接口在规范里统称 legacy interface。OASIS 接手后于 2016 年发布 1.0，2019 年发布 1.1（引入 packed virtqueue），2022 年发布 1.2，1.3 截至 2023-10 仍是委员会草案。QEMU/KVM 与 Crosvm（Android 模拟器与 AVF 的 VMM）都提供 virtio 设备，它已是虚拟化 I/O 的事实标准。
+
+4. **边界：**规范只约定 guest 可见的设备接口，两件事不归它管：
+
+    1. **不含后端实现：**同一 virtio-blk 的性能取决于后端 VMM 与宿主 I/O 路径，规范不作保证。
+    2. **不免除前端驱动：**guest 必须安装对应前端驱动，否则设备不可用。
+
+**Q10: [learning] virtio 虚拟磁盘（virtio-blk）是什么，为什么说它是协议约定出来的磁盘？**
 
 virtio-blk 是按 virtio 规范实现的半虚拟化块设备：guest 侧前端驱动把它呈现为普通块设备（Linux 下第一块是 `/dev/vda`），宿主侧后端把读写落到宿主文件或块设备。它不是对某种真实硬盘控制器的模拟——容量、缓存行为和命令集合都由规范定义、双方按特性位协商，不存在被照抄寄存器语义的“真实盘”。
 
@@ -73,7 +97,7 @@ virtio-blk 是按 virtio 规范实现的半虚拟化块设备：guest 侧前端�
 2. **为什么说“协议约定”：**没有照抄任何真实芯片，盘的容量、命令集与缓存行为按规范和特性位协商，磁盘几何只是可选兼容项。
 3. **行为边界：**宿主后端从镜像文件换成块设备，guest 毫无感知。代价是 guest 必须安装 virtio 前端驱动。
 
-**Q10: [learning] virtio 磁盘在 guest 侧和宿主侧分别是什么形态？**
+**Q11: [learning] virtio 磁盘在 guest 侧和宿主侧分别是什么形态？**
 
 guest 侧，virtio_blk 前端驱动把设备注册为标准块设备，盘名以 vd 开头，区别于 SATA/SCSI 盘的 sd。宿主侧，后端由 VMM 提供：QEMU 用 `-device virtio-blk-pci` 在 PCI 总线上挂设备，等价简写是 `-drive file=disk.img,if=virtio`，盘体可以是宿主文件（raw、qcow2）或宿主块设备。
 
@@ -81,7 +105,7 @@ guest 侧，virtio_blk 前端驱动把设备注册为标准块设备，盘名以
 2. **宿主侧：**QEMU 后端持有盘体镜像。Android AVF 的 VMM 是 Crosvm，系统盘与 payload 盘由它挂入。
 3. **非 PCI 形态：**非 PCI 机器上用 virtio-blk-device，协议相同、传输不同。
 
-**Q11: [learning] virtio 磁盘的容量、缓存等属性由谁决定？**
+**Q12: [learning] virtio 磁盘的容量、缓存等属性由谁决定？**
 
 由设备在配置空间给出、双方按特性位协商，不是模拟盘面参数。容量以 512 字节扇区计。flush、discard、缓存模式等能力对应特性位，如 VIRTIO_BLK_F_FLUSH、VIRTIO_BLK_F_DISCARD、VIRTIO_BLK_F_CONFIG_WCE。
 
@@ -89,7 +113,7 @@ guest 侧，virtio_blk 前端驱动把设备注册为标准块设备，盘名以
 2. **特性位协商：**能力支持与否由特性位逐位确认，guest 只使用双方都支持的子集。
 3. **与模拟盘的差别：**不需要柱面、磁头、扇区几何这类兼容字段，属性集由规范定义。
 
-**Q12: [learning] virtqueue 是什么，guest 的一次读写请求怎么流转到宿主存储？**
+**Q13: [learning] virtqueue 是什么，guest 的一次读写请求怎么流转到宿主存储？**
 
 virtqueue 是两端共享的内存队列，由描述符表、available 环、used 环三段组成。前端驱动把命令头与数据缓冲区挂成描述符链入队并通知后端，后端取出请求对宿主文件或块设备执行真实 I/O，完成后把状态写入 used 环并中断 guest。数据搬运全程走共享内存，不经过寄存器模拟。
 
@@ -98,7 +122,7 @@ virtqueue 是两端共享的内存队列，由描述符表、available 环、use
 3. **后端执行：**后端从 available 环取出请求，按命令头对宿主镜像文件或块设备发起实际读写。
 4. **完成回收：**后端把完成状态写入 used 环并注入中断。前端驱动取回结果、释放描述符，向上层完成请求。
 
-**Q13: [learning] virtio 的缓存语义由什么决定，T_FLUSH 起什么作用？**
+**Q14: [learning] virtio 的缓存语义由什么决定，T_FLUSH 起什么作用？**
 
 后端可配置为 writeback——写入进入宿主侧缓存即应答完成，此时应答不等于数据已落宿主存储。需要持久性保证时，guest 必须显式发送 T_FLUSH，由后端把缓存刷到宿主存储。设备是否支持 flush、缓存模式能否运行中切换，都由特性位协商（VIRTIO_BLK_F_FLUSH、VIRTIO_BLK_F_CONFIG_WCE）。
 
@@ -106,7 +130,7 @@ virtqueue 是两端共享的内存队列，由描述符表、available 环、use
 2. **T_FLUSH 的作用：**guest 显式请求落盘，后端把宿主缓存刷到存储后才报告完成。
 3. **能力来源：**是否支持 flush 与缓存模式切换由特性位协商，不能假设默认行为。
 
-**Q14: [learning] split virtqueue 和 packed virtqueue 有什么区别？**
+**Q15: [learning] split virtqueue 和 packed virtqueue 有什么区别？**
 
 两者是 virtqueue 的两种布局。split 是描述符表、available 环、used 环各自独立的三段式。virtio 1.1 起新增 packed，把三段合并成单环，描述符与完成状态同环存放，减少遍历开销。双方按特性位协商使用哪一种，Linux 5.15 的 UAPI 头已包含两种布局的定义。
 
@@ -114,7 +138,7 @@ virtqueue 是两端共享的内存队列，由描述符表、available 环、use
 2. **packed：**单环结构，减少缓存遍历，是 virtio 1.1 引入的替代布局。
 3. **选择方式：**由特性位协商，同一驱动可兼容两种布局。
 
-**Q15: [learning] virtio-pci 是什么，guest 怎么通过它发现这块磁盘？**
+**Q16: [learning] virtio-pci 是什么，guest 怎么通过它发现这块磁盘？**
 
 virtio-pci 不是总线，而是 virtio 设备“乘坐”PCI 总线的传输层。QEMU 在机器模型的虚拟 PCI 总线上把 virtio-blk 做成标准 PCI 设备，guest 用与发现真实硬件完全相同的 PCI 枚举机制找到它，再经两级驱动匹配出现 `/dev/vda`。
 
@@ -124,7 +148,7 @@ virtio-pci 不是总线，而是 virtio 设备“乘坐”PCI 总线的传输层
 4. **virtio 总线匹配：**virtio_pci 注册一个 virtio 设备（块设备类型 ID 为 2），virtio 总线按类型匹配给 virtio_blk 驱动。probe 里分配 virtqueue、协商特性。
 5. **块设备出现：**probe 完成向块层注册 gendisk，`/dev/vda` 出现，此后读写走 virtqueue 数据通路。
 
-**Q16: [learning] 为什么 virtio 借 PCI 总线呈现，没有 PCI 的环境用什么？**
+**Q17: [learning] 为什么 virtio 借 PCI 总线呈现，没有 PCI 的环境用什么？**
 
 借 PCI 是为了复用既有发现机制：枚举、BAR 内存映射、MSI-X 中断都是 PCI 栈自带的，virtio 不必发明新的设备发现协议。代价是虚拟机必须同时模拟 PCI 控制器。没有 PCI 的环境用 virtio-mmio——同一套协议直接挂在内存映射总线上，guest 换 virtio_mmio 传输驱动，块驱动与协议不变。
 

@@ -3,11 +3,17 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 plugins {
     kotlin("jvm") version "2.2.20"
     kotlin("plugin.compose") version "2.2.20"
-    id("org.jetbrains.compose") version "1.12.0"
+    // 1.12.1：修复 CMP-10673（1.12.0-rc01 回归）——SelectionContainer 内跨兄弟 Text 拖拽选区时，
+    // 文本节点拿到 start > end 的未规范化选区，draw 阶段 getPathForRange 抛 IllegalArgumentException
+    // 整窗崩溃（题库答案为多段落 Text，每次拖选都可能触发，2026-10-02/10-13 各一次）。
+    id("org.jetbrains.compose") version "1.12.1"
 }
 
 repositories {
     maven("https://maven.aliyun.com/repository/public")
+    // androidx 构件只发布在 google 仓库；本机直连 dl.google.com 会 Connection reset，
+    // 必须走阿里云 google 镜像（CMP 1.12.1 起新拉 androidx.compose.*:1.12.1 依赖时暴露）。
+    maven("https://maven.aliyun.com/repository/google")
     mavenCentral()
     google()
 }

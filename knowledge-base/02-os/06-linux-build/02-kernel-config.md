@@ -1,6 +1,6 @@
 # 内核配置选项
 
-> 学习资料。主线：内核配置选项的机制（Kconfig 声明、.config 记录形态、=y/=m/=n）、.config 文件本体及其与 Kconfig/defconfig 的分工协作，以及具体选项在 QEMU virtio 磁盘启动场景中的职责。2026-10-08 自 05-linux-boot/01-linux-boot.md 迁入成册，同日增补 .config 文件本体一题。Q2、Q3 按内核 5.15 Kconfig 源文核对（drivers/base/Kconfig 在 AAOS13 树本地观察；virtio 两个 Kconfig 对照 v5.15 源文），.config 行格式另按本仓 AAOS13 树实际 .config 实样核对。题序即文档结构，供 atlas 同源直读。
+> 学习资料。主线：内核配置选项的机制（Kconfig 声明、.config 记录形态、=y/=m/=n）、.config 文件本体及其与 Kconfig/defconfig 的分工协作，以及具体选项在 QEMU virtio 磁盘启动场景中的职责。2026-10-08 自 05-linux-boot/01-linux-boot.md 迁入成册，同日增补 .config 文件本体一题。Q2 按内核 5.15 同源编译的 conf 对最小 Kconfig 的 olddefconfig 与 syncconfig 实测；Q3、Q4 按内核 5.15 Kconfig 源文核对（drivers/base/Kconfig 在 AAOS13 树本地观察；virtio 两个 Kconfig 对照 v5.15 源文），.config 行格式另按本仓 AAOS13 树实际 .config 实样核对。题序即文档结构，供 atlas 同源直读。
 
 **Q1: [learning] 内核源码树根的 .config 是个什么文件？它与 Kconfig、defconfig 如何分工协作？**
 
@@ -27,9 +27,72 @@
 3. **消费（构建）：**校验完成 Kconfig 即退场。make 时 syncconfig 把 .config 转成 include/config/auto.conf（供 Makefile 做条件编译判断）与 include/generated/autoconf.h（供 C 源码 include 出 CONFIG_X 宏）。.config 本身不直接参与编译——配置改完必须重新编译，新开关才会进入 bzImage。
 4. **回流（沉淀与跨版本）：**`make savedefconfig` 拿当前 .config 与 Kconfig 默认值逐项对比，倒推出只含差异行的精简 defconfig，产品内核借此固化自己的默认配置。内核升级后重跑 olddefconfig，等于用新版本的规则解释旧实例——无效行丢弃、缺项补默认、已填保留，.config 因此能跟着源码演进。
 
-判断规则：三个文件单独拿出来都残缺——Kconfig 不含你的任何选择，defconfig 不是完整清单，.config 没有校验就可能留着拼错名或依赖失效的行。改完开关要验收，可直接利用记录形态：关闭项行首是 #，因此 grep 行首 `^CONFIG_<选项名>=` 只会打印开启状态的行，打印出几行就确认几个开关开启。.config 回答“这次构建是什么样”，Kconfig 回答“允许配成什么样”，defconfig 回答“推荐从什么样开始”。纯文本形态让 .config 能提交进版本库、能逐行 diff 厂商基准与现场配置。
+判断规则：三个文件单独拿出来都残缺——Kconfig 不含你的任何选择，defconfig 不是完整清单，.config 没有校验就可能留着拼错名或依赖失效的行。改配置的目标永远是 .config：menuconfig、scripts/config 与手工编辑只是写入入口不同，落盘对象相同；改 Kconfig 是改规则本身（增删选项、改依赖与默认值），属内核开发而非配置流程。直改 .config 合法，但写入动作一律不做校验，必须补 olddefconfig 核对。改完开关要验收，可直接利用记录形态：关闭项行首是 #，因此 grep 行首 `^CONFIG_<选项名>=` 只会打印开启状态的行，打印出几行就确认几个开关开启。.config 回答“这次构建是什么样”，Kconfig 回答“允许配成什么样”，defconfig 回答“推荐从什么样开始”。纯文本形态让 .config 能提交进版本库、能逐行 diff 厂商基准与现场配置。
 
-**Q2: [learning] 用 menuconfig 配内核时看到的选项（CONFIG_VIRTIO_PCI、CONFIG_DEVTMPFS 这些）怎么理解？=y、=m、=n 分别是什么意思，在 .config 里长什么样？**
+**Q2: [done] make olddefconfig 拿 Kconfig 逐项核对 .config，具体怎么比较？用最小实例走完全流程？**
+
+核对不是两份文件的逐行文本比对：olddefconfig 背后的 conf 程序先读入全部 Kconfig 建立符号表——每个选项的类型、依赖、默认值和 select 关系——再把 .config 读作这些符号的“用户答案”，逐符号按规则算出最终值，最后写回规范化 .config。比较的单位是选项，不是行；真实内核符号表有数千选项，几行手改输入经同一套核对就会展开成数千行完整清单。
+
+最小 Kconfig，五个选项覆盖全部规则形态（真实内核条目同构，只是字段更多，如 drivers/base/Kconfig 的 DEVTMPFS 为 bool 加提示词加帮助文本）：
+
+```text
+config SYS
+	bool "system core"
+	default y
+
+config DEV
+	bool "device support"
+	depends on SYS
+
+config NET
+	bool "network"
+	select LOG
+
+config LOG
+	bool "logging"
+
+config EXTRA
+	bool "extra"
+	default y
+```
+
+手写 .config 四行作为用户答案：
+
+```text
+CONFIG_TYPO_OPTION=y
+# CONFIG_SYS is not set
+CONFIG_DEV=y
+CONFIG_NET=y
+```
+
+olddefconfig 实测输出（规范化文件自带的头部注释行省略）：
+
+```text
+# CONFIG_SYS is not set
+CONFIG_NET=y
+CONFIG_LOG=y
+CONFIG_EXTRA=y
+```
+
+四种分支逐一对照：
+
+1. **Kconfig 有、.config 没有，按规则补：**EXTRA 输入无行，按默认值补 y。LOG 同样无行，却不是补默认值——它被 NET 的 select 强制拉成 y，说明“缺项”不一定落默认值，select 与依赖先参与计算。
+2. **.config 有、Kconfig 没有，丢行：**CONFIG_TYPO_OPTION 在符号表里没有对应符号，整行被丢弃，这就是拼错选项名的兜底。
+3. **两边都有且规则允许，保留用户值：**SYS 的用户值 n 压过它的默认 y（已填项一律保留，n 也不例外）；NET=y 同样保留。
+4. **两边都有但规则否决，重算：**DEV 被用户写成 =y，但它 depends on SYS 而 SYS 为 n，依赖不满足：值被强制为 n，且该选项本轮不可见，连 not set 注释行都不写，整行从 .config 消失。“明明写了、跑完却找不到”就是这个原因。
+
+写回之后是消费：再跑 syncconfig（make 构建时自动触发）把 .config 转成 include/generated/autoconf.h，实测只有开启项变成宏——`#define CONFIG_NET 1`、`#define CONFIG_EXTRA 1`、`#define CONFIG_LOG 1`；SYS 与 DEV 关闭，不产生任何宏，C 源码用 ifdef 做条件编译。至此 Kconfig 退场，构建只消费生成物。
+
+相近命令的区别：
+
+1. **oldconfig：**同一套核对，对缺项和新项逐个提问用户。
+2. **olddefconfig：**同一套核对但不提问，缺项直接按默认值补，适合脚本与 CI。
+3. **defconfig：**扔掉旧答案，从 defconfig 起点加默认值重新展开。
+4. **都不跑：**make 构建时自动触发 syncconfig 做同样规范化，未规范的 .config 不会漏进构建；但手工跑 olddefconfig 能提前看到哪些行被改写，是改配置的验收动作。
+
+依据：内核 5.15 scripts/kconfig 同源编译的 conf 对最小 Kconfig 的 olddefconfig 与 syncconfig 实测输出。
+
+**Q3: [learning] 用 menuconfig 配内核时看到的选项（CONFIG_VIRTIO_PCI、CONFIG_DEVTMPFS 这些）怎么理解？=y、=m、=n 分别是什么意思，在 .config 里长什么样？**
 
 每个选项是内核源码里一条 Kconfig 声明，包含选项名、类型、依赖、默认值和帮助文本。配置工具（menuconfig、defconfig）把全部选择汇总成源码树根的 .config 文件——一个纯文本“功能开关清单”，每行一个开关。构建系统按它决定这次编译包含哪些代码，并把每个选项变成 CONFIG_<选项名> 宏供源码条件编译，编出的基础内核镜像 vmlinux 再打包成启动用的 bzImage。三种取值的行格式与含义：
 
@@ -47,7 +110,7 @@
 
 判断规则：问“这个功能编译进去了吗”，看 .config 里该选项的值。问“启动最早期能不能用”，看它是 =y，还是模块已被打包进 initramfs。想加一个功能，本质上就是把清单里对应行从 not set 注释改成 =y，再重新编译 bzImage。
 
-**Q3: [learning] 让自编内核在 QEMU 里用 virtio 虚拟磁盘启动，CONFIG_VIRTIO_PCI、CONFIG_VIRTIO_BLK、CONFIG_DEVTMPFS 各承担什么？缺一个会怎样？**
+**Q4: [learning] 让自编内核在 QEMU 里用 virtio 虚拟磁盘启动，CONFIG_VIRTIO_PCI、CONFIG_VIRTIO_BLK、CONFIG_DEVTMPFS 各承担什么？缺一个会怎样？**
 
 三个选项各守“发现设备 → 变成块盘 → 自动出节点”这条链路的一段。QEMU 用 -drive file=rootfs.ext4,if=virtio 挂盘（file 指定镜像，if=virtio 表示以 virtio-blk 设备接入）时，guest 内核至少前两项要 =y：PCI 驱动 select 带上 VIRTIO 总线核心，块驱动依赖这个核心才能编译。三个选项的分工：
 

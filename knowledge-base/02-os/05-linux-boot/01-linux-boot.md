@@ -49,19 +49,49 @@ gzip -cd build/initramfs.cpio.gz | cpio -itv
 2. **验证压缩流：**`gzip -t` 检查压缩数据是否完整，成功时通常无输出。
 3. **查看归档清单：**`gzip -cd` 解压到标准输出，其中 `-c` 将结果写到标准输出，`-d` 表示解压。`cpio -itv` 读取并详细列出归档内容，不会解包到当前目录。
 
-**Q5: [done] QEMU 在前台运行且终端没有提示符、串口空白，能判断 Linux 内核卡住了吗？**
+**Q5: [learning] 把 rootfs/ 打包成 initramfs.cpio.gz 的命令链怎样逐段读，省略 -H newc 和 -n 分别是什么后果？**
+
+这一行的总目标是把 rootfs 目录树打包成一个内核能直接解包的 initramfs 镜像：数据经列举路径、编码归档、压缩、写文件四道加工，靠管道逐段流动，中途不落盘。括号、cd 与 && 是控制结构，决定在哪里运行、是否运行。失败能否被看见则由 pipefail 决定。
+
+1. **控制结构：**管道前的三个部分决定运行位置与执行条件：
+
+    1. `( ... )`：创建子 Shell，cd 只在其中生效，外层脚本的工作目录不变，后面的验证命令仍以项目目录为基准。没有括号时 cd 会影响整个脚本，后续相对路径全部错位。
+    2. `cd rootfs`：以树根为列举起点，归档条目路径因此是 `./init` 形态，内核解包后落在 `/init`。若不进目录而从上级打包，条目带 `rootfs/` 前缀，解包后根目录下会多出一层 `/rootfs`。它也决定重定向路径 `../build` 的基准。
+    3. `&&`：cd 成功后才执行 find。没有它时 cd 失败也会让 find 按当前目录列举，打包出错误的树而命令链未必报错。
+
+2. **列举路径：**`find . -print0` 以 rootfs 目录树为输入，递归列举全部条目（含目录与设备节点），输出以 NUL 字符分隔的路径流。`-print0` 把默认的行分隔改为 NUL 分隔：文件名可以包含换行，行分隔会把一个路径拆成两条。NUL 不会出现在文件名中，分隔没有歧义。它与下游 cpio 的 `--null` 是成对的约定。
+
+3. **编码归档：**`cpio --null --quiet -o -H newc` 以路径流为输入，把每个条目的权限、属主、设备号与数据按 newc 格式写成归档字节流。各选项：
+
+    1. `-o`：copy-out 模式，即创建归档。cpio 必须显式指定创建、解包、列表三种模式之一，不指定直接报用法错误。
+    2. `--null`：按 NUL 读取路径名单，与 `-print0` 配对。默认按行读取，喂入 `-print0` 的流时会一直等到 NUL，把整段流误读成一条路径。
+    3. `--quiet`：隐藏 cpio 结束时在 stderr 打印的块数提示（实测为 `2 blocks` 一行）。省略只多一行噪音，不影响产物。
+    4. `-H newc`：指定归档格式为 newc（头部魔数是 ASCII `070701`）。本机 GNU cpio 的默认输出格式是旧式 bin（魔数 `c7 71`，实测），而内核 initramfs 解包代码只认 `070701` 与 `070702` 两种魔数（内核源码树 init/initramfs.c、lib/earlycpio.c 实测）。格式不对时报 `incorrect cpio method used: use -H newc option`，这是整行中后果最重的省略。
+
+4. **压缩：**`gzip -9 -n` 以 cpio 字节流为输入，输出 gzip 流（魔数 `1f 8b`），内核启动时按魔数识别并解压。各选项：
+
+    1. `-9`：最高压缩级别，gzip 默认是 `-6`（man 页）。压缩代价是打包时间（只付一次），收益是镜像体积（initramfs 启动时整体进内存），所以这里显式取最高级。
+    2. `-n`：不把原文件名与修改时间写进 gzip 头。默认会写这两个字段（头部标志字节 FLG 为 0x08 并带时间戳），同一内容打包两次得到的字节也不同。加 `-n` 后同内容打包结果恒定，校验和可比、可复现（实测两包 sha256 相同，不加 `-n` 则不同）。
+
+5. **写文件：**`> ../build/initramfs.cpio.gz` 把 gzip 的标准输出重定向到文件，截断后重新写入。重定向在子 Shell 内求值，基准是 rootfs/，`../build` 正是项目的 build/。目标目录必须预先存在，重定向不创建目录，目录缺失时这一行直接失败。
+
+6. **失败如何暴露：**Shell 默认只取管道最后一段的退出码作为整条管道的结果——cpio 中途失败时，gzip 仍会把不完整的流压缩成功，命令行看起来“成功”。脚本开头的 `set -o pipefail` 改变这一点：任一段失败即整行失败，后面的 `gzip -t` 验证才有意义。
+
+依据：宿主实测（GNU cpio 默认 bin 格式魔数与 --quiet 的 stderr、gzip -n 的头部字段与校验和复现）、内核源码树 init/initramfs.c 与 lib/earlycpio.c 的魔数校验、man gzip 与 man cpio 的默认值。
+
+**Q6: [done] QEMU 在前台运行且终端没有提示符、串口空白，能判断 Linux 内核卡住了吗？**
 
 不能。没有提示符只表示宿主 Shell 还在等待前台 QEMU 退出；QEMU 进程存活也不代表客体内核仍在正常执行。串口空白只能说明当前终端没有收到串口字符，无法单独判断是内核没有输出、Linux 没选中串口控制台，还是 QEMU 没把虚拟串口接到终端。
 
 排查时分别确认两端：内核是否将控制台选为对应串口（如 `console=ttyS0`），QEMU 是否将该虚拟串口连接到终端（如 `-serial stdio`）。`-display none` 只关闭图形显示，`-monitor none` 只关闭 QEMU monitor，都不能代替这两项配置。
 
-**Q6: [done] 已看到 earlycon 内核日志，却没有 /init 输出，说明什么？**
+**Q7: [done] 已看到 earlycon 内核日志，却没有 /init 输出，说明什么？**
 
 这只说明早期日志通道已经输出成功，不代表正式的 `ttyS0` 串口驱动已注册。`earlycon` 在正式驱动初始化前直接输出内核早期信息。`/init` 的输出则需要正式串口控制台、`/dev/console` 和 QEMU 串口连接组成完整通路。
 
 例如 `earlycon=uart8250,io,0x3f8,115200n8` 指定早期控制台使用 8250 串口、I/O 端口 `0x3f8`（x86 COM1），通信格式为 115200 波特率、无校验、8 个数据位。早期日志可见而 `/init` 无输出，说明应继续检查正式串口驱动和后续控制台连接。
 
-**Q7: [done] 8250 串口数设为 0 时为什么没有 ttyS0，8250.nr_uarts=1 有什么作用？**
+**Q8: [done] 8250 串口数设为 0 时为什么没有 ttyS0，8250.nr_uarts=1 有什么作用？**
 
 `CONFIG_SERIAL_8250_RUNTIME_UARTS=0` 让 8250 驱动启动时注册 0 个串口，因此不会提供正式的 `ttyS0`。这是内核驱动的注册数量设置，不代表 QEMU 没有模拟 COM1。
 
@@ -71,14 +101,14 @@ gzip -cd build/initramfs.cpio.gz | cpio -itv
 
 这个内核参数只影响本次启动，无需重编译内核或重新打包 initramfs。
 
-**Q8: [done] 启动日志 Serial: 8250/16550 driver 和 Run /init as init process 各说明到哪一步？**
+**Q9: [done] 启动日志 Serial: 8250/16550 driver 和 Run /init as init process 各说明到哪一步？**
 
 这两条日志分别标记了串口驱动初始化和内核尝试启动 `/init`，都不能单独证明整条输出链路已经正常。
 
 1. `Serial: 8250/16550 driver, ...`：8250 驱动已通过串口数量检查并打印端口信息。它不证明 QEMU 终端一定接到了输出。
 2. `Run /init as init process`：内核即将调用 `kernel_execve()` 执行 `/init`。它不保证执行成功。还要检查其后的错误日志或 `/init` 自身输出。
 
-**Q9: [done] Linux 中文件描述符 1 为什么不固定指向屏幕，Mini_Android 的 /init 又如何获得标准输出？**
+**Q10: [done] Linux 中文件描述符 1 为什么不固定指向屏幕，Mini_Android 的 /init 又如何获得标准输出？**
 
 文件描述符 `1` 是进程打开对象清单中的编号，按约定承担标准输出的作用。它指向哪里，由启动程序的一方安排，可以是终端、文件或管道。
 
@@ -86,7 +116,7 @@ gzip -cd build/initramfs.cpio.gz | cpio -itv
 2. Mini_Android 启动时没有 Shell。内核的 `console_on_rootfs()` 打开 `/dev/console`，再通过三次 `init_dup()` 将它接到 PID 1 的文件描述符 `0`、`1`、`2`，分别作为标准输入、标准输出和标准错误。
 3. 内核执行 `/init` 后，这些描述符继续保留。因此，`std::cout` 写入 fd `1` 后，会进入 `/dev/console`。能否显示在 QEMU 终端，还取决于 Linux 控制台和 QEMU 串口是否接通。
 
-**Q10: [done] 如何创建普通文件和设备节点？**
+**Q11: [done] 如何创建普通文件和设备节点？**
 
 `touch` 可创建空普通文件，shell 重定向可创建并写入内容，设备节点则用 `mknod` 创建。设备节点是文件系统中的特殊文件，不存放普通文件数据，也不等于设备本身。
 
@@ -100,7 +130,7 @@ sudo mknod -m 600 rootfs/dev/console c 5 1
 2. `printf ... > path`：`>` 在目标不存在时创建文件，存在时先清空再写入。父目录必须已存在。
 3. `mknod ... c 5 1`：创建字符设备节点。访问该路径时，内核根据主、次设备号把操作交给相应驱动处理，设备号必须匹配目标内核。
 
-**Q11: [done] mknod、file 和 ls -l 怎么用？**
+**Q12: [done] mknod、file 和 ls -l 怎么用？**
 
 这些命令分别创建设备节点和检查文件。示例中的路径都相对于项目目录：
 
@@ -120,7 +150,7 @@ ls -l rootfs/init rootfs/dev/console
 2. `file`：不是缩写，命令名就是英文单词 file。它识别文件类型、目标架构和链接信息，不会运行程序。
 3. `ls -l`：`ls` 是 list，`-l` 表示 long listing format。长格式会显示权限、所有者和文件类型等信息。字符设备应显示 `c` 和设备号 `5, 1`。
 
-**Q12: [done] chmod 如何使用？**
+**Q13: [done] chmod 如何使用？**
 
 `chmod` 修改文件或目录的权限位，语法是 `chmod 模式 路径`——模式在前、路径在后。给脚本加执行权限最简写法是 `chmod +x 路径`（符号模式，在现有权限上增加执行位），完整指定三位权限用 `chmod 755 路径`（数字模式）。
 
@@ -146,9 +176,9 @@ ls -l scripts/build.sh   # -rwxr-xr-x（等效于 755）
 
 `chmod +x` 只添加执行位，`ls -l` 输出的权限位与预期一致后再运行脚本。等价写法是 `chmod 755 scripts/build.sh`，它直接把权限设为 `rwxr-xr-x`。
 
-**Q13: [done] C++ init 调用 mount() 挂载 procfs 和 sysfs 时，各参数是什么意思？**
+**Q14: [done] C++ init 调用 mount() 挂载 procfs 和 sysfs 时，各参数是什么意思？**
 
-`mount()` 是 Linux 的挂载系统调用接口，不是终端里的 `mount` 命令。代码把提供进程信息的 procfs 挂到 `/proc`，把提供内核设备信息的 sysfs 挂到 `/sys`。成功返回 `0`，失败返回 `-1` 并设置 `errno`。
+`mount()` 是 Linux 的挂载系统调用接口，不是终端里的 `mount` 命令。一次挂载完成的是“把一个文件系统实例接进当前命名空间的一颗目录”：source 与 filesystemtype 决定挂什么，target 决定接在哪。代码把提供进程信息的 procfs 挂到 `/proc`，把提供内核设备信息的 sysfs 挂到 `/sys`。成功返回 `0`，失败返回 `-1` 并设置 `errno`。
 
 ```cpp
 mount("proc", "/proc", "proc", 0, nullptr);
@@ -157,15 +187,17 @@ mount("sysfs", "/sys", "sysfs", 0, nullptr);
 
 每次调用的五个参数依次表示：
 
-1. 来源 `source`：`"proc"` 或 `"sysfs"` 是来源标识。这类虚拟文件系统没有要挂载的磁盘设备。
-2. 挂载点 `target`：`"/proc"` 或 `"/sys"` 是 initramfs 中已存在的目录，挂载后用于访问对应文件系统。
-3. 文件系统类型 `filesystemtype`：`"proc"` 选择 procfs，`"sysfs"` 选择 sysfs。
-4. 挂载标志 `mountflags`：`0` 表示不额外指定挂载标志。
-5. 文件系统参数 `data`：`nullptr` 表示不传递额外的文件系统专用选项。
+1. **来源 source（挂什么）：**磁盘类文件系统的 source 是设备路径，如 `/dev/vda`，内核从它读数据；procfs、sysfs 这类虚拟文件系统的数据由内核实时生成，没有磁盘设备，source 不指向任何东西——惯例把文件系统名字写在这里，内核主要把它记录进 /proc/mounts 便于阅读。宿主实测 /proc/mounts 里有 `udev /dev devtmpfs` 一行：source 写 udev、类型是 devtmpfs，可见两者各自独立，source 只是记录名。
+2. **挂载点 target（接在哪）：**必须是已存在的目录。挂载后该目录成为新文件系统的根目录：路径解析走到这里就进入新文件系统，目录原有内容在挂载期间被遮住，umount 后重新可见。例中的 `/proc`、`/sys` 是 initramfs 里预建的空目录，唯一作用就是当挂接点。
+3. **文件系统类型 filesystemtype（按什么格式解释）：**`"proc"` 选择 procfs，`"sysfs"` 选择 sysfs；它决定由哪个文件系统驱动解释数据，同一 source 也可以指定不同类型挂载。
+4. **挂载标志 mountflags：**`0` 表示不额外指定挂载标志，只读、禁止执行等由各标志位给出。
+5. **文件系统参数 data：**`nullptr` 表示不传递文件系统专用的额外选项。
 
 init 通常以 root 身份执行挂载。任一调用返回 `-1` 时，示例只打印通用错误。检查 `errno` 才能知道具体原因，例如权限不足或挂载点不存在。
 
-**Q14: [done] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
+依据：mount(2) 系统调用语义与宿主 /proc/mounts 实测。
+
+**Q15: [done] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
 
 QEMU 在模拟一台完整的电脑，每条参数都是往虚拟机上焊硬件或规定行为：`-m` 插内存条，`-kernel` 与 `-initrd` 绕过硬盘引导、直接把内核和初始内存盘交给这台机器，`-append` 写内核启动参数，`-drive` 焊一块盘片为宿主机 system.img 文件的硬盘，其余参数规定输出与退出行为。
 
@@ -221,7 +253,22 @@ qemu-system-x86_64 \
 
 6. **硬件在册不等于名字在册：**[vda] 日志只代表内核已注册块设备。`/dev/vda` 节点要等 devtmpfs 挂到 /dev 后由内核生成，读出内容还要再挂载。本内核 CONFIG_DEVTMPFS=y 但 CONFIG_DEVTMPFS_MOUNT 未设置，initramfs 场景也不会自动挂载，必须由 init 执行 `mount("devtmpfs", "/dev", ...)`，节点才出现。
 
-**Q15: [learning] vda 是什么，为什么内核已经认出这块盘，挂载时还是会找不到 /dev/vda？**
+**Q16: [done] devtmpfs 是什么，它怎样让 /dev 下自动出现设备节点？**
+
+devtmpfs 是 Linux 内核内置的 RAM-backed 伪文件系统（与 tmpfs、procfs 同类：不落盘，内容由内核生成和维护）：挂到 /dev 后，内核驱动核心每登记一个设备就在其中自动创建对应设备节点，设备注销时再删除。它把“创建设备节点”从用户态工作变成内核的附带动作；是否启用、由谁挂载分别由两个内核配置开关控制。
+
+1. **机制：内容由驱动核心驱动：**普通文件系统的内容来自磁盘或用户写入；devtmpfs 的目录项由驱动核心在设备注册、注销时创建和删除，节点的元数据（设备号等）直接取自设备模型。因此挂载后，已登记的设备（如 vda 这类块设备）立即出现，之后热插拔的设备也自动出现。节点本身不存数据，只存一对设备号。
+2. **两个开关各管一半：**
+
+    1. **CONFIG_DEVTMPFS：**内核是否具备维护这些节点的能力；缺它时 /dev 只能靠用户态 mknod 或守护进程建节点。
+    2. **CONFIG_DEVTMPFS_MOUNT：**内核是否在挂好根文件系统后自动把 devtmpfs 挂到 /dev，可被内核参数 devtmpfs.mount=0|1 覆盖。其 Kconfig 帮助明确不作用于 initramfs 启动：initramfs 场景必须由 /init 自己执行 `mount -t devtmpfs devtmpfs /dev`（伪文件系统没有磁盘设备，命令里第一个 devtmpfs 只是来源标识）。
+
+3. **与 tmpfs 加用户态建节点对比：**普通 tmpfs 挂到 /dev 只是一个空目录，节点要靠用户态守护进程监听内核 uevent 后按规则 mknod 创建（通用 Linux 为 udev/mdev，Android 为 ueventd），权限、属主和 SELinux 标签可逐条规则定制。devtmpfs 则由内核先按默认属性建出节点，用户态只做调整。AAOS 13 的 first_stage_init 走 tmpfs 加 ueventd 路线，Mini_Android 练习版用一行 devtmpfs 挂载简化。
+4. **边界：只解决节点在不在：**devtmpfs 不管权限、标签和业务就绪。内核启动 /init 前就要打开 /dev/console，而那时 devtmpfs 尚未挂载，因此 initramfs 仍需预置该节点——节点自动创建救不了控制台通路。
+
+依据：Linux 内核 Kconfig 帮助（DEVTMPFS、DEVTMPFS_MOUNT）、AAOS 13 first_stage_init 源码与 .config 实测、Mini_Android 练习。
+
+**Q17: [learning] vda 是什么，为什么内核已经认出这块盘，挂载时还是会找不到 /dev/vda？**
 
 vda 是内核 virtio_blk 驱动给 QEMU 虚拟磁盘起的注册名，取 virtio disk a 之意。“内核认得这块盘”和“用户态能通过 /dev/vda 访问它”是两层：驱动只完成设备登记，/dev/vda 这个节点文件要另有人创建。mount() 按路径字符串找节点，找不到就以 ENOENT 失败，根本走不到磁盘那一步。
 
@@ -242,14 +289,7 @@ vda 是内核 virtio_blk 驱动给 QEMU 虚拟磁盘起的注册名，取 virtio
 
 3. **宿主机的对照：**宿主机自己的 NVMe 盘同样是一个节点，`ls -l /dev/nvme0n1` 输出 `brw-rw---- 1 root disk 259, 5`——b 表示块设备，259, 5 是它的设备号。整机硬盘和 QEMU 里的 vda 在 Linux 眼里是同一类东西，区别只在节点由谁创建。
 
-4. **devtmpfs 负责自动建节点：**devtmpfs 是一种伪文件系统：挂载后里面看起来有文件，内容却由内核实时生成——驱动每登记一个设备，内核就在已挂载的 devtmpfs 里建出对应节点，所以挂上它之后 /dev/vda 会自己出现。内核配置里两个开关分管“会不会”和“替不替你做”（AAOS13 源码树 .config 第 1709–1710 行实测）：
-
-    ```text
-    CONFIG_DEVTMPFS=y                    # 内核会挂这个文件系统
-    # CONFIG_DEVTMPFS_MOUNT is not set   # 内核不会替你自动挂
-    ```
-
-    因此必须由 init 亲自动手：`mount("devtmpfs", "/dev", "devtmpfs", 0, nullptr)`。这就是启动流程里挂 devtmpfs 那一行的全部意义。
+4. **devtmpfs 负责自动建节点：**内核在已挂载的 devtmpfs 里为每个登记的设备建出对应节点，所以挂上它之后 /dev/vda 会自己出现。本内核 CONFIG_DEVTMPFS=y 但 CONFIG_DEVTMPFS_MOUNT 未设置（AAOS13 源码树 .config 第 1709–1710 行实测），initramfs 场景不会自动挂载，因此必须由 init 亲自动手：`mount("devtmpfs", "/dev", "devtmpfs", 0, nullptr)`。这就是启动流程里挂 devtmpfs 那一行的全部意义。
 
 5. **真 Android 的做法：**AAOS 13 的 first_stage_init 挂的是 tmpfs，再靠 uevent 机制建节点——用户态监听内核发出的新设备事件，再调用 mknod 创建，比 devtmpfs 复杂但更灵活。Mini 版用 devtmpfs 一行简化，思路同源：都是挂一个东西到 /dev，让节点出现。
 

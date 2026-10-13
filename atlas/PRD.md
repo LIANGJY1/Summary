@@ -687,6 +687,13 @@ Markdown 只保留一套“阅读优化”样式，删除“经典样式”及�
 - case 代表值覆盖雨 `10`（所给样本原值）、`301`、雨夹雪 `6`、雪 `14`/`302`、暴雪 `17`、非雨雪晴 `0`、未知 `99`；完整映射依据天气现象码表 PDF 与 `project/yadi/pet/entries/SRS_011.md`：雨/雨夹雪 `3–12,19,21–25,301` 映射雨动作，雪 `13–17,26–28,302` 映射雪动作，其他天气不触发。文件只改 `live` 对象字段，保留模板其余数据；本机临时变体在成功、失败或停止后均清理。
 - 联调前提：设备已连接且目标天气 App 包 `com.android.ext.autoweather` 支持 `run-as`（debuggable）与 `WeatherBackdoorActivity`；Launcher 萌宠调试注入开关无需开启，因为这里验证的是天气 App → Weather SDK → Launcher 的服务链。状态机竞合/进程周期单次行为仍用原 100 个 PetDebugInjector case 验证。
 
+#### 6.4.74 输入法修复工具（2026-10-13）
+
+- 工具页新增「输入法修复」分区，处置搜狗输入法 Linux 版的本机故障：`sogoupinyin-service` 引擎崩溃且看门狗不在时无法自愈，表现为"切不出中文、候选浮窗调不起来"而 fcitx 框架本身正常（2026-10-13 手工实修过一次，本工具把修法产品化）。
+- 架构：`core/SogouIme.kt` 纯逻辑（路径常量、pgrep/pkill 命令构造、修复序列、状态诊断，可单测）+ `ui/SogouImeView.kt` 状态卡（三进程指示灯 + 人话诊断 + 输出区）+ AppStore `imeRun/imeStatus` 单并发序列执行（模式同日志解密）。
+- 关键实现点：pgrep/pkill `-f` 会按完整命令行匹配到包裹 bash 自身的 `-c` 参数文本，模式一律写成 `[s]ogoupinyin-…` 字符类避免自匹配造成"永远在运行/自杀"；修复命令 `nohup … &` 后台拉起，秒回且不随 Atlas 退出；一键修复 = 清残留（引擎卡死时直接拉起会总线冲突）→ 拉看门狗 → 拉引擎 → fcitx 重启（运行中 `-r`、未运行 `-d`）；未检测到搜狗安装时不给修复入口。
+- 边界：仅本机 Linux + 搜狗 4.x 路径（`/opt/sogoupinyin/files/bin/`），不改输入法配置、不动词库，只拉起进程。测试：`SogouImeTest` 7/7 通过（含字符类不自匹配的正则验证）。
+
 ## 7. 功能需求（P0）
 
 ### A. 库、索引与内容管理
@@ -810,7 +817,7 @@ Markdown 只保留一套“阅读优化”样式，删除“经典样式”及�
 | NFR-3 | 隐私 | **零网络（代码级）**：无任何网络依赖与调用，遥测/更新检查/模型请求一律不存在；三档边界（FR-A1）保证"仅本地"内容不进上下文包 |
 | NFR-4 | 平台与许可 | Linux 桌面唯一验收平台：**X11 + Wayland（经 XWayland）**——CMP 无原生 Wayland 支持（skiko 无 Wayland 代码，调研-T/A），多屏 HiDPI 列为已知风险；打包 **deb 为承诺格式**（AppImage P2）；**AGPL-3.0** |
 | NFR-5 | i18n | 简中优先，字符串外置 |
-| NFR-6 | 技术栈（调研-T 落定 + MVP 偏差已落地） | Compose Multiplatform **1.12.0**（Desktop JVM，Kotlin 2.2.20，Material3 1.9.0 配套）；markdown 渲染 **内置轻量渲染器**（ADR：替代 mikepenz 库零依赖——GFM 表格/代码块/行内标记，无语法高亮）；存储 **xerial sqlite-jdbc 3.53.4.0 直连**（ADR：替代 SQLDelight；FTS5+trigram）；复习调度 **java-fsrs 1.0.0**（官方 MIT，适配层隔离）；jpackage 打包（**AppCDS 未启用**）；**无任何网络/模型依赖库**（依赖审计通过）。GraalVM native image 官方不支持 CMP，不纳入。spike 仍可推翻选型，推翻记 ADR |
+| NFR-6 | 技术栈（调研-T 落定 + MVP 偏差已落地） | Compose Multiplatform **1.12.1**（Desktop JVM，Kotlin 2.2.20，Material3 1.9.0 配套；2026-10-13 自 1.12.0 升级，修复 CMP-10673 选区绘制崩溃）；markdown 渲染 **内置轻量渲染器**（ADR：替代 mikepenz 库零依赖——GFM 表格/代码块/行内标记，无语法高亮）；存储 **xerial sqlite-jdbc 3.53.4.0 直连**（ADR：替代 SQLDelight；FTS5+trigram）；复习调度 **java-fsrs 1.0.0**（官方 MIT，适配层隔离）；jpackage 打包（**AppCDS 未启用**）；**无任何网络/模型依赖库**（依赖审计通过）。GraalVM native image 官方不支持 CMP，不纳入。spike 仍可推翻选型，推翻记 ADR |
 | NFR-7 | 质量 | 检索评测集（规划项，未实现）；FSRS/索引/模型层 TDD；主题普通文本对比度 ≥4.5:1、非文本与大字 ≥3:1；GitHub Actions 出 deb 产物（**未建**）；**IME 冒烟验收**（fcitx5/ibus 中文输入——历史有数月不可用窗口，见调研-T/A） |
 
 ## 10. 里程碑计划
@@ -1268,6 +1275,7 @@ git commit -m "feat(atlas): complete unified visual theme"
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-10-13 | — | **修复题库拖拽划选文字整窗崩溃**：CMP 1.12.0-rc01 引入的回归（上游 CMP-10673，Critical）——`SelectionContainer` 内跨段落 `Text` 拖选时，文本节点收到 start > end 的未规范化选区，绘制阶段 `MultiParagraph.getPathForRange` 抛 `IllegalArgumentException`；异常发生在 draw 阶段且选区仍在，每帧重复直至关窗。题库答案为多段落 Text 结构，10-02、10-13 各实际触发一次。修复：`org.jetbrains.compose` 插件 1.12.0 → **1.12.1**（官方 Verified 修复版），Material3 1.9.0 与 Kotlin 2.2.20 不变；NFR-6 同步。未编译，待 `update.sh` 重建验证。 |
 | 2026-10-06 | — | **萌宠调试新增真实天气服务 JSON 后门联调**：分析 `tianQ_pull` 的脚本、JSON 和天气码表，新增雨/雨夹雪/雪/暴雪/晴/未知 case；仅覆写模板 `data.live` 的天气码与名称，按天气 App 私有目录写入和后门 Activity 启动流程调用服务链，临时文件自动清理。天气 App 数据清理独立二次确认；现有状态机直注与场景库保持原样。未执行设备命令，未运行测试。详见 §6.4.73。 |
 | 2026-10-05 | — | **内容改动推进待学习题目并保留完成态**：Git 差异刷新时仅将内容有变化的 `todo` 自动写为 `[learning]`；`done` 不自动回退，必须手动改状态。改动题卡增加橙色边框，行内差异与状态图标独立显示。详见 §6.4.72。 |
 | 2026-10-05 | — | **题库增加题目状态筛选**：搜索栏新增「全部/待学习/学习中/已完成」单选过滤，与关键词搜索叠加；当前文件/整个目录树范围同时作用于关键词和状态筛选。全目录搜索按来源文件及文件内位置排序，标注结果范围、每题来源及源文件 Q 序号；隐藏搜索栏后恢复单文件题目列表。详见 §6.4.71。 |

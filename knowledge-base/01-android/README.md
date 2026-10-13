@@ -156,10 +156,10 @@
 
 ## 10-build-system/
 
-- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 85 题）：
+- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 89 题）：
   - [01-product-config.md](10-build-system/01-product-config.md)（15 题）
   - [02-soong-modules.md](10-build-system/02-soong-modules.md)（26 题）
-  - [03-android-executables.md](10-build-system/03-android-executables.md)（8 题）
+  - [03-android-executables.md](10-build-system/03-android-executables.md)（12 题）
   - [04-android-system-images.md](10-build-system/04-android-system-images.md)（8 题）
   - [05-android-kernel-build.md](10-build-system/05-android-kernel-build.md)（14 题）
   - [06-kernel-modules.md](10-build-system/06-kernel-modules.md)（4 题）
@@ -297,7 +297,7 @@
 | [09-platform-native/09-app-native-stability.md](09-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
 | [10-build-system/01-product-config.md](10-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
 | [10-build-system/02-soong-modules.md](10-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |
-| [10-build-system/03-android-executables.md](10-build-system/03-android-executables.md) | Android 可执行文件 | 8 |
+| [10-build-system/03-android-executables.md](10-build-system/03-android-executables.md) | Android 可执行文件 | 12 |
 | [10-build-system/04-android-system-images.md](10-build-system/04-android-system-images.md) | Android 系统镜像 | 8 |
 | [10-build-system/05-android-kernel-build.md](10-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
 | [10-build-system/06-kernel-modules.md](10-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |

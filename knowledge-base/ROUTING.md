@@ -14,7 +14,8 @@
 5. Android UI 域（组件运行期修改 / 资源变体 / 约束适配）"改不动、改不对"的坑与解法 → [android-ui.md](./android-ui.md)
 6. Android Provider 域（ContentProvider/系统级 Provider/ContentObserver 跨进程共享与监听）的机制事实与用法坑 → [android-provider.md](./android-provider.md)
 7. Android 音频域（音频焦点/播放配置/音源识别）的机制事实与踩坑 → [android-audio.md](./android-audio.md)
-8. 都不中 → 向用户提议新立大类；文档骨架按 [WRITING-GUIDE.md](./WRITING-GUIDE.md)，主题边界由新大类声明 → **建完回填本表**
+8. Android 内存性能域（PSS 与驻留口径、工作集与泄漏判定、位图/视频缓冲/缓存优化、测量纪律）的机制事实与解法 → [android-memory.md](./android-memory.md)
+9. 都不中 → 向用户提议新立大类；文档骨架按 [WRITING-GUIDE.md](./WRITING-GUIDE.md)，主题边界由新大类声明 → **建完回填本表**
 
 ## 重叠主题的裁决顺序
 
@@ -38,6 +39,7 @@
 | [android-ui.md](./android-ui.md) | session-to-knowledge | Android UI 域踩坑与解法（跨同类项目仍成立） | 跨库可迁移的设计模式 → sdk-design.md |
 | [android-provider.md](./android-provider.md) | session-to-knowledge | 跨进程数据共享与监听（Provider/系统 Provider/Observer）的架构事实与踩坑 | UI 域坑 → android-ui.md；权衡思维 → design-principles.md |
 | [android-audio.md](./android-audio.md) | session-to-knowledge | Android 音频域（焦点/播放配置/音源识别）的机制事实与踩坑 | Provider/Observer → android-provider.md；权衡思维 → design-principles.md |
+| [android-memory.md](./android-memory.md) | session-to-knowledge | Android 内存性能域（PSS 与驻留口径、工作集与泄漏判定、位图/视频缓冲/缓存优化、测量纪律）的机制事实与解法 | Java/JVM 机制 → 04-language/java；UI 域坑 → android-ui.md；权衡思维 → design-principles.md |
 
 ## 规则
 

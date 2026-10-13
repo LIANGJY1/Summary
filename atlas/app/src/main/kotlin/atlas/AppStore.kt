@@ -22,6 +22,7 @@ import atlas.core.Prompts
 import atlas.core.QuestionStatus
 import atlas.core.WmsParser
 import atlas.core.SettingsStore
+import atlas.core.SogouIme
 import atlas.core.SourceQuestions
 import atlas.core.TextDiff
 import atlas.core.Tools
@@ -185,6 +186,68 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     /** 工具页：任务自动化运行状态（跨页签保留，阻塞流程在 scope 的 IO 协程里跑） */
     val feishuRun = mutableStateOf<FeishuCheckin.FeishuRun?>(null)
+
+    /** 工具页：输入法修复的运行状态与最近一次检测结果（跨页签保留；pgrep/修复命令均为秒级） */
+    val imeRun = mutableStateOf(SogouIme.ImeRun())
+    val imeStatus = mutableStateOf<SogouIme.Status?>(null)
+    private var imeSequence = 0
+
+    fun checkImeStatus() = runImeSequence(emptyList(), thenStatusCheck = true)
+
+    fun repairIme() = runImeSequence(SogouIme.repairCommands(imeStatus.value), thenStatusCheck = true)
+
+    fun runImeStep(command: String) = runImeSequence(listOf(command))
+
+    private fun runImeSequence(commands: List<String>, thenStatusCheck: Boolean = false) {
+        if (imeRun.value.running) return
+        val runId = ++imeSequence
+        Log.i("工具页：输入法修复 steps=${commands.size} statusCheck=$thenStatusCheck")
+        imeRun.value = SogouIme.ImeRun(running = true)
+        scope.launch {
+            val lines = mutableListOf<String>()
+            var exitCode = 0
+            runCatching {
+                for (cmd in commands) {
+                    lines += "$ $cmd"
+                    val proc = ProcessBuilder("bash", "--noprofile", "--norc", "-c", cmd)
+                        .redirectErrorStream(true)
+                        .start()
+                    val out = proc.inputStream.bufferedReader().readText().trim()
+                    val code = proc.waitFor()
+                    if (out.isNotEmpty()) lines += out.lines()
+                    exitCode = code
+                }
+                if (thenStatusCheck) {
+                    val status = detectImeStatus()
+                    imeStatus.value = status
+                    lines += ""
+                    lines += SogouIme.statusLines(status)
+                }
+            }.onFailure { e ->
+                Log.e("工具页：输入法修复异常", e)
+                lines += "执行失败：${e.message}"
+                exitCode = -1
+            }
+            if (runId == imeSequence) imeRun.value = SogouIme.ImeRun(false, lines, exitCode)
+        }
+    }
+
+    private fun detectImeStatus(): SogouIme.Status {
+        val installed = SogouIme.isInstalled()
+        return SogouIme.Status(
+            installed = installed,
+            serviceRunning = installed && pgrepMatched(SogouIme.servicePgrepArgs()),
+            watchdogRunning = installed && pgrepMatched(SogouIme.watchdogPgrepArgs()),
+            fcitxRunning = pgrepMatched(SogouIme.fcitxPgrepArgs()),
+        )
+    }
+
+    private fun pgrepMatched(args: List<String>): Boolean = runCatching {
+        val proc = ProcessBuilder(args).redirectErrorStream(true).start()
+        val out = proc.inputStream.bufferedReader().readText()
+        proc.waitFor()
+        SogouIme.pgrepHasMatch(out)
+    }.getOrDefault(false)
 
     /** 工具页：手机链路连通状态（卡片可见时由 UI 定时刷新） */
     val feishuLink = mutableStateOf<FeishuCheckin.LinkStatus?>(null)

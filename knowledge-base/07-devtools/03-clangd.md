@@ -2,7 +2,7 @@
 
 > 通用开发工具学习资料。主线：clangd 的定位与链路、编译flags 从哪来、能力边界与同类工具取舍。维护者：session-to-knowledge。
 
-**Q1: [done] clangd 是什么，它靠什么知道用哪套编译参数解析代码？**
+**Q1: [learning] clangd 是什么，它靠什么知道用哪套编译参数解析代码？**
 
 clangd 是面向 C/C++/Objective-C 的语言服务器（language server，LLVM 项目组件，名字取 clang 加守护进程后缀 d）：它以独立进程运行，通过 LSP（Language Server Protocol，语言服务器协议）与编辑器插件通信，提供补全、跳转定义、实时诊断、悬停和重命名。它只用 clang 前端解析和分析代码，不编译、不产出目标文件；其判断准确性的前提是拿到每个文件真实的编译参数。
 
