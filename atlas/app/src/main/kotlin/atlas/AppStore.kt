@@ -905,15 +905,33 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     val prompts = mutableStateListOf<Prompts.Entry>()
     private var promptsLoaded = false
 
+    // 提示词库随 git 走：存仓库同步层 <库根>/atlas/prompts.md（与 cards.md/questions.md 同层）；
+    // 库未就绪时退回本机 ~/.local/share/atlas/prompts.md
+    private fun promptsFile(): File {
+        val root = libraryRoot()
+        return if (settings.libraryPath.isNotBlank() && root.isDirectory) File(atlasDir(), "prompts.md")
+        else File(configDir, "prompts.md")
+    }
+
     fun loadPrompts() {
         if (promptsLoaded) return
         promptsLoaded = true
+        migrateLegacyPrompts()
         val entries = Prompts.load(promptsFile())
         prompts.clear()
         prompts.addAll(entries)
     }
 
-    private fun promptsFile() = File(configDir, "prompts.md")
+    // 一次性迁移：旧本机文件搬进仓库同步层，写入成功后删除本机残留，避免两份内容分叉
+    private fun migrateLegacyPrompts() {
+        val legacy = File(configDir, "prompts.md")
+        val target = promptsFile()
+        if (!legacy.isFile || target == legacy || target.isFile) return
+        val entries = Prompts.load(legacy)
+        if (entries.isEmpty()) return
+        Prompts.save(target, entries)
+        if (target.isFile) legacy.delete()
+    }
 
     fun savePrompts() = Prompts.save(promptsFile(), prompts.toList())
 

@@ -173,6 +173,7 @@ P2 依据：调研-A——就业冲击集中在入口，学生最需要"用 AI �
 |---|---|---|---|
 | 用户知识库 | 用户选定目录 | md 为主 + 各类纳管文件 | 用户资产，应用**只读** |
 | 卡片 | `<库根>/atlas/cards.md` | md 小节：卡面/卡背/deck/来源/FSRS 状态行 | 人可手改，文件为准 |
+| 提示词库 | `<库根>/atlas/prompts.md` | md 小节：`## 标题` 起条目 + 正文 | 人可手改，文件为准；随 git 多设备一致 |
 | 题库 | 知识库中的问题式 Markdown | `**Qn: 问题**`（`# Qn:`/裸 `Qn:` 亦认）+ 后续 Markdown 答案；范围由设置「题目源文档」控制（默认仅 `knowledge-base/03-language/kotlin/01-syntax-basics.md`，支持目录规则） | 人或 Atlas 直接编辑，文件为准 |
 | 收件箱候选 | `<库根>/atlas/inbox/*.md` | 约定候选格式（kind: question、q、answer） | agent 写入，Atlas 确认后转入 questions.md 并删除候选 |
 | 发件箱任务 | `<库根>/atlas/outbox/*.md` | 约定任务格式（type: interview / cardgen） | Atlas 写出，agent 消费后可标记完成 |
@@ -1275,6 +1276,7 @@ git commit -m "feat(atlas): complete unified visual theme"
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-10-16 | — | **提示词库迁入仓库同步层随 git 走**：存储从本机 `~/.local/share/atlas/prompts.md` 改为 `<库根>/atlas/prompts.md`（与 cards.md/questions.md 同层，§6.3 表新增该行）；库未就绪时退回本机路径。首次打开工具页时一次性迁移：旧文件内容搬入仓库文件后删除本机残留，仓库文件已存在时本机文件不再读取。 |
 | 2026-10-16 | — | **修复提示词库 Add 按钮不新增条目**：Add 原本误接「清空编辑器当新建草稿」，点击后无任何条目新增（真正添加藏在 Save 的草稿分支）。改为 Add 恒为新建——名称为空时提示，否则把编辑器当前内容追加为新条目并选中；Save 保留「更新选中条目/草稿转正」双模式。未编译，待 `update.sh` 重建验证。 |
 | 2026-10-13 | — | **修复题库拖拽划选文字整窗崩溃**：CMP 1.12.0-rc01 引入的回归（上游 CMP-10673，Critical）——`SelectionContainer` 内跨段落 `Text` 拖选时，文本节点收到 start > end 的未规范化选区，绘制阶段 `MultiParagraph.getPathForRange` 抛 `IllegalArgumentException`；异常发生在 draw 阶段且选区仍在，每帧重复直至关窗。题库答案为多段落 Text 结构，10-02、10-13 各实际触发一次。修复：`org.jetbrains.compose` 插件 1.12.0 → **1.12.1**（官方 Verified 修复版），Material3 1.9.0 与 Kotlin 2.2.20 不变；NFR-6 同步。未编译，待 `update.sh` 重建验证。 |
 | 2026-10-06 | — | **萌宠调试新增真实天气服务 JSON 后门联调**：分析 `tianQ_pull` 的脚本、JSON 和天气码表，新增雨/雨夹雪/雪/暴雪/晴/未知 case；仅覆写模板 `data.live` 的天气码与名称，按天气 App 私有目录写入和后门 Activity 启动流程调用服务链，临时文件自动清理。天气 App 数据清理独立二次确认；现有状态机直注与场景库保持原样。未执行设备命令，未运行测试。详见 §6.4.73。 |
