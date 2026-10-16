@@ -1,6 +1,6 @@
 # VFS 与挂载
 
-> 通用操作系统虚拟文件系统与挂载学习资料。主线：VFS 的统一接口与分派、vnode 与 inode 的概念辨析、挂载的目的与必要性、挂载后路径查找的变化、bind mount、mount namespace 与 overlayfs。原 07 册更名并补规范格式；2026-10-06 按 kernel.org 与 AOSP fs_mgr 官方文档口径扩充 bind mount、mount namespace 与 overlayfs 三题；2026-10-08 增补挂载目的与必要性一题。Q 序列即结构，供 atlas 同源直读。
+> 通用操作系统虚拟文件系统与挂载学习资料。主线：VFS 的统一接口与分派、vnode 与 inode 的概念辨析、挂载的目的与必要性、fstab 声明与 UUID 标识、挂载后路径查找的变化、bind mount、mount namespace 与 overlayfs。原 07 册更名并补规范格式；2026-10-06 按 kernel.org 与 AOSP fs_mgr 官方文档口径扩充 bind mount、mount namespace 与 overlayfs 三题；2026-10-08 增补挂载目的与必要性一题。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [done] 分区上的文件系统为什么必须挂载后才能按路径访问？挂载的目的是什么？**
 
@@ -19,13 +19,46 @@
 
 
 
-**Q2: [learning] VFS 怎样让应用用统一接口访问不同文件系统？**
+**Q2: [learning] VFS 是什么？**
 
-虚拟文件系统在具体文件系统之上提供通用操作入口，并把操作分派给对应文件系统实现。应用按路径和通用文件操作访问对象，不必为每种文件系统编写一套调用接口。
+VFS（Virtual File System，虚拟文件系统）是内核的统一文件操作接口层：它定义访问文件、目录和设备节点的通用对象与操作表，并把每个操作分派给对象背后的具体文件系统实现。应用按路径和 open、read、write 等通用调用访问对象，不必知道对象落在 ext4、tmpfs 还是 procfs 上。
+
+1. **四类通用对象：**superblock 代表一个已挂载的文件系统实例；inode 代表一个文件对象的内存元数据与操作入口；dentry 代表路径中一个分量及其解析缓存；file 代表一次打开。四者共同支撑“路径到对象再到操作”的链路。
+2. **分派机制：**每个具体文件系统注册自己的操作表（如何查目录项、如何读 inode、如何写数据）。VFS 的通用函数取对象的操作表调用，同一次 read 系统调用在 ext4 挂载点下落到 ext4 的代码，在 /proc 下落到 procfs 的代码。
+3. **设备也走 VFS：**设备节点是特殊文件，open 与读写同样经 VFS 分派，块设备实现再把它们翻译成块请求。“一切皆文件”之所以成立，正是 VFS 把接口层统一了。
+4. **边界：**VFS 定义接口契约，不定义磁盘格式；同一文件在不同文件系统下磁盘布局可以完全不同。VFS 对象（内存 inode、dentry）与磁盘上同名结构不是同一个东西。
+
+依据：Linux 内核 VFS 层结构（内核 Documentation/filesystems）。
 
 
 
-**Q3: [learning] vnode 和 inode 是同一个对象吗？**
+**Q3: [learning] fstab 是什么？**
+
+fstab（file system table，文件系统表）是声明式配置文件：逐行声明“哪个文件系统、挂到哪里、什么类型、什么选项”，由 init 或 systemd 在开机时消费，也可被 `mount -a` 手动触发；它本身不是命令，不执行挂载。
+
+宿主 /etc/fstab 实样（注释行省略）：
+
+```text
+UUID=06eb992a-c6e1-44b7-9c9a-0b42dcec1fd2 /               ext4    errors=remount-ro 0       1
+UUID=D4A0-E9ED  /boot/efi       vfat    umask=0077      0       1
+UUID=41325635-76dd-4a17-a97d-310bd31b54e6 none            swap    sw              0       0
+```
+
+1. **六个位置字段：**
+
+    1. **来源：**设备路径或 UUID 标识；实样三行都用 UUID。
+    2. **挂载点：**接入目录树的路径；swap 无挂载点，按惯例写 none。
+    3. **类型：**ext4、vfat、swap；写错类型挂载即失败。
+    4. **选项：**挂载选项列表，defaults 表示无特殊选项；实样的 errors=remount-ro 让 ext4 出错时转只读止损，umask=0077 限制 vfat 目录权限。省略该字段行不完整，工具按位置解析会报错或跳过。
+    5. **dump：**legacy 备份工具 dump 是否记录，现代系统基本写 0。
+    6. **pass：**开机 fsck 检查顺序，根为 1，其余为 0 或 2；实样 /boot/efi 写 1 属该机安装器选择，vfat 实际不做日志检查。
+
+2. **为什么写 UUID：**sd 体系的字母只代表发现顺序，插拔或加盘后 /dev/sda 可能指向另一块盘；UUID 写在文件系统超级块里，不随槽位变化，/dev/disk/by-uuid/ 下的符号链接会解析到当前设备节点。宿主 fstab 头部注释也明示此意：UUID 在磁盘增删后仍然有效。NVMe 名字虽较稳定，分区号仍可能变动，UUID 是更稳的选择。
+3. **边界：**Android 不用 /etc/fstab，由 fs_mgr 读取自有格式的 fstab 文件，字段含挂载标志与 fs_mgr 标志，与通用六字段不同。swap 行由 swapon 消费而非普通挂载。
+
+依据：fstab(5) 与宿主 /etc/fstab 实测。
+
+**Q4: [learning] vnode 和 inode 是同一个对象吗？**
 
 这两个名称不表示所有操作系统中固定的一对不同对象。BSD 等系统常以 vnode 称呼 VFS 层的文件对象。Linux 使用 VFS inode 表示内存中的文件元数据与操作接口，并由具体文件系统提供其实现和持久化格式。它们在概念上都承担统一文件对象或元数据访问职责，但类型、缓存关系和持久化布局依操作系统而异。
 
@@ -33,13 +66,13 @@
 
 
 
-**Q4: [learning] 文件系统挂载后，路径查找发生了什么变化？**
+**Q5: [learning] 文件系统挂载后，路径查找发生了什么变化？**
 
 挂载把一个文件系统的根接到现有目录树中的挂载点。路径遍历到该挂载点时，后续查找转入被挂载文件系统。挂载通常需要注册文件系统类型、准备超级块或根对象并建立挂载关系，具体步骤随操作系统与文件系统实现而异。
 
 
 
-**Q5: [learning] bind mount 与普通挂载有什么区别？它解决了什么问题？**
+**Q6: [learning] bind mount 与普通挂载有什么区别？它解决了什么问题？**
 
 普通挂载把一个独立文件系统的根接到目录树。bind mount 则把“已有目录树中的某段子树”重新映射到另一个挂载点——两端是同一文件系统的同一份内容，不新建文件系统、不存在格式化对象，只是命名空间里多了一个入口视图。
 
@@ -53,7 +86,7 @@
 
 
 
-**Q6: [learning] mount namespace 是什么？它如何让不同进程看到不同的挂载布局？**
+**Q7: [learning] mount namespace 是什么？它如何让不同进程看到不同的挂载布局？**
 
 mount namespace 是内核提供的挂载视图隔离：每个命名空间持有独立的“挂载点集合”，进程关联到某个 namespace 后，它看到的目录树就由该集合决定。新建 namespace（clone/unshare 带 `CLONE_NEWNS`）会复制父视图，此后原视图与新视图各自 add mount / umount 互不可见。
 
@@ -63,7 +96,7 @@ mount namespace 是内核提供的挂载视图隔离：每个命名空间持有�
 
 
 
-**Q7: [learning] overlayfs 的上下层语义是什么？Android 为什么用它给只读分区提供可写视图？**
+**Q8: [learning] overlayfs 的上下层语义是什么？Android 为什么用它给只读分区提供可写视图？**
 
 overlayfs 把多个目录叠加成单个合并视图：lower 层只读（可多层叠放，通常来自只读分区或镜像），upper 层可写，合并结果对应用表现为一个普通目录。写路径的规则是“写时上提”：
 

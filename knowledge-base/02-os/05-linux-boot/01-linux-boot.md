@@ -176,7 +176,7 @@ ls -l scripts/build.sh   # -rwxr-xr-x（等效于 755）
 
 `chmod +x` 只添加执行位，`ls -l` 输出的权限位与预期一致后再运行脚本。等价写法是 `chmod 755 scripts/build.sh`，它直接把权限设为 `rwxr-xr-x`。
 
-**Q14: [done] C++ init 调用 mount() 挂载 procfs 和 sysfs 时，各参数是什么意思？**
+**Q14: [done] mount(proc, /proc, proc, 0, nullptr) 中来源名、挂载点、选 proc 实现的具体目的和作用分别是什么？**
 
 `mount()` 是 Linux 的挂载系统调用接口，不是终端里的 `mount` 命令。一次挂载完成的是“把一个文件系统实例接进当前命名空间的一颗目录”：source 与 filesystemtype 决定挂什么，target 决定接在哪。代码把提供进程信息的 procfs 挂到 `/proc`，把提供内核设备信息的 sysfs 挂到 `/sys`。成功返回 `0`，失败返回 `-1` 并设置 `errno`。
 
@@ -195,7 +195,13 @@ mount("sysfs", "/sys", "sysfs", 0, nullptr);
 
 init 通常以 root 身份执行挂载。任一调用返回 `-1` 时，示例只打印通用错误。检查 `errno` 才能知道具体原因，例如权限不足或挂载点不存在。
 
-依据：mount(2) 系统调用语义与宿主 /proc/mounts 实测。
+与磁盘类文件系统对照，source 三个位置的作用分工更清楚：
+
+1. **ext4 的消费链：**VFS 沿 source 路径解析到设备节点 inode，读 i_rdev 取得设备号，获得对应块设备对象；再读超级块、校验魔数与元数据，建立内存中的文件系统对象；最后把其根目录接到挂载点。链上任一环断裂——路径不存在、不是块设备节点、设备打不开、类型不匹配、元数据损坏——挂载即失败。
+2. **proc 不走这条链：**第一个 "proc" 不被解析成设备号、不打开块设备、不读超级块，选 "proc" 实现的作用就是让内核用 procfs 的代码在内存生成内容。source 是否被消费、如何被消费由各文件系统实现决定，不存在“所有文件系统都忽略 source”或“都打开设备”的统一行为。
+3. **版本边界：**现代内核挂载走 fs_context 机制，ext4 经 get_tree 类操作建树并复用通用块设备挂载路径；具体函数名随内核版本变化，不应把某一条调用链当成跨版本固定事实。固定的是职责分工：磁盘文件系统必须拿到块设备，伪文件系统不需要。
+
+依据：mount(2) 系统调用语义、Linux 内核 mount 与 fs_context 机制、宿主 /proc/mounts 实测。
 
 **Q15: [done] 怎么把制作好的 system.img 作为 virtio 磁盘交给 QEMU 启动，命令各参数是什么意思，启动后会发生什么？**
 
@@ -253,7 +259,7 @@ qemu-system-x86_64 \
 
 6. **硬件在册不等于名字在册：**[vda] 日志只代表内核已注册块设备。`/dev/vda` 节点要等 devtmpfs 挂到 /dev 后由内核生成，读出内容还要再挂载。本内核 CONFIG_DEVTMPFS=y 但 CONFIG_DEVTMPFS_MOUNT 未设置，initramfs 场景也不会自动挂载，必须由 init 执行 `mount("devtmpfs", "/dev", ...)`，节点才出现。
 
-**Q16: [done] devtmpfs 是什么，它怎样让 /dev 下自动出现设备节点？**
+**Q16: [learning] devtmpfs 是什么，它怎样让 /dev 下自动出现设备节点？**
 
 devtmpfs 是 Linux 内核内置的 RAM-backed 伪文件系统（与 tmpfs、procfs 同类：不落盘，内容由内核生成和维护）：挂到 /dev 后，内核驱动核心每登记一个设备就在其中自动创建对应设备节点，设备注销时再删除。它把“创建设备节点”从用户态工作变成内核的附带动作；是否启用、由谁挂载分别由两个内核配置开关控制。
 

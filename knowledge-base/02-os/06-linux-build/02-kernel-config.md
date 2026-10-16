@@ -29,7 +29,7 @@
 
 判断规则：三个文件单独拿出来都残缺——Kconfig 不含你的任何选择，defconfig 不是完整清单，.config 没有校验就可能留着拼错名或依赖失效的行。改配置的目标永远是 .config：menuconfig、scripts/config 与手工编辑只是写入入口不同，落盘对象相同；改 Kconfig 是改规则本身（增删选项、改依赖与默认值），属内核开发而非配置流程。直改 .config 合法，但写入动作一律不做校验，必须补 olddefconfig 核对。改完开关要验收，可直接利用记录形态：关闭项行首是 #，因此 grep 行首 `^CONFIG_<选项名>=` 只会打印开启状态的行，打印出几行就确认几个开关开启。.config 回答“这次构建是什么样”，Kconfig 回答“允许配成什么样”，defconfig 回答“推荐从什么样开始”。纯文本形态让 .config 能提交进版本库、能逐行 diff 厂商基准与现场配置。
 
-**Q2: [done] make olddefconfig 拿 Kconfig 逐项核对 .config，具体怎么比较？用最小实例走完全流程？**
+**Q2: [learning] make olddefconfig 拿 Kconfig 逐项核对 .config，具体怎么比较？用最小实例走完全流程？**
 
 核对不是两份文件的逐行文本比对：olddefconfig 背后的 conf 程序先读入全部 Kconfig 建立符号表——每个选项的类型、依赖、默认值和 select 关系——再把 .config 读作这些符号的“用户答案”，逐符号按规则算出最终值，最后写回规范化 .config。比较的单位是选项，不是行；真实内核符号表有数千选项，几行手改输入经同一套核对就会展开成数千行完整清单。
 

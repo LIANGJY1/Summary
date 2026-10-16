@@ -18,7 +18,7 @@ AAOS 13 的 `init_first_stage` 静态链接，`init_second_stage` 动态链接�
 
 
 
-**Q2: [done] 结合实例验证静态链接与动态链接的区别？**
+**Q2: [learning] 结合实例验证静态链接与动态链接的区别？**
 
 同一份源文件在宿主 Linux 上用 g++ 编译两次，默认动态链接、加 `-static` 静态链接。两个产物都是可执行文件，按链接方式分别叫动态链接可执行文件和静态链接可执行文件；“静态库、动态库”指 `.a` 和 `.so`，程序不按库的类别命名。实测：动态版约 33K，文件里只记录依赖清单；静态版约 2.4M，把所需库代码复制进产物，自包含。
 
@@ -72,7 +72,7 @@ int main() {
 
 实验依据：宿主 Linux（x86_64、g++、glibc）上同源双编译实测。
 
-**Q3: [done] 魔数是什么，ELF 魔数怎样标识文件格式？**
+**Q3: [learning] 魔数是什么，ELF 魔数怎样标识文件格式？**
 
 魔数是文件开头预置的固定字节序列，供读取者按内容而非文件名识别格式。ELF 的魔数是文件前四字节 `0x7f`、`E`、`L`、`F`；内核 execve 和 `file` 等工具都先读它，确认是 ELF 才按 ELF 规则继续解析。
 
@@ -126,7 +126,7 @@ $ readelf -h out/target/product/<产品名>/system/bin/init | grep -E 'Type|Mach
 
 `file` 输出形如 `ELF 64-bit LSB pie executable, ARM aarch64`。`readelf -h` 的 `Type` 字段给出文件类型，`Machine` 给出目标架构，`Entry` 给出入口地址——三者共同回答“这是什么格式、跑在哪种 CPU、从哪里开始执行”。
 
-**Q6: [done] ldd 查的是什么，它怎样得到结果，和 readelf -d 有什么区别？**
+**Q6: [learning] ldd 查的是什么，它怎样得到结果，和 readelf -d 有什么区别？**
 
 ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享库依赖及它们在当前系统上被解析到的路径。man-pages 没有给出 ldd 的全称展开，官方定位就是 print shared object dependencies；网上流传的 List Dynamic Dependencies 是按功能反推的助记，不是官方名称。它不是静态解析文件，而是让动态链接器真正做一遍依赖解析，因此输出反映“当前环境实际会加载哪些库”；readelf -d 只读文件里记录的 NEEDED 名字，不做解析。
 
