@@ -4,7 +4,7 @@
 
 1. `01-language-fundamentals.md`：词法与对象基础、编程范式、头文件与命名空间、程序模型、入口函数和基础 I/O（28 题）。
 2. `02-build-and-link.md`：预处理、编译链接、头文件机制与保护宏、工具链选项和产物检查（11 题）。
-3. `03-posix-apis.md`：POSIX 接口与最小 `/init` 示例，含 `pause()` 与 `wait()`、`mkdir()`、exec 家族、fork 创建服务进程、exit 与 _exit 区别和僵尸进程（11 题）。
+3. `03-posix-apis.md`：POSIX 接口与最小 `/init` 示例，含 `pause()` 与 `wait()`、`mkdir()`、exec 家族、fork 创建子进程与服务进程、exit 与 _exit 区别和僵尸进程（12 题）。
 4. `04-functions-and-types.md`：函数、基本类型、初始化、字符、数值与转换（23 题）。
 5. `05-arrays-and-strings.md`：数组、C 风格字符串、输入流（含 `std::istringstream` 解析和 `std::atoi` 转换）和 `std::string`（17 题）。
 6. `06-user-defined-types.md`：结构体、共同体和枚举：struct 定义解析、类型定义与对象、成员函数与构造函数、struct 与 class 的区别、列表初始化、匿名结构体、自引用与前向声明、位字段、参数传递、标准布局，以及共同体和枚举（18 题）。

@@ -49,10 +49,10 @@
 
 ## 03-ui/
 
-- **UI 与输入：Activity 生命周期与首帧、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、主题还原缺陷、UI 调试，以及输入全链路（分发、InputReader、按键映射、焦点多屏、AAOS 输入、排查）**（17 册 343 题）：
+- **UI 与输入：Activity 生命周期与首帧、View、资源适配、窗口系统、Compose、AAOS UI、驾驶安全、主题还原缺陷、UI 调试，以及输入全链路（分发、InputReader、按键映射、焦点多屏、AAOS 输入、排查）**（17 册 344 题）：
   - [01-activity.md](03-ui/01-activity.md)（14 题）
   - [02-view.md](03-ui/02-view.md)（27 题）
-  - [03-resources.md](03-ui/03-resources.md)（25 题）
+  - [03-resources.md](03-ui/03-resources.md)（26 题）
   - [04-window-system.md](03-ui/04-window-system.md)（39 题）
   - [05-compose.md](03-ui/05-compose.md)（19 题）
   - [06-aaos-ui.md](03-ui/06-aaos-ui.md)（19 题）
@@ -70,7 +70,7 @@
 
 ## 04-graphics/
 
-- **图形管线域：渲染管线与 VSync、GPU 合成与显示、显示服务与折叠形态、图形 API、相机/媒体、XR、应用渲染实战与 GPU 诊断。它不是 UI 的子集，回答的是“像素如何出现”的完整链路**（13 册 264 题）：
+- **图形管线域：渲染管线与 VSync、GPU 合成与显示、显示服务与折叠形态、图形 API、相机/媒体、XR、应用渲染实战与 GPU 诊断。它不是 UI 的子集，回答的是“像素如何出现”的完整链路**（13 册 258 题）：
   - [01-render-pipeline-vsync.md](04-graphics/01-render-pipeline-vsync.md)（37 题）
   - [02-gpu-composition-display.md](04-graphics/02-gpu-composition-display.md)（33 题）
   - [03-display-service-foldable.md](04-graphics/03-display-service-foldable.md)（10 题）
@@ -79,7 +79,7 @@
   - [06-camera-pipeline.md](04-graphics/06-camera-pipeline.md)（6 题）
   - [07-media-playback.md](04-graphics/07-media-playback.md)（6 题）
   - [08-android-xr.md](04-graphics/08-android-xr.md)（3 题）
-  - [09-app-image-page-rendering.md](04-graphics/09-app-image-page-rendering.md)（26 题）
+  - [09-app-image-page-rendering.md](04-graphics/09-app-image-page-rendering.md)（20 题）
   - [10-app-media-hybrid-practice.md](04-graphics/10-app-media-hybrid-practice.md)（33 题）
   - [11-gpu-diagnostics-tools.md](04-graphics/11-gpu-diagnostics-tools.md)（38 题）
   - [12-app-view-compose-practice.md](04-graphics/12-app-view-compose-practice.md)（26 题）
@@ -184,7 +184,7 @@
 - 目录边界与阅读顺序见 [12-performance/README.md](12-performance/README.md)。
 - 按“基础、应用、系统、底层、工具”五类组织；应用、系统和底层按优化方向查找，工具各自成组：
   - [00-基础/](12-performance/00-基础/)：共用性能指标、测量与分析方法的简要归纳。
-  - [01-应用/](12-performance/01-应用/)：App 的启动、渲染、内存、CPU、网络、能效与稳定性。
+  - [01-应用/](12-performance/01-应用/)：App 的启动、渲染、内存、网络、CPU、图片加载、能效与稳定性。
   - [02-系统/](12-performance/02-系统/)：Framework、system_server、系统服务与系统 Native。
   - [03-底层/](12-performance/03-底层/)：HAL、内核与驱动。
   - [04-工具/](12-performance/04-工具/)：Perfetto、Profiler、基准测试、线上诊断等独立工具组。
@@ -218,7 +218,7 @@
 | [02-app-framework/12-async-dispatch.md](02-app-framework/12-async-dispatch.md) | 协程调度、结构化并发与 Flow 背压 | 4 |
 | [03-ui/01-activity.md](03-ui/01-activity.md) | Activity 生命周期与首帧 | 14 |
 | [03-ui/02-view.md](03-ui/02-view.md) | View 测量、布局与绘制 | 27 |
-| [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 25 |
+| [03-ui/03-resources.md](03-ui/03-resources.md) | 资源、主题与多屏适配 | 26 |
 | [03-ui/04-window-system.md](03-ui/04-window-system.md) | 窗口系统与 WindowManagerService | 39 |
 | [03-ui/05-compose.md](03-ui/05-compose.md) | Compose 运行期与 View 互操作 | 19 |
 | [03-ui/06-aaos-ui.md](03-ui/06-aaos-ui.md) | AAOS 车机 UI 架构与 CarService | 19 |
@@ -241,7 +241,7 @@
 | [04-graphics/06-camera-pipeline.md](04-graphics/06-camera-pipeline.md) | 相机管线：缓冲、栅栏与时间戳 | 6 |
 | [04-graphics/07-media-playback.md](04-graphics/07-media-playback.md) | 视频播放与合成路径 | 6 |
 | [04-graphics/08-android-xr.md](04-graphics/08-android-xr.md) | Android XR 应用出图、环境资产与帧预算 | 3 |
-| [04-graphics/09-app-image-page-rendering.md](04-graphics/09-app-image-page-rendering.md) | 渲染实战：图像显示、帧率监控与页面切换 | 26 |
+| [04-graphics/09-app-image-page-rendering.md](04-graphics/09-app-image-page-rendering.md) | 渲染实战：帧率监控、页面切换与 Surface 实践 | 20 |
 | [04-graphics/10-app-media-hybrid-practice.md](04-graphics/10-app-media-hybrid-practice.md) | 渲染优化实战：Vulkan/Impeller、WebView、Media3、CameraX、App Widget 与系统取色 | 33 |
 | [04-graphics/11-gpu-diagnostics-tools.md](04-graphics/11-gpu-diagnostics-tools.md) | GPU 与专项工具 | 38 |
 | [04-graphics/12-app-view-compose-practice.md](04-graphics/12-app-view-compose-practice.md) | 渲染实战：View 与 Compose 基础 | 26 |
@@ -312,9 +312,9 @@
 | [11-aaos/07-vehicle-signal-semantics.md](11-aaos/07-vehicle-signal-semantics.md) | 车控信号语义：超时显示、双编码与值域换算 | 24 |
 | [11-aaos/08-kanzi-state-sync.md](11-aaos/08-kanzi-state-sync.md) | Kanzi 双端状态同步：状态残留、乐观更新与能力差异 | 18 |
 | [11-aaos/09-defect-state-cache-startup.md](11-aaos/09-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 27 |
-| [12-performance/README.md](12-performance/README.md) | Android 性能问题域导航与阅读路径 | 540 |
-| [12-performance/00-基础/](12-performance/00-基础/) | 性能指标、测量实验与分析方法 | 12 |
-| [12-performance/01-应用/](12-performance/01-应用/) | App 启动、渲染、内存、CPU、网络、能效与稳定性 | 199 |
+| [12-performance/README.md](12-performance/README.md) | Android 性能问题域导航与阅读路径 | 558 |
+| [12-performance/00-基础/](12-performance/00-基础/) | 性能指标、测量实验与分析方法 | 16 |
+| [12-performance/01-应用/](12-performance/01-应用/) | App 启动、渲染、内存、网络、CPU、图片加载、能效与稳定性 | 212 |
 | [12-performance/02-系统/](12-performance/02-系统/) | Framework、system_server、系统服务与系统 Native | 76 |
 | [12-performance/03-底层/](12-performance/03-底层/) | HAL、内核与驱动 | 19 |
-| [12-performance/04-工具/](12-performance/04-工具/) | Perfetto、Profiler、基准测试与诊断工具组 | 234 |
+| [12-performance/04-工具/](12-performance/04-工具/) | Perfetto、Profiler、基准测试与诊断工具组 | 235 |

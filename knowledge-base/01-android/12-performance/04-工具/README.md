@@ -17,66 +17,66 @@
 
 ### Trace、插桩与 profiling
 
-- [Perfetto 采集与 Trace Processor 分析](./perfetto/01-trace-capture-and-analysis.md)（66 题）
-- [Agp Instrumentation](./agp-instrumentation/01-bytecode-instrumentation.md)（4 题）
-- [Android Studio Profiler](./android-studio-profiler/01-cpu-and-memory-profiler.md)（5 题）
-- [Simpleperf 与 CPU 微架构分析](./simpleperf/01-cpu-sampling-and-analysis.md)（6 题）
-- [heapprofd Native Heap Profile](./heapprofd/01-native-heap-profiling.md)（4 题）
-- [ART HPROF 与 Java Heap Dump](./android-hprof/01-java-heap-dump.md)（3 题）
-- [Debug Memory Info](./debug-memory-info/01-process-memory-summary.md)（1 题）
-- [Native 内存诊断工具](./memory-sanitizers/01-native-memory-diagnostics.md)（1 题）
-- [Profilo](./profilo/01-atrace-provider.md)（1 题）
-- [AndroidX Tracing](./androidx-tracing/01-in-process-tracing.md)（3 题）
-- [Xtrace](./xtrace/01-dynamic-method-tracing.md)（1 题）
-- [Baseline Profile 与 Startup Profile 工具验证](./baseline-profile/01-profile-collection-and-validation.md)（4 题）
+- [Perfetto 采集与 Trace Processor 分析](./01-perfetto/01-Trace采集与分析.md)（66 题）
+- [Agp Instrumentation](./02-agp-instrumentation/01-字节码插桩.md)（4 题）
+- [Android Studio Profiler](./03-android-studio-profiler/01-CPU与内存剖析.md)（5 题）
+- [Simpleperf 与 CPU 微架构分析](./04-simpleperf/01-CPU采样与分析.md)（6 题）
+- [heapprofd Native Heap Profile](./05-heapprofd/01-原生堆剖析.md)（4 题）
+- [ART HPROF 与 Java Heap Dump](./06-android-hprof/01-Java堆转储.md)（3 题）
+- [Debug Memory Info](./07-debug-memory-info/01-进程内存概要.md)（1 题）
+- [Native 内存诊断工具](./08-memory-sanitizers/01-原生内存诊断.md)（1 题）
+- [Profilo](./09-profilo/01-ATrace提供者.md)（1 题）
+- [AndroidX Tracing](./10-androidx-tracing/01-进程内埋点.md)（3 题）
+- [Xtrace](./11-xtrace/01-动态方法跟踪.md)（1 题）
+- [Baseline Profile 与 Startup Profile 工具验证](./12-baseline-profile/01-基线Profile验证.md)（4 题）
 
 ### 基准测试与回归
 
-- [Benchmark、Macrobenchmark 与性能 CI](./benchmark/01-macro-micro-and-ci.md)（17 题）
-- [bundletool 设备交付体积测量](./bundletool/01-device-delivery-size.md)（1 题）
-- [PerfDog 实验室测量](./perfdog/01-lab-measurements.md)（3 题）
+- [Benchmark、Macrobenchmark 与性能 CI](./13-benchmark/01-基准测试与CI.md)（17 题）
+- [bundletool 设备交付体积测量](./14-bundletool/01-交付体积测量.md)（1 题）
+- [PerfDog 实验室测量](./15-perfdog/01-实验室测量.md)（3 题）
 
 ### 功耗工具与系统数据
 
-- [BatteryStats 读数与测量](./battery-stats/01-reading-batterystats.md)（3 题）
-- [Battery Historian 与功耗报告](./battery-historian/01-battery-historian-and-bugreport.md)（6 题）
-- [Android Studio Power Profiler](./power-profiler/01-power-profiler.md)（选型题见 [Battery Historian 采集对比主条目](./battery-historian/01-battery-historian-and-bugreport.md)）
-- [Macrobenchmark PowerMetric](./macrobenchmark-powermetric/01-power-metric.md)（选型题见 [Battery Historian 采集对比主条目](./battery-historian/01-battery-historian-and-bugreport.md)）
-- [PowerMonitor API](./power-monitor/01-power-monitor-api.md)（1 题）
-- [PowerStats HAL 数据读取边界](./powerstats-hal/01-powerstats-data.md)（2 题）
+- [BatteryStats 读数与测量](./16-battery-stats/01-电量统计读数.md)（3 题）
+- [Battery Historian 与功耗报告](./17-battery-historian/01-功耗报告.md)（6 题）
+- [Android Studio Power Profiler](./18-power-profiler/01-功耗剖析器.md)（选型题见 [Battery Historian 采集对比主条目](./17-battery-historian/01-功耗报告.md)）
+- [Macrobenchmark PowerMetric](./19-macrobenchmark-powermetric/01-功耗指标.md)（选型题见 [Battery Historian 采集对比主条目](./17-battery-historian/01-功耗报告.md)）
+- [PowerMonitor API](./20-power-monitor/01-功耗监测API.md)（1 题）
+- [PowerStats HAL 数据读取边界](./21-powerstats-hal/01-功耗HAL数据.md)（2 题）
 
 ### 命令行与系统诊断
 
-- [ADB、am 与 dumpsys 诊断命令](./adb-dumpsys/01-process-and-system-diagnostics.md)（9 题）
-- [Android Code Search](./android-code-search/01-source-search.md)（3 题）
-- [Logcat 诊断](./logcat/01-logcat-diagnostics.md)（1 题）
-- [ProfilingManager 与 ProfilingTrigger](./profiling-manager/01-managed-profiling.md)（4 题）
-- [statsd 配置与验证](./statsd/01-configuration-and-validation.md)（3 题）
-- [StrictMode](./strictmode/01-thread-and-vm-policy.md)（5 题）
-- [ApplicationExitInfo](./application-exit-info/01-exit-history-and-traces.md)（6 题）
-- [ApplicationStartInfo](./application-start-info/01-startup-history.md)（3 题）
-- [Android Vitals](./android-vitals/01-play-vitals-and-reporting.md)（8 题）
-- [Native Symbolization](./native-symbolization/01-symbols-and-mappings.md)（3 题）
+- [ADB、am 与 dumpsys 诊断命令](./22-adb-dumpsys/01-诊断命令.md)（9 题）
+- [Android Code Search](./23-android-code-search/01-源码检索.md)（3 题）
+- [Logcat 诊断](./24-logcat/01-日志诊断.md)（1 题）
+- [ProfilingManager 与 ProfilingTrigger](./25-profiling-manager/01-受管剖析.md)（4 题）
+- [statsd 配置与验证](./26-statsd/01-配置与验证.md)（3 题）
+- [StrictMode](./27-strictmode/01-严格模式策略.md)（5 题）
+- [ApplicationExitInfo](./28-application-exit-info/01-进程退出记录.md)（6 题）
+- [ApplicationStartInfo](./29-application-start-info/01-启动历史.md)（3 题）
+- [Android Vitals](./30-android-vitals/01-Vitals报表.md)（8 题）
+- [Native Symbolization](./31-native-symbolization/01-符号与映射.md)（3 题）
 
 ### APM 产品与采集器
 
-- [APM 工具能力与选型](./apm-platforms/00-tool-selection.md)（1 题）
-- [Firebase Performance](./firebase-performance/01-traces-and-reporting.md)（5 题）
-- [商业 APM 选型](./commercial-apm/01-evaluation.md)（1 题）
-- [Matrix](./matrix/01-gradle-plugin-and-runtime.md)（1 题）
-- [Trace Canary](./trace-canary/01-method-call-tree.md)（1 题）
-- [btrace](./btrace/01-method-stack-capture.md)（2 题）
-- [LeakCanary](./leakcanary/01-leak-analysis.md)（4 题）
-- [KOOM](./koom/01-heap-and-thread-leak.md)（2 题）
-- [DoKit](./dokit/01-performance-overlay-and-network-mocking.md)（3 题）
-- [Measure APM](./measure-apm/01-session-and-heap-capture.md)（1 题）
-- [BlockCanary](./blockcanary/01-main-thread-stall-detection.md)（1 题）
-- [Collie](./collie/01-monitoring-boundaries.md)（1 题）
-- [AndroidGodEye 与 Rabbit](./androidgodeye-rabbit/01-historical-project-evaluation.md)（1 题）
-- [APM 端侧采集器实现与 API](./apm-collector/01-collector-architecture-and-apis.md)（34 题）
+- [APM 工具能力与选型](./32-apm-platforms/00-工具选型.md)（1 题）
+- [Firebase Performance](./33-firebase-performance/01-Trace与报表.md)（5 题）
+- [商业 APM 选型](./34-commercial-apm/01-商业APM选型.md)（1 题）
+- [Matrix](./35-matrix/01-插件与运行时.md)（1 题）
+- [Trace Canary](./36-trace-canary/01-方法调用树.md)（1 题）
+- [btrace](./37-btrace/01-方法栈采集.md)（2 题）
+- [LeakCanary](./38-leakcanary/01-泄漏分析.md)（4 题）
+- [KOOM](./39-koom/01-堆与线程泄漏.md)（2 题）
+- [DoKit](./40-dokit/01-浮层与网络模拟.md)（3 题）
+- [Measure APM](./41-measure-apm/01-会话与堆采集.md)（1 题）
+- [BlockCanary](./42-blockcanary/01-主线程卡顿检测.md)（1 题）
+- [Collie](./43-collie/01-监控边界.md)（1 题）
+- [AndroidGodEye 与 Rabbit](./44-androidgodeye-rabbit/01-历史项目评估.md)（1 题）
+- [APM 端侧采集器实现与 API](./45-apm-collector/01-采集器架构与API.md)（34 题）
 
 ## 来源与边界
 
-逐题检查了 22 篇文章，工具题来自其中 20 篇：通用方法与工具、用户体验、Trace、内存/功耗、ANR/崩溃、可观测性、APM、CPU 与包体优化。来源标记为相对 `12-performance/` 的原文件路径和 Q 号。
+各册题目的行内来源注释指向迁移前的英文分类稿；该分类已并入本目录后删除，注释仅作历史追溯。
 
-`03-resource-domains/02-network-performance.md` 与 `03-resource-domains/03-platform-performance.md` 没有独立工具教程或工具结果解释题；其工具仅作为根因分析的证据入口。其他跨层题按问题目标处理：采集、查询和输出解释归本目录，FrameTimeline、调度、Binder、BufferQueue、ART、网络及功耗的根因机制归原主题。 已在系统主题保留的 `am_anr`/ANR trace/DropBox 证据（[ANR 与崩溃](../02-系统/04-anr-crash.md)，Q11）、蓝牙扫描证据字段与 controller activity 的关系（[Battery Historian 与功耗报告](./battery-historian/01-battery-historian-and-bugreport.md)，Q6）和 FrameTimeline Expected/Actual（[渲染与输入](../02-系统/01-rendering-input.md)，Q6），不在工具页重复全文；工具页的其他采集与分析内容仍保留。
+[网络请求](../01-应用/04-网络/01-网络请求.md) 与 [平台差异与诊断](../02-系统/05-平台差异与诊断.md) 没有独立工具教程或工具结果解释题；其工具仅作为根因分析的证据入口。其他跨层题按问题目标处理：采集、查询和输出解释归本目录，FrameTimeline、调度、Binder、BufferQueue、ART、网络及功耗的根因机制归原主题。已在系统主题保留的 `am_anr`/ANR trace/DropBox 证据（[ANR 与系统故障诊断](../02-系统/04-ANR与故障诊断.md)，Q10）、蓝牙扫描证据字段与 controller activity 的关系（[Battery Historian 与功耗报告](./17-battery-historian/01-功耗报告.md)，Q6）和 FrameTimeline Expected/Actual（[合成与输入](../02-系统/01-合成与输入.md)，Q7），不在工具页重复全文；工具页的其他采集与分析内容仍保留。

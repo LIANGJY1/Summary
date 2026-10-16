@@ -1,6 +1,6 @@
 # UI 疑难排查与体验踩坑
 
-> 学习资料（文章模式沉淀）。主线：UI 问题的分层归因、窗口不显示/白屏/黑屏的判定顺序、首帧阻塞定位、掉帧的阶段归因与帧度量字段、抓帧工具集、重绘范围过大的判定与治理、系统栏与圆角遮挡的正确解法、输入分发超时与 UI 阻塞的关系、渲染相关内存与纹理代价、SurfaceView 黑区、车机多显示与电源策略带来的特有故障、复盘与预防机制。AOSP 机制按本地 AAOS13 源码（Android 13）核对（WindowManagerShellCommand.java、ActivityManagerService.java 的 dump 归属、FrameMetrics.java、ViewRootImpl.java），命令与工具用法按官方文档口径（2026-09 检索）。系统侧机制见 [04-window-system.md](04-window-system.md)，绘制与失效机制见 [02-view.md](02-view.md)，流畅性度量方法见 [流畅性度量](../12-performance/01-应用/rendering/rendering.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：UI 问题的分层归因、窗口不显示/白屏/黑屏的判定顺序、首帧阻塞定位、掉帧的阶段归因与帧度量字段、抓帧工具集、重绘范围过大的判定与治理、系统栏与圆角遮挡的正确解法、输入分发超时与 UI 阻塞的关系、渲染相关内存与纹理代价、SurfaceView 黑区、车机多显示与电源策略带来的特有故障、复盘与预防机制。AOSP 机制按本地 AAOS13 源码（Android 13）核对（WindowManagerShellCommand.java、ActivityManagerService.java 的 dump 归属、FrameMetrics.java、ViewRootImpl.java），命令与工具用法按官方文档口径（2026-09 检索）。系统侧机制见 [04-window-system.md](04-window-system.md)，绘制与失效机制见 [02-view.md](02-view.md)，流畅性度量方法见 [流畅性度量](../12-performance/01-应用/02-渲染/01-渲染与响应.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 遇到白屏、黑屏或卡顿时，为什么应先分层归因再抓帧？**
 
@@ -65,7 +65,7 @@
 1. **gfxinfo 查询**（含 framestats 变体）：例如 `dumpsys gfxinfo <包名>` 可查看应用级帧统计与阶段耗时。它属于 ActivityManagerService 的 dump 命令。`dumpsys window` 则由 WindowManagerShellCommand 提供。
 2. `dumpsys SurfaceFlinger --latency <窗口名>` 与 `--latency-clear`：单窗口的呈现时间戳序列，回答“帧是准时到的还是迟到的”。适合确认掉帧是应用提交晚还是合成/呈现晚。
 3. **SurfaceFlinger 图层查询**：使用 `dumpsys SurfaceFlinger` 或 `--list`。图层与缓冲状态。
-4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答“这一帧的时间花在哪”。工具与类别用法见 [Perfetto 采集与 SQL 分析](../12-performance/04-工具/perfetto/01-trace-capture-and-analysis.md)。
+4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答“这一帧的时间花在哪”。工具与类别用法见 [Perfetto 采集与 SQL 分析](../12-performance/04-工具/01-perfetto/01-Trace采集与分析.md)。
 5. **帧时间线 / 帧指标采集**：FrameMetrics 回调可把逐帧数据收进自有采集，用于线上分布统计。
 
 选型原则：先确定要回答“应用内还是应用外”，再选工具。不要用一类工具的数据去解释另一类工具的现象。

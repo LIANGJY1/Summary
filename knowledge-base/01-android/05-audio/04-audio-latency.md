@@ -1,6 +1,6 @@
 # 音频延迟与应用实践
 
-> 学习资料（文章模式沉淀）。主线：应用侧的音频延迟口径与实测方法、控制面和数据面分工、FAST 轨接纳条件、AAudio 路径回退、数据回调纪律与 xrun 归因、Offload 取舍与收益验证、AudioTrack/SoundPool 使用语义、AAudio 缓冲调优。Q1–Q5 由 [../03-ui/04-window-system.md](../03-ui/04-window-system.md) 的音频部分迁入，原材料来自 android-internals-wiki §1.20，并已按 Android 13 公开 AOSP 实现复核。Q6–Q7 由 [../12-performance/01-应用/energy-background/energy-background.md](../12-performance/01-应用/energy-background/energy-background.md) 迁入，Android 17 与 AAOS 13 的差异在题内标明。音频子系统机制见 [01-aosp-audio.md](./01-aosp-audio.md)。蓝牙音频见 [05-bluetooth-audio.md](./05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：应用侧的音频延迟口径与实测方法、控制面和数据面分工、FAST 轨接纳条件、AAudio 路径回退、数据回调纪律与 xrun 归因、Offload 取舍与收益验证、AudioTrack/SoundPool 使用语义、AAudio 缓冲调优。Q1–Q5 由 [../03-ui/04-window-system.md](../03-ui/04-window-system.md) 的音频部分迁入，原材料来自 android-internals-wiki §1.20，并已按 Android 13 公开 AOSP 实现复核。Q6–Q7 由 [../12-performance/01-应用/07-能效/01-能效与后台.md](../12-performance/01-应用/07-能效/01-能效与后台.md) 迁入，Android 17 与 AAOS 13 的差异在题内标明。音频子系统机制见 [01-aosp-audio.md](./01-aosp-audio.md)。蓝牙音频见 [05-bluetooth-audio.md](./05-bluetooth-audio.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 48 kHz 下 240 帧的缓冲区就是 5 ms 输出延迟吗？设备声明低延迟能证明当前路由够快吗？**
 

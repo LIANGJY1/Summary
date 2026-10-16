@@ -227,3 +227,13 @@ Android 13 的 mResourceImpls 以 ResourcesKey 映射到 ResourcesImpl 的弱引
 4. **<stroke> 与 <padding>**：描边声明宽度与颜色。padding 声明内容留白，影响它作为容器或背景时内容的摆放。
 
 判断规则：需要纯色或线性渐变的简单几何外观用 `<shape>`（即 GradientDrawable）即可。渐变形式之外的复杂效果（多层、状态切换）应改用 layer-list、selector 等组合方式，而不是继续往 shape 上堆属性。
+
+**Q26: [learning] Android 中的图片 UI 资源一般使用什么格式？**
+
+Android 的 UI 图片资源主要使用 PNG、WebP、VectorDrawable（XML 矢量）与 9-patch，照片类大图用 JPEG。选型依据是图形类型（位图还是矢量）、是否需要透明，以及尺寸是否随内容变化。
+
+1. **PNG**：无损、支持透明，是位图 UI 资源的通用格式，适合按钮背景、装饰图等需要透明或像素级还原的素材。
+2. **WebP**：同等画质下体积通常小于 PNG 与 JPEG，支持有损、无损与透明。有损模式自 Android 4.0（API 14）、无损与透明模式自 Android 4.2（API 17）起支持（官方文档口径），工程上常用它替换 PNG 与 JPEG 以缩小安装包。
+3. **VectorDrawable（XML 矢量）**：图标与简单图形的首选，与分辨率无关，一套资源适配所有屏幕密度。Android 5.0（API 21）起原生支持，更低 minSdk 可用 AndroidX 兼容库。平台不支持直接使用 SVG，需要先转换为 VectorDrawable（只覆盖 SVG 的一部分特性）。
+4. **9-patch**：可拉伸背景专用格式，本质是 PNG，文件以 `.9.png` 结尾。四周的 1 像素边框记录可拉伸区与内容区，适合气泡、边框等尺寸随内容变化的背景。
+5. **JPEG**：有损、不支持透明，只用于照片类大图（如引导页背景），不用作图标或需要透明的素材。

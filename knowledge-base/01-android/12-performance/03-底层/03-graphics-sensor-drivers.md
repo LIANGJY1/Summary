@@ -1,9 +1,0 @@
-# 图形、显示与传感器驱动
-
-Framework 的 SurfaceFlinger、InputDispatcher 和传感器服务见 [Android 合成与输入系统](../02-系统/01-rendering-input.md) 与 [系统调度、电源与温控服务](../02-系统/03-scheduling-power.md)。
-
-**Q1: [learning] 灭屏后 non-wake-up 传感器事件缺失，是 HAL 丢包吗？wake-up 传感器又是怎么工作的？**
-
-不一定是丢包。non-wake-up sensor 不能唤醒 AP：AP suspend 期间事件继续写入 non-wake-up FIFO，FIFO 满后按环形缓冲覆盖较老的 continuous 事件，没有 FIFO 则事件直接丢失，`maxReportLatency` 不会为它唤醒 AP，AP 因其他原因醒来后才交付仍保留的事件。灭屏测试出现事件缺口可能符合 suspend 规则，不能直接判定 HAL 丢数据包。
-
-wake-up sensor 允许 AP suspend，但必须在事件达到最大上报延迟、wake-up FIFO 即将满或 one-shot wake-up 触发时唤醒 AP，正数 `maxReportLatencyUs` 可让多个事件共用一次 AP resume。设备从 suspend 恢复时会尽量交付 FIFO 中全部内容，减少刚回 suspend 又被唤醒的概率。两个关键边界：相同传感器类型可同时存在 wake-up 与 non-wake-up 两个独立实例，必须用 `Sensor.isWakeUpSensor()` 判断当前实例，不能按 `TYPE_ACCELEROMETER` 等类型名推断。on-change sensor（如 step counter）有“最新事件保存在共享 FIFO 之外、不被 continuous 事件覆盖”的特殊保证，累计值语义依赖它。业务若要求灭屏期间每个事件都不丢，只能持 partial wake lock 保活或改用 wake-up sensor，两者都会显著改变功耗模型，通常应先确认业务是否只需要最新状态或累计结果。

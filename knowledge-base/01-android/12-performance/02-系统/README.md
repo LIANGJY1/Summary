@@ -12,10 +12,10 @@
 
 ## 文章索引
 
-- [Android 合成与输入系统](01-rendering-input.md)（10 题）：FrameTimeline、SurfaceFlinger/HWC、BufferQueue、触摸重采样与 SystemUI 帧路径。
-- [进程、启动与 ART](02-process-lifecycle.md)（19 题）：ART 与 GC、init 启动、lmkd、低内存启动和 AMS 缓存进程 CPU 终止。
-- [系统调度、电源与温控服务](03-scheduling-power.md)（16 题）：task profile/cgroup、Power HAL、ThermalManagerService、BatteryStats、传感器与唤醒源映射。
-- [ANR 与系统故障诊断](04-anr-crash.md)（27 题）：ANR 超时与预警机制、system_server Watchdog、Binder、Freezer、am_anr/trace/DropBox 和系统 Native 崩溃。
-- [平台差异与系统诊断](05-platform-diagnostics.md)（4 题）：跨设备层级归因、公开约定/源码/运行证据，以及 Framework 私有 SQLite 诊断边界。
+- [Android 合成与输入系统](01-合成与输入.md)（10 题）：FrameTimeline、SurfaceFlinger/HWC、BufferQueue、触摸重采样与 SystemUI 帧路径。
+- [进程、启动与 ART](02-进程启动与ART.md)（19 题）：ART 与 GC、init 启动、lmkd、低内存启动和 AMS 缓存进程 CPU 终止。
+- [系统调度、电源与温控服务](03-调度电源与温控.md)（16 题）：task profile/cgroup、Power HAL、ThermalManagerService、BatteryStats、传感器与唤醒源映射。
+- [ANR 与系统故障诊断](04-ANR与故障诊断.md)（27 题）：ANR 超时与预警机制、system_server Watchdog、Binder、Freezer、am_anr/trace/DropBox 和系统 Native 崩溃。
+- [平台差异与系统诊断](05-平台差异与诊断.md)（4 题）：跨设备层级归因、公开约定/源码/运行证据，以及 Framework 私有 SQLite 诊断边界。
 
 共 5 篇、76 题。跨 Framework 与 HAL/内核的题按主要解释对象归档，并在文章开头互相链接；工具操作细节仍归工具主题。

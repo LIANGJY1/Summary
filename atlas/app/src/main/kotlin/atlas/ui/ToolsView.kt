@@ -1447,6 +1447,17 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
         content = ""
     }
 
+    // Add 恒为新建：把编辑器当前内容追加为新条目并选中（此前误接 clearEditor，点了没有任何条目新增）
+    fun addNew() {
+        if (name.isBlank()) {
+            store.showToast("名称不能为空")
+            return
+        }
+        store.addPrompt(name, content)
+        selected = store.prompts.lastIndex
+        store.showToast("已添加「${name.trim()}」")
+    }
+
     fun saveCurrent() {
         if (name.isBlank()) {
             store.showToast("名称不能为空")
@@ -1456,9 +1467,7 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
             store.updatePrompt(selected, name, content)
             store.showToast("已保存「${name.trim()}」")
         } else {
-            store.addPrompt(name, content)
-            selected = store.prompts.lastIndex
-            store.showToast("已添加「${name.trim()}」")
+            addNew()
         }
     }
 
@@ -1505,7 +1514,7 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
                     textStyle = ui.typography.secondary,
                     placeholder = { Text("提示词名称", style = ui.typography.secondary) },
                 )
-                CompactActionButton("Add") { clearEditor() }
+                CompactActionButton("Add") { addNew() }
                 CompactActionButton("Save") { saveCurrent() }
                 CompactActionButton(
                     "Delete",

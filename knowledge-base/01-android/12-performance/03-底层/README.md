@@ -10,9 +10,9 @@
 
 ## 文章索引
 
-- [内核调度与 CPU 频率](01-cpu-scheduler.md)（12 题）：Linux 调度、EAS、CPUFreq、DVFS、迁核与厂商内核扩展。
-- [内存回收与功耗硬件](02-memory-power-hardware.md)（5 题）：AppFlow 内核边界、低内存回收、ZRAM/MGLRU、硬件能量轨道与缺页计数。
-- [图形、显示与传感器驱动](03-graphics-sensor-drivers.md)（1 题）：wake-up 与 non-wake-up 传感器的 HAL/驱动唤醒路径。
-- [Binder 驱动调用边界](04-binder-driver.md)（1 题）：BINDER_WRITE_READ 与 Binder RPC 耗时的区别。
+- [内核调度与 CPU 频率](01-内核调度与频率.md)（12 题）：Linux 调度、EAS、CPUFreq、DVFS、迁核与厂商内核扩展。
+- [内存回收与功耗硬件](02-内存回收与功耗.md)（5 题）：AppFlow 内核边界、低内存回收、ZRAM/MGLRU、硬件能量轨道与缺页计数。
+- [图形、显示与传感器驱动](03-图形与传感器驱动.md)（1 题）：wake-up 与 non-wake-up 传感器的 HAL/驱动唤醒路径。
+- [Binder 驱动调用边界](04-Binder驱动.md)（1 题）：BINDER_WRITE_READ 与 Binder RPC 耗时的区别。
 
 共 4 篇、19 题。跨层题按主解释对象保留在一个目录，另一层的策略或调用链通过对应文章互链。
