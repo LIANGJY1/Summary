@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,6 +39,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -492,9 +492,18 @@ internal fun MarkdownImageBlock(
     val renderedBitmap = bitmap
     var contextMenuExpanded by remember(file.absolutePath) { mutableStateOf(false) }
     var confirmDelete by remember(file.absolutePath) { mutableStateOf(false) }
+    var pendingImageDeletion by remember(file.absolutePath) { mutableStateOf<String?>(null) }
     var imageWindowPosition by remember(file.absolutePath) { mutableStateOf(Offset.Zero) }
     var contextMenuPosition by remember(file.absolutePath) { mutableStateOf(IntOffset.Zero) }
     val cursorGapPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+    LaunchedEffect(pendingImageDeletion) {
+        val reference = pendingImageDeletion ?: return@LaunchedEffect
+        // Let the Popup detach from its separate window before deleting the image node from
+        // the document. Updating both hierarchies during the menu click can throw on desktop.
+        withFrameNanos { }
+        onImageDeleted?.invoke(reference)
+        pendingImageDeletion = null
+    }
     if (renderedBitmap == null) {
         Text(
             "图片无法显示：$description",
@@ -550,36 +559,45 @@ internal fun MarkdownImageBlock(
                         // inherit the full window width from Popup's loose constraints.
                         Column(Modifier.width(176.dp).padding(vertical = 4.dp)) {
                             if (confirmDelete && onImageDeleted != null && markdownReference != null) {
-                                DropdownMenuItem(
-                                    text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
-                                    enabled = false,
-                                    onClick = {},
+                                Text(
+                                    "确认删除这张图片？",
+                                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    color = Theme.Muted,
+                                    fontSize = 12.sp,
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("确认删除", color = Theme.BadRed) },
-                                    onClick = {
+                                Row(
+                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
                                         contextMenuExpanded = false
                                         confirmDelete = false
-                                        onImageDeleted(markdownReference)
+                                        pendingImageDeletion = markdownReference
                                     },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("取消") },
-                                    onClick = { confirmDelete = false },
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("确认删除", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = false },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("取消", Modifier.padding(horizontal = 16.dp))
+                                }
                             } else {
-                                DropdownMenuItem(
-                                    text = { Text("复制图片") },
-                                    onClick = {
+                                Row(
+                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
                                         contextMenuExpanded = false
                                         onImageCopied?.invoke(Platform.setClipboardImage(file))
                                     },
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("复制图片", Modifier.padding(horizontal = 16.dp))
+                                }
                                 if (onImageDeleted != null && markdownReference != null) {
-                                    DropdownMenuItem(
-                                        text = { Text("删除图片", color = Theme.BadRed) },
-                                        onClick = { confirmDelete = true },
-                                    )
+                                    Row(
+                                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = true },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("删除图片", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
+                                    }
                                 }
                             }
                         }
