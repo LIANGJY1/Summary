@@ -10,7 +10,7 @@ pre("01-architecture/15-package-management.md", "应用包管理：安装、校�
     "> 学习资料（文章模式沉淀）。边界：本文回答\"应用从分发制品到安装事务、dexopt 编排、增量与分阶段安装、应用归档与恢复\"；资源与 Configuration 更新归 [15-ui/03-resources.md](../15-ui/03-resources.md)；构建期模块声明归 18-build-system。源文档：android-internals-wiki §1.16–§1.17；机制按本地 AAOS13 源码（Android 13）核对，安装 dexopt 迁往 ART Service（Android 14 起）与平台级 App Archiving（Android 15 起）已标注版本差异。Q 序列即结构，供 atlas 同源直读。")
 pre("04-storage/02-partitions.md", "运行时分区与挂载",
     "> 学习资料（文章模式沉淀）。边界：本文回答\"设备上有哪些分区、各放什么、动态分区与虚拟 A/B 在运行时如何挂载与生效\"；镜像如何构建、打包与刷写归 [18-build-system/06-android-system-images.md](../18-build-system/06-android-system-images.md)；启动期 fstab/first-stage 挂载时序归 [01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)。分区名与布局随设备/版本有差异，权威以设备 fstab 与构建配置为准。Q 序列即结构，供 atlas 同源直读。")
-pre("02-rendering/04-graphics-api.md", "图形 API：EGL、Vulkan 与 NDK 出图接口",
+pre("02-rendering/05-graphics-api.md", "图形 API：EGL、Vulkan 与 NDK 出图接口",
     "> 学习资料（文章模式沉淀）。边界：本文回答\"EGL/Vulkan/NDK（ASurfaceControl、HardwareBufferRenderer、WebGPU）各对象与调用语义、Android 平台在其间的行为\"；渲染管线与 VSync 调度归 [01-render-pipeline-vsync.md](01-render-pipeline-vsync.md)，GPU 合成归 [02-gpu-composition-display.md](02-gpu-composition-display.md)，测量归因归 07-performance。证据：AAOS13 源码核对与官方文档口径，逐题标注。Q 序列即结构，供 atlas 同源直读。")
 pre("02-rendering/05-graphic-stack-preload.md", "图形栈预加载与驱动选择",
     "> 学习资料（文章模式沉淀）。边界：本文回答\"Zygote 预加载覆盖图形栈的哪一段、GPU 驱动/ANGLE 由谁选择、首帧开销中预加载帮不上的部分\"；Zygote 与启动链归 [01-architecture/02-system-boot.md](../01-architecture/02-system-boot.md)，应用侧首帧优化归 09-app-practice。源文档：android-internals-wiki §1.3（Android 17 语境），官方资料已核对。Q 序列即结构，供 atlas 同源直读。")

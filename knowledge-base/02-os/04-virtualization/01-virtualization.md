@@ -1,6 +1,6 @@
 # 虚拟机与虚拟化
 
-> 学习资料。主线：虚拟机监控程序两类的资源访问路径 → QEMU 的模拟范围与 CPU 执行方式 → pKVM 的受保护内存模型与代价 → 全虚拟化与半虚拟化的取舍 → virtio 的标准定义、三层组成与标准化历程 → virtio-blk 的协议本质、两侧形态与属性协商 → virtqueue 的请求流转、缓存语义与布局版本 → virtio-pci 的发现链路与 virtio-mmio 替代。依据：QEMU 官方文档、kernel.org 与 source.android.com（pKVM/AVF）、内核 5.15 UAPI（virtio_blk.h、virtio_ring.h、virtio_ids.h、virtio_pci.h）、OASIS virtio 规范（1.2 正文的引言、术语与设备类型清单，1.0/1.1/1.3 版本沿革）、kernelnewbies 的 Linux 2.6.24 变更日志与 QEMU 6.2 设备清单（2026-10 核对）。Android 专属集成（AVF/Crosvm/Microdroid）归 ../../01-android/08-platform-services/06-avf-virtualization.md。题序即文档结构。
+> 学习资料。主线：虚拟机监控程序两类的资源访问路径 → QEMU 的模拟范围与 CPU 执行方式 → pKVM 的受保护内存模型与代价 → 全虚拟化与半虚拟化的取舍 → virtio 的标准定义、三层组成与标准化历程 → virtio-blk 的协议本质、两侧形态与属性协商 → virtqueue 的请求流转、缓存语义与布局版本 → virtio-pci 的发现链路与 virtio-mmio 替代。依据：QEMU 官方文档、kernel.org 与 source.android.com（pKVM/AVF）、内核 5.15 UAPI（virtio_blk.h、virtio_ring.h、virtio_ids.h、virtio_pci.h）、OASIS virtio 规范（1.2 正文的引言、术语与设备类型清单，1.0/1.1/1.3 版本沿革）、kernelnewbies 的 Linux 2.6.24 变更日志与 QEMU 6.2 设备清单（2026-10 核对）。Android 专属集成（AVF/Crosvm/Microdroid）归 ../../01-android/09-platform-services/06-avf-virtualization.md。题序即文档结构。
 
 **Q1: [learning] 第一类和第二类虚拟机监控程序有什么区别？**
 

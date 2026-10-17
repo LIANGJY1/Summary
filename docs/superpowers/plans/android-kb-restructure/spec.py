@@ -211,7 +211,7 @@ DISSOLVE = {
         + [(q, "02-rendering/01-render-pipeline-vsync.md", "") for q in (6, 7, 8, 9)]
         + [(q, "15-ui/02-view.md", "View layer/SurfaceView/TextureView 用法") for q in range(10, 16)]
         + [(18, "15-ui/02-view.md", "GLSurfaceView 用法")]
-        + [(q, "02-rendering/04-graphics-api.md", "") for q in (16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28)]
+        + [(q, "02-rendering/05-graphics-api.md", "") for q in (16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28)]
     ),
     "07-performance/08-渲染管线-跨框架与媒体.md": (
         [(q, "09-app-practice/09-rendering-media-hybrid.md", "") for q in range(1, 6)]
@@ -221,7 +221,7 @@ DISSOLVE = {
         + [(q, "02-rendering/07-media-playback.md", "") for q in range(20, 26)]
         + [(q, "07-performance/01-smoothness.md", "游戏性能归因") for q in range(26, 30)]
         + [(q, "02-rendering/08-android-xr.md", "") for q in range(30, 33)]
-        + [(q, "02-rendering/04-graphics-api.md", "WebGPU") for q in range(33, 36)]
+        + [(q, "02-rendering/05-graphics-api.md", "WebGPU") for q in range(33, 36)]
     ),
     "09-app-practice/18-应用开发机制与常用API.md": [
         (1, "16-app-framework/05-collections-annotations.md", "SparseArray"),
@@ -322,7 +322,7 @@ ORDER = {
         + [("01-architecture/16-显示与窗口链路.md", 2),
            ("07-performance/07-渲染管线-基础与图形API.md", 3), ("07-performance/07-渲染管线-基础与图形API.md", 4)]
     ),
-    "02-rendering/04-graphics-api.md": [("07-performance/07-渲染管线-基础与图形API.md", q) for q in (16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28)] + [("07-performance/08-渲染管线-跨框架与媒体.md", q) for q in (33, 34, 35)],
+    "02-rendering/05-graphics-api.md": [("07-performance/07-渲染管线-基础与图形API.md", q) for q in (16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28)] + [("07-performance/08-渲染管线-跨框架与媒体.md", q) for q in (33, 34, 35)],
     "02-rendering/05-graphic-stack-preload.md": [("01-architecture/11-版本演进与图形栈预加载.md", q) for q in range(6, 12)],
     "02-rendering/06-camera-pipeline.md": [("07-performance/08-渲染管线-跨框架与媒体.md", q) for q in range(14, 20)],
     "02-rendering/07-media-playback.md": [("07-performance/08-渲染管线-跨框架与媒体.md", q) for q in range(20, 26)],

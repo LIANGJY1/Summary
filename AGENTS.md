@@ -9,13 +9,14 @@
 | `knowledge-base/` | 跨会话知识入口，含 `knowledge-entry` 与 `language-note` 两种 profile；检索先读 `ROUTING.md` | 内容生成和修订完整遵守 `WRITING-GUIDE.md`；写入路由按 profile 与 `ROUTING.md` 处理 |
 | `knowledge-base/01-android/`、`02-os/`、`03-network/`、`04-language/`、`05-design/`、`06-testing/`、`07-devtools/`、`08-exp/` | 学习资料目录（Q&A 或语言散文）；查阅前先读对应 README | 遵守目录边界和 `WRITING-GUIDE.md`；可迁移结论按 `ROUTING.md` 归档 |
 | `knowledge-base/01-android/` | Android 与车载平台机制、实现和实践 | Android 实现归此；通用操作系统和网络协议分别归 `knowledge-base/02-os/`、`knowledge-base/03-network/` |
+| `knowledge-base/01-android/03-app-libraries/` | Android 应用侧常用库与组件，如 Glide、RecyclerView | 库与组件机制按主题分别记录；性能分析和优化内容归 `13-performance/`；遵守 `knowledge-base/WRITING-GUIDE.md` |
 | `knowledge-base/02-os/`、`03-network/`、`04-language/` | 通用操作系统、网络协议、编程语言知识 | 按各目录 README 与 `WRITING-GUIDE.md` 维护；平台专属实现归 `knowledge-base/01-android/` |
 | `knowledge-base/06-testing/`、`07-devtools/` | 测试基础、策略、用例、自动化，以及 Git 等通用开发工具 | 按目录 README 组织；Android 测试机制归 `knowledge-base/01-android/`，项目治理经验归 `knowledge-base/08-exp/` |
 | `knowledge-base/08-exp/` | 跨项目非技术经验：阶段定位、质量投入、度量、流程和协作；Q 序列供 atlas 直读 | 技术根因归 `knowledge-base/01-android/` 等主题目录；项目事实归 `career/work-project-analysis/`；单次事件归 `issue/`。项目名按“某车机项目”惯例脱敏 |
 | `knowledge-base/career/` | Android/车载求职资料、学习计划、周练及真实项目分析 | 路线见 `plans/roadmaps/`，周练规则见 `weekly/`；通用知识引用父目录，外部真实项目默认只读 |
 | `knowledge-base/career/work-project-analysis/` | 真实工作项目分析 | 只记录可公开沉淀的项目经验，遵守脱敏要求 |
 | `knowledge-base/atlas/` | Atlas 配置协作目录，内容不入索引 | `config/settings.properties` 可手动修改并重启生效；本机配置和 PIN 位于 `~/.local/share/atlas/`；不得写入凭据 |
-| `knowledge-base/03-network/` | 平台无关的分层、DNS、TLS、TCP、NAT 等网络知识 | Android/车载网络实现归 `01-android/07-network/` |
+| `knowledge-base/03-network/` | 平台无关的分层、DNS、TLS、TCP、NAT 等网络知识 | Android/车载网络实现归 `01-android/08-network/` |
 | `project/project-architecture/` | 带 commit 锚点的项目架构解码 | 解读前阅读对应项目文档；使用 project-decoder 增量更新 |
 | `issue/` | 问题复盘与交接 | 排查前查找同类问题；解决后归档复盘 |
 | `research/` | 仓库级通用主题调研归档，如 `skill-research/` | 新主题建立子目录并登记；Atlas 调研归 `atlas/research/` |

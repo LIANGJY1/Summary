@@ -1,6 +1,6 @@
 # 网络分层原理与地基机制
 
-> 通用网络协议学习资料。边界：本文回答“分层模型、DNS/TLS/TCP/IP/NAT 等协议地基机制”；Android/车机网络实现与诊断归 [../01-android/07-network/](../01-android/07-network/)。Q 序列即结构，供 atlas 同源直读。
+> 通用网络协议学习资料。边界：本文回答“分层模型、DNS/TLS/TCP/IP/NAT 等协议地基机制”；Android/车机网络实现与诊断归 [../01-android/08-network/](../01-android/08-network/)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] TCP/IP 四层模型怎样分工？一个经 TCP 承载的 HTTPS 请求从车机发往服务器时如何封装与逐跳转发？**
 

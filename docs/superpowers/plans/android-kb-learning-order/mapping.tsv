@@ -262,256 +262,256 @@ old_path	old_q	new_path	new_q	title
 02-app-framework/09-defect-main-thread-async.md	Q25	02-app-framework/09-defect-main-thread-async.md	Q25	"依赖外部服务初始化的 UI 状态，如何应对""服务慢启动丢查询""的时序竞态？（SIR-6170）"
 02-app-framework/09-defect-main-thread-async.md	Q26	02-app-framework/09-defect-main-thread-async.md	Q26	"长驻进程对车服属性的订阅为什么会""静默失效""？订阅链路异步初始化必须配哪三件套？（SIR-5446）"
 02-app-framework/09-defect-main-thread-async.md	Q27	02-app-framework/09-defect-main-thread-async.md	Q27	蓝牙来电挂断后浮窗 1.56s 才消失，时延预算被异步链路的哪几段吃掉？终态事件该怎么走？（SIR-2617）
-03-ui/01-activity.md	Q1	03-ui/01-activity.md	Q2	Activity 执行到 onResume 后界面还没出现，首帧前后经历了哪些阶段？
-03-ui/01-activity.md	Q2	03-ui/01-activity.md	Q3	Android 内存紧张时哪些应用进程更容易被系统回收？
-03-ui/01-activity.md	Q3	03-ui/01-activity.md	Q5	`FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？
-03-ui/01-activity.md	Q4	03-ui/01-activity.md	Q1	Activity 从创建到前后台切换时，常见生命周期回调顺序是什么？
-03-ui/01-activity.md	Q5	03-ui/01-activity.md	Q6	Launcher Activity 的 Intent Filter 应声明什么？
-03-ui/01-activity.md	Q6	03-ui/01-activity.md	Q7	Intent Filter 中的 action、category 与 data 分别匹配什么？
-03-ui/01-activity.md	Q7	03-ui/01-activity.md	Q8	隐式 Intent 如何通过 Intent Filter 找到可启动的 Activity？
-03-ui/01-activity.md	Q8	03-ui/01-activity.md	Q9	启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？
-03-ui/01-activity.md	Q9	03-ui/01-activity.md	Q10	setContentView 后应用内容为什么不直接成为窗口根 View？
-03-ui/01-activity.md	Q10	03-ui/01-activity.md	Q11	在 onCreate 里读取根 View 宽高得到 0，应该等到哪个时机？
-03-ui/01-activity.md	Q11	03-ui/01-activity.md	Q12	旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？
-03-ui/01-activity.md	Q12	03-ui/01-activity.md	Q13	进程被系统回收后页面状态丢失，onSaveInstanceState 哪些内容需要自己保存？
-03-ui/01-activity.md	Q13	03-ui/01-activity.md	Q14	详情页返回后直接退出应用，是否由 `singleTask` 清理了返回栈？
-03-ui/01-activity.md	Q14	03-ui/01-activity.md	Q15	Activity 复用后收到新 Intent，为什么 `getIntent()` 仍是旧值？
-03-ui/01-activity.md	Q15	03-ui/01-activity.md	Q16	跨应用启动后 Activity 跑进了意外的任务栈，`taskAffinity` 与 `allowTaskReparenting` 起什么作用？
-03-ui/01-activity.md	Q16	03-ui/01-activity.md	Q17	Activity 切换时短暂看到前后两个页面，窗口动画期间发生了什么？
-03-ui/01-activity.md	Q17	03-ui/01-activity.md	Q18	启动指标显示首帧很快但页面仍是骨架，首帧与 reportFullyDrawn 分别表示什么？
-03-ui/01-activity.md	Q18	03-ui/01-activity.md	Q19	应用退到后台后收到 `onTrimMemory()`，哪些状态可以释放？
-03-ui/01-activity.md	Q19	03-ui/01-activity.md	Q20	车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？
-03-ui/01-activity.md	Q20	03-ui/01-activity.md	Q21	Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？
-03-ui/01-activity.md	Q21	03-ui/01-activity.md	Q22	Fragment 返回后旧 View 仍被观察者更新，视图生命周期该怎么绑定？
-03-ui/01-activity.md	Q22	03-ui/01-activity.md	Q23	切换 Fragment 页面后状态与内存表现不同，`show/hide`、`replace`、ViewPager2 有什么差别？
-03-ui/01-activity.md	Q23	03-ui/01-activity.md	Q24	网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？
-03-ui/01-activity.md	Q24	03-ui/01-activity.md	Q25	共享 ViewModel 后页面重建却不刷新或旧 View 泄漏，作用域与观察者应绑定谁？
-03-ui/01-activity.md	Q25	03-ui/01-activity.md	Q4	`startActivity()` 如何在任务选择与 Activity 实例复用之间作出决定？
-03-ui/01-activity.md	Q26	03-ui/01-activity.md	Q26	AAOS Launcher 设置 `FLAG_ACTIVITY_NEW_TASK` 后，系统是否一定新建任务？
-03-ui/01-activity.md	Q27	03-ui/01-activity.md	Q27	从 Launcher 点击图标时，为什么目标进程已存活仍可能创建新的 Activity？
-03-ui/02-view.md	Q1	03-ui/02-view.md	Q2	自定义 View 首次显示时为什么要先 measure、再 layout、最后 draw？
-03-ui/02-view.md	Q2	03-ui/02-view.md	Q1	Android View 与 ViewGroup 分别表示什么？
-03-ui/02-view.md	Q3	03-ui/02-view.md	Q3	Android View 动画、帧动画和属性动画分别改变什么？
-03-ui/02-view.md	Q4	03-ui/02-view.md	Q4	自定义 View 尺寸为 0 或被截断，MeasureSpec 的 mode 和 size 如何约束结果？
-03-ui/02-view.md	Q5	03-ui/02-view.md	Q5	可滚动 ViewGroup 内容很长却自身尺寸异常，父尺寸与子尺寸应怎样分别计算？
-03-ui/02-view.md	Q6	03-ui/02-view.md	Q6	自定义 ViewGroup 里的子 View 已创建却不显示，`layout()` 与 `onLayout()` 各负责什么？
-03-ui/02-view.md	Q7	03-ui/02-view.md	Q7	内容更新后画面没变或位置错了，该调用 `requestLayout()` 还是 `invalidate()`？
-03-ui/02-view.md	Q8	03-ui/02-view.md	Q8	硬件加速后修改绘制数据却仍显示旧内容，为什么必须显式 `invalidate()`？
-03-ui/02-view.md	Q9	03-ui/02-view.md	Q9	只 `invalidate()` 一个小 View 却感觉整块区域重绘，脏区实际如何传播？
-03-ui/02-view.md	Q10	03-ui/02-view.md	Q10	动画中的 View 突然盖住兄弟控件，`dispatchDraw()` 的绘制顺序何时会变化？
-03-ui/02-view.md	Q11	03-ui/02-view.md	Q11	子 View 需要画到父容器外却被裁掉，`clipChildren` 与 `clipToPadding` 分别该怎么设？
-03-ui/02-view.md	Q12	03-ui/02-view.md	Q12	自定义 View 滚动时持续掉帧，`onDraw()` 中分配对象会造成什么开销？
-03-ui/02-view.md	Q13	03-ui/02-view.md	Q13	复杂页面测量耗时高，深层 View 嵌套为什么会放大遍历成本？
-03-ui/02-view.md	Q14	03-ui/02-view.md	Q14	旋转、透明度或阴影动画卡顿，View 的三种 Layer 类型该如何取舍？
-03-ui/02-view.md	Q15	03-ui/02-view.md	Q15	视频控件旋转后出现黑区或层级异常，`SurfaceView` 与 `TextureView` 应该怎么选？
-03-ui/02-view.md	Q16	03-ui/02-view.md	Q16	只想移动一个 View 却触发复杂动画，`ViewPropertyAnimator` 与 `ObjectAnimator` 适用场景是什么？
-03-ui/02-view.md	Q17	03-ui/02-view.md	Q17	改变布局参数后界面瞬间跳变，`LayoutAnimation` 与 `TransitionManager` 哪个能动画化尺寸变化？
-03-ui/02-view.md	Q18	03-ui/02-view.md	Q18	自定义 View 重建后状态没恢复，为什么 `onSaveInstanceState()` 可能根本没被调用？
-03-ui/02-view.md	Q19	03-ui/02-view.md	Q19	`onCreate()` 中 `post()` 后能读到尺寸，但 `doOnPreDraw` 时机又不同，二者该怎么选？
-03-ui/02-view.md	Q20	03-ui/02-view.md	Q20	`View.setTag()` 和 keyed tag 适合存什么，如何避免资源键错误与引用泄漏？
-03-ui/02-view.md	Q21	03-ui/02-view.md	Q21	`LAYER_TYPE_SOFTWARE`、`LAYER_TYPE_HARDWARE` 与 `Canvas.saveLayer()` 三者最容易被怎样混淆，为什么 SurfaceFlinger 看不到独立 software View layer？
-03-ui/02-view.md	Q22	03-ui/02-view.md	Q22	`SurfaceView` 的“独立”具体独立在哪里，带来哪些收益，又有哪些不保证？
-03-ui/02-view.md	Q23	03-ui/02-view.md	Q23	Z-below 的 `SurfaceView` 为什么要在宿主窗口“挖洞”，`mDrawFinished` 置位后能证明什么、不能证明什么？
-03-ui/02-view.md	Q24	03-ui/02-view.md	Q24	`surfaceDestroyed()` 返回后 Producer 还在写旧 Surface 会怎样，正确的停止协议是什么？
-03-ui/02-view.md	Q25	03-ui/02-view.md	Q25	TextureView 的一次可见更新要经过哪两套队列与哪些环节，为什么 Producer 已 queue 不代表画面已更新？
-03-ui/02-view.md	Q26	03-ui/02-view.md	Q26	TextureView 的额外成本是什么形态，什么场景不合适，所有权上有哪些易错入口？
-03-ui/02-view.md	Q27	03-ui/02-view.md	Q27	`GLSurfaceView` 的两种 render mode 节奏由什么决定，GLThread 独立后哪些责任没有被隔离？
-03-ui/03-resources.md	Q1	03-ui/03-resources.md	Q1	新增资源目录后设备始终命中默认文件，限定符的匹配优先级和书写顺序是什么？
-03-ui/03-resources.md	Q2	03-ui/03-resources.md	Q3	Drawable 的 intrinsic width 和 intrinsic height 表示什么？
-03-ui/03-resources.md	Q3	03-ui/03-resources.md	Q4	常见 Drawable 类型各适合表达什么？
-03-ui/03-resources.md	Q4	03-ui/03-resources.md	Q2	Android Drawable 表示什么，为什么它不等同于位图？
-03-ui/03-resources.md	Q5	03-ui/03-resources.md	Q5	切回默认语言时因资源缺失崩溃，限定符变体应该怎样提供兜底？
-03-ui/03-resources.md	Q6	03-ui/03-resources.md	Q6	旧版 Android 忽略了新加的资源限定符，如何判断它从哪个 API 级别生效？
-03-ui/03-resources.md	Q7	03-ui/03-resources.md	Q7	系统切换深色模式后应用仍是浅色，资源、读取逻辑和主题分别要处理什么？
-03-ui/03-resources.md	Q8	03-ui/03-resources.md	Q8	设备已进入深色模式但应用外观没变，应从资源、系统主题还是厂商定制层排查？
-03-ui/03-resources.md	Q9	03-ui/03-resources.md	Q9	车机品牌要求固定配色时，为什么通常不跟随壁纸动态取色？
-03-ui/03-resources.md	Q10	03-ui/03-resources.md	Q10	自定义主题颜色取错值但能编译，?attr 与 ?android:attr 的作用域差异是什么？
-03-ui/03-resources.md	Q11	03-ui/03-resources.md	Q11	车厂希望不重编应用就替换资源，RRO 与编译期 overlay 的边界是什么？
-03-ui/03-resources.md	Q12	03-ui/03-resources.md	Q12	用户调大字体后按钮文字溢出，dp、sp 与 fontScale 应如何配合？
-03-ui/03-resources.md	Q13	03-ui/03-resources.md	Q13	分屏窗口变窄但资源布局没切换，为什么资源限定符不等同于窗口尺寸？
-03-ui/03-resources.md	Q14	03-ui/03-resources.md	Q14	车机副驾屏布局、字号或密度与主屏不一致，应用应从哪个显示上下文取配置？
-03-ui/03-resources.md	Q15	03-ui/03-resources.md	Q15	切换到阿拉伯语后控件方向错乱或部分字符串缺失，多语言和 RTL 资源要怎样组织？
-03-ui/03-resources.md	Q16	03-ui/03-resources.md	Q17	某个 ViewBinding 字段在大屏变体上为空，layout 资源之间必须满足什么契约？
-03-ui/03-resources.md	Q17	03-ui/03-resources.md	Q18	横竖屏或夜间模式切换后页面状态异常，何时让系统重建、何时自行处理 Configuration？
-03-ui/03-resources.md	Q18	03-ui/03-resources.md	Q19	运行时配置看似正确但仍拿到错误图片，如何确认实际命中的资源变体？
-03-ui/03-resources.md	Q19	03-ui/03-resources.md	Q16	ViewBinding 解决了什么问题，Fragment 中的 Binding 应在什么生命周期边界释放？
-03-ui/03-resources.md	Q20	03-ui/03-resources.md	Q20	"Resources、ResourcesImpl、AssetManager 三层各持有什么？""旋转一次就新建一个 ResourcesImpl""为什么不成立？"
-03-ui/03-resources.md	Q21	03-ui/03-resources.md	Q21	一次 Configuration 变更后，系统如何决定 Activity 是热派发 onConfigurationChanged 还是销毁重建？relaunch 等于冷启动吗？
-03-ui/03-resources.md	Q22	03-ui/03-resources.md	Q22	android:configChanges 接管旋转后系统还做什么？Android 17 的 recreateOnConfigChanges 五类扩展为什么不能在 Android 13 上依赖？
-03-ui/03-resources.md	Q23	03-ui/03-resources.md	Q23	"Resources 相关内存持续增长时，为什么""mResourceImpls 里的键变多""不能直接定性为泄漏？应该怎么取证？"
-03-ui/04-window-system.md	Q1	03-ui/04-window-system.md	Q1	界面内容、位置或合成结果异常时，应用窗口分别由哪些层维护？
-03-ui/04-window-system.md	Q2	03-ui/04-window-system.md	Q2	WindowManager.addView 抛 BadTokenException，缺失的 token 代表什么？
-03-ui/04-window-system.md	Q3	03-ui/04-window-system.md	Q3	悬浮窗 addView 返回失败码时，怎样沿 addWindow 校验顺序定位？
-03-ui/04-window-system.md	Q4	03-ui/04-window-system.md	Q4	窗口 relayout 后界面没有立即重绘，relayoutWindow 返回什么、遍历何时执行？
-03-ui/04-window-system.md	Q5	03-ui/04-window-system.md	Q5	修改状态栏或返回键行为时，为什么要找 WindowManagerPolicy 而非 server/wm？
-03-ui/04-window-system.md	Q6	03-ui/04-window-system.md	Q6	窗口 token 合法但显示层级或可见性异常，WindowState、WindowToken、DisplayContent 各管什么？
-03-ui/04-window-system.md	Q7	03-ui/04-window-system.md	Q7	普通 View 调整 z 序无效但 SurfaceView 可以置顶，窗口与 View 的层级由谁决定？
-03-ui/04-window-system.md	Q8	03-ui/04-window-system.md	Q8	系统栏或输入法遮挡内容时，Insets 从哪些来源计算并传给应用？
-03-ui/04-window-system.md	Q9	03-ui/04-window-system.md	Q9	沉浸式页面用 setSystemUiVisibility 后行为不稳定，WindowInsetsController 多了什么能力？
-03-ui/04-window-system.md	Q10	03-ui/04-window-system.md	Q10	调用 hide 后内容没有马上扩展，系统栏 Insets 为什么要等后续帧变化？
-03-ui/04-window-system.md	Q11	03-ui/04-window-system.md	Q11	切换配置后页面有时回调、有时重建，Activity 的分界条件是什么？
-03-ui/04-window-system.md	Q12	03-ui/04-window-system.md	Q12	分屏或折叠改变窗口大小但没触发 Configuration，应用为何仍会重新布局？
-03-ui/04-window-system.md	Q13	03-ui/04-window-system.md	Q13	输入法弹出后页面缩放卡顿或被平移，adjustResize、adjustPan、adjustNothing 如何影响窗口？
-03-ui/04-window-system.md	Q14	03-ui/04-window-system.md	Q14	多窗口中的 Activity 看起来小于任务区域，ActivityRecord 边界与 letterbox 分别表示什么？
-03-ui/04-window-system.md	Q15	03-ui/04-window-system.md	Q15	窗口不显示或黑屏时，怎样依次检查窗口记录、frame 与 SurfaceFlinger layer？
-03-ui/04-window-system.md	Q16	03-ui/04-window-system.md	Q16	窗口添加失败与 Surface 丢失都表现为空白，应用侧症状和恢复责任有什么不同？
-03-ui/04-window-system.md	Q17	03-ui/04-window-system.md	Q17	键盘动画结束后页面才跳动，如何用 WindowInsetsAnimation 同步布局？
-03-ui/04-window-system.md	Q18	03-ui/04-window-system.md	Q18	WMS.addWindow 返回成功后窗口就可见了吗？应用收到 BadTokenException 应该先查什么？
-03-ui/04-window-system.md	Q19	03-ui/04-window-system.md	Q19	"WMS 的 android.display、android.anim、android.anim.lf 三条线程怎么分工？""线程分开了""为什么仍可能互相拖慢？"
-03-ui/04-window-system.md	Q20	03-ui/04-window-system.md	Q20	ViewRootImpl.performTraversals 是每帧都跨进程调用 WMS 的 relayout 吗？命中哪些条件才会 relayout？
-03-ui/05-compose.md	Q1	03-ui/05-compose.md	Q1	滚动列表时任意状态变化都让整页重组，Compose 的组合、布局、绘制各阶段怎样响应？
-03-ui/05-compose.md	Q2	03-ui/05-compose.md	Q2	点击后 composable 持续重组甚至掉帧，为什么不能在组合函数体里直接写状态？
-03-ui/05-compose.md	Q3	03-ui/05-compose.md	Q3	旋转屏幕后输入内容消失，remember 与 rememberSaveable 分别能保留什么？
-03-ui/05-compose.md	Q4	03-ui/05-compose.md	Q4	滚动偏移每帧变化却只关心是否到达顶部，derivedStateOf 如何减少无用更新？
-03-ui/05-compose.md	Q5	03-ui/05-compose.md	Q5	某个状态更新让大量 composable 重跑，不稳定参数会怎样影响跳过？
-03-ui/05-compose.md	Q6	03-ui/05-compose.md	Q6	启用 strong skipping 后不稳定参数仍会重组吗？它改变了哪些跳过规则？
-03-ui/05-compose.md	Q7	03-ui/05-compose.md	Q7	高频状态只影响位移却反复触发组合，怎样把状态读取推迟到布局或绘制阶段？
-03-ui/05-compose.md	Q8	03-ui/05-compose.md	Q8	列表插入一行后输入状态跑到别的行，Lazy 列表的 key 应如何选择？
-03-ui/05-compose.md	Q9	03-ui/05-compose.md	Q9	协程因界面重组反复启动或资源未释放，三个 Effect 的生命周期边界是什么？
-03-ui/05-compose.md	Q10	03-ui/05-compose.md	Q10	Fragment 页面销毁后 Compose 内容仍占内存，ComposeView 的组合策略该怎样选？
-03-ui/05-compose.md	Q11	03-ui/05-compose.md	Q11	Compose 页面嵌入旧 View 控件后变卡，AndroidView 的 update 应避免做什么？
-03-ui/05-compose.md	Q12	03-ui/05-compose.md	Q12	自定义 Compose 宿主中的动画与界面更新不同步，Recomposer 为什么需要帧时钟？
-03-ui/05-compose.md	Q13	03-ui/05-compose.md	Q13	Compose 页面滚动掉帧，应先用哪些工具区分重组、布局和绘制瓶颈？
-03-ui/05-compose.md	Q14	03-ui/05-compose.md	Q14	把旧页面从 View 迁到 Compose 后出现主题、状态或返回键问题，迁移时要检查哪些边界？
-03-ui/05-compose.md	Q15	03-ui/05-compose.md	Q15	同一页面混用 View 和 Compose 后尺寸与状态互相打架，怎样确定约束和状态的唯一来源？
-03-ui/05-compose.md	Q16	03-ui/05-compose.md	Q16	普通 Compose 页面有自己的渲染引擎吗？`AndroidUiFrameClock` 的 Choreographer 回调与 ViewRootImpl 的 traversal 回调各做什么？
-03-ui/05-compose.md	Q17	03-ui/05-compose.md	Q17	Compose 中同一状态被 composable 函数体、placement lambda 与 draw lambda 读取，状态变化分别触发什么？Recomposition 一定带来重绘吗？
-03-ui/05-compose.md	Q18	03-ui/05-compose.md	Q18	Compose 的每个 LayoutNode 都对应一个 Android RenderNode 吗？`Modifier.graphicsLayer` 一定创建离屏纹理吗？
-03-ui/05-compose.md	Q19	03-ui/05-compose.md	Q19	Compose 的 PausableComposition 分段执行的是什么工作？为什么它不能用来降低 GPU 负担？
-03-ui/06-aaos-ui.md	Q1	03-ui/06-aaos-ui.md	Q1	收到“车机页面改不动”的需求后，如何判断应改应用、SystemUI、CarService 还是车辆层？
-03-ui/06-aaos-ui.md	Q2	03-ui/06-aaos-ui.md	Q2	应用需要读取车辆状态时，CarService 与 car-lib 分别承担什么角色？
-03-ui/06-aaos-ui.md	Q3	03-ui/06-aaos-ui.md	Q3	车机桌面需要随驾驶状态和多显示变化，为什么 Launcher 不只是普通桌面应用？
-03-ui/06-aaos-ui.md	Q4	03-ui/06-aaos-ui.md	Q4	车载功能用模板应用还是原生 Activity 实现，怎样按功能和合规成本选路线？
-03-ui/06-aaos-ui.md	Q5	03-ui/06-aaos-ui.md	Q5	Car App 应用已安装却没出现在宿主列表，CarAppService 清单还缺哪些声明？
-03-ui/06-aaos-ui.md	Q6	03-ui/06-aaos-ui.md	Q6	同一 Android 版本的车辆支持能力不同，Car App API level 为什么不能用 SDK 版本替代？
-03-ui/06-aaos-ui.md	Q7	03-ui/06-aaos-ui.md	Q7	模板应用传入 Action 后按钮没显示，宿主渲染与 Template 契约怎样约束结果？
-03-ui/06-aaos-ui.md	Q8	03-ui/06-aaos-ui.md	Q8	副驾屏上的应用拿不到座位信息，occupant zone 如何关联座位、显示和用户？
-03-ui/06-aaos-ui.md	Q9	03-ui/06-aaos-ui.md	Q9	后排操作影响了驾驶员的数据，车机多用户下哪些状态必须隔离？
-03-ui/06-aaos-ui.md	Q10	03-ui/06-aaos-ui.md	Q10	调用 DisplayManager 关闭车机屏幕后状态不一致，屏幕实际由什么电源策略控制？
-03-ui/06-aaos-ui.md	Q11	03-ui/06-aaos-ui.md	Q11	车机夜间模式跟车辆灯光变化不同步，日夜状态由谁提供给应用？
-03-ui/06-aaos-ui.md	Q12	03-ui/06-aaos-ui.md	Q12	应用收不到旋钮或自定义按键事件，车机输入事件经什么系统通道分发？
-03-ui/06-aaos-ui.md	Q13	03-ui/06-aaos-ui.md	Q13	导航地图无法显示到仪表屏，cluster 服务与普通 Activity 有何区别？
-03-ui/06-aaos-ui.md	Q14	03-ui/06-aaos-ui.md	Q14	Android Auto 投影启动后原生应用不可见或失焦，二者如何共存？
-03-ui/06-aaos-ui.md	Q15	03-ui/06-aaos-ui.md	Q15	车机调试时 UX 限制被放开，如何用服务状态与特性开关确认测试环境？
-03-ui/06-aaos-ui.md	Q16	03-ui/06-aaos-ui.md	Q16	地图 Surface 的生命周期怎么管理？帧预算与可见区域有哪些约束？
-03-ui/06-aaos-ui.md	Q17	03-ui/06-aaos-ui.md	Q17	CarSystemUI 或 TaskPanel 重启后界面空白、焦点或 rotary 失效，应检查哪些恢复与输入边界？
-03-ui/06-aaos-ui.md	Q18	03-ui/06-aaos-ui.md	Q18	CarSystemUI 将依赖注入接到 platform SystemUI 时，CarSysUIComponent 与 OEM Module 的扩展边界是什么？
-03-ui/07-driving-safety.md	Q1	03-ui/07-driving-safety.md	Q1	车速刚超过零就锁死所有界面，为什么应用不能自行硬编码驾驶限制？
-03-ui/07-driving-safety.md	Q2	03-ui/07-driving-safety.md	Q2	车辆从驻车进入行驶后 UI 未切换，驾驶状态是怎样从车辆信号推导出来的？
-03-ui/07-driving-safety.md	Q3	03-ui/07-driving-safety.md	Q3	同一车机在不同车型限制不同，UX Restrictions 映射表如何表达差异？
-03-ui/07-driving-safety.md	Q4	03-ui/07-driving-safety.md	Q4	配置设了 no_video 却仍要求分心优化，uxr 与 baseline 的关系是什么？
-03-ui/07-driving-safety.md	Q5	03-ui/07-driving-safety.md	Q5	车型切换后限制配置未生效，restriction mode 为什么需要独立于驾驶状态？
-03-ui/07-driving-safety.md	Q6	03-ui/07-driving-safety.md	Q6	页面只在 onCreate 读取 UX 限制，行驶后仍可操作，应用应监听什么？
-03-ui/07-driving-safety.md	Q7	03-ui/07-driving-safety.md	Q7	Car App 在行驶中无法启动，清单里的 distractionOptimized 声明有什么作用？
-03-ui/07-driving-safety.md	Q8	03-ui/07-driving-safety.md	Q8	升级后车机进入全限制状态，配置读取失败时系统为何采用安全兜底？
-03-ui/07-driving-safety.md	Q9	03-ui/07-driving-safety.md	Q9	行驶中需要开放语音设置入口，哪些界面可以通过配置豁免 UX 限制？
-03-ui/07-driving-safety.md	Q10	03-ui/07-driving-safety.md	Q10	副驾触屏被锁或后排屏输入异常，显示触控设置与输入类型声明如何配合？
-03-ui/07-driving-safety.md	Q11	03-ui/07-driving-safety.md	Q11	车辆行驶状态变化后页面仍保留旧控件，应用应怎样处理限制更新？
-03-ui/07-driving-safety.md	Q12	03-ui/07-driving-safety.md	Q12	驾驶时视频、长文本或复杂交互被禁用，限制依据是什么、界面应如何降级？
-03-ui/07-driving-safety.md	Q13	03-ui/07-driving-safety.md	Q13	驾驶员需要操作高频功能却不应盯屏，语音和物理控件各解决什么风险？
-03-ui/07-driving-safety.md	Q14	03-ui/07-driving-safety.md	Q14	UX 限制功能通过了驻车测试却在路测失效，怎样按配置到交互构造验证？
-03-ui/07-driving-safety.md	Q15	03-ui/07-driving-safety.md	Q15	倒车影像、车速显示和音量限制同时影响页面时，如何纳入 UI 安全设计？
-03-ui/07-driving-safety.md	Q16	03-ui/07-driving-safety.md	Q16	驾驶分心限制（UXR）到底能禁什么？FULLY_RESTRICTED 的位标志清单是什么？
-03-ui/07-driving-safety.md	Q17	03-ui/07-driving-safety.md	Q17	OEM 怎么定制分心限制规则？为什么改了 car_ux_restrictions_map.xml 没立即生效？
-03-ui/07-driving-safety.md	Q18	03-ui/07-driving-safety.md	Q18	"行驶中打开应用被全屏遮罩挡住——系统怎么判定和阻断？""IDENTIFY_DISTRACTION 权限""是真的吗？"
-03-ui/08-ui-debugging.md	Q1	03-ui/11-ui-debugging.md	Q1	遇到白屏、黑屏或卡顿时，为什么应先分层归因再抓帧？
-03-ui/08-ui-debugging.md	Q2	03-ui/11-ui-debugging.md	Q2	应用页面完全没出来，怎样从窗口建立、frame 到图层逐步判定？
-03-ui/08-ui-debugging.md	Q3	03-ui/11-ui-debugging.md	Q3	冷启动白屏数秒，如何把首帧前的初始化阶段拆开定位？
-03-ui/08-ui-debugging.md	Q4	03-ui/11-ui-debugging.md	Q4	透明主题页面看似黑屏，怎样区分窗口未创建与窗口有界但没有内容？
-03-ui/08-ui-debugging.md	Q5	03-ui/11-ui-debugging.md	Q5	帧时间超预算或用户仍感觉掉帧，怎样区分 UI 线程、渲染线程和合成侧？
-03-ui/08-ui-debugging.md	Q6	03-ui/11-ui-debugging.md	Q6	需要判断是哪个窗口迟交帧，gfxinfo、SurfaceFlinger 与 Perfetto 各提供什么证据？
-03-ui/08-ui-debugging.md	Q7	03-ui/11-ui-debugging.md	Q7	ViewRootImpl 没有执行绘制时，是否能从框架诊断字段找到跳过原因？
-03-ui/08-ui-debugging.md	Q8	03-ui/11-ui-debugging.md	Q8	局部数据变化造成大范围重绘和掉帧，如何判断失效范围并缩小成本？
-03-ui/08-ui-debugging.md	Q9	03-ui/11-ui-debugging.md	Q9	刘海、圆角或系统栏压住按钮，怎样按 Insets 调整内容与点击区域？
-03-ui/08-ui-debugging.md	Q10	03-ui/11-ui-debugging.md	Q10	用户点击后长期无响应并出现输入超时，主线程阻塞如何造成这两类现象？
-03-ui/08-ui-debugging.md	Q11	03-ui/11-ui-debugging.md	Q11	页面渲染卡顿并伴随内存上涨，怎样区分分配、纹理与缓冲区问题？
-03-ui/08-ui-debugging.md	Q12	03-ui/11-ui-debugging.md	Q12	SurfaceView 区域变黑或偏移，如何分别确认图层、位置和 buffer？
-03-ui/08-ui-debugging.md	Q13	03-ui/11-ui-debugging.md	Q13	车机同一页面在主屏和副驾屏大小不同，怎样检查显示配置与窗口几何？
-03-ui/08-ui-debugging.md	Q14	03-ui/11-ui-debugging.md	Q14	车机屏幕熄灭但应用进程仍运行，如何判断是否由电源策略控制？
-03-ui/08-ui-debugging.md	Q15	03-ui/11-ui-debugging.md	Q15	同类 UI 缺陷反复回归，怎样把视觉与状态问题变成可重复验证的检查？
-03-ui/08-ui-debugging.md	Q16	03-ui/11-ui-debugging.md	Q16	Android Studio 预览 XML 资源时如何缩放画布？
-03-ui/09-app-view-compose-practice.md	Q1	03-ui/08-app-view-compose-practice.md	Q1	列表 item 里的一个 TextView 改文字并调用 requestLayout()，为什么一次调用不等于一帧只做一轮完整测量布局，ViewRootImpl 是怎么合并和二次调度的？
-03-ui/09-app-view-compose-practice.md	Q2	03-ui/08-app-view-compose-practice.md	Q3	压平一个首屏布局前应优先识别哪三类结构性成本，为什么 View.GONE 子节点被 measureChildren 跳过却仍建议延迟创建？
-03-ui/09-app-view-compose-practice.md	Q3	03-ui/08-app-view-compose-practice.md	Q4	ViewStub、merge、include 分别解决什么问题，哪些误用会直接抛异常或让优化失效？
-03-ui/09-app-view-compose-practice.md	Q4	03-ui/08-app-view-compose-practice.md	Q5	把布局解析挪到 AsyncLayoutInflater 后台线程后，为什么主线程仍可能出现 inflate 时间，哪些布局会回退到 UI 线程？
-03-ui/09-app-view-compose-practice.md	Q5	03-ui/08-app-view-compose-practice.md	Q6	自定义 View 用缓存的期望尺寸跳过 onMeasure 计算，为什么只比较宽度 MeasureSpec 不够，onLayout 里只看 changed 参数会漏掉什么？
-03-ui/09-app-view-compose-practice.md	Q6	03-ui/08-app-view-compose-practice.md	Q7	波形图这类持续刷新的自绘 View 应怎样组织绘制对象与失效调用，invalidate()、requestLayout()、postInvalidateOnAnimation() 各承担什么？
-03-ui/09-app-view-compose-practice.md	Q7	03-ui/08-app-view-compose-practice.md	Q8	RecyclerView 稳定滑动中偶尔出现 onBindViewHolder 是否说明复用失效，ViewHolder 到底按什么顺序获取、哪些来源仍会 bind？
-03-ui/09-app-view-compose-practice.md	Q8	03-ui/08-app-view-compose-practice.md	Q9	多个嵌套横向列表共享同一个 RecycledViewPool 时，viewType 应按什么原则划分，共享池会引入什么新风险？
-03-ui/09-app-view-compose-practice.md	Q9	03-ui/08-app-view-compose-practice.md	Q10	高频局部刷新的列表为什么 notifyDataSetChanged 会卡，DiffUtil 的三个回调与 payload 各承担什么，ListAdapter 有哪些硬边界？
-03-ui/09-app-view-compose-practice.md	Q10	03-ui/08-app-view-compose-practice.md	Q11	RecyclerView 的 GapWorker 预取运行在哪个线程，willCreateInTime/willBindInTime 怎么决定做不做，为什么预取正常下一帧仍可能长？
-03-ui/09-app-view-compose-practice.md	Q11	03-ui/08-app-view-compose-practice.md	Q12	纵向 Feed 里嵌横向卡片列表时应怎样配置容器，setHasFixedSize(true) 的确切语义是什么？
-03-ui/09-app-view-compose-practice.md	Q12	03-ui/08-app-view-compose-practice.md	Q13	LazyColumn 的 key 与 contentType 分别对应 RecyclerView 的什么概念，从 RecyclerView 迁移到 LazyColumn 应比较哪些指标？
-03-ui/09-app-view-compose-practice.md	Q13	03-ui/08-app-view-compose-practice.md	Q14	Compose 状态在 Composable 函数体、placement lambda、draw lambda 与 graphicsLayer lambda 中被读取，变化后分别触发哪个阶段的工作？
-03-ui/09-app-view-compose-practice.md	Q14	03-ui/08-app-view-compose-practice.md	Q15	Strong Skipping 默认开启后，List 这类 unstable 参数的 Composable 还能跳过吗，@Stable/@Immutable 注解还承担什么？
-03-ui/09-app-view-compose-practice.md	Q15	03-ui/08-app-view-compose-practice.md	Q16	Compose 编译器报告里 skippable=1 且 unstable 数量下降，能据此宣布重组性能改善吗？各报告文件分别能回答什么？
-03-ui/09-app-view-compose-practice.md	Q16	03-ui/08-app-view-compose-practice.md	Q17	remember(keys)、derivedStateOf、produceState 与 snapshotFlow 各适合什么场景，混用会出什么问题？
-03-ui/09-app-view-compose-practice.md	Q17	03-ui/08-app-view-compose-practice.md	Q18	自定义 Modifier.Node 时 NodeChain 按什么规则复用、更新或替换节点，Element 的 equals 契约写错会怎样？
-03-ui/09-app-view-compose-practice.md	Q18	03-ui/08-app-view-compose-practice.md	Q19	自定义 Modifier 只组合现有节点时，Modifier.composed 与 Modifier.Node 的运行成本和迁移边界是什么？
-03-ui/09-app-view-compose-practice.md	Q19	03-ui/08-app-view-compose-practice.md	Q20	自定义 Compose Layout 里对同一个子节点用两组约束连续调用 measure() 会发生什么，单遍测量协议包含哪些约束？
-03-ui/09-app-view-compose-practice.md	Q20	03-ui/08-app-view-compose-practice.md	Q21	Compose 节点上一帧测过的尺寸什么时候会被复用，@Stable 注解会影响布局缓存吗？
-03-ui/09-app-view-compose-practice.md	Q21	03-ui/08-app-view-compose-practice.md	Q22	对 LazyColumn 或 BoxWithConstraints 查询 IntrinsicSize.Min 为什么会直接失败，固有尺寸查询的真实成本怎么评估？
-03-ui/09-app-view-compose-practice.md	Q22	03-ui/08-app-view-compose-practice.md	Q23	padding + background + clickable 组合会创建几个 LayoutNode，调整 Modifier 顺序为什么属于行为变更而不是纯性能优化？
-03-ui/09-app-view-compose-practice.md	Q23	03-ui/08-app-view-compose-practice.md	Q24	同样的 Compose Text(String) 在什么条件下走简化实现 ParagraphLayoutCache，哪些能力会让它改走 AnnotatedString 路径，段落缓存什么时候复用？
-03-ui/09-app-view-compose-practice.md	Q24	03-ui/08-app-view-compose-practice.md	Q25	用 rememberTextMeasurer 在 drawWithCache 里绘制文本时，TextMeasurer 的缓存键包含哪些内容，容量怎么设置才合理？
-03-ui/09-app-view-compose-practice.md	Q25	03-ui/08-app-view-compose-practice.md	Q26	自定义 Modifier.Node 的 onAttach、onDetach、onReset 与 coroutineScope 分别该承担什么生命周期工作？
-03-ui/09-app-view-compose-practice.md	Q26	03-ui/08-app-view-compose-practice.md	Q2	首屏布局应如何选择 LinearLayout、FrameLayout 与 ConstraintLayout，怎样验证压平层级确有收益？
-03-ui/10-app-compose-advanced-practice.md	Q1	03-ui/09-app-compose-advanced-practice.md	Q1	在后台线程读取 mutableStateOf 时读到的可能是哪个版本，Snapshot 按什么条件从状态记录链里选值？
-03-ui/10-app-compose-advanced-practice.md	Q2	03-ui/09-app-compose-advanced-practice.md	Q2	takeSnapshot() 创建的只读视图为什么必须显式 dispose，不 dispose 会怎样？
-03-ui/10-app-compose-advanced-practice.md	Q3	03-ui/09-app-compose-advanced-practice.md	Q3	两个并发 MutableSnapshot 修改同一个 StateObject，apply 冲突按什么规则合并，内置变更策略有什么区别？
-03-ui/10-app-compose-advanced-practice.md	Q4	03-ui/09-app-compose-advanced-practice.md	Q4	两个 Snapshot 各改不同 State 都 apply 成功，跨对象业务约束仍可能被破坏——这是为什么，怎么防？
-03-ui/10-app-compose-advanced-practice.md	Q5	03-ui/09-app-compose-advanced-practice.md	Q5	mutableStateOf 可以从工作线程读写吗，state.value++ 为什么仍可能丢更新，enter 为什么不能跨协程挂起点保留？
-03-ui/10-app-compose-advanced-practice.md	Q6	03-ui/09-app-compose-advanced-practice.md	Q6	一次 state.value = x 写入后重组是怎么被安排的，为什么多次写入可能合并成一次重组？
-03-ui/10-app-compose-advanced-practice.md	Q7	03-ui/09-app-compose-advanced-practice.md	Q7	AndroidView 把一个 View 接进 Compose 后由谁测量谁，Compose 状态变化什么时候会让这个 View 重新布局或重绘？
-03-ui/10-app-compose-advanced-practice.md	Q8	03-ui/09-app-compose-advanced-practice.md	Q8	AndroidView 的 factory/update/onReset/onRelease 各自的调用时机与职责是什么，怎样避免 View 与 Compose 状态互相回写的反馈循环？
-03-ui/10-app-compose-advanced-practice.md	Q9	03-ui/09-app-compose-advanced-practice.md	Q9	Lazy 列表里的 AndroidView 为什么必须提供非空 onReset 才能复用实例，onReset 之后 View 处于什么状态？
-03-ui/10-app-compose-advanced-practice.md	Q10	03-ui/09-app-compose-advanced-practice.md	Q10	ComposeView 放进 RecyclerView 与放进 Fragment 各该用什么 ViewCompositionStrategy，为什么不要在 onViewRecycled 里 disposeComposition()？
-03-ui/10-app-compose-advanced-practice.md	Q11	03-ui/09-app-compose-advanced-practice.md	Q11	"同一窗口里多个 ComposeView 是共享一个 Recomposer 还是各有一个，""每个 ComposeView 都很轻""为什么不成立？"
-03-ui/10-app-compose-advanced-practice.md	Q12	03-ui/09-app-compose-advanced-practice.md	Q12	Compose 外层动画请求高帧率后，内嵌 AndroidView 里的视频为什么不会跟着提帧，混合树里帧率请求按什么边界传播？
-03-ui/10-app-compose-advanced-practice.md	Q13	03-ui/09-app-compose-advanced-practice.md	Q13	View 属性动画里每个 tick 用 updateLayoutParams 改宽度为什么会持续掉帧，scaleX 这类变换属性能替代到什么程度？
-03-ui/10-app-compose-advanced-practice.md	Q14	03-ui/09-app-compose-advanced-practice.md	Q14	Compose 里 Animatable、Transition 与 animate*AsState 的动画值逐帧更新时，重组范围由什么决定，主线程卡一下动画会怎样？
-03-ui/10-app-compose-advanced-practice.md	Q15	03-ui/09-app-compose-advanced-practice.md	Q15	同一个 Animatable 被手势高频调用 snapTo 与 animateTo 有什么行为差异，Transition 在 1.12.0 的组合语义是什么？
-03-ui/10-app-compose-advanced-practice.md	Q16	03-ui/09-app-compose-advanced-practice.md	Q16	AnimatedVisibility 退出动画期间旧内容还在组合里吗，AnimatedContent 快速切换为什么会同时保留多份内容？
-03-ui/10-app-compose-advanced-practice.md	Q17	03-ui/09-app-compose-advanced-practice.md	Q17	共享元素过渡里 sharedElement 与 sharedBounds 怎么选，scaleToBounds 与 RemeasureToBounds 的成本差在哪？
-03-ui/10-app-compose-advanced-practice.md	Q18	03-ui/09-app-compose-advanced-practice.md	Q18	"共享元素过渡的 Lookahead 布局是不是""第二次 GPU 渲染""，GraphicsLayer 是不是 Bitmap 缓存，元素数量有平台阈值吗？"
-03-ui/10-app-compose-advanced-practice.md	Q19	03-ui/09-app-compose-advanced-practice.md	Q19	View.setRenderEffect 做模糊时 GPU 成本从哪来，它与窗口背景模糊是同一套机制吗？
-03-ui/10-app-compose-advanced-practice.md	Q20	03-ui/09-app-compose-advanced-practice.md	Q20	RuntimeShader 更新 uniform 后画面不动是什么原因，AGSL 着色器的构造与使用有哪些硬约束？
-03-ui/10-app-compose-advanced-practice.md	Q21	03-ui/09-app-compose-advanced-practice.md	Q21	按 Android 13 设备开发时，RuntimeColorFilter、RuntimeXfermode、getGpuHeadroom、HardwareBufferRenderer 这些效果相关 API 的可用状态是什么？
-03-ui/10-app-compose-advanced-practice.md	Q22	03-ui/09-app-compose-advanced-practice.md	Q22	Compose 的 Canvas 没有独立 Surface，一次 drawRect 从 Kotlin 调用到 GPU 经过了哪几段，哪些绘制对象需要应用自己管理？
-03-ui/10-app-compose-advanced-practice.md	Q23	03-ui/09-app-compose-advanced-practice.md	Q23	drawWithCache 缓存什么、什么时候失效，drawWithContent 里不调用 drawContent 会发生什么？
-03-ui/10-app-compose-advanced-practice.md	Q24	03-ui/09-app-compose-advanced-practice.md	Q24	图表、粒子、手写这类持续绘制的场景什么时候该离开 Compose Canvas 转 SurfaceView，绘制回调的线程边界是什么？
-03-ui/11-defect-ui-theme-fidelity.md	Q1	03-ui/10-defect-ui-theme-fidelity.md	Q1	深浅色双主题的车机应用里，UI 还原与主题适配类缺陷为什么能占到修复总量的三分之一？根因集中在哪几类形态？
-03-ui/11-defect-ui-theme-fidelity.md	Q2	03-ui/10-defect-ui-theme-fidelity.md	Q2	布局里把 textColor 写成 #000000 这类硬编码色值，为什么浅色模式测试通过仍会在深色模式翻车？正确写法是什么？
-03-ui/11-defect-ui-theme-fidelity.md	Q3	03-ui/10-defect-ui-theme-fidelity.md	Q3	"drawable 内写死深色半透明导致""白天有、黑夜无""的视觉元素，排查入口是什么？（SIR-7246）"
-03-ui/11-defect-ui-theme-fidelity.md	Q4	03-ui/10-defect-ui-theme-fidelity.md	Q4	深色模式下弹窗整体仍是浅色配色，典型根因与修复路径是什么？（SIR-6620）
-03-ui/11-defect-ui-theme-fidelity.md	Q5	03-ui/10-defect-ui-theme-fidelity.md	Q5	"""新增颜色必配 night 值""这条清单项依据的失败模式是什么？如何用流程兜底？"
-03-ui/11-defect-ui-theme-fidelity.md	Q6	03-ui/10-defect-ui-theme-fidelity.md	Q6	夜间模式下无封面兜底图显示的仍是白天素材，最省事的修复方式是什么？（SIR-6224）
-03-ui/11-defect-ui-theme-fidelity.md	Q7	03-ui/10-defect-ui-theme-fidelity.md	Q7	"用 getIdentifier 按""前缀 + 数值""拼资源名取图，为什么夜间帧图可能取错？怎样修复并控制风险？（3ba0d479）"
-03-ui/11-defect-ui-theme-fidelity.md	Q8	03-ui/10-defect-ui-theme-fidelity.md	Q8	"多模块工程中，app 壳工程定义与公共库同名的 drawable，为什么会""劫持""库组件的交互态？（SIR-7514）"
-03-ui/11-defect-ui-theme-fidelity.md	Q9	03-ui/10-defect-ui-theme-fidelity.md	Q9	"""按钮点击无视觉反馈""类缺陷的固定排查套路是什么？selector 还有哪些必查项？"
-03-ui/11-defect-ui-theme-fidelity.md	Q10	03-ui/10-defect-ui-theme-fidelity.md	Q10	"selector 状态表复制上一行忘改资源，为什么会表现出""白天正常、黑夜异常""的功能假象？（SIR-6802）"
-03-ui/11-defect-ui-theme-fidelity.md	Q11	03-ui/10-defect-ui-theme-fidelity.md	Q11	Activity 在 configChanges 里声明接管 uiMode 后，深浅色切换为什么会让界面停在旧主题？（SIR-6360）
-03-ui/11-defect-ui-theme-fidelity.md	Q12	03-ui/10-defect-ui-theme-fidelity.md	Q12	WebView 加载的本地协议页为什么 values-night 管不到？标准适配方案是什么？（SIR-4568）
-03-ui/11-defect-ui-theme-fidelity.md	Q13	03-ui/10-defect-ui-theme-fidelity.md	Q13	"弹出 Dialog 时为什么 Dock 栏等""别的窗口""也会被压暗？替代方案是什么？（SIR-6606）"
-03-ui/11-defect-ui-theme-fidelity.md	Q14	03-ui/10-defect-ui-theme-fidelity.md	Q14	全屏应用手势退出时先闪一帧白底再露出桌面，根因与修复是什么？（SIR-6788）
-03-ui/11-defect-ui-theme-fidelity.md	Q15	03-ui/10-defect-ui-theme-fidelity.md	Q15	界面顶部或四周露出异色色块，检查哪三处可以定位大多数案例？（SIR-7382）
-03-ui/11-defect-ui-theme-fidelity.md	Q16	03-ui/10-defect-ui-theme-fidelity.md	Q16	"搜索结果列表写在 ConstraintLayout 里却用了 `layout_height=""match_parent""`，为什么界面只露出最后一行，约束布局里该写什么？"
-03-ui/11-defect-ui-theme-fidelity.md	Q17	03-ui/10-defect-ui-theme-fidelity.md	Q17	带全屏遮罩的密码弹窗被键盘整体顶起、遮罩盖住状态栏，正确的避让方式是什么？（SIR-7359）
-03-ui/11-defect-ui-theme-fidelity.md	Q18	03-ui/10-defect-ui-theme-fidelity.md	Q18	设计稿指定 450、550 这类非整百字重时，为什么仍可能无法还原？该怎样判断问题在规格还是字体？
-03-ui/11-defect-ui-theme-fidelity.md	Q19	03-ui/10-defect-ui-theme-fidelity.md	Q19	快速连续切换深浅色导致屏幕出现灰色中间态，为什么要在入口防抖而不是处理重绘结果？（SIR-8546）
-03-ui/11-defect-ui-theme-fidelity.md	Q20	03-ui/10-defect-ui-theme-fidelity.md	Q20	长歌名跑马灯滚动 3 遍才停，是哪个默认值造成的？（SIR-1477）
-03-ui/11-defect-ui-theme-fidelity.md	Q21	03-ui/10-defect-ui-theme-fidelity.md	Q21	刻度进度条/滑块与 UI 或实际行为不符，有哪些典型的 off-by-one 形态？
-03-ui/11-defect-ui-theme-fidelity.md	Q22	03-ui/10-defect-ui-theme-fidelity.md	Q22	回弹/复位动画从错误位置跳变，根因是什么？（SIR-6634）
-03-ui/11-defect-ui-theme-fidelity.md	Q23	03-ui/10-defect-ui-theme-fidelity.md	Q23	多个界面滚动条样式不一、与设计稿不符，治理方案是什么？（SIR-7004）
-03-ui/11-defect-ui-theme-fidelity.md	Q24	03-ui/10-defect-ui-theme-fidelity.md	Q24	图标颜色依赖主题色资源导致个别场景与设计稿不符，为什么修复反而要新增一份硬编码色值的专用资源？（SIR-7406）
-03-ui/11-defect-ui-theme-fidelity.md	Q25	03-ui/10-defect-ui-theme-fidelity.md	Q25	设计稿版本混淆与需求变更，如何在流程上防回归？（SIR-4333、SIR-7849）
-03-ui/11-defect-ui-theme-fidelity.md	Q26	03-ui/10-defect-ui-theme-fidelity.md	Q26	"需求或 SRS 变更后，为什么""删掉的没清干净、增量的没逐项落地""是同一类缺陷，验收该以什么为 checklist？"
-03-ui/11-defect-ui-theme-fidelity.md	Q27	03-ui/10-defect-ui-theme-fidelity.md	Q27	业务代码里用 `uiMode == 19` 这类数值比较判断夜间模式再手动选颜色，为什么是黑白适配的反模式？正确写法是什么？
-03-ui/11-defect-ui-theme-fidelity.md	Q28	03-ui/10-defect-ui-theme-fidelity.md	Q28	公共库同时存在新旧两套色板、硬编码引用散落各处时，怎样的重构顺序能保证旧色引用零残留？
-03-ui/11-defect-ui-theme-fidelity.md	Q29	03-ui/10-defect-ui-theme-fidelity.md	Q29	"用 `ChangeSkinManager.getColorResource(""text_default_color"")` 这类按字符串资源名运行时取色的换肤框架，为什么要迁移到 `R.color` 常量引用？"
-03-ui/11-defect-ui-theme-fidelity.md	Q30	03-ui/10-defect-ui-theme-fidelity.md	Q30	"页面确需避免主题切换时重建、必须在 configChanges 里保留 uiMode 时，要补什么才不会重演""停在旧主题""？"
-03-ui/11-defect-ui-theme-fidelity.md	Q31	03-ui/10-defect-ui-theme-fidelity.md	Q31	布局声明了 `textFontWeight`，代码又对同一批文本 `setTypeface(Typeface.DEFAULT_BOLD)`，字重为什么会失控？应从哪几处收敛？
-03-ui/11-defect-ui-theme-fidelity.md	Q32	03-ui/10-defect-ui-theme-fidelity.md	Q32	搜索方法收到空关键字时，怎样避免进入普通查询路径？
+04-ui/01-activity.md	Q1	04-ui/01-activity.md	Q2	Activity 执行到 onResume 后界面还没出现，首帧前后经历了哪些阶段？
+04-ui/01-activity.md	Q2	04-ui/01-activity.md	Q3	Android 内存紧张时哪些应用进程更容易被系统回收？
+04-ui/01-activity.md	Q3	04-ui/01-activity.md	Q5	`FLAG_ACTIVITY_NEW_TASK`、`SINGLE_TOP` 与 `CLEAR_TOP` 如何改变 Activity 启动？
+04-ui/01-activity.md	Q4	04-ui/01-activity.md	Q1	Activity 从创建到前后台切换时，常见生命周期回调顺序是什么？
+04-ui/01-activity.md	Q5	04-ui/01-activity.md	Q6	Launcher Activity 的 Intent Filter 应声明什么？
+04-ui/01-activity.md	Q6	04-ui/01-activity.md	Q7	Intent Filter 中的 action、category 与 data 分别匹配什么？
+04-ui/01-activity.md	Q7	04-ui/01-activity.md	Q8	隐式 Intent 如何通过 Intent Filter 找到可启动的 Activity？
+04-ui/01-activity.md	Q8	04-ui/01-activity.md	Q9	启动页该等 `onWindowFocusChanged()` 还是首帧回调再关闭？
+04-ui/01-activity.md	Q9	04-ui/01-activity.md	Q10	setContentView 后应用内容为什么不直接成为窗口根 View？
+04-ui/01-activity.md	Q10	04-ui/01-activity.md	Q11	在 onCreate 里读取根 View 宽高得到 0，应该等到哪个时机？
+04-ui/01-activity.md	Q11	04-ui/01-activity.md	Q12	旋转屏幕或切换深色模式后，Activity 为什么有时回调、有时重建？
+04-ui/01-activity.md	Q12	04-ui/01-activity.md	Q13	进程被系统回收后页面状态丢失，onSaveInstanceState 哪些内容需要自己保存？
+04-ui/01-activity.md	Q13	04-ui/01-activity.md	Q14	详情页返回后直接退出应用，是否由 `singleTask` 清理了返回栈？
+04-ui/01-activity.md	Q14	04-ui/01-activity.md	Q15	Activity 复用后收到新 Intent，为什么 `getIntent()` 仍是旧值？
+04-ui/01-activity.md	Q15	04-ui/01-activity.md	Q16	跨应用启动后 Activity 跑进了意外的任务栈，`taskAffinity` 与 `allowTaskReparenting` 起什么作用？
+04-ui/01-activity.md	Q16	04-ui/01-activity.md	Q17	Activity 切换时短暂看到前后两个页面，窗口动画期间发生了什么？
+04-ui/01-activity.md	Q17	04-ui/01-activity.md	Q18	启动指标显示首帧很快但页面仍是骨架，首帧与 reportFullyDrawn 分别表示什么？
+04-ui/01-activity.md	Q18	04-ui/01-activity.md	Q19	应用退到后台后收到 `onTrimMemory()`，哪些状态可以释放？
+04-ui/01-activity.md	Q19	04-ui/01-activity.md	Q20	车机多用户、多显示时页面显示在错误屏幕，Activity 归属由什么决定？
+04-ui/01-activity.md	Q20	04-ui/01-activity.md	Q21	Activity 生命周期回调里哪些时序操作容易造成白屏、旧界面更新或闪烁？
+04-ui/01-activity.md	Q21	04-ui/01-activity.md	Q22	Fragment 返回后旧 View 仍被观察者更新，视图生命周期该怎么绑定？
+04-ui/01-activity.md	Q22	04-ui/01-activity.md	Q23	切换 Fragment 页面后状态与内存表现不同，`show/hide`、`replace`、ViewPager2 有什么差别？
+04-ui/01-activity.md	Q23	04-ui/01-activity.md	Q24	网络回调在 `onSaveInstanceState()` 后提交 Fragment 事务导致崩溃，三个 commit 方法有何边界？
+04-ui/01-activity.md	Q24	04-ui/01-activity.md	Q25	共享 ViewModel 后页面重建却不刷新或旧 View 泄漏，作用域与观察者应绑定谁？
+04-ui/01-activity.md	Q25	04-ui/01-activity.md	Q4	`startActivity()` 如何在任务选择与 Activity 实例复用之间作出决定？
+04-ui/01-activity.md	Q26	04-ui/01-activity.md	Q26	AAOS Launcher 设置 `FLAG_ACTIVITY_NEW_TASK` 后，系统是否一定新建任务？
+04-ui/01-activity.md	Q27	04-ui/01-activity.md	Q27	从 Launcher 点击图标时，为什么目标进程已存活仍可能创建新的 Activity？
+04-ui/02-view.md	Q1	04-ui/02-view.md	Q2	自定义 View 首次显示时为什么要先 measure、再 layout、最后 draw？
+04-ui/02-view.md	Q2	04-ui/02-view.md	Q1	Android View 与 ViewGroup 分别表示什么？
+04-ui/02-view.md	Q3	04-ui/02-view.md	Q3	Android View 动画、帧动画和属性动画分别改变什么？
+04-ui/02-view.md	Q4	04-ui/02-view.md	Q4	自定义 View 尺寸为 0 或被截断，MeasureSpec 的 mode 和 size 如何约束结果？
+04-ui/02-view.md	Q5	04-ui/02-view.md	Q5	可滚动 ViewGroup 内容很长却自身尺寸异常，父尺寸与子尺寸应怎样分别计算？
+04-ui/02-view.md	Q6	04-ui/02-view.md	Q6	自定义 ViewGroup 里的子 View 已创建却不显示，`layout()` 与 `onLayout()` 各负责什么？
+04-ui/02-view.md	Q7	04-ui/02-view.md	Q7	内容更新后画面没变或位置错了，该调用 `requestLayout()` 还是 `invalidate()`？
+04-ui/02-view.md	Q8	04-ui/02-view.md	Q8	硬件加速后修改绘制数据却仍显示旧内容，为什么必须显式 `invalidate()`？
+04-ui/02-view.md	Q9	04-ui/02-view.md	Q9	只 `invalidate()` 一个小 View 却感觉整块区域重绘，脏区实际如何传播？
+04-ui/02-view.md	Q10	04-ui/02-view.md	Q10	动画中的 View 突然盖住兄弟控件，`dispatchDraw()` 的绘制顺序何时会变化？
+04-ui/02-view.md	Q11	04-ui/02-view.md	Q11	子 View 需要画到父容器外却被裁掉，`clipChildren` 与 `clipToPadding` 分别该怎么设？
+04-ui/02-view.md	Q12	04-ui/02-view.md	Q12	自定义 View 滚动时持续掉帧，`onDraw()` 中分配对象会造成什么开销？
+04-ui/02-view.md	Q13	04-ui/02-view.md	Q13	复杂页面测量耗时高，深层 View 嵌套为什么会放大遍历成本？
+04-ui/02-view.md	Q14	04-ui/02-view.md	Q14	旋转、透明度或阴影动画卡顿，View 的三种 Layer 类型该如何取舍？
+04-ui/02-view.md	Q15	04-ui/02-view.md	Q15	视频控件旋转后出现黑区或层级异常，`SurfaceView` 与 `TextureView` 应该怎么选？
+04-ui/02-view.md	Q16	04-ui/02-view.md	Q16	只想移动一个 View 却触发复杂动画，`ViewPropertyAnimator` 与 `ObjectAnimator` 适用场景是什么？
+04-ui/02-view.md	Q17	04-ui/02-view.md	Q17	改变布局参数后界面瞬间跳变，`LayoutAnimation` 与 `TransitionManager` 哪个能动画化尺寸变化？
+04-ui/02-view.md	Q18	04-ui/02-view.md	Q18	自定义 View 重建后状态没恢复，为什么 `onSaveInstanceState()` 可能根本没被调用？
+04-ui/02-view.md	Q19	04-ui/02-view.md	Q19	`onCreate()` 中 `post()` 后能读到尺寸，但 `doOnPreDraw` 时机又不同，二者该怎么选？
+04-ui/02-view.md	Q20	04-ui/02-view.md	Q20	`View.setTag()` 和 keyed tag 适合存什么，如何避免资源键错误与引用泄漏？
+04-ui/02-view.md	Q21	04-ui/02-view.md	Q21	`LAYER_TYPE_SOFTWARE`、`LAYER_TYPE_HARDWARE` 与 `Canvas.saveLayer()` 三者最容易被怎样混淆，为什么 SurfaceFlinger 看不到独立 software View layer？
+04-ui/02-view.md	Q22	04-ui/02-view.md	Q22	`SurfaceView` 的“独立”具体独立在哪里，带来哪些收益，又有哪些不保证？
+04-ui/02-view.md	Q23	04-ui/02-view.md	Q23	Z-below 的 `SurfaceView` 为什么要在宿主窗口“挖洞”，`mDrawFinished` 置位后能证明什么、不能证明什么？
+04-ui/02-view.md	Q24	04-ui/02-view.md	Q24	`surfaceDestroyed()` 返回后 Producer 还在写旧 Surface 会怎样，正确的停止协议是什么？
+04-ui/02-view.md	Q25	04-ui/02-view.md	Q25	TextureView 的一次可见更新要经过哪两套队列与哪些环节，为什么 Producer 已 queue 不代表画面已更新？
+04-ui/02-view.md	Q26	04-ui/02-view.md	Q26	TextureView 的额外成本是什么形态，什么场景不合适，所有权上有哪些易错入口？
+04-ui/02-view.md	Q27	04-ui/02-view.md	Q27	`GLSurfaceView` 的两种 render mode 节奏由什么决定，GLThread 独立后哪些责任没有被隔离？
+04-ui/03-resources.md	Q1	04-ui/03-resources.md	Q1	新增资源目录后设备始终命中默认文件，限定符的匹配优先级和书写顺序是什么？
+04-ui/03-resources.md	Q2	04-ui/03-resources.md	Q3	Drawable 的 intrinsic width 和 intrinsic height 表示什么？
+04-ui/03-resources.md	Q3	04-ui/03-resources.md	Q4	常见 Drawable 类型各适合表达什么？
+04-ui/03-resources.md	Q4	04-ui/03-resources.md	Q2	Android Drawable 表示什么，为什么它不等同于位图？
+04-ui/03-resources.md	Q5	04-ui/03-resources.md	Q5	切回默认语言时因资源缺失崩溃，限定符变体应该怎样提供兜底？
+04-ui/03-resources.md	Q6	04-ui/03-resources.md	Q6	旧版 Android 忽略了新加的资源限定符，如何判断它从哪个 API 级别生效？
+04-ui/03-resources.md	Q7	04-ui/03-resources.md	Q7	系统切换深色模式后应用仍是浅色，资源、读取逻辑和主题分别要处理什么？
+04-ui/03-resources.md	Q8	04-ui/03-resources.md	Q8	设备已进入深色模式但应用外观没变，应从资源、系统主题还是厂商定制层排查？
+04-ui/03-resources.md	Q9	04-ui/03-resources.md	Q9	车机品牌要求固定配色时，为什么通常不跟随壁纸动态取色？
+04-ui/03-resources.md	Q10	04-ui/03-resources.md	Q10	自定义主题颜色取错值但能编译，?attr 与 ?android:attr 的作用域差异是什么？
+04-ui/03-resources.md	Q11	04-ui/03-resources.md	Q11	车厂希望不重编应用就替换资源，RRO 与编译期 overlay 的边界是什么？
+04-ui/03-resources.md	Q12	04-ui/03-resources.md	Q12	用户调大字体后按钮文字溢出，dp、sp 与 fontScale 应如何配合？
+04-ui/03-resources.md	Q13	04-ui/03-resources.md	Q13	分屏窗口变窄但资源布局没切换，为什么资源限定符不等同于窗口尺寸？
+04-ui/03-resources.md	Q14	04-ui/03-resources.md	Q14	车机副驾屏布局、字号或密度与主屏不一致，应用应从哪个显示上下文取配置？
+04-ui/03-resources.md	Q15	04-ui/03-resources.md	Q15	切换到阿拉伯语后控件方向错乱或部分字符串缺失，多语言和 RTL 资源要怎样组织？
+04-ui/03-resources.md	Q16	04-ui/03-resources.md	Q17	某个 ViewBinding 字段在大屏变体上为空，layout 资源之间必须满足什么契约？
+04-ui/03-resources.md	Q17	04-ui/03-resources.md	Q18	横竖屏或夜间模式切换后页面状态异常，何时让系统重建、何时自行处理 Configuration？
+04-ui/03-resources.md	Q18	04-ui/03-resources.md	Q19	运行时配置看似正确但仍拿到错误图片，如何确认实际命中的资源变体？
+04-ui/03-resources.md	Q19	04-ui/03-resources.md	Q16	ViewBinding 解决了什么问题，Fragment 中的 Binding 应在什么生命周期边界释放？
+04-ui/03-resources.md	Q20	04-ui/03-resources.md	Q20	"Resources、ResourcesImpl、AssetManager 三层各持有什么？""旋转一次就新建一个 ResourcesImpl""为什么不成立？"
+04-ui/03-resources.md	Q21	04-ui/03-resources.md	Q21	一次 Configuration 变更后，系统如何决定 Activity 是热派发 onConfigurationChanged 还是销毁重建？relaunch 等于冷启动吗？
+04-ui/03-resources.md	Q22	04-ui/03-resources.md	Q22	android:configChanges 接管旋转后系统还做什么？Android 17 的 recreateOnConfigChanges 五类扩展为什么不能在 Android 13 上依赖？
+04-ui/03-resources.md	Q23	04-ui/03-resources.md	Q23	"Resources 相关内存持续增长时，为什么""mResourceImpls 里的键变多""不能直接定性为泄漏？应该怎么取证？"
+04-ui/04-window-system.md	Q1	04-ui/04-window-system.md	Q1	界面内容、位置或合成结果异常时，应用窗口分别由哪些层维护？
+04-ui/04-window-system.md	Q2	04-ui/04-window-system.md	Q2	WindowManager.addView 抛 BadTokenException，缺失的 token 代表什么？
+04-ui/04-window-system.md	Q3	04-ui/04-window-system.md	Q3	悬浮窗 addView 返回失败码时，怎样沿 addWindow 校验顺序定位？
+04-ui/04-window-system.md	Q4	04-ui/04-window-system.md	Q4	窗口 relayout 后界面没有立即重绘，relayoutWindow 返回什么、遍历何时执行？
+04-ui/04-window-system.md	Q5	04-ui/04-window-system.md	Q5	修改状态栏或返回键行为时，为什么要找 WindowManagerPolicy 而非 server/wm？
+04-ui/04-window-system.md	Q6	04-ui/04-window-system.md	Q6	窗口 token 合法但显示层级或可见性异常，WindowState、WindowToken、DisplayContent 各管什么？
+04-ui/04-window-system.md	Q7	04-ui/04-window-system.md	Q7	普通 View 调整 z 序无效但 SurfaceView 可以置顶，窗口与 View 的层级由谁决定？
+04-ui/04-window-system.md	Q8	04-ui/04-window-system.md	Q8	系统栏或输入法遮挡内容时，Insets 从哪些来源计算并传给应用？
+04-ui/04-window-system.md	Q9	04-ui/04-window-system.md	Q9	沉浸式页面用 setSystemUiVisibility 后行为不稳定，WindowInsetsController 多了什么能力？
+04-ui/04-window-system.md	Q10	04-ui/04-window-system.md	Q10	调用 hide 后内容没有马上扩展，系统栏 Insets 为什么要等后续帧变化？
+04-ui/04-window-system.md	Q11	04-ui/04-window-system.md	Q11	切换配置后页面有时回调、有时重建，Activity 的分界条件是什么？
+04-ui/04-window-system.md	Q12	04-ui/04-window-system.md	Q12	分屏或折叠改变窗口大小但没触发 Configuration，应用为何仍会重新布局？
+04-ui/04-window-system.md	Q13	04-ui/04-window-system.md	Q13	输入法弹出后页面缩放卡顿或被平移，adjustResize、adjustPan、adjustNothing 如何影响窗口？
+04-ui/04-window-system.md	Q14	04-ui/04-window-system.md	Q14	多窗口中的 Activity 看起来小于任务区域，ActivityRecord 边界与 letterbox 分别表示什么？
+04-ui/04-window-system.md	Q15	04-ui/04-window-system.md	Q15	窗口不显示或黑屏时，怎样依次检查窗口记录、frame 与 SurfaceFlinger layer？
+04-ui/04-window-system.md	Q16	04-ui/04-window-system.md	Q16	窗口添加失败与 Surface 丢失都表现为空白，应用侧症状和恢复责任有什么不同？
+04-ui/04-window-system.md	Q17	04-ui/04-window-system.md	Q17	键盘动画结束后页面才跳动，如何用 WindowInsetsAnimation 同步布局？
+04-ui/04-window-system.md	Q18	04-ui/04-window-system.md	Q18	WMS.addWindow 返回成功后窗口就可见了吗？应用收到 BadTokenException 应该先查什么？
+04-ui/04-window-system.md	Q19	04-ui/04-window-system.md	Q19	"WMS 的 android.display、android.anim、android.anim.lf 三条线程怎么分工？""线程分开了""为什么仍可能互相拖慢？"
+04-ui/04-window-system.md	Q20	04-ui/04-window-system.md	Q20	ViewRootImpl.performTraversals 是每帧都跨进程调用 WMS 的 relayout 吗？命中哪些条件才会 relayout？
+04-ui/05-compose.md	Q1	04-ui/05-compose.md	Q1	滚动列表时任意状态变化都让整页重组，Compose 的组合、布局、绘制各阶段怎样响应？
+04-ui/05-compose.md	Q2	04-ui/05-compose.md	Q2	点击后 composable 持续重组甚至掉帧，为什么不能在组合函数体里直接写状态？
+04-ui/05-compose.md	Q3	04-ui/05-compose.md	Q3	旋转屏幕后输入内容消失，remember 与 rememberSaveable 分别能保留什么？
+04-ui/05-compose.md	Q4	04-ui/05-compose.md	Q4	滚动偏移每帧变化却只关心是否到达顶部，derivedStateOf 如何减少无用更新？
+04-ui/05-compose.md	Q5	04-ui/05-compose.md	Q5	某个状态更新让大量 composable 重跑，不稳定参数会怎样影响跳过？
+04-ui/05-compose.md	Q6	04-ui/05-compose.md	Q6	启用 strong skipping 后不稳定参数仍会重组吗？它改变了哪些跳过规则？
+04-ui/05-compose.md	Q7	04-ui/05-compose.md	Q7	高频状态只影响位移却反复触发组合，怎样把状态读取推迟到布局或绘制阶段？
+04-ui/05-compose.md	Q8	04-ui/05-compose.md	Q8	列表插入一行后输入状态跑到别的行，Lazy 列表的 key 应如何选择？
+04-ui/05-compose.md	Q9	04-ui/05-compose.md	Q9	协程因界面重组反复启动或资源未释放，三个 Effect 的生命周期边界是什么？
+04-ui/05-compose.md	Q10	04-ui/05-compose.md	Q10	Fragment 页面销毁后 Compose 内容仍占内存，ComposeView 的组合策略该怎样选？
+04-ui/05-compose.md	Q11	04-ui/05-compose.md	Q11	Compose 页面嵌入旧 View 控件后变卡，AndroidView 的 update 应避免做什么？
+04-ui/05-compose.md	Q12	04-ui/05-compose.md	Q12	自定义 Compose 宿主中的动画与界面更新不同步，Recomposer 为什么需要帧时钟？
+04-ui/05-compose.md	Q13	04-ui/05-compose.md	Q13	Compose 页面滚动掉帧，应先用哪些工具区分重组、布局和绘制瓶颈？
+04-ui/05-compose.md	Q14	04-ui/05-compose.md	Q14	把旧页面从 View 迁到 Compose 后出现主题、状态或返回键问题，迁移时要检查哪些边界？
+04-ui/05-compose.md	Q15	04-ui/05-compose.md	Q15	同一页面混用 View 和 Compose 后尺寸与状态互相打架，怎样确定约束和状态的唯一来源？
+04-ui/05-compose.md	Q16	04-ui/05-compose.md	Q16	普通 Compose 页面有自己的渲染引擎吗？`AndroidUiFrameClock` 的 Choreographer 回调与 ViewRootImpl 的 traversal 回调各做什么？
+04-ui/05-compose.md	Q17	04-ui/05-compose.md	Q17	Compose 中同一状态被 composable 函数体、placement lambda 与 draw lambda 读取，状态变化分别触发什么？Recomposition 一定带来重绘吗？
+04-ui/05-compose.md	Q18	04-ui/05-compose.md	Q18	Compose 的每个 LayoutNode 都对应一个 Android RenderNode 吗？`Modifier.graphicsLayer` 一定创建离屏纹理吗？
+04-ui/05-compose.md	Q19	04-ui/05-compose.md	Q19	Compose 的 PausableComposition 分段执行的是什么工作？为什么它不能用来降低 GPU 负担？
+04-ui/06-aaos-ui.md	Q1	04-ui/06-aaos-ui.md	Q1	收到“车机页面改不动”的需求后，如何判断应改应用、SystemUI、CarService 还是车辆层？
+04-ui/06-aaos-ui.md	Q2	04-ui/06-aaos-ui.md	Q2	应用需要读取车辆状态时，CarService 与 car-lib 分别承担什么角色？
+04-ui/06-aaos-ui.md	Q3	04-ui/06-aaos-ui.md	Q3	车机桌面需要随驾驶状态和多显示变化，为什么 Launcher 不只是普通桌面应用？
+04-ui/06-aaos-ui.md	Q4	04-ui/06-aaos-ui.md	Q4	车载功能用模板应用还是原生 Activity 实现，怎样按功能和合规成本选路线？
+04-ui/06-aaos-ui.md	Q5	04-ui/06-aaos-ui.md	Q5	Car App 应用已安装却没出现在宿主列表，CarAppService 清单还缺哪些声明？
+04-ui/06-aaos-ui.md	Q6	04-ui/06-aaos-ui.md	Q6	同一 Android 版本的车辆支持能力不同，Car App API level 为什么不能用 SDK 版本替代？
+04-ui/06-aaos-ui.md	Q7	04-ui/06-aaos-ui.md	Q7	模板应用传入 Action 后按钮没显示，宿主渲染与 Template 契约怎样约束结果？
+04-ui/06-aaos-ui.md	Q8	04-ui/06-aaos-ui.md	Q8	副驾屏上的应用拿不到座位信息，occupant zone 如何关联座位、显示和用户？
+04-ui/06-aaos-ui.md	Q9	04-ui/06-aaos-ui.md	Q9	后排操作影响了驾驶员的数据，车机多用户下哪些状态必须隔离？
+04-ui/06-aaos-ui.md	Q10	04-ui/06-aaos-ui.md	Q10	调用 DisplayManager 关闭车机屏幕后状态不一致，屏幕实际由什么电源策略控制？
+04-ui/06-aaos-ui.md	Q11	04-ui/06-aaos-ui.md	Q11	车机夜间模式跟车辆灯光变化不同步，日夜状态由谁提供给应用？
+04-ui/06-aaos-ui.md	Q12	04-ui/06-aaos-ui.md	Q12	应用收不到旋钮或自定义按键事件，车机输入事件经什么系统通道分发？
+04-ui/06-aaos-ui.md	Q13	04-ui/06-aaos-ui.md	Q13	导航地图无法显示到仪表屏，cluster 服务与普通 Activity 有何区别？
+04-ui/06-aaos-ui.md	Q14	04-ui/06-aaos-ui.md	Q14	Android Auto 投影启动后原生应用不可见或失焦，二者如何共存？
+04-ui/06-aaos-ui.md	Q15	04-ui/06-aaos-ui.md	Q15	车机调试时 UX 限制被放开，如何用服务状态与特性开关确认测试环境？
+04-ui/06-aaos-ui.md	Q16	04-ui/06-aaos-ui.md	Q16	地图 Surface 的生命周期怎么管理？帧预算与可见区域有哪些约束？
+04-ui/06-aaos-ui.md	Q17	04-ui/06-aaos-ui.md	Q17	CarSystemUI 或 TaskPanel 重启后界面空白、焦点或 rotary 失效，应检查哪些恢复与输入边界？
+04-ui/06-aaos-ui.md	Q18	04-ui/06-aaos-ui.md	Q18	CarSystemUI 将依赖注入接到 platform SystemUI 时，CarSysUIComponent 与 OEM Module 的扩展边界是什么？
+04-ui/07-driving-safety.md	Q1	04-ui/07-driving-safety.md	Q1	车速刚超过零就锁死所有界面，为什么应用不能自行硬编码驾驶限制？
+04-ui/07-driving-safety.md	Q2	04-ui/07-driving-safety.md	Q2	车辆从驻车进入行驶后 UI 未切换，驾驶状态是怎样从车辆信号推导出来的？
+04-ui/07-driving-safety.md	Q3	04-ui/07-driving-safety.md	Q3	同一车机在不同车型限制不同，UX Restrictions 映射表如何表达差异？
+04-ui/07-driving-safety.md	Q4	04-ui/07-driving-safety.md	Q4	配置设了 no_video 却仍要求分心优化，uxr 与 baseline 的关系是什么？
+04-ui/07-driving-safety.md	Q5	04-ui/07-driving-safety.md	Q5	车型切换后限制配置未生效，restriction mode 为什么需要独立于驾驶状态？
+04-ui/07-driving-safety.md	Q6	04-ui/07-driving-safety.md	Q6	页面只在 onCreate 读取 UX 限制，行驶后仍可操作，应用应监听什么？
+04-ui/07-driving-safety.md	Q7	04-ui/07-driving-safety.md	Q7	Car App 在行驶中无法启动，清单里的 distractionOptimized 声明有什么作用？
+04-ui/07-driving-safety.md	Q8	04-ui/07-driving-safety.md	Q8	升级后车机进入全限制状态，配置读取失败时系统为何采用安全兜底？
+04-ui/07-driving-safety.md	Q9	04-ui/07-driving-safety.md	Q9	行驶中需要开放语音设置入口，哪些界面可以通过配置豁免 UX 限制？
+04-ui/07-driving-safety.md	Q10	04-ui/07-driving-safety.md	Q10	副驾触屏被锁或后排屏输入异常，显示触控设置与输入类型声明如何配合？
+04-ui/07-driving-safety.md	Q11	04-ui/07-driving-safety.md	Q11	车辆行驶状态变化后页面仍保留旧控件，应用应怎样处理限制更新？
+04-ui/07-driving-safety.md	Q12	04-ui/07-driving-safety.md	Q12	驾驶时视频、长文本或复杂交互被禁用，限制依据是什么、界面应如何降级？
+04-ui/07-driving-safety.md	Q13	04-ui/07-driving-safety.md	Q13	驾驶员需要操作高频功能却不应盯屏，语音和物理控件各解决什么风险？
+04-ui/07-driving-safety.md	Q14	04-ui/07-driving-safety.md	Q14	UX 限制功能通过了驻车测试却在路测失效，怎样按配置到交互构造验证？
+04-ui/07-driving-safety.md	Q15	04-ui/07-driving-safety.md	Q15	倒车影像、车速显示和音量限制同时影响页面时，如何纳入 UI 安全设计？
+04-ui/07-driving-safety.md	Q16	04-ui/07-driving-safety.md	Q16	驾驶分心限制（UXR）到底能禁什么？FULLY_RESTRICTED 的位标志清单是什么？
+04-ui/07-driving-safety.md	Q17	04-ui/07-driving-safety.md	Q17	OEM 怎么定制分心限制规则？为什么改了 car_ux_restrictions_map.xml 没立即生效？
+04-ui/07-driving-safety.md	Q18	04-ui/07-driving-safety.md	Q18	"行驶中打开应用被全屏遮罩挡住——系统怎么判定和阻断？""IDENTIFY_DISTRACTION 权限""是真的吗？"
+04-ui/08-ui-debugging.md	Q1	04-ui/11-ui-debugging.md	Q1	遇到白屏、黑屏或卡顿时，为什么应先分层归因再抓帧？
+04-ui/08-ui-debugging.md	Q2	04-ui/11-ui-debugging.md	Q2	应用页面完全没出来，怎样从窗口建立、frame 到图层逐步判定？
+04-ui/08-ui-debugging.md	Q3	04-ui/11-ui-debugging.md	Q3	冷启动白屏数秒，如何把首帧前的初始化阶段拆开定位？
+04-ui/08-ui-debugging.md	Q4	04-ui/11-ui-debugging.md	Q4	透明主题页面看似黑屏，怎样区分窗口未创建与窗口有界但没有内容？
+04-ui/08-ui-debugging.md	Q5	04-ui/11-ui-debugging.md	Q5	帧时间超预算或用户仍感觉掉帧，怎样区分 UI 线程、渲染线程和合成侧？
+04-ui/08-ui-debugging.md	Q6	04-ui/11-ui-debugging.md	Q6	需要判断是哪个窗口迟交帧，gfxinfo、SurfaceFlinger 与 Perfetto 各提供什么证据？
+04-ui/08-ui-debugging.md	Q7	04-ui/11-ui-debugging.md	Q7	ViewRootImpl 没有执行绘制时，是否能从框架诊断字段找到跳过原因？
+04-ui/08-ui-debugging.md	Q8	04-ui/11-ui-debugging.md	Q8	局部数据变化造成大范围重绘和掉帧，如何判断失效范围并缩小成本？
+04-ui/08-ui-debugging.md	Q9	04-ui/11-ui-debugging.md	Q9	刘海、圆角或系统栏压住按钮，怎样按 Insets 调整内容与点击区域？
+04-ui/08-ui-debugging.md	Q10	04-ui/11-ui-debugging.md	Q10	用户点击后长期无响应并出现输入超时，主线程阻塞如何造成这两类现象？
+04-ui/08-ui-debugging.md	Q11	04-ui/11-ui-debugging.md	Q11	页面渲染卡顿并伴随内存上涨，怎样区分分配、纹理与缓冲区问题？
+04-ui/08-ui-debugging.md	Q12	04-ui/11-ui-debugging.md	Q12	SurfaceView 区域变黑或偏移，如何分别确认图层、位置和 buffer？
+04-ui/08-ui-debugging.md	Q13	04-ui/11-ui-debugging.md	Q13	车机同一页面在主屏和副驾屏大小不同，怎样检查显示配置与窗口几何？
+04-ui/08-ui-debugging.md	Q14	04-ui/11-ui-debugging.md	Q14	车机屏幕熄灭但应用进程仍运行，如何判断是否由电源策略控制？
+04-ui/08-ui-debugging.md	Q15	04-ui/11-ui-debugging.md	Q15	同类 UI 缺陷反复回归，怎样把视觉与状态问题变成可重复验证的检查？
+04-ui/08-ui-debugging.md	Q16	04-ui/11-ui-debugging.md	Q16	Android Studio 预览 XML 资源时如何缩放画布？
+04-ui/09-app-view-compose-practice.md	Q1	04-ui/08-app-view-compose-practice.md	Q1	列表 item 里的一个 TextView 改文字并调用 requestLayout()，为什么一次调用不等于一帧只做一轮完整测量布局，ViewRootImpl 是怎么合并和二次调度的？
+04-ui/09-app-view-compose-practice.md	Q2	04-ui/08-app-view-compose-practice.md	Q3	压平一个首屏布局前应优先识别哪三类结构性成本，为什么 View.GONE 子节点被 measureChildren 跳过却仍建议延迟创建？
+04-ui/09-app-view-compose-practice.md	Q3	04-ui/08-app-view-compose-practice.md	Q4	ViewStub、merge、include 分别解决什么问题，哪些误用会直接抛异常或让优化失效？
+04-ui/09-app-view-compose-practice.md	Q4	04-ui/08-app-view-compose-practice.md	Q5	把布局解析挪到 AsyncLayoutInflater 后台线程后，为什么主线程仍可能出现 inflate 时间，哪些布局会回退到 UI 线程？
+04-ui/09-app-view-compose-practice.md	Q5	04-ui/08-app-view-compose-practice.md	Q6	自定义 View 用缓存的期望尺寸跳过 onMeasure 计算，为什么只比较宽度 MeasureSpec 不够，onLayout 里只看 changed 参数会漏掉什么？
+04-ui/09-app-view-compose-practice.md	Q6	04-ui/08-app-view-compose-practice.md	Q7	波形图这类持续刷新的自绘 View 应怎样组织绘制对象与失效调用，invalidate()、requestLayout()、postInvalidateOnAnimation() 各承担什么？
+04-ui/09-app-view-compose-practice.md	Q7	04-ui/08-app-view-compose-practice.md	Q8	RecyclerView 稳定滑动中偶尔出现 onBindViewHolder 是否说明复用失效，ViewHolder 到底按什么顺序获取、哪些来源仍会 bind？
+04-ui/09-app-view-compose-practice.md	Q8	04-ui/08-app-view-compose-practice.md	Q9	多个嵌套横向列表共享同一个 RecycledViewPool 时，viewType 应按什么原则划分，共享池会引入什么新风险？
+04-ui/09-app-view-compose-practice.md	Q9	04-ui/08-app-view-compose-practice.md	Q10	高频局部刷新的列表为什么 notifyDataSetChanged 会卡，DiffUtil 的三个回调与 payload 各承担什么，ListAdapter 有哪些硬边界？
+04-ui/09-app-view-compose-practice.md	Q10	04-ui/08-app-view-compose-practice.md	Q11	RecyclerView 的 GapWorker 预取运行在哪个线程，willCreateInTime/willBindInTime 怎么决定做不做，为什么预取正常下一帧仍可能长？
+04-ui/09-app-view-compose-practice.md	Q11	04-ui/08-app-view-compose-practice.md	Q12	纵向 Feed 里嵌横向卡片列表时应怎样配置容器，setHasFixedSize(true) 的确切语义是什么？
+04-ui/09-app-view-compose-practice.md	Q12	04-ui/08-app-view-compose-practice.md	Q13	LazyColumn 的 key 与 contentType 分别对应 RecyclerView 的什么概念，从 RecyclerView 迁移到 LazyColumn 应比较哪些指标？
+04-ui/09-app-view-compose-practice.md	Q13	04-ui/08-app-view-compose-practice.md	Q14	Compose 状态在 Composable 函数体、placement lambda、draw lambda 与 graphicsLayer lambda 中被读取，变化后分别触发哪个阶段的工作？
+04-ui/09-app-view-compose-practice.md	Q14	04-ui/08-app-view-compose-practice.md	Q15	Strong Skipping 默认开启后，List 这类 unstable 参数的 Composable 还能跳过吗，@Stable/@Immutable 注解还承担什么？
+04-ui/09-app-view-compose-practice.md	Q15	04-ui/08-app-view-compose-practice.md	Q16	Compose 编译器报告里 skippable=1 且 unstable 数量下降，能据此宣布重组性能改善吗？各报告文件分别能回答什么？
+04-ui/09-app-view-compose-practice.md	Q16	04-ui/08-app-view-compose-practice.md	Q17	remember(keys)、derivedStateOf、produceState 与 snapshotFlow 各适合什么场景，混用会出什么问题？
+04-ui/09-app-view-compose-practice.md	Q17	04-ui/08-app-view-compose-practice.md	Q18	自定义 Modifier.Node 时 NodeChain 按什么规则复用、更新或替换节点，Element 的 equals 契约写错会怎样？
+04-ui/09-app-view-compose-practice.md	Q18	04-ui/08-app-view-compose-practice.md	Q19	自定义 Modifier 只组合现有节点时，Modifier.composed 与 Modifier.Node 的运行成本和迁移边界是什么？
+04-ui/09-app-view-compose-practice.md	Q19	04-ui/08-app-view-compose-practice.md	Q20	自定义 Compose Layout 里对同一个子节点用两组约束连续调用 measure() 会发生什么，单遍测量协议包含哪些约束？
+04-ui/09-app-view-compose-practice.md	Q20	04-ui/08-app-view-compose-practice.md	Q21	Compose 节点上一帧测过的尺寸什么时候会被复用，@Stable 注解会影响布局缓存吗？
+04-ui/09-app-view-compose-practice.md	Q21	04-ui/08-app-view-compose-practice.md	Q22	对 LazyColumn 或 BoxWithConstraints 查询 IntrinsicSize.Min 为什么会直接失败，固有尺寸查询的真实成本怎么评估？
+04-ui/09-app-view-compose-practice.md	Q22	04-ui/08-app-view-compose-practice.md	Q23	padding + background + clickable 组合会创建几个 LayoutNode，调整 Modifier 顺序为什么属于行为变更而不是纯性能优化？
+04-ui/09-app-view-compose-practice.md	Q23	04-ui/08-app-view-compose-practice.md	Q24	同样的 Compose Text(String) 在什么条件下走简化实现 ParagraphLayoutCache，哪些能力会让它改走 AnnotatedString 路径，段落缓存什么时候复用？
+04-ui/09-app-view-compose-practice.md	Q24	04-ui/08-app-view-compose-practice.md	Q25	用 rememberTextMeasurer 在 drawWithCache 里绘制文本时，TextMeasurer 的缓存键包含哪些内容，容量怎么设置才合理？
+04-ui/09-app-view-compose-practice.md	Q25	04-ui/08-app-view-compose-practice.md	Q26	自定义 Modifier.Node 的 onAttach、onDetach、onReset 与 coroutineScope 分别该承担什么生命周期工作？
+04-ui/09-app-view-compose-practice.md	Q26	04-ui/08-app-view-compose-practice.md	Q2	首屏布局应如何选择 LinearLayout、FrameLayout 与 ConstraintLayout，怎样验证压平层级确有收益？
+04-ui/10-app-compose-advanced-practice.md	Q1	04-ui/09-app-compose-advanced-practice.md	Q1	在后台线程读取 mutableStateOf 时读到的可能是哪个版本，Snapshot 按什么条件从状态记录链里选值？
+04-ui/10-app-compose-advanced-practice.md	Q2	04-ui/09-app-compose-advanced-practice.md	Q2	takeSnapshot() 创建的只读视图为什么必须显式 dispose，不 dispose 会怎样？
+04-ui/10-app-compose-advanced-practice.md	Q3	04-ui/09-app-compose-advanced-practice.md	Q3	两个并发 MutableSnapshot 修改同一个 StateObject，apply 冲突按什么规则合并，内置变更策略有什么区别？
+04-ui/10-app-compose-advanced-practice.md	Q4	04-ui/09-app-compose-advanced-practice.md	Q4	两个 Snapshot 各改不同 State 都 apply 成功，跨对象业务约束仍可能被破坏——这是为什么，怎么防？
+04-ui/10-app-compose-advanced-practice.md	Q5	04-ui/09-app-compose-advanced-practice.md	Q5	mutableStateOf 可以从工作线程读写吗，state.value++ 为什么仍可能丢更新，enter 为什么不能跨协程挂起点保留？
+04-ui/10-app-compose-advanced-practice.md	Q6	04-ui/09-app-compose-advanced-practice.md	Q6	一次 state.value = x 写入后重组是怎么被安排的，为什么多次写入可能合并成一次重组？
+04-ui/10-app-compose-advanced-practice.md	Q7	04-ui/09-app-compose-advanced-practice.md	Q7	AndroidView 把一个 View 接进 Compose 后由谁测量谁，Compose 状态变化什么时候会让这个 View 重新布局或重绘？
+04-ui/10-app-compose-advanced-practice.md	Q8	04-ui/09-app-compose-advanced-practice.md	Q8	AndroidView 的 factory/update/onReset/onRelease 各自的调用时机与职责是什么，怎样避免 View 与 Compose 状态互相回写的反馈循环？
+04-ui/10-app-compose-advanced-practice.md	Q9	04-ui/09-app-compose-advanced-practice.md	Q9	Lazy 列表里的 AndroidView 为什么必须提供非空 onReset 才能复用实例，onReset 之后 View 处于什么状态？
+04-ui/10-app-compose-advanced-practice.md	Q10	04-ui/09-app-compose-advanced-practice.md	Q10	ComposeView 放进 RecyclerView 与放进 Fragment 各该用什么 ViewCompositionStrategy，为什么不要在 onViewRecycled 里 disposeComposition()？
+04-ui/10-app-compose-advanced-practice.md	Q11	04-ui/09-app-compose-advanced-practice.md	Q11	"同一窗口里多个 ComposeView 是共享一个 Recomposer 还是各有一个，""每个 ComposeView 都很轻""为什么不成立？"
+04-ui/10-app-compose-advanced-practice.md	Q12	04-ui/09-app-compose-advanced-practice.md	Q12	Compose 外层动画请求高帧率后，内嵌 AndroidView 里的视频为什么不会跟着提帧，混合树里帧率请求按什么边界传播？
+04-ui/10-app-compose-advanced-practice.md	Q13	04-ui/09-app-compose-advanced-practice.md	Q13	View 属性动画里每个 tick 用 updateLayoutParams 改宽度为什么会持续掉帧，scaleX 这类变换属性能替代到什么程度？
+04-ui/10-app-compose-advanced-practice.md	Q14	04-ui/09-app-compose-advanced-practice.md	Q14	Compose 里 Animatable、Transition 与 animate*AsState 的动画值逐帧更新时，重组范围由什么决定，主线程卡一下动画会怎样？
+04-ui/10-app-compose-advanced-practice.md	Q15	04-ui/09-app-compose-advanced-practice.md	Q15	同一个 Animatable 被手势高频调用 snapTo 与 animateTo 有什么行为差异，Transition 在 1.12.0 的组合语义是什么？
+04-ui/10-app-compose-advanced-practice.md	Q16	04-ui/09-app-compose-advanced-practice.md	Q16	AnimatedVisibility 退出动画期间旧内容还在组合里吗，AnimatedContent 快速切换为什么会同时保留多份内容？
+04-ui/10-app-compose-advanced-practice.md	Q17	04-ui/09-app-compose-advanced-practice.md	Q17	共享元素过渡里 sharedElement 与 sharedBounds 怎么选，scaleToBounds 与 RemeasureToBounds 的成本差在哪？
+04-ui/10-app-compose-advanced-practice.md	Q18	04-ui/09-app-compose-advanced-practice.md	Q18	"共享元素过渡的 Lookahead 布局是不是""第二次 GPU 渲染""，GraphicsLayer 是不是 Bitmap 缓存，元素数量有平台阈值吗？"
+04-ui/10-app-compose-advanced-practice.md	Q19	04-ui/09-app-compose-advanced-practice.md	Q19	View.setRenderEffect 做模糊时 GPU 成本从哪来，它与窗口背景模糊是同一套机制吗？
+04-ui/10-app-compose-advanced-practice.md	Q20	04-ui/09-app-compose-advanced-practice.md	Q20	RuntimeShader 更新 uniform 后画面不动是什么原因，AGSL 着色器的构造与使用有哪些硬约束？
+04-ui/10-app-compose-advanced-practice.md	Q21	04-ui/09-app-compose-advanced-practice.md	Q21	按 Android 13 设备开发时，RuntimeColorFilter、RuntimeXfermode、getGpuHeadroom、HardwareBufferRenderer 这些效果相关 API 的可用状态是什么？
+04-ui/10-app-compose-advanced-practice.md	Q22	04-ui/09-app-compose-advanced-practice.md	Q22	Compose 的 Canvas 没有独立 Surface，一次 drawRect 从 Kotlin 调用到 GPU 经过了哪几段，哪些绘制对象需要应用自己管理？
+04-ui/10-app-compose-advanced-practice.md	Q23	04-ui/09-app-compose-advanced-practice.md	Q23	drawWithCache 缓存什么、什么时候失效，drawWithContent 里不调用 drawContent 会发生什么？
+04-ui/10-app-compose-advanced-practice.md	Q24	04-ui/09-app-compose-advanced-practice.md	Q24	图表、粒子、手写这类持续绘制的场景什么时候该离开 Compose Canvas 转 SurfaceView，绘制回调的线程边界是什么？
+04-ui/11-defect-ui-theme-fidelity.md	Q1	04-ui/10-defect-ui-theme-fidelity.md	Q1	深浅色双主题的车机应用里，UI 还原与主题适配类缺陷为什么能占到修复总量的三分之一？根因集中在哪几类形态？
+04-ui/11-defect-ui-theme-fidelity.md	Q2	04-ui/10-defect-ui-theme-fidelity.md	Q2	布局里把 textColor 写成 #000000 这类硬编码色值，为什么浅色模式测试通过仍会在深色模式翻车？正确写法是什么？
+04-ui/11-defect-ui-theme-fidelity.md	Q3	04-ui/10-defect-ui-theme-fidelity.md	Q3	"drawable 内写死深色半透明导致""白天有、黑夜无""的视觉元素，排查入口是什么？（SIR-7246）"
+04-ui/11-defect-ui-theme-fidelity.md	Q4	04-ui/10-defect-ui-theme-fidelity.md	Q4	深色模式下弹窗整体仍是浅色配色，典型根因与修复路径是什么？（SIR-6620）
+04-ui/11-defect-ui-theme-fidelity.md	Q5	04-ui/10-defect-ui-theme-fidelity.md	Q5	"""新增颜色必配 night 值""这条清单项依据的失败模式是什么？如何用流程兜底？"
+04-ui/11-defect-ui-theme-fidelity.md	Q6	04-ui/10-defect-ui-theme-fidelity.md	Q6	夜间模式下无封面兜底图显示的仍是白天素材，最省事的修复方式是什么？（SIR-6224）
+04-ui/11-defect-ui-theme-fidelity.md	Q7	04-ui/10-defect-ui-theme-fidelity.md	Q7	"用 getIdentifier 按""前缀 + 数值""拼资源名取图，为什么夜间帧图可能取错？怎样修复并控制风险？（3ba0d479）"
+04-ui/11-defect-ui-theme-fidelity.md	Q8	04-ui/10-defect-ui-theme-fidelity.md	Q8	"多模块工程中，app 壳工程定义与公共库同名的 drawable，为什么会""劫持""库组件的交互态？（SIR-7514）"
+04-ui/11-defect-ui-theme-fidelity.md	Q9	04-ui/10-defect-ui-theme-fidelity.md	Q9	"""按钮点击无视觉反馈""类缺陷的固定排查套路是什么？selector 还有哪些必查项？"
+04-ui/11-defect-ui-theme-fidelity.md	Q10	04-ui/10-defect-ui-theme-fidelity.md	Q10	"selector 状态表复制上一行忘改资源，为什么会表现出""白天正常、黑夜异常""的功能假象？（SIR-6802）"
+04-ui/11-defect-ui-theme-fidelity.md	Q11	04-ui/10-defect-ui-theme-fidelity.md	Q11	Activity 在 configChanges 里声明接管 uiMode 后，深浅色切换为什么会让界面停在旧主题？（SIR-6360）
+04-ui/11-defect-ui-theme-fidelity.md	Q12	04-ui/10-defect-ui-theme-fidelity.md	Q12	WebView 加载的本地协议页为什么 values-night 管不到？标准适配方案是什么？（SIR-4568）
+04-ui/11-defect-ui-theme-fidelity.md	Q13	04-ui/10-defect-ui-theme-fidelity.md	Q13	"弹出 Dialog 时为什么 Dock 栏等""别的窗口""也会被压暗？替代方案是什么？（SIR-6606）"
+04-ui/11-defect-ui-theme-fidelity.md	Q14	04-ui/10-defect-ui-theme-fidelity.md	Q14	全屏应用手势退出时先闪一帧白底再露出桌面，根因与修复是什么？（SIR-6788）
+04-ui/11-defect-ui-theme-fidelity.md	Q15	04-ui/10-defect-ui-theme-fidelity.md	Q15	界面顶部或四周露出异色色块，检查哪三处可以定位大多数案例？（SIR-7382）
+04-ui/11-defect-ui-theme-fidelity.md	Q16	04-ui/10-defect-ui-theme-fidelity.md	Q16	"搜索结果列表写在 ConstraintLayout 里却用了 `layout_height=""match_parent""`，为什么界面只露出最后一行，约束布局里该写什么？"
+04-ui/11-defect-ui-theme-fidelity.md	Q17	04-ui/10-defect-ui-theme-fidelity.md	Q17	带全屏遮罩的密码弹窗被键盘整体顶起、遮罩盖住状态栏，正确的避让方式是什么？（SIR-7359）
+04-ui/11-defect-ui-theme-fidelity.md	Q18	04-ui/10-defect-ui-theme-fidelity.md	Q18	设计稿指定 450、550 这类非整百字重时，为什么仍可能无法还原？该怎样判断问题在规格还是字体？
+04-ui/11-defect-ui-theme-fidelity.md	Q19	04-ui/10-defect-ui-theme-fidelity.md	Q19	快速连续切换深浅色导致屏幕出现灰色中间态，为什么要在入口防抖而不是处理重绘结果？（SIR-8546）
+04-ui/11-defect-ui-theme-fidelity.md	Q20	04-ui/10-defect-ui-theme-fidelity.md	Q20	长歌名跑马灯滚动 3 遍才停，是哪个默认值造成的？（SIR-1477）
+04-ui/11-defect-ui-theme-fidelity.md	Q21	04-ui/10-defect-ui-theme-fidelity.md	Q21	刻度进度条/滑块与 UI 或实际行为不符，有哪些典型的 off-by-one 形态？
+04-ui/11-defect-ui-theme-fidelity.md	Q22	04-ui/10-defect-ui-theme-fidelity.md	Q22	回弹/复位动画从错误位置跳变，根因是什么？（SIR-6634）
+04-ui/11-defect-ui-theme-fidelity.md	Q23	04-ui/10-defect-ui-theme-fidelity.md	Q23	多个界面滚动条样式不一、与设计稿不符，治理方案是什么？（SIR-7004）
+04-ui/11-defect-ui-theme-fidelity.md	Q24	04-ui/10-defect-ui-theme-fidelity.md	Q24	图标颜色依赖主题色资源导致个别场景与设计稿不符，为什么修复反而要新增一份硬编码色值的专用资源？（SIR-7406）
+04-ui/11-defect-ui-theme-fidelity.md	Q25	04-ui/10-defect-ui-theme-fidelity.md	Q25	设计稿版本混淆与需求变更，如何在流程上防回归？（SIR-4333、SIR-7849）
+04-ui/11-defect-ui-theme-fidelity.md	Q26	04-ui/10-defect-ui-theme-fidelity.md	Q26	"需求或 SRS 变更后，为什么""删掉的没清干净、增量的没逐项落地""是同一类缺陷，验收该以什么为 checklist？"
+04-ui/11-defect-ui-theme-fidelity.md	Q27	04-ui/10-defect-ui-theme-fidelity.md	Q27	业务代码里用 `uiMode == 19` 这类数值比较判断夜间模式再手动选颜色，为什么是黑白适配的反模式？正确写法是什么？
+04-ui/11-defect-ui-theme-fidelity.md	Q28	04-ui/10-defect-ui-theme-fidelity.md	Q28	公共库同时存在新旧两套色板、硬编码引用散落各处时，怎样的重构顺序能保证旧色引用零残留？
+04-ui/11-defect-ui-theme-fidelity.md	Q29	04-ui/10-defect-ui-theme-fidelity.md	Q29	"用 `ChangeSkinManager.getColorResource(""text_default_color"")` 这类按字符串资源名运行时取色的换肤框架，为什么要迁移到 `R.color` 常量引用？"
+04-ui/11-defect-ui-theme-fidelity.md	Q30	04-ui/10-defect-ui-theme-fidelity.md	Q30	"页面确需避免主题切换时重建、必须在 configChanges 里保留 uiMode 时，要补什么才不会重演""停在旧主题""？"
+04-ui/11-defect-ui-theme-fidelity.md	Q31	04-ui/10-defect-ui-theme-fidelity.md	Q31	布局声明了 `textFontWeight`，代码又对同一批文本 `setTypeface(Typeface.DEFAULT_BOLD)`，字重为什么会失控？应从哪几处收敛？
+04-ui/11-defect-ui-theme-fidelity.md	Q32	04-ui/10-defect-ui-theme-fidelity.md	Q32	搜索方法收到空关键字时，怎样避免进入普通查询路径？
 04-input/01-input-system.md	Q1	04-input/01-input-system.md	Q1	"一次点击""没有反应""，输入事件从硬件到 View 树要经过哪些阶段，排查时按什么顺序分段定位？"
 04-input/01-input-system.md	Q2	04-input/01-input-system.md	Q2	"`MotionEvent.getEventTime()` 代表什么时间？为什么""eventTime 到回调结束""不等于端到端触摸延迟？"
 04-input/01-input-system.md	Q3	04-input/01-input-system.md	Q3	窗口输入事件为什么走 AF_UNIX SOCK_SEQPACKET 套接字而不是 Binder？Binder 在输入路径里还承担什么？
@@ -739,21 +739,21 @@ old_path	old_q	new_path	new_q	title
 05-rendering/03-multi-window-foldable.md	Q26	05-rendering/03-multi-window-foldable.md	Q26	TaskSnapshot 在运行时如何缓存，磁盘上保存哪些文件？
 05-rendering/03-multi-window-foldable.md	Q27	05-rendering/03-multi-window-foldable.md	Q27	如何估算 TaskSnapshot 的图形内存，像素格式和分辨率由什么决定？
 05-rendering/03-multi-window-foldable.md	Q28	05-rendering/03-multi-window-foldable.md	Q28	点击 Overview 卡片回到应用走哪条路径？旧快照为什么不匹配时会不用？
-05-rendering/04-graphics-api.md	Q1	05-rendering/04-graphics-api.md	Q1	EGL 的 EGLDisplay、EGLContext、EGLSurface 各管什么，「应用在用 GLES」能推断它写到哪个 Surface 吗？
-05-rendering/04-graphics-api.md	Q2	05-rendering/04-graphics-api.md	Q2	AOSP 平台层在 eglSwapBuffers 里做哪些事，swap 耗时长能直接归因 GPU 慢吗？
-05-rendering/04-graphics-api.md	Q3	05-rendering/04-graphics-api.md	Q3	ANGLE 在 Android 上如何分层，为什么不能把每个 GLES 调用一一映射成同名同数量的 Vulkan 命令？
-05-rendering/04-graphics-api.md	Q4	05-rendering/04-graphics-api.md	Q4	ANGLE 路径上 swap 阶段做哪些工作，为什么 vkQueuePresentKHR 返回仍不能当作上屏证据？
-05-rendering/04-graphics-api.md	Q5	05-rendering/04-graphics-api.md	Q5	Android 上 Vulkan 的 swapchain image 与 BufferQueue 是什么关系，acquire 与 present 如何与 ANativeWindow 的 fence 交接？
-05-rendering/04-graphics-api.md	Q6	05-rendering/04-graphics-api.md	Q6	Vulkan 的 semaphore、fence、pipeline barrier 各解决什么问题，把 stage mask 一律放宽为 ALL_COMMANDS 会怎样？
-05-rendering/04-graphics-api.md	Q7	05-rendering/04-graphics-api.md	Q7	Android 的 Vulkan present mode 集合与桌面 Vulkan 有何不同，选 MAILBOX 就一定时延最低吗？
-05-rendering/04-graphics-api.md	Q8	05-rendering/04-graphics-api.md	Q8	HWUI 的 Vulkan 后端用什么 queue 结构，Android 13 与 Android 17 的描述有何差异，queue 数量能推导硬件并行吗？
-05-rendering/04-graphics-api.md	Q9	05-rendering/04-graphics-api.md	Q9	ASurfaceControl_createFromWindow 创建的是什么，它与 parent window 的 BufferQueue 是什么关系？
-05-rendering/04-graphics-api.md	Q10	05-rendering/04-graphics-api.md	Q10	ASurfaceTransaction 的原子性保证覆盖到哪里，OnCommit、OnComplete 与 API 36 的 OnBufferRelease 各能证明什么？
-05-rendering/04-graphics-api.md	Q11	05-rendering/04-graphics-api.md	Q11	setBuffer 传入 acquire fence fd 后所有权归谁，API 29–35 与 API 36–37 的「buffer 可复用依据」为何不同？
-05-rendering/04-graphics-api.md	Q12	05-rendering/04-graphics-api.md	Q12	HardwareBufferRenderer 适合什么问题，它与 lockHardwareCanvas 的边界在哪，AAOS13 上能用吗？
-05-rendering/04-graphics-api.md	Q13	05-rendering/04-graphics-api.md	Q13	Jetpack WebGPU 是 Android 17 的系统组件吗？它与 WebView 里的 navigator.gpu 是同一条路径吗？
-05-rendering/04-graphics-api.md	Q14	05-rendering/04-graphics-api.md	Q14	WebGPU 的 Core/Compatibility 与 Vulkan/OpenGLES 是同一组分类吗？使用 subgroup 这类能力前要查什么？
-05-rendering/04-graphics-api.md	Q15	05-rendering/04-graphics-api.md	Q15	WebGPU 的 `surface.present()` 返回表示上屏了吗？`AndroidExternalSurface` 与 `AndroidEmbeddedExternalSurface` 差在哪？
+05-rendering/05-graphics-api.md	Q1	05-rendering/05-graphics-api.md	Q1	EGL 的 EGLDisplay、EGLContext、EGLSurface 各管什么，「应用在用 GLES」能推断它写到哪个 Surface 吗？
+05-rendering/05-graphics-api.md	Q2	05-rendering/05-graphics-api.md	Q2	AOSP 平台层在 eglSwapBuffers 里做哪些事，swap 耗时长能直接归因 GPU 慢吗？
+05-rendering/05-graphics-api.md	Q3	05-rendering/05-graphics-api.md	Q3	ANGLE 在 Android 上如何分层，为什么不能把每个 GLES 调用一一映射成同名同数量的 Vulkan 命令？
+05-rendering/05-graphics-api.md	Q4	05-rendering/05-graphics-api.md	Q4	ANGLE 路径上 swap 阶段做哪些工作，为什么 vkQueuePresentKHR 返回仍不能当作上屏证据？
+05-rendering/05-graphics-api.md	Q5	05-rendering/05-graphics-api.md	Q5	Android 上 Vulkan 的 swapchain image 与 BufferQueue 是什么关系，acquire 与 present 如何与 ANativeWindow 的 fence 交接？
+05-rendering/05-graphics-api.md	Q6	05-rendering/05-graphics-api.md	Q6	Vulkan 的 semaphore、fence、pipeline barrier 各解决什么问题，把 stage mask 一律放宽为 ALL_COMMANDS 会怎样？
+05-rendering/05-graphics-api.md	Q7	05-rendering/05-graphics-api.md	Q7	Android 的 Vulkan present mode 集合与桌面 Vulkan 有何不同，选 MAILBOX 就一定时延最低吗？
+05-rendering/05-graphics-api.md	Q8	05-rendering/05-graphics-api.md	Q8	HWUI 的 Vulkan 后端用什么 queue 结构，Android 13 与 Android 17 的描述有何差异，queue 数量能推导硬件并行吗？
+05-rendering/05-graphics-api.md	Q9	05-rendering/05-graphics-api.md	Q9	ASurfaceControl_createFromWindow 创建的是什么，它与 parent window 的 BufferQueue 是什么关系？
+05-rendering/05-graphics-api.md	Q10	05-rendering/05-graphics-api.md	Q10	ASurfaceTransaction 的原子性保证覆盖到哪里，OnCommit、OnComplete 与 API 36 的 OnBufferRelease 各能证明什么？
+05-rendering/05-graphics-api.md	Q11	05-rendering/05-graphics-api.md	Q11	setBuffer 传入 acquire fence fd 后所有权归谁，API 29–35 与 API 36–37 的「buffer 可复用依据」为何不同？
+05-rendering/05-graphics-api.md	Q12	05-rendering/05-graphics-api.md	Q12	HardwareBufferRenderer 适合什么问题，它与 lockHardwareCanvas 的边界在哪，AAOS13 上能用吗？
+05-rendering/05-graphics-api.md	Q13	05-rendering/05-graphics-api.md	Q13	Jetpack WebGPU 是 Android 17 的系统组件吗？它与 WebView 里的 navigator.gpu 是同一条路径吗？
+05-rendering/05-graphics-api.md	Q14	05-rendering/05-graphics-api.md	Q14	WebGPU 的 Core/Compatibility 与 Vulkan/OpenGLES 是同一组分类吗？使用 subgroup 这类能力前要查什么？
+05-rendering/05-graphics-api.md	Q15	05-rendering/05-graphics-api.md	Q15	WebGPU 的 `surface.present()` 返回表示上屏了吗？`AndroidExternalSurface` 与 `AndroidEmbeddedExternalSurface` 差在哪？
 05-rendering/05-graphic-stack-preload.md	Q1	05-rendering/05-graphic-stack-preload.md	Q1	Zygote 预加载碰了图形栈的哪些部分？nativePreloadAppProcessHALs 预加载的是缓冲区分配器吗？
 05-rendering/05-graphic-stack-preload.md	Q2	05-rendering/05-graphic-stack-preload.md	Q2	Android 17 的 mapper 预加载为什么跳过 Gralloc 2/3？什么情况下直接 FATAL？
 05-rendering/05-graphic-stack-preload.md	Q3	05-rendering/05-graphic-stack-preload.md	Q3	maybePreloadGraphicsDriver 把图形驱动预热到什么程度？ro.zygote.disable_gl_preload 关掉的是什么？

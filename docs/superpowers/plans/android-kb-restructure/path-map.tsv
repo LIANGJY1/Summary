@@ -14,7 +14,7 @@ old_path	new_path	reason	affected_links_checked
 01-architecture/13-MessageQueue锁竞争与Binder深化.md	01-architecture/04-binder.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 01-architecture/14-系统服务调度核心.md	11-platform-services/01-broadcast.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 01-architecture/15-安装归档与资源配置.md	01-architecture/08-package-management.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
-01-architecture/16-显示与窗口链路.md	03-ui/04-window-system.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+01-architecture/16-显示与窗口链路.md	04-ui/04-window-system.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 01-architecture/17-Telephony与Connectivity.md	08-network/02-cellular-wireless.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 01-architecture/18-Notification-Biometric-Location.md	11-platform-services/02-notifications.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 01-architecture/19-AVF可观测与AI手机技术栈.md	12-platform-native/07-bpf.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
@@ -44,7 +44,7 @@ old_path	new_path	reason	affected_links_checked
 07-performance/04-内存性能.md	15-performance/04-memory-performance.md	rename to kebab-case English stem	
 07-performance/05-功耗.md	15-performance/05-power.md	rename to kebab-case English stem	
 07-performance/06-网络性能.md	15-performance/06-network-performance.md	rename to kebab-case English stem	
-07-performance/07-渲染管线-基础与图形API.md	05-rendering/04-graphics-api.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
+07-performance/07-渲染管线-基础与图形API.md	05-rendering/05-graphics-api.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 07-performance/08-渲染管线-跨框架与媒体.md	16-app-practice/11-rendering-media-hybrid.md	dissolved; representative destination (see question-ledger.tsv for per-Q)	
 08-cpu-power/01-调度与功耗框架.md	14-cpu-power/01-scheduler-power-framework.md	rename to kebab-case English stem	
 08-cpu-power/02-能效专项.md	14-cpu-power/02-energy-efficiency.md	rename to kebab-case English stem	

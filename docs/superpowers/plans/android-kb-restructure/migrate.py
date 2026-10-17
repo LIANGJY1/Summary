@@ -41,7 +41,7 @@ REP = {
     "01-architecture/19-AVF可观测与AI手机技术栈.md": "12-platform-native/07-bpf.md",
     "06-system/01-AOSP性能优化.md": "07-performance/09-platform-optimization.md",
     "06-system/02-OEM与设备差异.md": "08-cpu-power/01-scheduler-power-framework.md",
-    "07-performance/07-渲染管线-基础与图形API.md": "02-rendering/04-graphics-api.md",
+    "07-performance/07-渲染管线-基础与图形API.md": "02-rendering/05-graphics-api.md",
     "07-performance/08-渲染管线-跨框架与媒体.md": "09-app-practice/09-rendering-media-hybrid.md",
     "09-app-practice/18-应用开发机制与常用API.md": "16-app-framework/04-parcel.md",
     "14-network/10-网络分层原理与地基机制.md": "OUT:knowledge-base/网络/01-network-fundamentals.md",

@@ -1,7 +1,7 @@
 # Android 性能知识分类调研
 
 调研日期：2026-10-11  
-范围：Android 官方开发文档、Android vitals、Perfetto 官方文档。目标是为 `knowledge-base/01-android/12-performance` 设计便于学习、检索和持续扩展的分类目录。
+范围：Android 官方开发文档、Android vitals、Perfetto 官方文档。目标是为 `knowledge-base/01-android/13-performance` 设计便于学习、检索和持续扩展的分类目录。
 
 ## 结论摘要
 
@@ -22,7 +22,7 @@ Android 官方资料不是按“工具品牌”组织性能知识，而是围绕
 目录名可按仓库现有编号风格调整，以下主题边界建议保持：
 
 ```text
-12-performance/
+13-performance/
 ├── README.md                           # 问题域入口、学习顺序、边界和题目索引
 ├── 00-methods-and-tools/               # 横切方法：发现、测量、定位、验证
 │   ├── performance-workflow.md         # 学习路径、实验方法、指标和测量口径

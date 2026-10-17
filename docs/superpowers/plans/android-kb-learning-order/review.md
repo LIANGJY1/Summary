@@ -9,7 +9,7 @@
 - 主干 01–05 与系统能力 06–09 连续保留；10–13 改为系统服务、原生层、构建系统、AAOS。CarService/VHAL 的理解依赖 Binder、系统服务接口、HAL、网络和音频；车载集成因而在平台主题之后。系统服务与原生层相邻。构建系统放在 AAOS 之前，让产品配置、模块及镜像对接有先备语境。
 - 10-platform-services/05 aconfig 运行时需要 12-build-system/07 aconfig 声明和代码生成；这是跨专题的局部前置，README 明示跳读。10-platform-services/06 AVF 的 pKVM 部分可先读 11-platform-native/01 内核与 GKI。两处不以单题依赖打散主题目录。
 - 01-architecture：Binder 移到 SystemServer 前，先掌握服务注册/事务模型再读服务装配。02-app-framework：Parcel 移到 ContentProvider 深入调用链前。
-- 03-ui：07 驾驶安全之后为 08 View/Compose 基础实践 → 09 Compose 进阶实践 → 10 主题还原缺陷 → 11 UI 综合排查。08-network：传输协议前于应用网络约束，多 APN 前于依赖它的 VPN 共存题；应用实践前于网络诊断。
+- 04-ui：07 驾驶安全之后为 08 View/Compose 基础实践 → 09 Compose 进阶实践 → 10 主题还原缺陷 → 11 UI 综合排查。08-network：传输协议前于应用网络约束，多 APN 前于依赖它的 VPN 共存题；应用实践前于网络诊断。
 - 09-audio 的 06–12 点击音连续链不拆分、不交换：声音决策 → 应用焦点契约 → 焦点调用链 → AAOS 焦点矩阵 → 路由音量 → 播放/HAL → 实验排障。
 - 13-aaos：车机端到端链路、CarService 和 VHAL 契约先于应用/Launcher；信号语义先于 Kanzi 同步；综合状态与启动缺陷最后。
 - 15-performance：01 学习方法 → 02 性能方法论 → 03 工具 → 04 Perfetto 基础；05–14 为流畅性、响应、启动、ANR、内存、功耗、网络、平台优化、稳定性和崩溃专题；15 Perfetto 进阶 → 16–17 可观测性 → 18–19 APM。Perfetto 基础支撑专题中的 trace 证据，进阶分析放在案例经验之后；APM 以可观测性口径和采集架构为前置。
@@ -22,10 +22,10 @@
 | --- | --- | --- |
 | 01-architecture/02-system-boot | Q22 到 Q19 前 | 先说明 Zygote/fork 的角色，再读启动与预加载细节。 |
 | 01-architecture/06-art-runtime | Q2–Q5 到末尾 | 编译、类加载与 GC 机制先于属性、oatdump 和诊断。 |
-| 03-ui/01-activity | Q4 到 Q1 前；Q25 到 Q3 前 | 生命周期与实例选择先于首帧、启动标志案例。 |
-| 03-ui/02-view | Q2 到 Q1 前 | View/ViewGroup 概念先于遍历链。 |
-| 03-ui/03-resources | Q4 到 Q2 前；Q19 到 Q16 前 | Drawable 和 ViewBinding 的定义先于属性与跨变体字段问题。 |
-| 03-ui/09-app-view-compose-practice | Q26 到 Q2 前 | 布局容器选型先于压平与优化。 |
+| 04-ui/01-activity | Q4 到 Q1 前；Q25 到 Q3 前 | 生命周期与实例选择先于首帧、启动标志案例。 |
+| 04-ui/02-view | Q2 到 Q1 前 | View/ViewGroup 概念先于遍历链。 |
+| 04-ui/03-resources | Q4 到 Q2 前；Q19 到 Q16 前 | Drawable 和 ViewBinding 的定义先于属性与跨变体字段问题。 |
+| 04-ui/09-app-view-compose-practice | Q26 到 Q2 前 | 布局容器选型先于压平与优化。 |
 | 05-rendering/01-render-pipeline-vsync | Q13 到 Q2 前 | VSync 语义先于 VSync→上屏全链路。 |
 | 05-rendering/02-gpu-composition-display | Q12 到 Q7 前 | fence 语义先于 BufferQueue 的 release/dequeue 等待。 |
 | 05-rendering/11-gpu-diagnostics-tools | Q8 到 Q6 前 | 构建类型与捕获前提先于 AGI 注入细节。 |

@@ -1,6 +1,6 @@
 # Fragment 生命周期与 ViewModel 作用域
 
-> 学习资料（文章模式沉淀）。主线：Fragment 实例生命周期与视图生命周期的两段式分离、viewLifecycleOwner 观察契约、show/hide、replace 与 ViewPager2 三种页面切换方式的视图保留与回退语义、FragmentManager 事务的三个 commit 方法边界、ViewModel 的作用域选择与观察者绑定。按 AndroidX Fragment 通用行为描述（视图生命周期自 AndroidX Fragment 1.2.0 起提供），具体异常时点随 AndroidX 版本核对。Activity 生命周期见 [01-activity.md](../03-ui/01-activity.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：Fragment 实例生命周期与视图生命周期的两段式分离、viewLifecycleOwner 观察契约、show/hide、replace 与 ViewPager2 三种页面切换方式的视图保留与回退语义、FragmentManager 事务的三个 commit 方法边界、ViewModel 的作用域选择与观察者绑定。按 AndroidX Fragment 通用行为描述（视图生命周期自 AndroidX Fragment 1.2.0 起提供），具体异常时点随 AndroidX 版本核对。Activity 生命周期见 [01-activity.md](../04-ui/01-activity.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Fragment 的实例生命周期与视图生命周期为什么分成两段？onCreateView 与 onViewCreated 的职责应怎样划分？**
 

@@ -81,7 +81,7 @@ UUID=41325635-76dd-4a17-a97d-310bd31b54e6 none            swap    sw            
 
     1. 为容器/chroot 补齐 /proc、/dev 等入口。
     2. 把只读位置以只读标志重新暴露。
-    3. Android 开发期的 adb remount 也用 bind/overlay 组合在只读分区上提供可写视图（平台细节归 `../../01-android/10-build-system/01-product-config.md` 相邻主题）。
+    3. Android 开发期的 adb remount 也用 bind/overlay 组合在只读分区上提供可写视图（平台细节归 `../../01-android/11-build-system/01-product-config.md` 相邻主题）。
 3. **边界**：bind mount 的复制是挂载动作而非数据拷贝。移动（rename）挂载点下的内容与普通文件操作相同。
 
 

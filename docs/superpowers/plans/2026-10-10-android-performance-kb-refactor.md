@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown, repository knowledge-base conventions, Python for structural count/link checks only.
 
-**Spec:** `knowledge-base/01-android/12-performance/README.md` and `knowledge-base/WRITING-GUIDE.md`.
+**Spec:** `knowledge-base/01-android/13-performance/README.md` and `knowledge-base/WRITING-GUIDE.md`.
 
 ## Global Constraints
 
@@ -24,7 +24,7 @@
 
 ### Task 1: Refactor articles 01–08
 
-**Files:** `knowledge-base/01-android/12-performance/01-*.md` through `08-*.md`; any new focused article created from these files. Do not edit README indexes in this task; Task 4 owns all index updates.
+**Files:** `knowledge-base/01-android/13-performance/01-*.md` through `08-*.md`; any new focused article created from these files. Do not edit README indexes in this task; Task 4 owns all index updates.
 
 - [x] Assign single-topic ownership for methodology, tools, Perfetto, smoothness, responsiveness, startup, and ANR.
 - [x] Move startup material from responsiveness into startup; move or isolate authentication, push, and integrity topics by domain; narrow smoothness to frame/jank and route UI/platform deep dives to their existing topic directories.
@@ -35,7 +35,7 @@
 
 ### Task 2: Refactor articles 09–15
 
-**Files:** `knowledge-base/01-android/12-performance/09-memory-performance.md`, `11-network-performance.md` through `15-perfetto-advanced.md`; relevant existing graphics/network/platform destination articles and any focused article created. Do not edit README indexes in this task; Task 4 owns all index updates. Leave `10-power.md` for Task 3, which owns its consolidation with the app/system power articles.
+**Files:** `knowledge-base/01-android/13-performance/09-memory-performance.md`, `11-network-performance.md` through `15-perfetto-advanced.md`; relevant existing graphics/network/platform destination articles and any focused article created. Do not edit README indexes in this task; Task 4 owns all index updates. Leave `10-power.md` for Task 3, which owns its consolidation with the app/system power articles.
 
 - [x] Separate graphics-memory material from general memory performance and route it to the graphics topic.
 - [x] Consolidate power measurement, framework mechanisms, and app-side power governance under distinct ownership; route DNS mechanics to network knowledge.
@@ -47,7 +47,7 @@
 
 ### Task 3: Refactor articles 16–23
 
-**Files:** `knowledge-base/01-android/12-performance/16-*.md` through `23-*.md`; `10-power.md`, any new focused article created, and relevant existing destination articles. Do not edit README indexes in this task; Task 4 owns all index updates.
+**Files:** `knowledge-base/01-android/13-performance/16-*.md` through `23-*.md`; `10-power.md`, any new focused article created, and relevant existing destination articles. Do not edit README indexes in this task; Task 4 owns all index updates.
 
 - [x] Separate observability governance, diagnostic signal semantics, APM product selection, and SDK internals.
 - [x] Move benchmark method material to the performance-methodology/tools owner; remove duplicate crash, network, power, and WebView mechanism explanations.
@@ -59,7 +59,7 @@
 
 ### Task 4: Integrate structure and indexes
 
-**Files:** `knowledge-base/01-android/12-performance/README.md`, `knowledge-base/01-android/README.md`, and every touched article.
+**Files:** `knowledge-base/01-android/13-performance/README.md`, `knowledge-base/01-android/README.md`, and every touched article.
 
 - [x] Resolve cross-task overlaps by applying the single-owner topic map.
 - [x] Ensure every article has continuous Q numbering and every internal reference resolves.

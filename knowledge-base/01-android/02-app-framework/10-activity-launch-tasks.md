@@ -1,6 +1,6 @@
 # Activity 启动、任务栈与 Intent 匹配
 
-> 学习资料（文章模式沉淀）。主线：启动请求的任务选择与实例复用两条判断、launchMode 与 Intent flag 的叠加语义、Intent Filter 的 action/category/data 匹配规则与包可见性、taskAffinity 与 allowTaskReparenting、冷热启动与实例复用的区分、非 Activity Context 启动的约束、任务栈组合场景推演。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityStarter、TaskFragment、ContextImpl、ActivityTaskSupervisor），版本相关结论按官方文档口径（2026-09 检索）。生命周期与首帧时序见 [01-activity.md](../03-ui/01-activity.md)，四大组件总览见 [01-four-components.md](01-four-components.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：启动请求的任务选择与实例复用两条判断、launchMode 与 Intent flag 的叠加语义、Intent Filter 的 action/category/data 匹配规则与包可见性、taskAffinity 与 allowTaskReparenting、冷热启动与实例复用的区分、非 Activity Context 启动的约束、任务栈组合场景推演。AOSP 机制按本地 AAOS13 源码（Android 13）核对（ActivityStarter、TaskFragment、ContextImpl、ActivityTaskSupervisor），版本相关结论按官方文档口径（2026-09 检索）。生命周期与首帧时序见 [01-activity.md](../04-ui/01-activity.md)，四大组件总览见 [01-four-components.md](01-four-components.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] startActivity() 如何在任务选择与 Activity 实例复用之间作出决定？**
 
