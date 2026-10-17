@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -540,63 +541,65 @@ internal fun MarkdownImageBlock(
                     },
                 contentScale = ContentScale.Fit,
             )
-            if ((onImageCopied != null || onImageDeleted != null) && contextMenuExpanded) {
-                Popup(
-                    popupPositionProvider = CursorPopupPositionProvider(contextMenuPosition, cursorGapPx),
-                    onDismissRequest = {
-                        contextMenuExpanded = false
-                        confirmDelete = false
-                    },
-                    properties = PopupProperties(focusable = true),
-                ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 3.dp,
-                        shadowElevation = 8.dp,
+            DisableSelection {
+                if ((onImageCopied != null || onImageDeleted != null) && contextMenuExpanded) {
+                    Popup(
+                        popupPositionProvider = CursorPopupPositionProvider(contextMenuPosition, cursorGapPx),
+                        onDismissRequest = {
+                            contextMenuExpanded = false
+                            confirmDelete = false
+                        },
+                        properties = PopupProperties(focusable = true),
                     ) {
-                        // DropdownMenuItem uses fillMaxWidth; cap the Popup content so it cannot
-                        // inherit the full window width from Popup's loose constraints.
-                        Column(Modifier.width(176.dp).padding(vertical = 4.dp)) {
-                            if (confirmDelete && onImageDeleted != null && markdownReference != null) {
-                                Text(
-                                    "确认删除这张图片？",
-                                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    color = Theme.Muted,
-                                    fontSize = 12.sp,
-                                )
-                                Row(
-                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
-                                        contextMenuExpanded = false
-                                        confirmDelete = false
-                                        pendingImageDeletion = markdownReference
-                                    },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("确认删除", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
-                                }
-                                Row(
-                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = false },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("取消", Modifier.padding(horizontal = 16.dp))
-                                }
-                            } else {
-                                Row(
-                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
-                                        contextMenuExpanded = false
-                                        onImageCopied?.invoke(Platform.setClipboardImage(file))
-                                    },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("复制图片", Modifier.padding(horizontal = 16.dp))
-                                }
-                                if (onImageDeleted != null && markdownReference != null) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 8.dp,
+                        ) {
+                            // DropdownMenuItem uses fillMaxWidth; cap the Popup content so it cannot
+                            // inherit the full window width from Popup's loose constraints.
+                            Column(Modifier.width(176.dp).padding(vertical = 4.dp)) {
+                                if (confirmDelete && onImageDeleted != null && markdownReference != null) {
+                                    Text(
+                                        "确认删除这张图片？",
+                                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        color = Theme.Muted,
+                                        fontSize = 12.sp,
+                                    )
                                     Row(
-                                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = true },
+                                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
+                                            contextMenuExpanded = false
+                                            confirmDelete = false
+                                            pendingImageDeletion = markdownReference
+                                        },
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text("删除图片", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
+                                        Text("确认删除", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
+                                    }
+                                    Row(
+                                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = false },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("取消", Modifier.padding(horizontal = 16.dp))
+                                    }
+                                } else {
+                                    Row(
+                                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
+                                            contextMenuExpanded = false
+                                            onImageCopied?.invoke(Platform.setClipboardImage(file))
+                                        },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("复制图片", Modifier.padding(horizontal = 16.dp))
+                                    }
+                                    if (onImageDeleted != null && markdownReference != null) {
+                                        Row(
+                                            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { confirmDelete = true },
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text("删除图片", Modifier.padding(horizontal = 16.dp), color = Theme.BadRed)
+                                        }
                                     }
                                 }
                             }
