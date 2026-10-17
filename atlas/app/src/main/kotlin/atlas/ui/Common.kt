@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,6 +49,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -64,10 +65,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -76,6 +83,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URLDecoder
+import kotlin.math.roundToInt
 
 /** 应用自定义色板：MaterialTheme 之外业务用到的语义色，随明暗主题切换 */
 data class AtlasPalette(
@@ -484,11 +492,9 @@ internal fun MarkdownImageBlock(
     val renderedBitmap = bitmap
     var contextMenuExpanded by remember(file.absolutePath) { mutableStateOf(false) }
     var confirmDelete by remember(file.absolutePath) { mutableStateOf(false) }
-    var contextMenuPosition by remember(file.absolutePath) { mutableStateOf(Offset.Zero) }
-    val density = LocalDensity.current
-    val contextMenuOffset = with(density) {
-        DpOffset(contextMenuPosition.x.toDp() + 4.dp, contextMenuPosition.y.toDp() + 4.dp)
-    }
+    var imageWindowPosition by remember(file.absolutePath) { mutableStateOf(Offset.Zero) }
+    var contextMenuPosition by remember(file.absolutePath) { mutableStateOf(IntOffset.Zero) }
+    val cursorGapPx = with(LocalDensity.current) { 4.dp.roundToPx() }
     if (renderedBitmap == null) {
         Text(
             "图片无法显示：$description",
@@ -504,12 +510,19 @@ internal fun MarkdownImageBlock(
                 modifier = Modifier.fillMaxWidth()
                     .heightIn(max = 520.dp)
                     .clip(RoundedCornerShape(8.dp))
+                    .onGloballyPositioned { imageWindowPosition = it.positionInWindow() }
                     .pointerInput(file.absolutePath, onImageDeleted) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
                                 if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                                    event.changes.firstOrNull()?.position?.let { contextMenuPosition = it }
+                                    event.changes.firstOrNull()?.position?.let { localPosition ->
+                                        contextMenuPosition = IntOffset(
+                                            (imageWindowPosition.x + localPosition.x).roundToInt(),
+                                            (imageWindowPosition.y + localPosition.y).roundToInt(),
+                                        )
+                                    }
+                                    confirmDelete = false
                                     contextMenuExpanded = true
                                     event.changes.forEach { it.consume() }
                                 }
@@ -518,50 +531,81 @@ internal fun MarkdownImageBlock(
                     },
                 contentScale = ContentScale.Fit,
             )
-            if (onImageCopied != null || onImageDeleted != null) {
-                DropdownMenu(
-                    expanded = contextMenuExpanded,
-                    onDismissRequest = { contextMenuExpanded = false },
-                    offset = contextMenuOffset,
+            if ((onImageCopied != null || onImageDeleted != null) && contextMenuExpanded) {
+                Popup(
+                    popupPositionProvider = CursorPopupPositionProvider(contextMenuPosition, cursorGapPx),
+                    onDismissRequest = {
+                        contextMenuExpanded = false
+                        confirmDelete = false
+                    },
+                    properties = PopupProperties(focusable = true),
                 ) {
-                    if (confirmDelete && onImageDeleted != null && markdownReference != null) {
-                        DropdownMenuItem(
-                            text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
-                            enabled = false,
-                            onClick = {},
-                        )
-                        DropdownMenuItem(
-                            text = { Text("确认删除", color = Theme.BadRed) },
-                            onClick = {
-                                contextMenuExpanded = false
-                                confirmDelete = false
-                                onImageDeleted(markdownReference)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("取消") },
-                            onClick = {
-                                confirmDelete = false
-                            },
-                        )
-                    } else {
-                        DropdownMenuItem(
-                            text = { Text("复制图片") },
-                            onClick = {
-                                contextMenuExpanded = false
-                                onImageCopied?.invoke(Platform.setClipboardImage(file))
-                            },
-                        )
-                        if (onImageDeleted != null && markdownReference != null) {
-                            DropdownMenuItem(
-                                text = { Text("删除图片", color = Theme.BadRed) },
-                                onClick = { confirmDelete = true },
-                            )
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 8.dp,
+                    ) {
+                        Column(Modifier.widthIn(min = 144.dp).padding(vertical = 4.dp)) {
+                                if (confirmDelete && onImageDeleted != null && markdownReference != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("确认删除", color = Theme.BadRed) },
+                                        onClick = {
+                                            contextMenuExpanded = false
+                                            confirmDelete = false
+                                            onImageDeleted(markdownReference)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("取消") },
+                                        onClick = { confirmDelete = false },
+                                    )
+                                } else {
+                                    DropdownMenuItem(
+                                        text = { Text("复制图片") },
+                                        onClick = {
+                                            contextMenuExpanded = false
+                                            onImageCopied?.invoke(Platform.setClipboardImage(file))
+                                        },
+                                    )
+                                    if (onImageDeleted != null && markdownReference != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("删除图片", color = Theme.BadRed) },
+                                            onClick = { confirmDelete = true },
+                                        )
+                                    }
+                                }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+private class CursorPopupPositionProvider(
+    private val cursor: IntOffset,
+    private val gap: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val right = cursor.x + gap
+        val bottom = cursor.y + gap
+        val left = if (right + popupContentSize.width <= windowSize.width) right else cursor.x - gap - popupContentSize.width
+        val top = if (bottom + popupContentSize.height <= windowSize.height) bottom else cursor.y - gap - popupContentSize.height
+        return IntOffset(
+            left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+            top.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+        )
     }
 }
 
