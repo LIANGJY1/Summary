@@ -1,6 +1,6 @@
 # 渲染实战：帧率监控、页面切换与 Surface 实践
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把帧率监控、Fragment/Navigation 页面切换、自适应布局与自适应刷新率放进同一帧预算与同一套验收口径，并按选型与排障视角收束 SurfaceView/TextureView。图片加载与解码的性能题目归 [应用图片加载性能](../13-performance/01-应用/06-图片加载/)。SurfaceView/TextureView 两条管线的机制层见 [../05-graphics/04-graphics-api.md](./04-graphics-api.md)；DisplayModeDirector、多窗口与折叠屏管理面见 [../05-graphics/03-display-service-foldable.md](./03-display-service-foldable.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：把帧率监控、Fragment/Navigation 页面切换、自适应布局与自适应刷新率放进同一帧预算与同一套验收口径，并按选型与排障视角收束 SurfaceView/TextureView。应用侧图片资源、Bitmap 内存、加载请求与显示渲染按主要问题归入[应用性能专题](../13-performance/01-应用/README.md)。SurfaceView/TextureView 两条管线的机制层见 [../05-graphics/04-graphics-api.md](./04-graphics-api.md)；DisplayModeDirector、多窗口与折叠屏管理面见 [../05-graphics/03-display-service-foldable.md](./03-display-service-foldable.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Choreographer.FrameCallback、JankStats、FrameMetrics、SurfaceControl.JankData 四类监控入口各自覆盖渲染路径的哪一段？为什么 queueBuffer() 返回不能证明该帧已显示？**
 

@@ -7,6 +7,11 @@ import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import java.io.File
 
@@ -20,6 +25,7 @@ object Platform {
 
     /** 默认库路径：约定手机端知识库放在 /sdcard/Atlas/knowledge-base，可在设置页改 */
     val defaultLibraryPath: String = "/sdcard/Atlas/knowledge-base"
+    val supportsQuestionImageActions: Boolean = false
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -34,10 +40,31 @@ object Platform {
         cm.setPrimaryClip(ClipData.newPlainText("atlas", text))
     }
 
+    /** Android 阅读端暂不向系统剪贴板写入本地图片。 */
+    fun setClipboardImage(file: File): Boolean = false
+
     fun getClipboardText(): String? {
         val cm = appContext?.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
         return cm.primaryClip?.getItemAt(0)?.text?.toString()
     }
+
+    /** Android 手机端当前没有支持图片粘贴的题库编辑输入框。 */
+    fun getClipboardImagePng(): ByteArray? = null
+
+    fun loadImage(file: File): ImageBitmap? = runCatching {
+        android.graphics.BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+    }.getOrNull()
+
+    fun normalizeImagePng(bytes: ByteArray): ByteArray? = runCatching {
+        val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        java.io.ByteArrayOutputStream().use { output ->
+            if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) return null
+            output.toByteArray()
+        }
+    }.getOrNull()
+
+    @Composable
+    fun windowWidthDp(): Dp = LocalConfiguration.current.screenWidthDp.dp
 
     /** 手机端无「系统默认程序打开」语义；抛出让调用方既有 catch 降级为 toast */
     fun openFile(file: File) {

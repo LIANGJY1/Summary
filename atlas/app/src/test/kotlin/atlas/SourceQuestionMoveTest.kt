@@ -19,10 +19,10 @@ class SourceQuestionMoveTest {
         val root = File(tmp, "move-lib-${System.nanoTime()}").apply { mkdirs() }
         val sourceFile = File(root, "knowledge-base/android/a.md").apply { parentFile.mkdirs() }
         sourceFile.writeText(
-            "**Q1: 留守问题？**\n\n留守答案。\n\n**Q2: 被移动问题？**\n\n被移动答案。",
+            "**Q1: 留守问题？**\n\n留守答案。\n\n**Q2: 被移动问题？**\n\n被移动答案。\n\n![图](../_assets/hash.png)",
             Charsets.UTF_8,
         )
-        val targetFile = File(root, "knowledge-base/language/b.md").apply { parentFile.mkdirs() }
+        val targetFile = File(root, "knowledge-base/language/deep/b.md").apply { parentFile.mkdirs() }
         targetFile.writeText("# b\n\n**Q1: 已有问题？**\n\n已有答案。", Charsets.UTF_8)
         store.settings = store.settings.copy(
             libraryPath = root.absolutePath,
@@ -39,16 +39,16 @@ class SourceQuestionMoveTest {
         val entry = store.allSourceQuestions.first { it.question == "被移动问题？" }
         assertEquals("knowledge-base/android/a.md", entry.sourcePath)
 
-        assertTrue(store.moveSourceQuestion(entry, "knowledge-base/language/b.md"))
+        assertTrue(store.moveSourceQuestion(entry, "knowledge-base/language/deep/b.md"))
 
         val sourceText = sourceFile.readText(Charsets.UTF_8)
         val targetText = targetFile.readText(Charsets.UTF_8)
         assertFalse(sourceText.contains("被移动问题"), "源文档不应再包含被移动的题目")
         assertTrue(sourceText.contains("**Q1: 留守问题？**"), "源文档剩余题目保留")
-        assertTrue(targetText.contains("**Q2: 被移动问题？**\n\n被移动答案。"), "目标文档从最大题号之后续排")
+        assertTrue(targetText.contains("**Q2: 被移动问题？**\n\n被移动答案。\n\n![图](../../_assets/hash.png)"), "目标文档从最大题号之后续排并保留图片引用")
 
         val moved = store.allSourceQuestions.single { it.question == "被移动问题？" }
-        assertEquals("knowledge-base/language/b.md", moved.sourcePath)
+        assertEquals("knowledge-base/language/deep/b.md", moved.sourcePath)
         assertEquals(2, moved.number)
     }
 
@@ -74,7 +74,7 @@ class SourceQuestionMoveTest {
             Charsets.UTF_8,
         )
 
-        assertFalse(store.moveSourceQuestion(entry, "knowledge-base/language/b.md"))
+        assertFalse(store.moveSourceQuestion(entry, "knowledge-base/language/deep/b.md"))
         assertFalse(
             store.allSourceQuestions.first { it.question == "被移动问题？" }.sourcePath == "knowledge-base/language/b.md",
         )

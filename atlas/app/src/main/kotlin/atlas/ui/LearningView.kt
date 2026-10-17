@@ -60,7 +60,6 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -696,7 +695,7 @@ internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, tota
 fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
     val cardHorizontal = questionCardHorizontalMetrics()
-    val compact = LocalWindowInfo.current.containerDpSize.width < 600.dp
+    val compact = Platform.windowWidthDp() < 600.dp
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
@@ -1580,23 +1579,37 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                         // 题面用较亮的阅读标题色 + 较轻的 Medium 字重，
                                         // 与答案正文区分层级，同时避免 SemiBold 在深色卡上显得过厚。
                                         if (reorderMode) {
-                                            Text(
+                                            QuestionPromptContent(
+                                                entry.question,
                                                 displayQuestion,
-                                                style = ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
-                                                color = Theme.MdH1,
+                                                store.questionImageBaseDirectory(entry.sourcePath),
+                                                ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                                onImageCopied = if (Platform.supportsQuestionImageActions) {
+                                                    { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
+                                                } else null,
+                                                onImageDeleted = if (Platform.supportsQuestionImageActions) {
+                                                    { reference -> store.deleteQuestionImageReference(entry, reference) }
+                                                } else null,
                                             )
                                         } else {
                                             key(entryKey, entry.question) {
                                                 SelectionContainer {
-                                                    Text(
+                                                    QuestionPromptContent(
+                                                        entry.question,
                                                         displayQuestion,
+                                                        store.questionImageBaseDirectory(entry.sourcePath),
                                                         // 题面字号随设置；同源题库标题按 itemTitle 的 15/13 比例跟随工作台基准
-                                                        style = ui.typography.itemTitle.copy(
+                                                        ui.typography.itemTitle.copy(
                                                             fontSize = (store.settings.questionFontSize * 15f / 13f).sp,
                                                             lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
                                                             fontWeight = FontWeight.Medium,
                                                         ),
-                                                        color = Theme.MdH1,
+                                                        onImageCopied = if (Platform.supportsQuestionImageActions) {
+                                                            { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
+                                                        } else null,
+                                                        onImageDeleted = if (Platform.supportsQuestionImageActions) {
+                                                            { reference -> store.deleteQuestionImageReference(entry, reference) }
+                                                        } else null,
                                                     )
                                                 }
                                             }
@@ -1668,6 +1681,13 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                             entry.answer,
                                                             dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
                                                             maxWidth = SourceQuestionContentWidth,
+                                                            imageBaseDirectory = store.questionImageBaseDirectory(entry.sourcePath),
+                                                            onImageCopied = if (Platform.supportsQuestionImageActions) {
+                                                                { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
+                                                            } else null,
+                                                            onImageDeleted = if (Platform.supportsQuestionImageActions) {
+                                                                { reference -> store.deleteQuestionImageReference(entry, reference) }
+                                                            } else null,
                                                         )
                                                     }
                                                 }
@@ -2054,6 +2074,62 @@ private fun Modifier.markdownFormatKeys(onToggle: (String, String) -> Unit): Mod
             false
         }
     }
+
+private fun Modifier.questionImagePasteKeys(
+    store: AppStore,
+    sourcePath: String,
+    question: () -> String,
+    value: () -> TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onImageSaved: (String) -> Unit,
+    inline: Boolean = false,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown || !event.isCtrlPressed || event.key != Key.V) return@onPreviewKeyEvent false
+    val png = Platform.getClipboardImagePng() ?: return@onPreviewKeyEvent false
+    val relative = store.saveQuestionImage(sourcePath, question(), png) ?: return@onPreviewKeyEvent true
+    onImageSaved(relative)
+    val markdown = "![图片]($relative)"
+    onValueChange(if (inline) value().insertInlineMarkdownImage(markdown) else value().insertMarkdownImage(markdown))
+    true
+}
+
+private val questionImageLinkPattern = Regex("!\\[([^]]*)]\\(([^)]+)\\)")
+
+@Composable
+private fun QuestionPromptContent(
+    raw: String,
+    styled: AnnotatedString,
+    imageBaseDirectory: java.io.File,
+    style: androidx.compose.ui.text.TextStyle,
+    onImageCopied: ((Boolean) -> Unit)? = null,
+    onImageDeleted: ((String) -> Unit)? = null,
+) {
+    val images = questionImageLinkPattern.findAll(raw).toList()
+    if (images.isEmpty()) {
+        Text(styled, style = style, color = Theme.MdH1)
+        return
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        var start = 0
+        images.forEach { match ->
+            if (match.range.first > start) {
+                Text(styled.subSequence(start, match.range.first), style = style, color = Theme.MdH1)
+            }
+            val imagePath = match.groupValues[2].split('/').joinToString(java.io.File.separator) {
+                java.net.URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8)
+            }
+            MarkdownImageBlock(
+                java.io.File(imageBaseDirectory, imagePath).canonicalFile,
+                match.groupValues[1].ifBlank { "题目图片" },
+                markdownReference = match.value,
+                onImageCopied = onImageCopied,
+                onImageDeleted = onImageDeleted,
+            )
+            start = match.range.last + 1
+        }
+        if (start < styled.length) Text(styled.subSequence(start, styled.length), style = style, color = Theme.MdH1)
+    }
+}
 
 @Composable
 private fun KnowledgeTreeNodeView(
@@ -2450,10 +2526,17 @@ private fun EditSourceQuestionDialog(
         return
     }
     val entry = stableEntries[safeIndex]
-    var question by remember(entry.id) { mutableStateOf(entry.question) }
+    val pastedImageRefs = remember(entry.sourcePath) { mutableStateListOf<String>() }
+    var questionValue by remember(entry.id) { mutableStateOf(TextFieldValue(entry.question)) }
+    val question = questionValue.text
     var answer by remember(entry.id) { mutableStateOf(TextFieldValue(entry.answer)) }
     var status by remember(entry.id) { mutableStateOf(entry.status) }
     var tagsText by remember(entry.id) { mutableStateOf(entry.tags.joinToString("，")) }
+    fun dismissEditor() {
+        store.cleanupUnreferencedQuestionImages(pastedImageRefs.toList() + listOf(questionValue.text, answer.text))
+        pastedImageRefs.clear()
+        onDismiss()
+    }
     fun saveAndMove(target: Int): Boolean {
         if (question.isBlank()) return false
         if (!store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) return false
@@ -2461,6 +2544,8 @@ private fun EditSourceQuestionDialog(
         val updatedByNumber = SourceQuestions.parse(entry.sourcePath, updatedDocument, listOf(entry.sourcePath))
             .associateBy { it.number }
         stableEntries = stableEntries.map { updatedByNumber[it.number] ?: it }
+        store.cleanupUnreferencedQuestionImages(pastedImageRefs.toList() + listOf(entry.question, entry.answer))
+        pastedImageRefs.clear()
         currentIndex = target
         return true
     }
@@ -2474,7 +2559,7 @@ private fun EditSourceQuestionDialog(
         }
     }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = ::dismissEditor,
         modifier = Modifier.width(820.dp),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = { Text("编辑 Q${entry.number}（${safeIndex + 1}/${stableEntries.size}）") },
@@ -2498,7 +2583,7 @@ private fun EditSourceQuestionDialog(
                     if (!isSaving && question.isNotBlank()) {
                         isSaving = true
                         try {
-                            if (store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) onDismiss()
+                            if (store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) dismissEditor()
                         } finally {
                             isSaving = false
                         }
@@ -2506,13 +2591,22 @@ private fun EditSourceQuestionDialog(
                 }) { Text("保存到源文档") }
             }
         },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { OutlinedButton(onClick = ::dismissEditor) { Text("取消") } },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                OutlinedTextField(question, { question = it }, Modifier.fillMaxWidth(), label = { Text("题目") }, minLines = 2)
+                OutlinedTextField(
+                    questionValue,
+                    { questionValue = it },
+                    Modifier.fillMaxWidth().questionImagePasteKeys(
+                        store, entry.sourcePath, { questionValue.text }, { questionValue }, { questionValue = it },
+                        { pastedImageRefs += it }, inline = true,
+                    ),
+                    label = { Text("题目") },
+                    minLines = 2,
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("完成状态（写进 Q 行的 [key] 前缀，如 [done]；todo 不写标记）", fontSize = 11.sp, color = Theme.Muted)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2540,7 +2634,12 @@ private fun EditSourceQuestionDialog(
                 OutlinedTextField(
                     answer,
                     { answer = it },
-                    Modifier.fillMaxWidth().markdownFormatKeys { prefix, suffix ->
+                    Modifier.fillMaxWidth()
+                        .questionImagePasteKeys(
+                            store, entry.sourcePath, { questionValue.text }, { answer }, { answer = it },
+                            { pastedImageRefs += it },
+                        )
+                        .markdownFormatKeys { prefix, suffix ->
                         answer = answer.toggleMarkdownWrap(prefix, suffix)
                     },
                     label = { Text("答案 Markdown") },
@@ -2548,7 +2647,7 @@ private fun EditSourceQuestionDialog(
                     maxLines = 16,
                 )
                 Text(
-                    "快捷键：选中文字按 Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+` 行内代码（再按一次取消）",
+                    "截图 Ctrl+V 插入图片；选中文字按 Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+` 行内代码（再按一次取消）",
                     fontSize = 11.sp,
                     color = Theme.Muted,
                 )

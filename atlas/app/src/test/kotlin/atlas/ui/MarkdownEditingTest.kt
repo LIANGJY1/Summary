@@ -45,4 +45,18 @@ class MarkdownEditingTest {
         assertEquals("*混合编译*", result.text)
         assertEquals(TextRange(1, 5), result.selection)
     }
+
+    @Test
+    fun `pastes image as a separate markdown block at the caret`() {
+        val result = value("before after", 7).insertMarkdownImage("![图片](../_assets/a.png)")
+        assertEquals("before \n\n![图片](../_assets/a.png)\n\nafter", result.text)
+        assertEquals(TextRange("before \n\n![图片](../_assets/a.png)\n\n".length), result.selection)
+    }
+
+    @Test
+    fun `pastes image into an empty field without adding surrounding blank lines`() {
+        val result = value("", 0).insertMarkdownImage("![图片](../_assets/a.png)")
+        assertEquals("![图片](../_assets/a.png)", result.text)
+        assertEquals(TextRange(result.text.length), result.selection)
+    }
 }

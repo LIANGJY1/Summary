@@ -11,6 +11,7 @@ cd "$(dirname "$0")"
 # 发布前/交付前使用：ATLAS_RUN_TESTS=1 bash update.sh
 RUN_TESTS="${ATLAS_RUN_TESTS:-0}"
 INSTALL_STAMP="$PWD/build/.last-installed-deb.sha256"
+JBR="${ATLAS_JBR:-/opt/android-studio-for-platform/jbr}"
 
 die() {
   echo "✗ $*" >&2
@@ -28,6 +29,13 @@ sudo_run() {
     sudo "$@"
   fi
 }
+
+# Atlas 的 Linux 输入法候选框依赖 JBR 的 XIM spotLocation 补丁。
+# 普通 OpenJDK 即使设置 jb.awt.newXimClient.* 也无法上报光标位置，必须在任何安装前确认运行时可用。
+[[ -x "$JBR/bin/java" && -f "$JBR/lib/libjli.so" && -f "$JBR/lib/libawt_xawt.so" ]] \
+  || die "缺少可用的 JetBrains Runtime：$JBR（设置 ATLAS_JBR 指向包含 XIM 补丁的 JBR）"
+grep -qsF spotLocation "$JBR/lib/libawt_xawt.so" \
+  || die "JBR 不含 XIM spotLocation 补丁：$JBR；输入法候选框将固定在屏幕左下角"
 
 atlas_pids() {
   {
@@ -116,7 +124,8 @@ else
 fi
 if [[ "$INSTALLED_SHA" == "$DEB_SHA" ]] \
   && dpkg-query -W -f='${Status}' atlas 2>/dev/null | grep -q 'install ok installed' \
-  && [[ -x /opt/atlas/bin/atlas ]]; then
+  && [[ -x /opt/atlas/bin/atlas ]] \
+  && grep -qsF spotLocation /opt/atlas/lib/runtime/lib/libawt_xawt.so; then
   echo "==> deb 未变化（$DEB_SHA），跳过安装、JBR 替换和重启"
   if [[ -z "$(atlas_pids)" ]]; then
     launch_atlas
@@ -148,22 +157,17 @@ fi
 # 在这里做安装后替换。jpackage 启动器只需要 lib/libjli.so + lib/modules，完整 JBR 目录是
 # jlink 镜像的超集，可直接顶替（实测 java.version=21.0.7 / vendor=JetBrains，界面无回归）。
 ATLAS_RUNTIME="/opt/atlas/lib/runtime"
-JBR="${ATLAS_JBR:-/opt/android-studio-for-platform/jbr}"
-if [[ -x "$JBR/bin/java" && -f "$JBR/lib/libjli.so" ]]; then
-  if sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so"; then
-    echo "==> 运行时已是 JBR（$ATLAS_RUNTIME），跳过替换"
-  else
-    echo "==> 用 JBR 替换运行时（$(du -sh "$JBR" | cut -f1)，替换前 $(sudo_run du -sh "$ATLAS_RUNTIME" | cut -f1)）"
-    sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
-    sudo_run mv "$ATLAS_RUNTIME" "$ATLAS_RUNTIME.jlink"
-    sudo_run cp -a "$JBR" "$ATLAS_RUNTIME"
-    sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
-    sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so" \
-      || die "替换后仍找不到 spotLocation，JBR 路径不对：$JBR"
-    echo "==> 运行时已切换为 JBR：$(sudo_run "$ATLAS_RUNTIME/bin/java" -version 2>&1 | head -1)"
-  fi
+if sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so"; then
+  echo "==> 运行时已是 JBR（$ATLAS_RUNTIME），跳过替换"
 else
-  echo "! 找不到可用的 JBR（$JBR），保留 deb 自带运行时——输入法候选框将无法跟随光标" >&2
+  echo "==> 用 JBR 替换运行时（$(du -sh "$JBR" | cut -f1)，替换前 $(sudo_run du -sh "$ATLAS_RUNTIME" | cut -f1)）"
+  sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
+  sudo_run mv "$ATLAS_RUNTIME" "$ATLAS_RUNTIME.jlink"
+  sudo_run cp -a "$JBR" "$ATLAS_RUNTIME"
+  sudo_run rm -rf "$ATLAS_RUNTIME.jlink"
+  sudo_run grep -qsF spotLocation "$ATLAS_RUNTIME/lib/libawt_xawt.so" \
+    || die "替换后仍找不到 spotLocation，JBR 路径不对：$JBR"
+  echo "==> 运行时已切换为 JBR：$(sudo_run "$ATLAS_RUNTIME/bin/java" -version 2>&1 | head -1)"
 fi
 
 # JBR 的新版 XIM 客户端默认关闭；开启后它在建输入上下文时与输入法协商 PreeditPosition

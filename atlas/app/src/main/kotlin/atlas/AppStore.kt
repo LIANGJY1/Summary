@@ -12,6 +12,7 @@ import atlas.core.DocMarker
 import atlas.core.FeishuCheckin
 import atlas.core.Inbox
 import atlas.core.Log
+import atlas.core.MarkdownImages
 import atlas.core.MdStores
 import atlas.core.MdStores.CardEntry
 import atlas.core.MdStores.QuestionEntry
@@ -38,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -1688,6 +1690,184 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         return true
     }
 
+    /** 保存剪贴板截图到知识库共享资源目录，返回相对当前题目文档的 Markdown 路径。 */
+    fun saveQuestionImage(sourcePath: String, question: String, imageBytes: ByteArray): String? = runCatching {
+        val png = Platform.normalizeImagePng(imageBytes) ?: error("剪贴板内容不是可识别的图片")
+        val digest = MessageDigest.getInstance("SHA-256").digest(png)
+            .joinToString("") { "%02x".format(it) }
+        val keyword = questionImageKeyword(question)
+        val root = libraryRoot()
+        val knowledgeRoot = if (root.name == "knowledge-base") root else File(root, "knowledge-base")
+        val assetsDir = File(knowledgeRoot, "_assets")
+        assetsDir.mkdirs()
+        // Digest-based reuse preserves content deduplication, including assets created before keyword prefixes.
+        val asset = assetsDir.listFiles()
+            ?.firstOrNull { it.isFile && questionImageDigest(it.name) == digest }
+            ?: File(assetsDir, "$keyword-$digest.png")
+        if (!asset.isFile) {
+            val temp = File(assetsDir, ".$keyword-$digest.${System.nanoTime()}.tmp")
+            try {
+                temp.writeBytes(png)
+                try {
+                    java.nio.file.Files.move(
+                        temp.toPath(), asset.toPath(),
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: java.nio.file.FileAlreadyExistsException) {
+                    // 相同截图并发粘贴时复用先完成的内容。
+                } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                    try {
+                        java.nio.file.Files.move(temp.toPath(), asset.toPath())
+                    } catch (_: java.nio.file.FileAlreadyExistsException) {
+                        // 相同截图并发粘贴时复用先完成的内容。
+                    }
+                }
+            } finally {
+                temp.delete()
+            }
+        }
+        val document = sourceDocumentFile(sourcePath).canonicalFile
+        val relative = (document.parentFile ?: error("题目文档缺少父目录")).toPath().relativize(asset.canonicalFile.toPath())
+            .toString().replace(File.separatorChar, '/')
+        relative.split('/').joinToString("/") {
+            java.net.URLEncoder.encode(it, Charsets.UTF_8).replace("+", "%20")
+        }
+    }.onFailure { error ->
+        Log.e("题库截图保存失败 path=$sourcePath", error)
+        showToast("截图保存失败：${error.message ?: error.javaClass.simpleName}")
+    }.getOrNull()
+
+    fun questionImageBaseDirectory(sourcePath: String): File =
+        sourceDocumentFile(sourcePath).absoluteFile.parentFile ?: libraryRoot()
+
+    /** 编辑取消或保存后清掉本次粘贴但没有被 Markdown 引用的新图片。 */
+    fun cleanupUnreferencedQuestionImages(relativeRefs: Collection<String>): Set<String> {
+        if (relativeRefs.isEmpty()) return emptySet()
+        val root = libraryRoot()
+        val knowledgeRoot = if (root.name == "knowledge-base") root else File(root, "knowledge-base")
+        val candidates = relativeRefs.mapNotNull(::questionImageAssetName).toSet()
+        if (candidates.isEmpty()) return emptySet()
+        val documents = if (knowledgeRoot.isDirectory) knowledgeRoot.walkTopDown()
+            .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+            .filterNot { file -> file.toPath().any { it.toString() == ".git" || it.toString() == "atlas" } }
+            .toList() else emptyList()
+        val references = documents.flatMap { file ->
+            questionImageAssetPattern.findAll(decodeQuestionImageReference(runCatching { file.readText(Charsets.UTF_8) }.getOrDefault("")))
+                .map { it.value }.toList()
+        }.toSet()
+        return candidates.filterNot { it in references }.filter { name ->
+            val file = File(File(knowledgeRoot, "_assets"), name)
+            !file.exists() || file.delete()
+        }.toSet()
+    }
+
+    /** 删除题目中的单个图片引用，并在知识库中已无引用时一并删除对应图片文件。 */
+    fun deleteQuestionImageReference(entry: SourceQuestions.Entry, markdownReference: String): Boolean {
+        val asset = resolveQuestionImageAsset(entry.sourcePath, markdownReference)
+        if (asset == null) {
+            showToast("只能删除题库图片资源")
+            return false
+        }
+        val file = sourceDocumentFile(entry.sourcePath)
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != entry.document) {
+            Log.w("题库图片删除冲突：源文件已变化 file=${file.absolutePath}")
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        val questionWithoutImage = removeFirstImageReference(entry.question, markdownReference)
+        val answerWithoutImage = if (questionWithoutImage == null) {
+            removeFirstImageReference(entry.answer, markdownReference)
+        } else null
+        if (questionWithoutImage == null && answerWithoutImage == null) {
+            showToast("图片引用已不存在，请刷新题目")
+            reloadKnowledgeFiles()
+            return false
+        }
+        return runCatching {
+            val updated = SourceQuestions.replace(
+                entry,
+                questionWithoutImage ?: entry.question,
+                answerWithoutImage ?: entry.answer,
+                entry.status,
+                entry.tags,
+            )
+            MdStores.atomicWrite(file, updated)
+            reloadKnowledgeFiles()
+            val removedAssets = cleanupUnreferencedQuestionImages(listOf(markdownReference))
+            if (asset.name in removedAssets) {
+                showToast("图片引用和图片文件已删除")
+            } else {
+                showToast("图片引用已删除；其他内容仍在使用该图片，保留图片文件")
+            }
+            Log.i("题库图片删除成功 path=${entry.sourcePath} asset=${asset.name}")
+            true
+        }.getOrElse { error ->
+            Log.e("题库图片删除失败 path=${entry.sourcePath}", error)
+            reloadKnowledgeFiles()
+            showToast("图片删除失败：${error.message}")
+            false
+        }
+    }
+
+    private fun resolveQuestionImageAsset(sourcePath: String, markdownReference: String): File? = runCatching {
+        val target = Regex("!\\[[^]]*]\\(([^)]+)\\)").find(markdownReference)?.groupValues?.get(1)?.trim()
+            ?: return null
+        val path = target.removeSurrounding("<", ">").substringBefore('#').substringBefore('?')
+        if (path.isBlank() || path.startsWith("/") || path.startsWith("\\\\") ||
+            path.startsWith("http://", true) || path.startsWith("https://", true) || path.startsWith("data:", true)
+        ) return null
+        val decoded = decodeQuestionImageReference(path)
+        val documentParent = sourceDocumentFile(sourcePath).canonicalFile.parentFile ?: return null
+        val asset = File(documentParent, decoded.replace('/', File.separatorChar)).canonicalFile
+        val root = libraryRoot()
+        val knowledgeRoot = if (root.name == "knowledge-base") root else File(root, "knowledge-base")
+        val assetsDir = File(knowledgeRoot, "_assets").canonicalFile
+        asset.takeIf {
+            it.parentFile == assetsDir && it.isFile && questionImageDigest(it.name) != null
+        }
+    }.getOrNull()
+
+    private fun removeFirstImageReference(markdown: String, reference: String): String? {
+        val index = markdown.indexOf(reference)
+        if (index < 0) return null
+        val end = index + reference.length
+        val lineStart = markdown.lastIndexOf('\n', index - 1) + 1
+        val nextNewline = markdown.indexOf('\n', end)
+        val lineEnd = if (nextNewline < 0) markdown.length else nextNewline
+        val onlyImageOnLine = markdown.substring(lineStart, index).isBlank() && markdown.substring(end, lineEnd).isBlank()
+        val updated = if (onlyImageOnLine) {
+            val removeEnd = if (nextNewline < 0) lineEnd else nextNewline + 1
+            markdown.removeRange(lineStart, removeEnd)
+        } else {
+            markdown.removeRange(index, end)
+        }
+        return updated.replace(Regex("\\n{3,}"), "\n\n")
+    }
+
+    private fun questionImageKeyword(question: String): String {
+        val plain = question
+            .replace(Regex("(?i)\\bQ\\d+\\s*[:：]?"), " ")
+            .replace(Regex("\\[[^]]*]"), " ")
+            .replace(Regex("[*_`~\\[\\]{}]"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), "-")
+            .trim('-')
+        return plain.take(24).trimEnd('-').ifBlank { "question" }
+    }
+
+    private fun questionImageDigest(fileName: String): String? =
+        questionImageAssetPattern.matchEntire(fileName)?.groupValues?.get(1)
+
+    private fun questionImageAssetName(reference: String): String? =
+        questionImageAssetPattern.find(decodeQuestionImageReference(reference))?.value
+
+    private fun decodeQuestionImageReference(value: String): String = runCatching {
+        java.net.URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8)
+    }.getOrDefault(value)
+
+    private val questionImageAssetPattern = Regex("(?:[\\p{L}\\p{N}-]+-)?([a-f0-9]{64})\\.png")
+
     /** 为当前源文档中选中的多道题追加同一标签，并一次性写回。 */
     fun addTagToSourceQuestions(entries: List<SourceQuestions.Entry>, rawTag: String): Boolean {
         val tag = SourceQuestions.normalizeTags(listOf(rawTag)).singleOrNull()
@@ -1788,6 +1968,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         return runCatching {
             MdStores.atomicWrite(file, updated)
             reloadKnowledgeFiles()
+            cleanupUnreferencedQuestionImages(listOf(entry.question, entry.answer))
             Log.i("同源题目删除成功 path=${entry.sourcePath} Q${entry.number}")
             showToast("已删除 Q${entry.number}")
             true
@@ -1826,9 +2007,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             return false
         }
         val targetDocument = if (targetFile.isFile) targetFile.readText(Charsets.UTF_8) else ""
+        val rebasedQuestion = MarkdownImages.rebaseRelativeLinks(entry.question, sourceFile, targetFile)
+        val rebasedAnswer = MarkdownImages.rebaseRelativeLinks(entry.answer, sourceFile, targetFile)
         val updatedTarget = SourceQuestions.append(
             targetDocument,
-            listOf(SourceQuestions.Draft(entry.question, entry.answer, status = entry.status, tags = entry.tags)),
+            listOf(SourceQuestions.Draft(rebasedQuestion, rebasedAnswer, status = entry.status, tags = entry.tags)),
         )
         return runCatching {
             // 先写目标再写源：中途失败只会造成题目重复，不会丢题

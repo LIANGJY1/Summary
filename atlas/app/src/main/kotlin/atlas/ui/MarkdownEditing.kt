@@ -32,3 +32,33 @@ internal fun TextFieldValue.toggleMarkdownWrap(prefix: String, suffix: String = 
     val text = text.substring(0, start) + prefix + selected + suffix + text.substring(end)
     return TextFieldValue(text, TextRange(start + prefix.length, end + prefix.length))
 }
+
+/** Replace the current selection with a standalone Markdown image block and keep the caret after it. */
+internal fun TextFieldValue.insertMarkdownImage(markdown: String): TextFieldValue {
+    val start = selection.min
+    val end = selection.max
+    val before = text.substring(0, start)
+    val after = text.substring(end)
+    val prefix = when {
+        before.isEmpty() || before.endsWith("\n\n") -> ""
+        before.endsWith('\n') -> "\n"
+        else -> "\n\n"
+    }
+    val suffix = when {
+        after.isEmpty() || after.startsWith("\n\n") -> ""
+        after.startsWith('\n') -> "\n"
+        else -> "\n\n"
+    }
+    val inserted = "$prefix$markdown$suffix"
+    val updated = before + inserted + after
+    val caret = before.length + inserted.length
+    return TextFieldValue(updated, TextRange(caret))
+}
+
+internal fun TextFieldValue.insertInlineMarkdownImage(markdown: String): TextFieldValue {
+    val start = selection.min
+    val end = selection.max
+    val updated = text.substring(0, start) + markdown + text.substring(end)
+    val caret = start + markdown.length
+    return TextFieldValue(updated, TextRange(caret))
+}

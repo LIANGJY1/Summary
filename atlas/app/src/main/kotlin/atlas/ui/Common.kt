@@ -1,6 +1,7 @@
 package atlas.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -23,6 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,12 +42,17 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -55,9 +64,18 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import atlas.platform.Platform
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.URLDecoder
 
 /** 应用自定义色板：MaterialTheme 之外业务用到的语义色，随明暗主题切换 */
 data class AtlasPalette(
@@ -444,11 +462,108 @@ private const val MD_INLINE_CODE_GAP = "\u202F\u202F\u202F"
 private val markdownBulletPattern = Regex("^\\s*[-*] ")
 private val markdownNumberedPattern = Regex("^\\s*([0-9]+)(?:[.]\\s+|[、)]\\s*)(.+)$")
 private val markdownTaskPattern = Regex("^\\s*[-*] \\[([ xX])\\] (.+)$")
+private val markdownImageLine = Regex("^!\\[([^]]*)]\\(([^)]+)\\)$")
 
 private fun isMarkdownListItem(line: String): Boolean =
     markdownNumberedPattern.containsMatchIn(line) ||
         markdownTaskPattern.containsMatchIn(line) ||
         markdownBulletPattern.containsMatchIn(line)
+
+@Composable
+internal fun MarkdownImageBlock(
+    file: File,
+    description: String,
+    modifier: Modifier = Modifier,
+    markdownReference: String? = null,
+    onImageCopied: ((Boolean) -> Unit)? = null,
+    onImageDeleted: ((String) -> Unit)? = null,
+) {
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, file.absolutePath) {
+        value = withContext(Dispatchers.IO) { if (file.isFile) Platform.loadImage(file) else null }
+    }
+    val renderedBitmap = bitmap
+    var contextMenuExpanded by remember(file.absolutePath) { mutableStateOf(false) }
+    var confirmDelete by remember(file.absolutePath) { mutableStateOf(false) }
+    var contextMenuPosition by remember(file.absolutePath) { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
+    val contextMenuOffset = with(density) {
+        DpOffset(contextMenuPosition.x.toDp() + 4.dp, contextMenuPosition.y.toDp() + 4.dp)
+    }
+    if (renderedBitmap == null) {
+        Text(
+            "图片无法显示：$description",
+            modifier = modifier.padding(vertical = 6.dp),
+            color = Theme.Muted,
+            fontSize = 12.sp,
+        )
+    } else {
+        Box(modifier) {
+            Image(
+                bitmap = renderedBitmap,
+                contentDescription = description,
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .pointerInput(file.absolutePath, onImageDeleted) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                    event.changes.firstOrNull()?.position?.let { contextMenuPosition = it }
+                                    contextMenuExpanded = true
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                    },
+                contentScale = ContentScale.Fit,
+            )
+            if (onImageCopied != null || onImageDeleted != null) {
+                DropdownMenu(
+                    expanded = contextMenuExpanded,
+                    onDismissRequest = { contextMenuExpanded = false },
+                    offset = contextMenuOffset,
+                ) {
+                    if (confirmDelete && onImageDeleted != null && markdownReference != null) {
+                        DropdownMenuItem(
+                            text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
+                            enabled = false,
+                            onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = { Text("确认删除", color = Theme.BadRed) },
+                            onClick = {
+                                contextMenuExpanded = false
+                                confirmDelete = false
+                                onImageDeleted(markdownReference)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("取消") },
+                            onClick = {
+                                confirmDelete = false
+                            },
+                        )
+                    } else {
+                        DropdownMenuItem(
+                            text = { Text("复制图片") },
+                            onClick = {
+                                contextMenuExpanded = false
+                                onImageCopied?.invoke(Platform.setClipboardImage(file))
+                            },
+                        )
+                        if (onImageDeleted != null && markdownReference != null) {
+                            DropdownMenuItem(
+                                text = { Text("删除图片", color = Theme.BadRed) },
+                                onClick = { confirmDelete = true },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /** 列表项之间的单个源码空行不额外占一整行视觉间距，层级距离由列表项自身控制。 */
 private fun isListSeparatorBlank(lines: List<String>, index: Int, followingLine: String? = null): Boolean =
@@ -624,12 +739,21 @@ fun MarkdownText(
     modifier: Modifier = Modifier,
     dirtyLines: Set<Int> = emptySet(),
     maxWidth: Dp = Dp.Unspecified,
+    imageBaseDirectory: File? = null,
+    onImageCopied: ((Boolean) -> Unit)? = null,
+    onImageDeleted: ((String) -> Unit)? = null,
 ) =
     SelectionContainer {
         if (remember(md) { md.count { it == '\n' } + 1 } > MD_STREAM_LINE_THRESHOLD) {
-            StreamedMarkdownText(remember(md) { markdownBlocks(md) }, modifier, dirtyLines, maxWidth)
+            StreamedMarkdownText(
+                remember(md) { markdownBlocks(md) }, modifier, dirtyLines, maxWidth, imageBaseDirectory,
+                onImageCopied, onImageDeleted,
+            )
         } else {
-            ReaderMarkdownText(md, modifier, dirtyLines, maxWidth = maxWidth)
+            ReaderMarkdownText(
+                md, modifier, dirtyLines, maxWidth = maxWidth, imageBaseDirectory = imageBaseDirectory,
+                onImageCopied = onImageCopied, onImageDeleted = onImageDeleted,
+            )
         }
     }
 
@@ -659,6 +783,9 @@ private fun StreamedMarkdownText(
     modifier: Modifier = Modifier,
     dirtyLines: Set<Int> = emptySet(),
     maxWidth: Dp = Dp.Unspecified,
+    imageBaseDirectory: File? = null,
+    onImageCopied: ((Boolean) -> Unit)? = null,
+    onImageDeleted: ((String) -> Unit)? = null,
 ) {
     val ui = atlasUiTokens()
     val visibleBlocks = remember(blocks) { mutableIntStateOf(mdStreamFirstBlocks(blocks)) }
@@ -678,6 +805,9 @@ private fun StreamedMarkdownText(
                     maxWidth,
                     lineOffset = block.startLine,
                     followingLine = block.followingLine,
+                    imageBaseDirectory = imageBaseDirectory,
+                    onImageCopied = onImageCopied,
+                    onImageDeleted = onImageDeleted,
                 )
             }
         }
@@ -692,9 +822,12 @@ private fun ReaderMarkdownText(
     maxWidth: Dp = Dp.Unspecified,
     lineOffset: Int = 0,
     followingLine: String? = null,
+    imageBaseDirectory: File? = null,
+    onImageCopied: ((Boolean) -> Unit)? = null,
+    onImageDeleted: ((String) -> Unit)? = null,
 ) {
     val ui = atlasUiTokens()
-    val compactReading = LocalWindowInfo.current.containerDpSize.width < 600.dp
+    val compactReading = Platform.windowWidthDp() < 600.dp
     val readingColors = LocalMarkdownReadingColors.current
     // 渐进渲染按块调用时传 [lineOffset]：把原文坐标的脏行集合平移成块内局部坐标
     val answerDirty = remember(dirtyLines, lineOffset) {
@@ -813,6 +946,20 @@ private fun ReaderMarkdownText(
                     i = table.endExclusive - 1
                     true
                 } == true -> Unit
+                imageBaseDirectory != null && markdownImageLine.matchEntire(renderedLine.trim()) != null -> {
+                    val imageLink = markdownImageLine.matchEntire(renderedLine.trim())!!
+                    val decodedPath = imageLink.groupValues[2].split('/').joinToString(File.separator) {
+                        URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8)
+                    }
+                    MarkdownImageBlock(
+                        file = File(imageBaseDirectory, decodedPath).canonicalFile,
+                        description = imageLink.groupValues[1].ifBlank { "题目图片" },
+                        modifier = Modifier.fillMaxWidth(),
+                        markdownReference = renderedLine.trim(),
+                        onImageCopied = onImageCopied,
+                        onImageDeleted = onImageDeleted,
+                    )
+                }
                 line.trimStart().startsWith("```") -> {
                     val lang = line.trimStart().removePrefix("```").trim()
                     val buf = ArrayList<String>()
