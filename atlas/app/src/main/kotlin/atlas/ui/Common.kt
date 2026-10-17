@@ -546,40 +546,42 @@ internal fun MarkdownImageBlock(
                         tonalElevation = 3.dp,
                         shadowElevation = 8.dp,
                     ) {
-                        Column(Modifier.widthIn(min = 144.dp).padding(vertical = 4.dp)) {
-                                if (confirmDelete && onImageDeleted != null && markdownReference != null) {
+                        // DropdownMenuItem uses fillMaxWidth; cap the Popup content so it cannot
+                        // inherit the full window width from Popup's loose constraints.
+                        Column(Modifier.width(176.dp).padding(vertical = 4.dp)) {
+                            if (confirmDelete && onImageDeleted != null && markdownReference != null) {
+                                DropdownMenuItem(
+                                    text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("确认删除", color = Theme.BadRed) },
+                                    onClick = {
+                                        contextMenuExpanded = false
+                                        confirmDelete = false
+                                        onImageDeleted(markdownReference)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("取消") },
+                                    onClick = { confirmDelete = false },
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("复制图片") },
+                                    onClick = {
+                                        contextMenuExpanded = false
+                                        onImageCopied?.invoke(Platform.setClipboardImage(file))
+                                    },
+                                )
+                                if (onImageDeleted != null && markdownReference != null) {
                                     DropdownMenuItem(
-                                        text = { Text("确认删除这张图片？", color = Theme.Muted, fontSize = 12.sp) },
-                                        enabled = false,
-                                        onClick = {},
+                                        text = { Text("删除图片", color = Theme.BadRed) },
+                                        onClick = { confirmDelete = true },
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("确认删除", color = Theme.BadRed) },
-                                        onClick = {
-                                            contextMenuExpanded = false
-                                            confirmDelete = false
-                                            onImageDeleted(markdownReference)
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("取消") },
-                                        onClick = { confirmDelete = false },
-                                    )
-                                } else {
-                                    DropdownMenuItem(
-                                        text = { Text("复制图片") },
-                                        onClick = {
-                                            contextMenuExpanded = false
-                                            onImageCopied?.invoke(Platform.setClipboardImage(file))
-                                        },
-                                    )
-                                    if (onImageDeleted != null && markdownReference != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("删除图片", color = Theme.BadRed) },
-                                            onClick = { confirmDelete = true },
-                                        )
-                                    }
                                 }
+                            }
                         }
                     }
                 }
