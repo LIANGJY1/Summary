@@ -1,289 +1,245 @@
 # Android 系统架构
 
-> 学习资料（文章模式沉淀）。主线：分层架构与进程边界、跨层接口、HAL 与 Treble、近年架构边界、进程与线程的架构分工。源文档：android-internals-wiki §1.1《Android 分层架构、进程模型与线程协作》（机制按 AOSP `android-17.0.0_r1` 与 ACK `android17-6.18-2026-06_r6` 核对）；16 KB 分发时间线、应用沙箱与 ART 编译策略已于 2026-09-23 与官方资料核对。启动全链路（init、.rc、Zygote、system_server、应用进程诞生）见 [02-system-boot.md](02-system-boot.md)。Q 序列即结构，供 atlas 同源直读。
+> 本文解释 Android 的职责分层、进程边界、跨层接口和平台组件。启动全链路见 [Android 系统启动](02-system-boot.md)，系统服务进程见 [system_server](04-system-server.md)，硬件抽象层见 [HAL](05-hal.md)。事实以对应平台版本的 Android Open Source Project（AOSP）实现和官方架构文档为准。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: [learning] Android 的五层架构怎么理解？各层中的典型对象都有什么？**
+**Q1: [done] Android 的五层架构分别承担什么职责，每一层都有哪些典型组件？**
 
-五层按**职责**划分 Android 组件，不表示进程或编程语言也严格分成五份。理解时先看组件承担的职责，再用代表性对象定位：
+Android 的五层是按组件职责组织的架构视图，不是五个进程，也不意味着请求必须逐层经过。典型分层从上到下如下：
 
-1. **应用层**：承载单个应用的业务逻辑与界面。典型对象有 Activity、Compose/View、应用业务线程和 RenderThread，通常运行在应用自己的进程。
-2. **应用框架层**：提供应用可调用的系统 API 与系统服务。Activity、View 等 SDK 客户端代码位于应用进程。ActivityTaskManagerService、WindowManagerService、PackageManagerService 等服务端通常位于 `system_server`。
-3. **原生库与 ART 层**：提供运行时和通用原生能力。ART 执行 dex 并管理 GC。Bionic、Skia/HWUI、SQLite、libbinder 等是原生库。SurfaceFlinger、AudioFlinger 等是独立原生服务进程。
-4. **HAL 层**：以稳定接口封装硬件相关能力。典型组件包括显示、相机、音频和蓝牙 HAL，实现可以是独立服务，也可能采用直通式加载。
-5. **Linux 内核层**：负责调度、内存、电源、网络、文件系统、Binder 驱动和设备驱动等内核职责。
+```mermaid
+flowchart TB
+    Apps["应用：业务代码与系统应用"]
+    Framework["应用框架：SDK 客户端与 system server"]
+    Native["原生库与 ART：运行时、Bionic、Skia、媒体与原生服务"]
+    HAL["HAL：Stable AIDL、存量 HIDL 与厂商实现"]
+    Kernel["Linux 内核：调度、内存、Binder、网络与驱动"]
 
-这里的“层”是职责归类：同一进程可以承载多个层的代码，同一层的组件也可能分布在多个进程。HAL 接口采用 Stable AIDL 或存量 HIDL 的情况，以及各层之间如何调用，分别由后续问题说明。
+    Apps -->|"SDK 调用 / Binder"| Framework
+    Framework -->|"JNI / Native Binder"| Native
+    Framework -->|"Stable AIDL / HIDL"| HAL
+    Native -->|"系统调用 / ioctl / mmap"| Kernel
+    HAL -->|"系统调用 / 驱动接口"| Kernel
+```
 
-**Q2: [learning] Android 五层架构之间是通过什么方式通信的，可以跨层通信吗？**
+1. **应用层：**应用组件和业务代码，如 Activity、View/Compose、应用线程与应用自带的 Native 库。
+2. **应用框架层：**供应用使用的 API（Application Programming Interface，应用程序接口），以及 ActivityTaskManager、WindowManager、PackageManager 等系统服务。API 客户端类通常运行在调用应用进程，服务端通常运行在 `system_server`。
+3. **Android Runtime 与原生库：**Android Runtime（ART）执行和管理应用字节码；原生库提供通用平台能力，如 Bionic、Skia、SQLite 和 libbinder。SurfaceFlinger、AudioFlinger 等原生服务通常以独立进程运行。
+4. **HAL（Hardware Abstraction Layer，硬件抽象层）：**定义硬件能力的接口并承接厂商实现，使上层能够通过约定接口访问设备能力。HAL 的进程和语言形态取决于接口与实现。
+5. **Linux 内核：**提供进程调度、虚拟内存、文件系统、网络、Binder 驱动和设备驱动等内核机制。
 
-层与层之间通过各边界上的明确定义接口通信：同进程的跨界是进程内函数调用或 JNI，跨进程的跨界必须走显式 IPC（Binder 等）。五层是职责划分，不是调用管线，上层可以跳过中间层直达下层。
+**Q2: [learning] 一次 Android 请求会按五层顺序传递吗，不同请求实际经过哪些边界？**
 
-各边界常用的接口如下：
+不会。五层不是固定调用管线；请求只穿过实际参与的进程和接口。分析时要分别画出控制命令与数据的路径，并区分进程内调用、JNI、IPC（Inter-Process Communication，进程间通信）、共享内存和系统调用。
 
-1. **应用 → 应用框架**：同进程内经 SDK API 调用客户端代码。跨进程时通常经 Binder 进入 `system_server`。
-2. **应用框架 → 原生库与 ART**：框架的 Java 代码可通过 JNI 调用同进程原生库。原生框架服务之间可通过 C++ Binder 跨进程通信。
-3. **框架 → HAL**：新 HAL 可使用 Stable AIDL，存量 HIDL HAL 使用 hwbinder。大数据可辅以 FMQ 或共享缓冲区传输。
-4. **原生库/HAL → 内核**：通过系统调用、`ioctl`、`mmap` 或设备节点访问内核能力。
+1. **应用内文件操作：**应用调用 Java/Kotlin API 后，可能经 libcore、Bionic 和系统调用到达内核；它不必先经过 `system_server` 或 HAL。
+2. **系统管理操作：**查询系统服务、启动组件或管理窗口时，应用侧 API 通常经 Binder 调用 `system_server` 中的服务。是否再访问 HAL 取决于具体操作。
+3. **图形显示：**应用生成图形缓冲区并交给系统合成链路；SurfaceFlinger 收集可见图层，按设备能力使用 GPU（Graphics Processing Unit，图形处理器）客户端合成或委托 HWC（Hardware Composer，硬件合成器）。缓冲区传递和图层控制并不等同于逐层同步函数调用。
+4. **相机与音频：**Binder 等 IPC 常承载配置和控制；图像、音频等大块数据可使用共享缓冲区、DMA（Direct Memory Access，直接内存访问）缓冲区、FMQ（Fast Message Queue，快速消息队列）等通路。控制面和数据面需要分别追踪。
 
-跳过中间层的直达是常态：应用可以经 Bionic 直接发起文件系统调用，直达内核而不经过框架服务和 HAL。SurfaceFlinger 可以直接对接 Composer HAL 和 DRM 显示子系统。
+JNI 只适合同一进程内的 Java/native 互调，不能跨越进程边界。跨进程则需要 Binder 等 IPC；共享内存减少大块数据复制，但仍须处理缓冲区所有权、同步和生命周期。
 
-以 SurfaceFlinger 为例，应用将渲染缓冲区经 BufferQueue 交给它。SurfaceFlinger 按 vsync 周期把缓冲区句柄、几何、混合模式和 Z 序等图层信息经 Binder 交给 Composer HAL。厂商 HAL 再通过 DRM/KMS ioctl 把图层提交给显示控制器的硬件 plane。需要 GPU 合成的图层则由 SurfaceFlinger 的 RenderEngine 经 DRM 渲染节点处理。此原生路径不要求每一步都经过 Java 框架服务，“跨层直达”描述的是组件直接跨越相应接口边界。
+依据：AOSP《Graphics architecture》《AIDL for HALs》。
 
-**Q3: [learning] Android 实际工作场景中都有哪些架构问题？如何定位架构问题？**
+**Q3: [learning] 跨层性能或故障问题应如何定位，怎样避免把调用方误判为根因？**
 
-真实架构问题的共同形态是“现象在应用、根因可能在任何一层”：典型场景如主线程同步 Binder 调用过长、SurfaceFlinger 合成变长、Camera 请求返回慢。定位的标准动作是沿“进程 → 跨层接口 → 线程状态 → 内核等待对象”逐边界取证，每多跨一个边界就多保存一份证据。
+先建立带时间戳的因果链，再沿实际进程边界追踪；调用方出现长耗时只证明它在等待或执行，不能单独证明哪一层出了问题。定位结论至少要对应到具体进程、线程、接口或等待对象。
 
-三个典型场景的取证路径：
+1. **固定场景：**记录设备、系统构建、复现步骤、请求或帧的关联标识和目标结果，避免把不同请求拼成一条链。
+2. **找出进程边界：**确认调用方和被调用方，以及中间是否有 Binder、JNI、共享缓冲区、驱动或系统服务。
+3. **对齐时间线：**使用 Perfetto 等证据关联调用、线程状态、调度、锁、I/O、同步栅栏和下游处理。只有采集到相应事件时，才能据此建立因果关系。
+4. **检查阻塞点：**识别线程是在 CPU（Central Processing Unit，中央处理器）上运行、等待 CPU，还是睡眠等待事件；再用唤醒源、栈、Binder 对端、锁或 I/O 证据细化原因。线程状态本身通常不能给出完整根因。
+5. **回到实现验证：**把时间片与对应版本源码、接口契约和设备实现对照，确认该片段代表的实际工作。
 
-1. **主线程同步 Binder 很长**：先取调用方 Binder 时间片、目标进程与线程，向下追目标线程的调度、锁、I/O 与下游 Binder。不要直接得出“Binder 驱动慢”。
-2. `surfaceflinger` 的 composite 变长：先取 SF 主线程、CompositionEngine、HWC/RenderEngine 事件，向下追合成类型、同步栅栏、GPU/HWC 与图层变化。不要直接得出“一定是应用绘制慢”。
-3. **Camera 请求返回慢**：先取应用框架、CameraService 与 HAL 间的事务及请求 ID，向下追 HAL 线程、FMQ/缓冲区、同步栅栏、驱动与传感器。不要直接得出“HAL 只是接口，不会延迟”。
+常见跨层场景可按以下证据链开始：
 
-通用定位流程：
+1. **主线程同步 Binder 耗时：**关联调用方、服务端 Binder 线程和服务端下游等待。若目标线程正在等锁或 I/O，不能仅凭调用方时间片断言 Binder 驱动慢。
+2. **SurfaceFlinger 合成变长：**区分客户端合成、硬件合成、GPU 工作和同步栅栏，再查看图层与缓冲区变化。SurfaceFlinger 的耗时变长不自动证明应用绘制慢。
+3. **Camera 请求返回慢：**用同一请求标识串起应用、CameraService、HAL、缓冲区和驱动。应用 API 返回慢不等于传感器本身慢。
 
-1. 确定工作发生在哪个进程（进程树/`ps`）。
-2. 确认调用跨过哪些接口——同步 Binder 调用可沿 Perfetto 的流向关联（flow）找到目标进程的处理线程。
-3. 看目标线程状态，按状态判读等待原因。
-4. 涉及图形、相机、音频等大数据时，把控制命令、缓冲区生命周期、同步栅栏分开看。
-5. 回到源码确认时间片段对应的执行边界。
+Perfetto 中常见线程状态只说明线程当时的调度状态：Running 表示正在 CPU 上执行；Runnable 表示可运行但尚未获得 CPU；Sleeping 表示等待事件；Uninterruptible Sleep 表示处于不可中断等待。它们需要与线程栈、唤醒事件和内核证据一起解释，不能直接映射成业务根因。
 
-线程状态（第 3 步）按含义与排查方向判读：
+**Q4: [learning] Android 架构层与 Linux 进程是什么关系，一个应用进程里通常有哪些组件？**
 
-1. **Running**：正在 CPU 上执行，看执行内容判断在算什么。
-2. **Runnable**：在等 CPU，结合优先级、频率、温控。
-3. **Sleeping**：通常在等事件——Binder 回复、futex 锁、epoll、I/O。
-4. **Uninterruptible**：不可中断等待，看 `wchan` 与驱动事件。
+架构层描述职责，进程描述隔离和资源所有权，因此两者是多对多关系。普通应用进程通常同时包含应用代码、Framework 客户端类、ART 和应用所需的原生库。
 
-收尾判断规则：调用 API 的进程不是根因的唯一候选，单看一张 `dumpsys` 快照没有时间线，定不下因果。
+1. **应用代码：**应用的 DEX（Dalvik Executable）字节码、业务线程，以及 APK（Android application package，Android 应用程序包）携带并加载的 `.so`。
+2. **Framework 客户端类：**Activity、View 和系统服务客户端等类由系统运行时环境提供，并在应用进程中执行。构建时的 `android.jar` 是编译期 API stub，不是设备运行时实现。
+3. **ART：**为应用提供运行时环境、垃圾回收和线程管理，并可使用解释、JIT（Just-In-Time，即时编译）或 AOT（Ahead-Of-Time，提前编译）等方式执行字节码。
+4. **原生依赖：**Bionic、图形或数据库等系统库，以及应用自身的 Native 库，按进程需要映射到该地址空间。
 
-**Q4: [learning] Android 架构层级与进程是什么关系？一个应用进程都包含哪些层级的代码？了解这些有什么用？**
-
-一个普通应用进程里同时运行着应用自身代码、Framework 客户端类、ART 运行时和原生库，它们处于同一个进程地址空间并共享该进程的生命周期：
-
-1. **应用代码**：dex 字节码、业务线程、应用自带的 `.so`。
-2. **Framework 客户端类**：Activity、View 和系统服务客户端等框架 API 类由设备上的 boot classpath 提供。编译应用时使用的 `android.jar` 是 API stub，不是运行时装载的实现。
-3. **ART**：dex 的 AOT/JIT 混合编译（安装/运行期把热点代码编译成本地代码）、GC、线程管理。
-4. **原生库**：Bionic libc、libbinder、图形（Skia/HWUI）等，随系统镜像提供。
-
-层与进程是多对多关系，一个进程承载多层的代码，一个层也散布在多个进程：
-
-1. 一个应用进程同时装着应用代码、Framework 客户端代码、ART 和原生库。
-2. `system_server` 混合 Java 服务与 JNI 库。
-3. SurfaceFlinger 是独立原生服务进程。
-4. HAL 可能是独立 Binder 服务进程，也可能以共享库形式加载进调用方进程。
-
-了解这些的用处有三点：
-
-1. **崩溃归属**：任何一层的缺陷都表现成“这个进程的问题”——进程崩溃或被杀带走全部四套代码，不能因为“我的业务代码没问题”就排除 Framework、ART 或原生库的原因。
-2. **性能归属**：耗时在业务逻辑、Framework 分发、ART（GC/JIT）还是原生库/渲染线程，优化动作完全不同。
-3. **安全边界**：进程边界就是沙箱边界，每个应用默认独占一个 Linux UID 和一个进程，跨进程访问必须走 Binder 等显式 IPC。
+反过来，`system_server` 可同时运行大量 Java 服务和 JNI 代码；SurfaceFlinger 通常是独立 Native 进程；HAL 可运行在独立服务进程，也可能采用同进程实现。判断崩溃、权限和性能归属时，要分别问组件属于什么职责层、运行在哪个进程、调用经过什么边界。
 
 **Q5: [learning] Android 进程与线程有什么区别，同一应用为什么会使用多个进程？**
 
-进程拥有独立的虚拟地址空间和运行时状态。线程是进程内执行流，共享进程内存与资源，但各自有调用栈和调度状态。同一应用的组件默认运行在应用主进程，需要时可通过 Manifest 的 `android:process` 将组件放到另一进程。
+进程拥有独立的虚拟地址空间和进程级资源；线程是进程内的执行流，共享进程地址空间和大部分进程资源，但有各自的栈、寄存器状态和调度状态。应用组件默认运行在应用主进程，也可通过 `android:process` 等配置运行在其他进程。
 
-使用多进程会改变状态共享和资源成本：
+1. **隔离：**进程边界可隔离崩溃、权限和部分资源回收影响，但不意味着进程一定独立于应用生命周期或拥有更高优先级。
+2. **状态：**静态字段、单例和普通对象缓存只存在于各自进程，不能跨进程共享；通信需要 IPC 或其他跨进程数据机制。
+3. **成本：**每个进程都要维护地址空间、运行时和线程等状态，通常增加内存与启动成本。多进程本身不会把主线程工作自动变成后台任务。
+4. **命名：**以冒号开头的 `android:process` 值表示应用私有进程名，系统会把它与应用包名组合。进程名不能用于推断线程数、调度优先级或隔离强度。
 
-1. **隔离收益**：特定服务可拥有独立崩溃和内存回收边界，也可满足组件必须在单独进程运行的约束。
-2. **状态边界**：静态字段、单例和对象缓存不跨进程共享，组件间需要通过 IPC 交换数据。
-3. **资源开销**：每个进程要维护自己的地址空间和运行时状态，通常增加内存占用。进程隔离不会自动把主线程工作变成后台任务。
+只有在隔离边界、组件部署或系统约束确有需要时才采用多进程，并为跨进程状态、生命周期和错误恢复设计明确协议。
 
-以冒号开头的进程名（如 `:worker`）表示应用私有的进程名后缀，实际名称会以应用包名为前缀。显式完整名称可能允许不同应用在共享 UID 等条件下请求同一命名进程，具体可用性还受组件与平台权限规则约束。不要仅凭进程名推断线程、隔离权限或执行优先级。
+**Q6: [learning] 16 KB 页大小、Mainline 模块化和 VNDK 弃用分别改变了什么？**
 
-**Q6: [learning] 16 KB 页大小、Mainline 模块化、VNDK 废弃——这三个近年架构边界分别改变了什么？**
+它们影响的是不同兼容边界：16 KB 页大小要求 Native 二进制和打包布局适配；Mainline 使部分系统组件可独立于整机 OTA（Over-the-Air，无线）更新；VNDK 弃用改变了 system/vendor 原生库的分发方式。三者不能互相替代。
 
-三者分别影响原生二进制兼容、系统模块分发与 system/vendor 原生库依赖。它们不能互相替代：16 KB 页要求原生代码适配运行时页大小，Mainline 模块可独立于整机 OTA 更新，VNDK 则从 Android 15 起废弃并调整厂商可用库的分发方式。
+1. **16 KB 页大小：**Android 15 起，AOSP 支持使用 16 KB 页的设备。应用只要直接或通过 SDK（Software Development Kit，软件开发工具包）间接依赖 NDK（Native Development Kit，原生开发套件）库，就应检查并按要求重建、测试 Native 库及 APK 对齐。Google Play 要求面向 Android 15（API 35）及以上的应用支持 64 位设备上的 16 KB 页；自 2027 年 2 月 1 日起，不支持 16 KB 页的应用更新不能发布。该分发要求不表示所有 Android 设备都使用 16 KB 页。
+2. **Mainline：**部分系统组件以可更新模块分发，可独立于整机系统镜像更新。同一平台版本的设备可能因此运行不同模块版本；诊断模块行为时应记录设备构建信息和相关模块版本。
+3. **VNDK（Vendor Native Development Kit，厂商原生开发套件）弃用：**从 Android 15 起弃用该套件。为 Android 15 构建的 vendor/product 分区不再使用 VNDK 版本属性；原 VNDK 库改为按 vendor-available 库安装到 vendor 或 product 镜像。既有较旧 vendor 镜像仍可能依赖旧 VNDK。弃用 VNDK 不等于取消 linker namespace 或所有 system/vendor 隔离规则。
 
-1. **16 KB 页大小**（Android 15 起支持）：只含 Java/Kotlin 代码的应用通常无需为 ELF 对齐重新构建。含 NDK 库或经 SDK 间接引入 `.so` 的应用要检查 ELF `LOAD` 段对齐和 APK 内未压缩原生库的 ZIP 对齐。设备当前页大小可用 `adb shell getconf PAGE_SIZE` 读取。Google Play 要求目标为 Android 15（API 35）及以上的应用支持 64 位设备上的 16 KB 页。自 2027-02-01 起，不支持 16 KB 的应用更新不能发布。这是分发要求，不表示所有设备都运行在 16 KB 模式。
-2. **Mainline**：部分系统组件以 APEX 或 APK 模块分发，可经 Google Play 系统更新独立于整机 OTA 更新，因此同一平台版本的设备可能安装不同模块版本。分析问题时应同时记录 build fingerprint 和相关模块版本。模块升级仍须遵守相应模块接口与兼容契约，不能仅根据平台版本推断模块实现。
-3. **VNDK 废弃**（Android 15 起）：针对 Android 15 构建的 vendor/product 分区不再声明 `ro.vndk.version` 等 VNDK 版本属性，原 VNDK 库改按 vendor-available 库安装到 vendor 或 product 镜像。VNDK 废弃不等于动态链接器命名空间隔离取消，加载前的可访问性仍受命名空间规则约束。
+版本依据：Android Developers《Support 16 KB page sizes》；AOSP《VNDK overview》《Mainline》。
 
-版本依据：Android Developers《Support 16 KB page sizes》。Android Open Source Project《Vendor Native Development Kit (VNDK) overview》。
+**Q7: [learning] 为什么不能只看 Android 版本号判断设备上的运行时行为？**
 
-**Q7: [learning] 判断一台 Android 17 设备的运行时行为，为什么要同时核对五个版本维度，而不是只看系统版本号？**
+Android 版本号只描述平台基线，应用兼容行为、可更新模块、vendor/HAL 实现和内核都可能独立变化。复现和归因时，应记录与问题相关的实际版本，而不是只写“Android 17”。
 
-系统版本号只覆盖平台构建一个维度。targetSdk 兼容行为、Mainline 模块版本、vendor 分区与 HAL 版本、内核 GKI/KMI 代际各自独立演进，任何一维不同都可能让“同一 Android 17”表现出不同行为。
+1. **平台构建：**记录 build fingerprint、SDK/API level 和构建类型，以确定 Framework 基线。
+2. **应用兼容设置：**记录应用 `targetSdkVersion` 和适用的兼容性变更状态，因为部分新行为按目标版本启用。
+3. **Mainline 模块：**对依赖模块的行为，记录相关模块版本；平台版本号不能替代模块版本。
+4. **vendor 与 HAL：**检查设备实际 VINTF manifest、HAL 接口版本和厂商实现；相同 Framework 版本不保证底层实现一致。
+5. **内核：**记录内核 release、GKI（Generic Kernel Image，通用内核映像）/KMI（Kernel Module Interface，内核模块接口）信息及厂商扩展，确认实际调度和驱动实现。
 
-五个维度与各自的判断落点：
+只采集与故障假设相关的维度。完整记录用于复现和缩小差异来源，不能单凭版本字段证明某一项就是根因。
 
-1. **平台构建**：SDK/API level 与系统镜像决定框架代码基线。
-2. **应用 targetSdk**：新平台的收紧行为按 targetSdk 门控，同设备上不同 targetSdk 的应用表现可以不同。
-3. **Mainline 模块版本**：ART 等组件以 APEX 独立于 OTA 更新（ART 模块自 Android 12 引入，见 [06-art-runtime.md](06-art-runtime.md)），排障要记录模块版本。
-4. **vendor 分区与 HAL**：Treble 解耦后框架对 vendor 的依赖由 VINTF 兼容矩阵约束。
-5. **内核分支与 KMI**：GKI 让内核与平台 release 解绑，先确认设备实际内核再看内核行为。
+**Q8: [learning] Treble 怎样降低 Framework 与 vendor 的升级耦合，GSI 能证明什么？**
 
-做法：采集 build fingerprint、各应用 targetSdk、模块版本、VINTF manifest 与内核版本/KMI 字符串，五项齐了再下结论。
+Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。VINTF（Vendor Interface，厂商接口）汇总设备提供的接口与 Framework 所需接口，兼容性矩阵和 manifest 用于检查双方声明是否匹配。
 
-**Q8: [learning] Treble 的“框架与 vendor 解耦”靠什么机制保证？GSI 为什么能当验证载体？**
+1. **接口声明：**device manifest 描述设备侧提供的 HAL；framework compatibility matrix 描述 Framework 所需能力。声明匹配是 OTA 兼容判断的一部分。
+2. **接口形式：**新 HAL 优先使用 Stable AIDL（Android Interface Definition Language，Android 接口定义语言）；存量 HIDL（HAL Interface Definition Language，HAL 接口定义语言）仍可能存在。接口稳定性和可用后端受所在分区规则约束。
+3. **GSI 验证：**GSI（Generic System Image，通用系统映像）提供通用 AOSP system 镜像，可在 Treble 设备上检验通用 Framework 与设备 vendor 接口的协作。它能发现一部分集成问题，但单独刷入 GSI 不证明产品满足全部 CTS（Compatibility Test Suite，兼容性测试套件）/VTS（Vendor Test Suite，厂商测试套件）、认证、厂商扩展或性能要求。
 
-Treble 用 VINTF（vendor interface）约束框架与 vendor 之间的接口版本。设备在 vendor manifest 中声明已实现的 HAL 版本，框架兼容矩阵（FCM）声明所需接口，启动或兼容性验证时据此检查匹配关系。HIDL 已弃用，新 HAL 应使用稳定 AIDL。
+完整兼容性结论还需结合 VINTF 检查、CTS/VTS 和产品自身测试。
 
-GSI 尽量使用通用框架实现，并通过声明的 vendor 接口与设备侧实现协作，因此可作为兼容性测试载体。刷入 GSI 可发现部分框架与 vendor 集成问题，但不能单独证明设备满足全部接口、兼容性和认证要求，也不覆盖厂商扩展功能与产品性能。判断完整兼容性还需结合 VINTF 检查、VTS/CTS 和产品测试。
+依据：AOSP《Vendor interface object》《Generic system images》《AIDL for HALs》。
 
-**Q9: [learning] Android 的进程回收架构由哪些角色组成？杀、冻、压分别是谁在做什么？**
+**Q9: [learning] Android 的进程回收与压缩由哪些角色负责？**
 
-Android 17 的进程回收和压缩由不同角色协作。OomAdjuster 给出进程重要性，lmkd 负责按内存压力选择终止目标，Freezer 暂停符合策略的缓存进程，mmd 维护 ZRAM 压缩。杀、冻、压是三种不同操作。
+进程重要性评估、进程终止、冻结和 ZRAM 维护是不同职责。诊断时要先确认现象是进程退出、冻结，还是内存页交换/压缩造成的回切成本。
 
-1. **OomAdjuster**：在 `system_server` 中根据组件活跃状态及绑定、Provider 等依赖关系计算进程重要性，并将 adj、procState、schedGroup 和能力标志同步给 lmkd。adj 数值越小通常越受保护。
-2. **lmkd**：在用户态监控内存压力，根据 PSI、swap 剩余和页面回收后的再访问（refault）等信号选择合格目标并发送 SIGKILL。它不是简单地杀 RSS 最大的进程。
-3. **Freezer**：通过 cgroup 暂停缓存进程的线程调度，进程仍存在。是否冻结取决于缓存状态、阈值与策略。冻结期间发生不允许的同步 Binder 事务时，系统可能终止该进程。
-4. **mmd**：负责 ZRAM 重压缩、写回和预取，改变缓存进程的内存驻留与回切代价，但不取代 lmkd 的终止决策。
+1. **ActivityManager 与 OomAdjuster：**根据组件状态和依赖关系计算进程重要性，并把相应信息提供给系统的内存管理策略。重要性不是简单按进程 RSS（Resident Set Size，常驻集大小）排序。
+2. **lmkd（Low Memory Killer Daemon，低内存杀进程守护进程）：**监测内存压力并在需要时选择可回收进程终止。它会综合压力和可用内存等信号，不等同于“杀掉占内存最多的应用”。
+3. **Cached App Freezer：**按系统策略冻结符合条件的缓存进程，使其线程暂时不被调度；进程仍保留，冻结与终止是不同状态。
+4. **mmd（Memory Management Daemon，内存管理守护进程）：**Android 17 及以上引入的内存管理守护进程，负责配置和持续维护 swap/ZRAM，可执行重压缩、写回等维护操作。它与 `system_server` 的调度决策、lmkd 的终止职责不同。
 
-排查按症状走三条证据链：
+排查进程退出时看退出原因和 lmkd 证据；进程仍存在但不运行时确认 freezer 状态；回切变慢时再检查 ZRAM 与缺页/写回证据。某一种信号与另一种结果同时出现，不足以单独证明因果。
 
-1. **进程没了**：查退出原因（`dumpsys activity exit-info`）与 lmkd 日志。
-2. **进程在但不跑**：查冻结状态（`dumpsys activity processes`、cgroup.freeze 文件）。
-3. **回切慢**：查 ZRAM 写回与预取记录。
+依据：AOSP《Memory management daemon》《Cached app freezer》《Low memory killer daemon》。
 
-**Q10: [learning] 一个 Android 应用进程内部有哪几类固定线程角色？一次点击到上屏经过哪些线程？**
+**Q10: [learning] 应用进程常见线程角色有哪些，点击到显示通常经过哪些执行环节？**
 
-常见应用进程包含主线程、硬件加速下的 RenderThread、接收远程 Binder 请求的线程，以及应用自行创建的后台执行器。从输入事件已被系统路由到目标窗口开始，一次点击通常经过"应用主线程接收与分发 → 业务逻辑 →（可能跨进程 Binder 调用）→ 主线程遍历 View 并记录绘制内容 → RenderThread 准备并提交渲染工作 → SurfaceFlinger 合成"。这是常见路径，动画、无效化合并和缓存可能改变具体帧的工作量。
+应用进程通常有主线程、硬件加速路径中的 RenderThread、接收远程 Binder 调用的线程池，以及应用创建的后台线程。它们不是每个进程都固定具备的一组线程；点击到屏幕显示也不是单线程串行完成。
 
-1. **主线程**：由 `ActivityThread.main()` 启动 Looper 消息循环，承载生命周期回调、输入分发、测量/布局和显示列表记录。它上面的长消息是掉帧的最直接原因。
-2. **RenderThread**：硬件加速窗口才有，消费主线程记录的显示列表、准备并提交 GPU 工作。与主线程在帧同步点交接——既不是“主线程提交后立即自由”，也不是“等 GPU 画完整帧”。
-3. **Binder 线程池**：接收跨进程调用。远程 AIDL 回调默认落在这里而不是主线程，实现必须自己保证线程安全。主线程主动发起同步 Binder 调用时同样会被拖住。
-4. **后台执行器**：协程、线程池、HandlerThread 等。选择依据是生命周期绑定、持久化、串行/并发需求——HandlerThread 只在任务需要 Looper 亲和时用，需在进程重启后仍存活、由约束触发的持久任务交给 WorkManager。
+常见路径从系统已把输入事件路由到应用窗口开始：InputDispatcher 经输入通道投递事件，应用主线程分发输入并执行回调；需要更新界面时，主线程进行 View 遍历并记录绘制内容；硬件加速场景下，RenderThread 准备并提交渲染工作；之后由 GPU、SurfaceFlinger 和显示合成链路完成可见帧。具体工作会受动画、帧合并、缓存和合成策略影响。
 
-边界：软件渲染窗口不走硬件渲染路径。协程改变的是任务结构不是速度，`Dispatchers.Main` 上的协程仍然占用主线程。
+1. **主线程：**运行 Looper，处理生命周期、输入分发、View 测量/布局/绘制记录和应用回调。长时间占用会推迟输入或帧工作。
+2. **RenderThread：**硬件加速路径使用的渲染线程之一，负责消费绘制记录并准备渲染命令。它与 GPU 执行不是同一件事，主线程也不必等待 GPU 完成整帧才继续所有工作。
+3. **Binder 线程：**处理远程进程送来的 Binder 请求或回调。远程 AIDL 方法不保证在主线程执行；实现要按实际线程模型保护共享状态。
+4. **后台线程：**线程池、协程调度器或 HandlerThread 承担耗时工作。协程改变任务组织方式，不会自动加速任务；运行在 `Dispatchers.Main` 的代码仍占用主线程。
 
-**Q11: [learning] 应用的所有请求都需要经过 Android 的五层架构吗？可以跨层通信吗？**
+定位掉帧时要确认耗时发生在主线程、RenderThread、GPU、SurfaceFlinger 还是显示等待上，不能把“点击回调变慢”和“最终上屏变慢”视为同一指标。
 
-不需要。五层是职责划分，不是一条所有请求都必须流经的调用管线：一次请求只穿过它实际跨越的层，很多高频请求完全绕开“应用框架服务”这一层，数据面请求也常常不经 HAL。
+**Q11: [learning] Android 中 Native 代码、库和服务如何区分？**
 
-按请求类型分开看：
+Android NDK 文档在应用开发语境中把 C/C++ 代码称为 native code；JNI 文档把 Java/Kotlin 称为 managed code，并说明 JNI 用于两者互调。这里的 Native 指应用中的原生实现，通常编译为设备 ABI 匹配的 `.so` 并加载到进程运行。
 
-1. **管理类、跨应用类**：通常经 Binder 进入 `system_server`——安装/查询应用（PMS）、启动组件（AMS/ATMS）、窗口操作（WMS），之后才可能继续向下到原生库、HAL 与内核。
-2. **进程内数据面**：文件读写和绝大多数计算在应用进程内完成——Java API 只是进程内库函数（libcore/Bionic），直达系统调用进入内核，不经过框架服务进程。
-3. **图形**：应用经 Skia/HWUI 提交到 GPU 驱动（内核），合成在独立的 SurfaceFlinger 进程对接 Composer HAL 与 DRM 显示子系统。
-4. **相机、音频**：Binder 只传控制命令，数据经共享缓冲区/FMQ 直达 HAL 与驱动，控制路径和数据路径不同。
+Java/Kotlin 代码由 ART 管理；即使 ART 将其编译成机器码，它仍是 managed code。Java/Kotlin 可通过 JNI 调用 Native 实现，但调用不会改变两边代码的归属。
 
-判断方法：把一次操作拆成“控制命令走哪、数据走哪”，数它跨过的进程和边界，就知道该去哪些进程取证。“应用发起的请求”不等于“会逐层经过五层”。
+1. **应用 Native 库：**应用进程加载 APK 中的 `.so`，JNI 提供 Java/Kotlin 与 Native 代码的调用接口。
+2. **平台 Native 库：**如 Bionic、Skia、SQLite，作为共享库映射到使用它们的进程。
+3. **Native 服务：**如 SurfaceFlinger，是独立可执行程序和进程；HAL 常由此类服务实现。Linux 内核代码运行在内核态，不是用户进程中的 Native 库。
 
-**Q12: [learning] Android 说的“原生库”指什么？“原生”（native）在这里是什么意思？**
+依据：Android Developers《Android NDK: Concepts》《JNI tips》《Android ABIs》；AOSP《Architecture overview》。
 
-原生库指用 C/C++ 编译成本机机器码、以 .so 形式分发、由 CPU 直接执行的库。“原生”是 native 的中译，取“CPU 本机指令集”之义，对立面是需要在虚拟机里翻译执行的字节码，而不是“系统原装”的意思。
+**Q12: [learning] ABI 是什么，与 API 有什么区别？**
 
-"native"的地基：CPU 只执行自己指令集的机器码，native code 即编译成这套指令、无中间翻译层直接执行的代码（NDK 的 N 就是 Native）。它的对立面是 dex 字节码——不面向具体 CPU，由 ART 在运行时翻译，对象活在 GC 管理的堆上。一段代码是不是“原生世界”的成员，看它的进程里有没有 ART、内存由谁管理。
+API（Application Programming Interface，应用程序接口）规定源码可以调用哪些函数、类型和行为；ABI（Application Binary Interface，应用二进制接口）规定编译后的二进制如何与处理器及系统运行时衔接。简单说，API 面向源码，ABI 面向二进制。
 
-“库”的形态对照：
+1. **API 变化影响编译与调用：**应用使用的 API 不存在或行为不兼容时，可能无法编译，或在运行时因平台接口差异失败。Android 的 API level 用于标识平台 API 版本。
+2. **ABI 变化影响二进制加载与执行：**指令集、调用约定或数据布局不匹配时，Native 库不能在目标设备上正确加载或运行。Android 常见 ABI 有 `arm64-v8a`、`armeabi-v7a` 和 `x86_64`；APK 将 Native 库放在 `lib/<abi>/` 下，安装时系统选择设备支持的兼容版本。
 
-1. **原生库**：动态库 .so，装载进调用方进程的地址空间，进程内直接调函数——Bionic libc、Skia、SQLite、libbinder，以及应用经 NDK 打包的 libxxx.so。
-2. **独立原生服务**：ELF 可执行程序，由 init 拉起为无界面守护进程——SurfaceFlinger、AudioFlinger。“原生库与 ART 层”这个名字把两种形态都框进同一层，“库”字不读死。
+因此，同一份 Java/Kotlin 字节码可由运行时适配不同设备 ABI；Native 库则必须提供与设备 ABI 兼容的二进制。API 兼容不代表 ABI 兼容，反之亦然。
 
-边界与纠偏：
+依据：Android Developers《Android NDK: Concepts》《Android ABIs》。
+**Q13: [learning] HAL 通常用什么语言实现，Framework 为什么通过 IPC 而不是 JNI 调用独立 HAL 服务？**
 
-1. WMS 也是系统自带，但它是 Java 类、活在 ART 里，不是 native——“原生”不等于“原装、出厂自带”。
-2. ART 自己就是 native 库（libart.so），是 native 世界派去管理 dex 世界的运行时，这也是这一层叫“原生库与 ART 层”的原因。
-3. 应用侧的直观体感：NDK 写 C/C++ 编出 .so 塞进 APK，System.loadLibrary() 加载后经 JNI 调用。
+HAL 没有唯一实现语言。常见实现使用 C/C++；AIDL 也可生成 Java、C++、NDK 或 Rust 后端，但 vendor 分区必须遵守对应的稳定接口与运行时规则。JNI 只做进程内互调；当 Framework 与 HAL 位于不同进程时，必须使用 Binder 等 IPC。
 
-**Q13: [learning] C/C++ 编写的组件都属于“原生库与 ART 层”吗？**
+1. **设备访问：**HAL 常需调用设备节点、驱动接口或厂商库，因此 Native 实现常见；这只是工程惯例，不是 HAL 的定义条件。
+2. **跨分区契约：**system/vendor 之间的 AIDL HAL 使用 Stable AIDL。vendor Native 实现应使用 NDK 后端及稳定的 `libbinder_ndk` 接口，不能依赖不稳定的 C++ `libbinder` API。
+3. **数据通路：**Binder 适合控制命令和结构化元数据；图像、音频等大数据可结合共享内存、DMA-BUF（Direct Memory Access Buffer，直接内存访问缓冲区）、FMQ 和同步栅栏。不能把“使用 Binder”理解为所有媒体数据都复制进 Parcel。
+4. **历史形态：**旧式 passthrough HAL 可在调用方进程中加载；Treble 后 binderized HAL 是跨分区常见方式。具体设备仍要看接口版本、VINTF 声明和实现。
 
-不属于。“C/C++ 编写”只说明组件是 native 代码（实现形态），层归属是架构角色，由“随谁分发、服务谁、在哪个边界”决定。C/C++ 代码实际横跨五层中的四层。
+JNI 不提供进程隔离、服务发现或 IPC 权限边界，因此不能用它替代 Framework 与独立 HAL 服务之间的 Binder 通信。
 
-四层对照：
+依据：AOSP《AIDL for HALs》《AIDL backends》《HAL overview》。
 
-1. **应用层**：游戏引擎与 App 的 NDK 模块（如 libunity.so）——随 APK 分发、跑在应用进程、服务单个应用的业务。
-2. **原生库与 ART 层**：Skia、SQLite、libbinder、SurfaceFlinger——随系统镜像分发、为全系统提供公共能力。
-3. **HAL 层**：厂商的相机、音频、显示 HAL 实现——C/C++ 写成，贴硬件、躲在稳定接口后面。
-4. **内核层**：Linux 内核与驱动本身就是 C。
+**Q14: [learning] C++ Binder、Java Binder 和 hwbinder 是什么关系？**
 
-归属三问的判断顺序：先问随谁分发（系统镜像还是 APK），再问服务谁（全系统公共能力还是单应用业务），最后问在哪个边界（贴内核驱动属 HAL/内核，管 dex 的是 ART）。语言只是入场券，席位由归属决定——应用自带的 C++ 是“运行在应用层的原生代码”，内核的 C 是内核层，厂商的 C++ HAL 是 HAL 层。
+Java Binder 与 C++ Binder 是 Android Binder IPC 的不同语言接口；它们可以通过 Binder 驱动通信，不代表两套互不相关的 IPC 机制。`hwbinder` 则是历史上供 HIDL HAL 使用的 Binder 设备/上下文，不能把“C++ Binder”等同于 `hwbinder`。
 
-**Q14: [learning] HAL 的实现代码是 Java 还是 C/C++？框架与 HAL 之间为什么用 Binder 而不是 JNI？**
+1. **Java Binder：**应用和 Framework Java 代码通常使用 `android.os.Binder`、`IBinder` 与 Java AIDL 生成类。
+2. **C++ Binder：**Native 进程可使用 libbinder 的 C++ 接口；稳定跨分区 AIDL 通信应选择适用的 NDK 或 Rust 后端，遵守对应 API 稳定性要求。
+3. **hwbinder：**存量 HIDL HAL 可能使用专用 Binder 通道；新的 HAL 接口应按当前 AOSP 规则优先采用 Stable AIDL，不能把旧设备行为外推到所有版本。
+4. **数据边界：**例如 AudioTrack 与音频服务之间，Binder 可传控制请求和句柄，PCM（Pulse-Code Modulation，脉冲编码调制）流通常通过共享缓冲区等机制传输，而非把连续音频样本逐次塞入普通 Binder 调用。
 
-现代 Android 的 vendor HAL 服务通常使用 C++ 或 Rust 等 native 实现，但不能概括成“HAL 只能用 C/C++”。AIDL 可生成 Java、C++、NDK 和 Rust 等后端。vendor 分区能否使用某个后端还受稳定性、服务注册和分区 API 规则限制。Java 也可作为框架侧客户端，例如 CarService 通过 Binder 调用 VHAL。
+分析 Binder 问题时说明进程、语言后端、Binder 设备/上下文和数据通路；只说“原生 Binder 慢”不足以定位故障。
 
-实现形态由接口、进程边界和硬件数据路径共同决定：
+依据：AOSP《AIDL for HALs》《AIDL backends》及对应版本的 Binder 实现。
 
-1. **硬件访问**：HAL 常需对设备节点执行 ioctl、映射缓冲区、与内核驱动交换结构化数据，因此 native 代码和对应系统库较常见。JNI 本身既不是 ioctl 接口，也不能替代跨进程通信。
-2. **大数据通路**：相机图像、显示缓冲区和音频数据可使用共享内存、DMA-BUF、FMQ 或同步栅栏等机制，避免把大块数据序列化进普通 Binder Parcel。控制面与数据面因此可能采用不同通路。
-3. **既有实现**：厂商常把既有 C/C++ 库、驱动接口与固件控制封装在 HAL 后面，迁移时需维持稳定接口和设备兼容性。
-4. **接口演进**：早期 legacy HAL 常以共享库形式加载。Treble 引入 binderized HAL，存量 HIDL 使用 hwbinder。Stable AIDL HAL 使用普通 Binder 并通过 VINTF 管理接口稳定性。直通 HAL 与新旧版本并存，不能据此断言所有 HAL 都在独立进程。
+**Q15: [learning] Android 平台主要使用哪些实现语言，AIDL 和 HIDL 又是什么？**
 
-JNI 用于同一进程地址空间内的 Java/native 互调。进程隔离时必须通过 IPC，Android HAL 场景常见 Binder。Treble 推动框架与 vendor 之间使用受版本约束的接口，以减少升级耦合并形成故障与权限边界，但实际隔离程度仍取决于 HAL 类型和产品实现。
+Android 平台使用 Java、Kotlin、C、C++ 和 Rust 等语言实现不同组件。AIDL 与 HIDL 是接口描述语言，用于声明跨进程接口契约并生成绑定代码，不是与这些实现语言并列的组件语言。
 
-依据：AOSP《AIDL for HALs》与《AIDL backends》说明了 HAL 接口后端、稳定性和分区限制。具体设备的接口形式应以其 VINTF manifest 与实现为准。
+1. **Java 与 Kotlin：**广泛用于 Framework、`system_server` 和应用。Kotlin 与 Java 可在 Android 工具链中互操作；Kotlin 不会替换 ART，也不意味着 Framework 已整体迁移。
+2. **C 与 C++：**常用于 Native 库、系统服务、HAL 和工具。Linux 内核以 C 为主，也在受控范围引入 Rust；模块构建约束需按具体 `Android.bp` 配置核对。
+3. **Rust：**用于部分平台组件，借用检查可在编译期阻止一类内存错误；`unsafe` 和 FFI（Foreign Function Interface，外部函数接口）边界仍需审查。引入 Rust 不代表既有 C/C++ 代码会整体重写。
+4. **AIDL：**描述 IPC 接口，支持 Java、C++、NDK 和 Rust 等后端。具体后端是否适用，取决于模块和分区规则。
+5. **HIDL：**用于较早建立的 HAL 接口体系，存量设备仍可能使用；新 HAL 按 AOSP 指引优先使用 Stable AIDL。
 
-**Q15: [learning] 框架服务之间所说的“原生 Binder”是什么，和 Java Binder、hwbinder 有何区别？**
+不要从语言名称推断层级、隔离方式或安全性。应同时说明实现语言、进程位置和接口契约。
 
-指框架家族的原生服务守护进程（SurfaceFlinger、AudioFlinger、CameraService、installd 等）互相调用、以及 system_server 内原生代码调用它们时，用的是 libbinder 的 C++ 接口——BBinder、BpBinder、C++ 版 Parcel 与 AIDL 的 C++/NDK 后端，编解码全程在 C++ 里完成，没有 JVM 参与。
+依据：AOSP《AIDL backends》《AIDL for HALs》《HAL overview》及 Android Kernel 文档。
 
-地基：Binder 只有一套底座——内核一个驱动加用户态一个 libbinder，其上有两个语言门面：Java 门面（android.os.Binder、Java 版 Parcel、AIDL 的 Java 后端，本身经 JNI 包着 libbinder）和 native 门面（C++ API）。“原生 Binder”不是第二套 IPC，而是同一条管道的 C++ 门面。必须用它没有选择余地：原生服务进程里没有 ART，android.os.Binder 这个类在那些进程里不存在。
+**Q16: [learning] system_server 中有哪些 Native 代码，它们为什么与 Java 服务同进程？**
 
-三个具体调用：
+`system_server` 是一个进程，不是单一语言运行时：其中运行 ART/Java 服务，也可加载 JNI 库和 Native 组件。JNI 让同一进程内的 Java 与 C/C++ 代码互调；进程内共享意味着它们共享进程故障边界。
 
-1. **图层事务**：system_server 中的 WMS 经 JNI 进入 libgui 的 SurfaceComposerClient，再用 C++ Binder 调用 surfaceflinger 进程的 ISurfaceComposer 接口。
-2. **音频通路**：AudioTrack 的 native 半截与 audioserver 进程的 AudioFlinger 之间，经 IAudioFlinger、IAudioTrack 这些 C++ Binder 接口传控制命令与 PCM 数据。
-3. **installd**：system_server 的原生部分经 IInstalld（AIDL 的 C++ 后端）跨进程调 installd 守护进程做 dexopt 与目录操作。
+1. **JNI 胶水：**`frameworks/base/services/core/jni/` 中的实现为部分 Java 系统服务接入 Native 库和系统能力。
+2. **Native 子系统：**例如 InputManagerService 通过 JNI 创建 Native 输入管理组件，InputReader 和 InputDispatcher 在独立 Native 线程中处理输入；SensorService 在相应 AOSP 配置下可由 SystemServer 的 Native 初始化路径启动。
+3. **服务边界：**Native 组件在 `system_server` 内运行时，与该进程中的 Java 服务共享地址空间和崩溃域；独立 Native 守护进程则有自己的进程边界。
 
-两个易混点：
+把某组件称为“Native”不表示它一定是独立进程，也不表示它由应用调用。排查时要核对该版本的 JNI 注册、加载入口和实际进程归属。
 
-1. **别与 hwbinder 混淆**：hwbinder 是 Treble 时代给 HIDL HAL 划的专用通道。框架原生服务之间走普通 Binder。
-2. **跨语言调用是常态**：system_server 的 Java 服务调 cameraserver 的 C++ 服务，就是 Java 代理对 C++ 实现，同一个驱动承载——这恰好证明 Java 与 native 门面是同一套 IPC。另外 system_server 内部 Java 服务互调（如 AMS 调 PMS）虽是 Binder 语义，但两端同进程时走本地路径直接执行，不进内核。
+依据：对应版本 AOSP `frameworks/base/services/core/jni/`、InputFlinger 和 SensorService 实现。
 
-**Q16: [learning] Android 平台组件主要用哪些语言实现，AIDL 和 HIDL 又是什么？**
+**Q17: [learning] 怎样查看设备上 system_server 当前映射的 .so，为什么它不是固定依赖清单？**
 
-Android 平台代码主要使用 Java、Kotlin、C、C++ 和 Rust。AIDL、HIDL 是接口描述语言，不是与它们并列的实现语言。选型取决于代码运行在 ART、native 进程还是内核，以及需要跨越什么接口边界。应用也可以随 APK 携带 Dart、JavaScript 等自己的运行时，这不改变平台组件所用的语言。
+`system_server` 的映射会随 Android 版本、产品配置、启动阶段和按需加载行为变化，因此不存在适用于所有设备的固定 `.so` 清单。`/proc/<pid>/maps` 只能显示采样时刻已映射的对象，适合作为设备现场证据。
 
-1. **Java 与 Kotlin**：Java 仍广泛用于 Framework 和 `system_server`。Kotlin 与 Java 可在 Android/JVM 工具链中互操作，常用于应用和部分平台模块。使用 Kotlin 不会替换 ART，也不意味着框架主体已整体迁移。
-2. **C 与 C++**：用于 native 库、系统服务和大量 HAL 实现。Linux 内核传统上以 C 为主，近年也支持在受限范围内增量引入 Rust。不能把“内核代码”简单描述为只能写 C。AOSP 各模块对 C++ 异常和 RTTI 的构建约束需按模块配置判断。
-3. **Rust**：用于适合其安全和系统编程特性的新增平台组件。借用检查能在编译期阻止一类内存错误，但 `unsafe` 和 FFI 边界仍需审查。Android 的采用重点是新代码，不等于承诺重写全部既有 C/C++。
-4. **AIDL 与 HIDL**：描述 IPC 接口及数据契约，再由构建工具生成后端绑定。稳定 AIDL 支持 Java、C++、NDK 和 Rust 等后端，vendor 分区可用的后端受稳定性与 API 规则约束。存量 HIDL HAL 仍需按平台版本识别。
-
-Google 在 2024 年公布的 Android 数据显示，内存安全漏洞占比从 2019 年的 76% 降至 2024 年的 24%。Google 在 Android 13 的资料称，当时约 21% 的新增 native 代码使用 Rust。它们是对应年份的平台统计，不代表漏洞全部来自 C/C++，也不能作为当前代码占比。Rust 可减少新引入的内存安全问题，但不能消除所有漏洞类别。
-
-版本依据：Google Online Security Blog《Eliminating Memory Safety Vulnerabilities at the Source》（2024）和《Memory Safe Languages in Android 13》（2022）。AOSP《Stable AIDL》与《AIDL backends》。
-
-**Q17: [learning] system_server 里有 C++ 代码吗？“system_server 的原生部分”指什么？**
-
-有。system_server 不是纯 Java 进程，而是一个宿主：ART 运行时加几百个 Java 服务，再加 JNI 胶水、成建制的 C++ 库甚至完整的 C++ 服务。“原生部分”就指这些 C++ 代码。
-
-地基是“进程不是语言单元”：同一个地址空间可以同时装两类代码——Java 部分由 ART 执行字节码、内存归 GC 管，C++ 部分是 .so 装载后由 CPU 直接执行。两部分共享线程与内存，靠 JNI 互调。system_server 是这一事实最集中的样本。
-
-system_server 里的 C++ 分三类：
-
-1. **JNI 胶水**：libandroid_runtime（Binder、Parcel、MessageQueue 的 native 实现）、libandroid_servers（各系统服务的 JNI 总库）。
-2. **混合服务的 native 半边**：不少“Java 服务”只有决策逻辑在 Java，执行管道在 C++——窗口的 SurfaceControl 经 JNI 落到 libgui，音频的 AudioService 经 JNI 落到 libaudioclient，dexopt 落到 installd 的客户端封装。
-3. **整建制 C++ 服务**：输入子系统的 InputReader 与 InputDispatcher 是纯 C++，跑在 system_server 自己的 native 线程上，Java 的 InputManagerService 只是壳。SensorService 也是完整的 C++ Binder 服务，经 JNI 在 system_server 内实例化，外部进程察觉不到它与 Java 服务同住。
-
-为什么这么设计：输入分发延迟直接影响触控跟手度，InputReader 要用 epoll 直读内核 input 设备节点。贴内核的接口 Java 做不了。libgui、inputflinger 这些库本就是为多进程共享写的，直接装载即可。
-
-代价与归属边界：
-
-1. **同进程即同崩溃域**：C++ 部分崩溃照样带走整个 system_server、触发框架重启——InputDispatcher 崩溃等于框架崩溃。
-2. **层级归属不变**：这些 C++ 仍是原生层的代码，不因住进 system_server 变成框架层——层与进程是多对多关系，system_server 同时承载应用框架层与原生层的代码。
-
-**Q18: [learning] system_server 引入了哪些 so 库？如何拿到权威清单？**
-
-没有跨版本固定的 system_server 原生库清单。库可能由 SystemServer 显式加载、服务类按需加载，或作为 ELF 依赖被动态链接器拉入，而且具体集合随版本和产品变化。因此设备进程的实际映射是运行时核对依据，源码清单只用于解释来源。
-
-三种途径对应三类库：
-
-1. **SystemServer 显式加载**：libandroid_servers（frameworks/base/services 的 JNI 总库，收输入、电源、灯光、闹钟、USB、Vibrator 等服务的 JNI 与 SensorService 的启动入口。AAOS 13 源码中其链接依赖含 libinputflinger、libinputservice、libaudioclient、libpowermanager、libhardware、libhidlbase、libbinder_ndk 等）。另有触发式加载的 libfdtrack——FD 数量越过阈值才装载的文件描述符泄漏追踪库。
-2. **框架必用、自 Zygote 继承的 JNI**：libandroid_runtime（android.os.Binder、Parcel、MessageQueue 的 native 实现）、libhwui（渲染管线，SurfaceControl 与 Surface 的 JNI 也在其中）、libmedia_jni（音频与媒体的框架绑定）、Wi-Fi 栈的 libwifi-service。
-3. **依赖拉入的实现库**：libbinder 与基础设施（libcutils、libutils、liblog、libbase）、libgui（SurfaceComposerClient，经 libhwui 的依赖进入）、libaudioclient、libhardware（hw_get_module 加载旧式直通 HAL 的入口）、libhidlbase（存量 HIDL，逐步退场）、libEGL 与 libGLESv2（system_server 自绘界面时生效）、Bionic（libc、libm、libdl）与 C++ 运行时。
-
-权威清单的取法：
+在允许读取目标进程 maps 的开发设备上，可用以下命令列出映射路径中包含 `.so` 的条目：
 
 ```bash
-adb shell su -c 'cat /proc/$(pidof system_server)/maps' | grep '\.so' | awk '{print $6}' | sort -u
+adb shell 'pid=$(pidof system_server) && cat /proc/$pid/maps' \
+  | sed -n 's/^[^ ]* [^ ]* [^ ]* [^ ]* [^ ]* //p' \
+  | grep '\.so' \
+  | sort -u
 ```
 
-命令各段的作用如下：
+1. **远端采样：**`pidof system_server` 获取设备端 PID（Process Identifier，进程标识符），`cat` 读取该进程 maps。生产设备可能因权限和 SELinux（Security-Enhanced Linux，安全增强型 Linux）限制拒绝读取；仅在获准 root 的 userdebug/eng 等开发环境使用特权方式。
+2. **提取路径：**maps 每行前五项是地址范围、权限、偏移、设备号和 inode；`sed` 去掉这些字段并保留其余路径，避免用固定列号截断带空格的路径。
+3. **筛选去重：**`grep` 只保留路径文本包含 `.so` 的映射，`sort -u` 去重。该筛选是便于阅读的近似清单，不包含所有匿名映射或无 `.so` 路径的 Native 映射。
+4. **解释来源：**把现场路径与该设备版本的 `SystemServer` 显式加载点、`libandroid_servers` 等构建依赖及动态链接关系对照。按需加载库可能尚未出现，库也可能随后卸载。
 
-1. `adb shell` 在设备端执行后续命令。
-2. `su -c` 请求以设备允许的 root 权限执行引号内命令。若设备未授权 root，读取其他进程的 maps 会失败。userdebug、eng 或车机开发版本是否允许仍由设备配置决定。
-3. `pidof system_server` 查询当前 `system_server` PID，`$(...)` 将结果代入 `/proc/<pid>/maps`。进程不存在或 PID 查询失败时路径无效。
-4. `cat` 输出该进程当前的内存映射，`grep '\\.so'` 保留路径含 `.so` 的行，`awk '{print $6}'` 取 maps 行中的路径字段，`sort -u` 排序并去重。
+命令反映的是采样时刻的映射，不等于源码中的完整依赖闭包，也不能直接说明每个库当前正在执行。
 
-该命令是设备上的即时采样，不是完整、永久的依赖清单：按需加载库可能尚未出现，匿名映射也不会被 `.so` 过滤器列出。路径中包含空格时按固定字段取值也可能失准。源码侧可用 `frameworks/base/services/core/jni/` 查 libandroid_servers 的源文件，并全局搜索 `loadLibrary` 查显式加载点。需要解释某库为何出现时，应结合采样时机、进程映射和该设备源码追踪。
+**Q18: [learning] Linux 内核本身能构成完整的 Android 或桌面 Linux 系统吗？**
 
-`libhwbinder` 自 Android 11 起并入 `libbinder`，新版本中通常看不到独立的同名库。Mainline 模块化会把部分能力移出 `system_server`，车机产品也可能增加 CarService 相关依赖，因此网上的库清单只能视为特定版本快照。核对设备时结合 maps 采样与对应源码。
+不能。Linux 内核提供进程、内存、调度、文件系统和驱动等底层机制；用户可交互的系统还需要 init、运行库、守护进程、服务、命令行工具或图形环境等用户空间组件。
 
-**Q19: 只有 Linux 内核能构成 Android 或桌面 Linux 吗？**
+1. **Android：**除内核外，还需要 init、Bionic、系统服务、ART、Framework 和应用等组件。
+2. **桌面 Linux：**除内核外，还需要用户空间运行库、init/system manager、shell、命令行工具，以及按需提供的图形环境。
+3. **命令边界：**`ls` 通常是用户空间可执行程序；`cd` 通常由 shell 内建。启动内核不会自动提供这些程序或 shell 环境。
 
-不能。Linux 内核负责进程、内存、调度和驱动等底层资源管理，不包含启动后提供日常功能所需的完整用户空间。
-
-1. **Android**：还需要 init、Bionic、系统服务、Android Runtime、Framework 和应用等用户空间组件。
-2. **桌面 Linux**：还需要 shell、常用命令、运行库和桌面图形环境。
-3. `ls` 通常是用户空间程序，`cd` 通常由 shell 内建。只保留内核不会自动提供这些命令或环境。
+因此“Linux”在日常语境中可能指内核，也可能指由内核与用户空间组件组成的完整系统；讨论架构时要说清所指范围。

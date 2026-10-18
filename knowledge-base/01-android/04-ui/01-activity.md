@@ -1,6 +1,6 @@
 # Activity 生命周期与首帧
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：Activity 生命周期回调的两对正交维度与分场景顺序、启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、Configuration 变更的两条路径与 relaunch 语义、状态保存的时机与恢复链路、切换动画期间的双窗口、首帧与启动度量、生命周期时序缺陷排查。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../13-performance/01-应用/01-启动/01-启动与交付.md)，ANR 契约见 [ANR](../13-performance/02-系统/04-ANR与故障诊断.md)；启动模式、任务栈与 Intent 匹配见 [../02-app-framework/10-activity-launch-tasks.md](../02-app-framework/10-activity-launch-tasks.md)，Fragment 与 ViewModel 见 [../02-app-framework/11-fragment-viewmodel.md](../02-app-framework/11-fragment-viewmodel.md)。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：Activity 生命周期回调的两对正交维度与分场景顺序、启动到首帧的完整时序、四个"可观测时点"能承诺什么、setContentView 与 DecorView 的分工、Configuration 变更的两条路径与 relaunch 语义、状态保存的时机与恢复链路、切换动画期间的双窗口、首帧与启动度量、生命周期时序缺陷排查。系统侧 relayout 与 insets 见 [04-window-system.md](04-window-system.md)，启动优化手段见[启动优化](../13-performance/01-应用/01-启动/01-启动与交付.md)，ANR 契约见 [ANR](../13-performance/02-系统/04-稳定性与诊断/04-ANR与故障诊断.md)；启动模式、任务栈与 Intent 匹配见 [../02-app-framework/10-activity-launch-tasks.md](../02-app-framework/10-activity-launch-tasks.md)，Fragment 与 ViewModel 见 [../02-app-framework/11-fragment-viewmodel.md](../02-app-framework/11-fragment-viewmodel.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Activity 从创建到前后台切换时，常见生命周期回调顺序是什么？**
 

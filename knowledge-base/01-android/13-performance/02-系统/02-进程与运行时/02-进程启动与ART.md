@@ -1,6 +1,6 @@
 # 进程、启动与 ART
 
-系统服务依赖内核回收、调度与 Native 故障处理；底层机制见 [内存回收与功耗硬件](../03-底层/02-内存回收与功耗.md) 与 [内核调度与 CPU 频率](../03-底层/01-内核调度与频率.md)。ART profile 产物由[Baseline Profile 工具主题](../04-工具/12-baseline-profile/01-基线Profile验证.md)说明，native heap 采样与内存错误检测见[heapprofd](../04-工具/05-heapprofd/01-原生堆剖析.md)和[内存诊断工具](../04-工具/08-memory-sanitizers/01-原生内存诊断.md)。
+系统服务依赖内核回收、调度与 Native 故障处理；底层机制见 [内存回收与功耗硬件](../../03-底层/02-内存与能耗/02-内存回收与功耗.md) 与 [内核调度与 CPU 频率](../../03-底层/01-调度与频率/01-内核调度与频率.md)。ART profile 产物由[Baseline Profile 工具主题](../../04-工具/03-基准与交付/12-baseline-profile/01-基线Profile验证.md)说明，native heap 采样与内存错误检测见[heapprofd](../../04-工具/02-性能剖析/05-heapprofd/01-原生堆剖析.md)和[内存诊断工具](../../04-工具/02-性能剖析/08-memory-sanitizers/01-原生内存诊断.md)。
 
 **Q1: [learning] 并发 GC 时代 GC 还会拖慢启动吗，HeapTaskDaemon 在 Perfetto 里 Running 就等于在 GC 吗？**
 
@@ -10,7 +10,7 @@
 
 正确顺序是先在 App 进程找到该线程，区分 concurrent/blocking GC、trim 与其他 heap task slice，再看主线程在同一窗口是 Running、Runnable 还是卡在 GC wait slice，最后对照 TTID/TTFD——首帧之后的 GC 不能解释 TTID 变慢，长时间 Runnable 更支持 CPU 竞争，明确的 GC wait slice 才证明线程在等回收完成。Logcat 的 ART GC 行默认只记录符合条件的显式或慢 GC，没有日志不等于没发生 GC。
 
-堆结构、GC 分类与 lmkd 机制见 [../../07-memory-storage/01-memory-management.md](../../07-memory-storage/01-memory-management.md)。
+堆结构、GC 分类与 lmkd 机制见 [../../07-memory-storage/01-memory-management.md](../../../07-memory-storage/01-memory-management.md)。
 
 **Q2: [learning] 应用进程 fork 后 ART 对启动期堆做了什么，这等于“关闭了两秒 GC”吗？**
 
@@ -65,7 +65,7 @@ lmkd 是用户态低内存终止守护进程，按 AAOS13 源码核对（system/
 
 lmkd 与 LowMemDetector 的职责不同：
 
-1. **lmkd：**在内存压力下选择并终止进程；选择策略与 oom_score_adj 见 [../../07-memory-storage/01-memory-management.md](../../07-memory-storage/01-memory-management.md)。
+1. **lmkd：**在内存压力下选择并终止进程；选择策略与 oom_score_adj 见 [../../07-memory-storage/01-memory-management.md](../../../07-memory-storage/01-memory-management.md)。
 2. **LowMemDetector：**system_server 内的状态管理路径，不负责杀进程。native 层注册 PSI monitor，Java 线程经 epoll 等等级变化，并把压力等级提供给 ActivityManager，作为 memory factor 与进程统计调整的输入。
 
 AAOS13 `LowMemDetector.cpp` 的三个 monitor 阈值如下；这些数值与材料按 Android 17 核对的值一致：
@@ -84,7 +84,7 @@ AAOS13 `LowMemDetector.cpp` 的三个 monitor 阈值如下；这些数值与材�
 2. **PSI 与 direct reclaim 上升，GC 不变：**瓶颈更可能在系统回收或 I/O。
 3. **两组信号重叠：**继续检查 CPU 竞争与分配线程调用栈。
 
-两个相邻概念也要分开：kswapd、ZRAM、compaction 消耗 CPU 会挤压 GC 并发线程的调度时间。cached process 被 framework compact（压减驻留）或 freeze（暂停调度）属于进程驻留优化，不等同于 ART 的 Java heap GC。GC 与掉帧的重叠判定（暂停、等待、CPU 竞争四类时间）见 [../../07-memory-storage/01-memory-management.md](../../07-memory-storage/01-memory-management.md)。
+两个相邻概念也要分开：kswapd、ZRAM、compaction 消耗 CPU 会挤压 GC 并发线程的调度时间。cached process 被 framework compact（压减驻留）或 freeze（暂停调度）属于进程驻留优化，不等同于 ART 的 Java heap GC。GC 与掉帧的重叠判定（暂停、等待、CPU 竞争四类时间）见 [../../07-memory-storage/01-memory-management.md](../../../07-memory-storage/01-memory-management.md)。
 
 **Q9: [learning] 内存抖动、泄漏、缓存增长在曲线上怎么区分？**
 
