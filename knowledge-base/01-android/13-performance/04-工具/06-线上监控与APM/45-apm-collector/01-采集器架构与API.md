@@ -142,7 +142,7 @@ Android 的默认终止链由 `RuntimeInit.commonInit()` 安装的两层处理�
 
 系统 ANR 的取证入口全部在系统侧。`/data/anr` 目录由 init 以 `0775 system system` 创建（AAOS13 `system/core/rootdir/init.rc` 已核对），内部文件还受 SELinux 强制访问控制、文件属主与系统服务检查共同限制，三方生产应用读不到，轮询、inotify 或反射调用系统服务都不是稳定方案。系统收集 Java 线程 dump 时发出的 `SIGQUIT` 先在所有线程的 signal mask 中被屏蔽，再由 ART 的 `SignalCatcher` 线程通过 `sigwait()` 同步接收（AAOS13 `art/runtime/signal_catcher.cc` 已核对），因此应用再注册的 `sigaction` handler 根本不会被调用——这就是“ANR 取证用 SIGQUIT，应用却收不到”的原因。所谓 Signal Catcher Hook 要改信号掩码、拦截 ART 内部符号或修改 libsigchain，与 Android 版本和 ART 实现强耦合，只适合厂商 ROM、root/userdebug 诊断或可回滚实验。
 
-三方应用能做的只有应用端 main-looper watchdog：定时检查主线程消息循环是否还能响应，在卡顿期间多次采主线程栈，提前发现耗时消息、锁等待和 Binder 阻塞。它没有 system_server 掌握的输入分发、广播、Service、ContentProvider 等超时上下文，所以只能标记 `suspected_anr`。系统 ANR 结论以后续 `ApplicationExitInfo`、Vitals 或系统 trace 为准。ANR 各类超时契约与 trace 解读的机制层见 [../../02-系统/04-ANR与故障诊断.md](../../02-系统/04-ANR与故障诊断.md)。
+三方应用能做的只有应用端 main-looper watchdog：定时检查主线程消息循环是否还能响应，在卡顿期间多次采主线程栈，提前发现耗时消息、锁等待和 Binder 阻塞。它没有 system_server 掌握的输入分发、广播、Service、ContentProvider 等超时上下文，所以只能标记 `suspected_anr`。系统 ANR 结论以后续 `ApplicationExitInfo`、Vitals 或系统 trace 为准。ANR 各类超时契约与 trace 解读的机制层见 [../../02-系统/04-ANR与故障诊断.md](../../../02-系统/04-稳定性与诊断/04-ANR与故障诊断.md)。
 
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q15 -->
@@ -202,7 +202,7 @@ isolated 进程（`android:isolatedProcess="true"`）没有应用权限、不能
 2. **应用可见结果：**回调到达、扫描成功或网络字节说明该次调用成功，但不等于整个硬件活跃窗口。
 3. **系统或实验室统计：**batterystats、Perfetto、Power Profiler、Macrobenchmark `PowerMetric` 才有 UID 与硬件状态口径。普通应用进程拿不到与 `BatteryStats` 同等完整的数据；开发期可用 `dumpsys batterystats` 和系统 trace 核对。
 
-由此推出几条“API 窗口不等于硬件窗口”的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描。`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做“蜂窝耗电风险”级别的风险判断。任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [../../04-工具/17-battery-historian/01-功耗报告.md](../../04-工具/17-battery-historian/01-功耗报告.md)。
+由此推出几条“API 窗口不等于硬件窗口”的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描。`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做“蜂窝耗电风险”级别的风险判断。任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [../../04-工具/04-能耗测量/17-battery-historian/01-功耗报告.md](../../04-能耗测量/17-battery-historian/01-功耗报告.md)。
 
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q21 -->

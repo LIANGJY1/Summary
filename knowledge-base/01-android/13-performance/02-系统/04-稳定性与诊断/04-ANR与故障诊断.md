@@ -1,6 +1,6 @@
 # ANR 与系统故障诊断
 
-应用侧证据采集边界与 ANR 事件分层见 [APM 采集架构](../04-工具/45-apm-collector/01-采集器架构与API.md)；应用退出历史和 trace 附件的 API 读取边界见 [ApplicationExitInfo 工具主题](../04-工具/28-application-exit-info/01-进程退出记录.md)。Native 崩溃的信号到 tombstone 路径还依赖系统 Native 与底层实现。
+应用侧证据采集边界与 ANR 事件分层见 [APM 采集架构](../../04-工具/06-线上监控与APM/45-apm-collector/01-采集器架构与API.md)；应用退出历史和 trace 附件的 API 读取边界见 [ApplicationExitInfo 工具主题](../../04-工具/05-平台诊断/28-application-exit-info/01-进程退出记录.md)。Native 崩溃的信号到 tombstone 路径还依赖系统 Native 与底层实现。
 
 **Q1: [learning] Android 的 ANR 为什么不能概括为“主线程卡 5 秒”？**
 
@@ -185,7 +185,7 @@ Binder 支持嵌套同步事务和一定重入，回调可由线程池中其他�
 3. **状态旁证：**必要时读取 cgroup.events 的 frozen 状态。
 典型案例中，输入事件派发 13 毫秒后持有该连接的进程被冻结，约 5 秒后未完成事件触发超时。关闭 freezer 后复现消失、重新开启又复现（A/B 验证），时间、对象 PID 与开关实验互相吻合后才能写成已确认。
 
-两个反例提醒：D 状态或栈中的 __refrigerator 都不足以单独证明冻结。该案例是个别 OEM 分支在 Gesture Monitor 仍有未完成输入事件时冻结进程的生命周期协同缺陷，不能外推为所有 Android 版本的通病。系统侧修复方向是：持有活跃输入 monitor 或未完成 WaitQueue 事件的进程不进入可冻结状态，monitor 销毁时先停止派发再允许降级。Freezer 本体的资格判断与冻结顺序见 [../../07-memory-storage/01-memory-management.md](../../07-memory-storage/01-memory-management.md)。
+两个反例提醒：D 状态或栈中的 __refrigerator 都不足以单独证明冻结。该案例是个别 OEM 分支在 Gesture Monitor 仍有未完成输入事件时冻结进程的生命周期协同缺陷，不能外推为所有 Android 版本的通病。系统侧修复方向是：持有活跃输入 monitor 或未完成 WaitQueue 事件的进程不进入可冻结状态，monitor 销毁时先停止派发再允许降级。Freezer 本体的资格判断与冻结顺序见 [../../07-memory-storage/01-memory-management.md](../../../07-memory-storage/01-memory-management.md)。
 
 **Q20: [learning] NotificationManager.notify() 是异步的吗？发布线程在等 system_server 做什么？**
 

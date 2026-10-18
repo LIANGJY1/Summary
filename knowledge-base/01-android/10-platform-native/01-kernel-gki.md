@@ -69,7 +69,7 @@ vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用
 
 1. **判读**：memory 的 full avg60 持续大于 0 = 全系统级内存停顿明显（内存压力实锤）。some 高而 full 为 0 是局部任务受阻。
 2. **dmesg 过滤**：`su 0 dmesg -w | grep -iE 'binder|oom|lowmemorykiller|psi'`。user 版默认限制读 dmesg（dmesg_restrict），要用 userdebug/root。`logcat -b kernel` 依赖 logd 配置、并非所有设备可用。
-3. **衔接**：lmkd 消费 PSI 的机制见 [../07-memory-storage/01-memory-management.md](../07-memory-storage/01-memory-management.md)。调度压力与温控见 [../13-performance/03-底层/01-内核调度与频率.md](../13-performance/03-底层/01-内核调度与频率.md)。
+3. **衔接**：lmkd 消费 PSI 的机制见 [../07-memory-storage/01-memory-management.md](../07-memory-storage/01-memory-management.md)。调度压力与温控见 [../13-performance/03-底层/01-内核调度与频率.md](../13-performance/03-底层/01-调度与频率/01-内核调度与频率.md)。
 
 
 

@@ -91,7 +91,7 @@ false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写�
 
 未识别值进入 Unknown，不自动套用相邻等级。每项仍要保留运行时能力查询作为必要条件。产品侧的 MediaTier 分组不能反向解释为 CDD 正式名称。
 
-跨层边界：设备性能等级与系统能力边界见 [设备性能等级与系统能力边界](../../02-系统/03-调度电源与温控.md)。
+跨层边界：设备性能等级与系统能力边界见 [设备性能等级与系统能力边界](../../02-系统/03-调度与能效/03-调度电源与温控.md)。
 
 **Q12: [learning] MPC 与运行时能力查询怎样组合决策？值为 0 或低等级的设备怎么设计体验？**
 
@@ -113,7 +113,7 @@ false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写�
 
 应用降载策略要满足三点：可逆（温度回落能逐步恢复）、有迟滞（进入与退出用不同阈值，避免画质在临界值附近反复切换）、按瓶颈选择（GPU 受限减像素与特效，CPU 受限减模拟、脚本或编码复杂度）。还应设置最短驻留时间，避免短暂波动反复切换档位。例如丢帧比例达到较高阈值才降级，只有低于更低的恢复阈值且热状态回落后才恢复，并保持一段最短时间。典型分档是 LIGHT 停非关键后台任务、MODERATE 降渲染分辨率与编码档位、SEVERE 及以上降帧率目标并优先保障交互与数据安全——分档动作是产品策略示例，要经设备实测标定。配合 `OnThermalStatusChangedListener` 响应已发生的状态变化，用低频轮询 headroom 提前准备降载。
 
-跨层边界：Thermal Headroom 系统语义见 [Thermal Headroom 系统语义](../../02-系统/03-调度电源与温控.md)。
+跨层边界：Thermal Headroom 系统语义见 [Thermal Headroom 系统语义](../../02-系统/03-调度与能效/03-调度电源与温控.md)。
 
 
 
@@ -123,7 +123,7 @@ false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写�
 
 按 AAOS13 源码核对，Android 13 的可用面是 `PerformanceHintManager`（API 31 引入）：`createHintSession(tids, targetDurationNanos)`（返回 null 表示设备不支持或 TID 不属于本应用）、`updateTargetWorkDuration()`、`reportActualWorkDuration(long)` 与 `close()`。服务端 `HintManagerService` 位于 `services/core/java/com/android/server/power/hint/`。API 34 的 `setThreads()`、API 35 的 `WorkDuration`（CPU/GPU 分项上报）与 `setPreferPowerEfficiency()`、API 36 的 NDK workload hint 在 Android 13 上不存在——协程漂移导致线程集合失真时，A13 的做法是关闭旧 session 再按当前 TID 重建。
 
-跨层边界：ADPF 性能提示机制见 [ADPF 性能提示机制](../../02-系统/03-调度电源与温控.md)。
+跨层边界：ADPF 性能提示机制见 [ADPF 性能提示机制](../../02-系统/03-调度与能效/03-调度电源与温控.md)。
 
 **Q15: [learning] target duration 应该填整帧周期吗？事后上报 actual 能修复已经掉的那一帧吗？**
 

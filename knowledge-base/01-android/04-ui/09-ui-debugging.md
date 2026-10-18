@@ -65,7 +65,7 @@
 1. **gfxinfo 查询**（含 framestats 变体）：例如 `dumpsys gfxinfo <包名>` 可查看应用级帧统计与阶段耗时。它属于 ActivityManagerService 的 dump 命令。`dumpsys window` 则由 WindowManagerShellCommand 提供。
 2. `dumpsys SurfaceFlinger --latency <窗口名>` 与 `--latency-clear`：单窗口的呈现时间戳序列，回答“帧是准时到的还是迟到的”。适合确认掉帧是应用提交晚还是合成/呈现晚。
 3. **SurfaceFlinger 图层查询**：使用 `dumpsys SurfaceFlinger` 或 `--list`。图层与缓冲状态。
-4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答“这一帧的时间花在哪”。工具与类别用法见 [Perfetto 采集与 SQL 分析](../13-performance/04-工具/01-perfetto/01-Trace采集与分析.md)。
+4. **Perfetto trace（gfx、view、input、hal、sched、freq、binder_driver 等类别）**：能同时看到 UI 线程调用栈、渲染线程、合成与内核调度，回答“这一帧的时间花在哪”。工具与类别用法见 [Perfetto 采集与 SQL 分析](../13-performance/04-工具/01-采集与追踪/01-perfetto/01-Trace采集与分析.md)。
 5. **帧时间线 / 帧指标采集**：FrameMetrics 回调可把逐帧数据收进自有采集，用于线上分布统计。
 
 选型原则：先确定要回答“应用内还是应用外”，再选工具。不要用一类工具的数据去解释另一类工具的现象。

@@ -1,6 +1,6 @@
 # Binder 驱动调用边界
 
-这篇只解释 Binder 驱动的系统调用边界；Framework Binder 调用流程见 [系统 ANR 与故障诊断](../02-系统/04-ANR与故障诊断.md)。
+这篇只解释 Binder 驱动的系统调用边界；Framework Binder 调用流程见 [系统 ANR 与故障诊断](../../02-系统/04-稳定性与诊断/04-ANR与故障诊断.md)。
 
 **Q1: [learning] 从系统调用层重建 Binder 调用语义为什么这么难？BINDER_WRITE_READ 的 ioctl 耗时能当 Binder RPC 耗时吗？**
 

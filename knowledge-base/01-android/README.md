@@ -321,9 +321,9 @@
 | [12-aaos/07-vehicle-signal-semantics.md](12-aaos/07-vehicle-signal-semantics.md) | 车控信号语义：超时显示、双编码与值域换算 | 24 |
 | [12-aaos/08-kanzi-state-sync.md](12-aaos/08-kanzi-state-sync.md) | Kanzi 双端状态同步：状态残留、乐观更新与能力差异 | 18 |
 | [12-aaos/09-defect-state-cache-startup.md](12-aaos/09-defect-state-cache-startup.md) | 状态缓存与启动时序：从卡开机到缓存失步的因果链 | 27 |
-| [13-performance/README.md](13-performance/README.md) | Android 性能问题域导航与阅读路径 | 654 |
+| [13-performance/README.md](13-performance/README.md) | Android 性能问题域导航与阅读路径 | 624 |
 | [13-performance/00-基础/](13-performance/00-基础/) | 性能指标、测量实验与分析方法 | 16 |
-| [13-performance/01-应用/](13-performance/01-应用/) | App 启动、渲染、内存、网络、CPU、图片加载、能效与稳定性 | 308 |
+| [13-performance/01-应用/](13-performance/01-应用/) | App 启动、渲染、内存、网络、CPU、图片加载、能效与稳定性 | 278 |
 | [13-performance/02-系统/](13-performance/02-系统/) | Framework、system_server、系统服务与系统 Native | 76 |
 | [13-performance/03-底层/](13-performance/03-底层/) | HAL、内核与驱动 | 19 |
 | [13-performance/04-工具/](13-performance/04-工具/) | Perfetto、Profiler、基准测试与诊断工具组 | 235 |
