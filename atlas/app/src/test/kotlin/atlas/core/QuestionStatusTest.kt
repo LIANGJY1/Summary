@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class QuestionStatusTest {
 
-    private val path = "knowledge-base/language/kotlin/01-syntax-basics.md"
+    private val path = SourceQuestions.TARGET_PATH
 
     private fun parseOne(document: String): SourceQuestions.Entry =
         SourceQuestions.parse(path, document).single()

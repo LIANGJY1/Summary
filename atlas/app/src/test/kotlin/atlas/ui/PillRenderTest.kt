@@ -36,7 +36,7 @@ class PillRenderTest {
                     ),
                 ) {
                     Box(Modifier.fillMaxSize().background(Color.Black).padding(16.dp)) {
-                        MarkdownText("  1. `android_app` 是应用模块类型，产物是可安装的 APK： `srcs` 编译为 DEX， `resource_dirs` 的资源由 AAPT2 打包，与 `manifest` 合并应用身份与组件声明，按 `certificate` 签名，按分区属性安装。块内其余属性都是这条链路的输入；同样源码改用 `android_library` 只产出供依赖编译的库，不走 APK 链路。")
+                        MarkdownText("  1. `android_app` 是应用模块类型，产物是可安装的 APK： `srcs` 编译为 DEX， `resource_dirs` 的资源由 AAPT2 打包，与 `android_app` 合并应用身份与组件声明，按 `certificate` 签名，按分区属性安装。块内其余属性都是这条链路的输入；同样源码改用 `android_library` 只产出供依赖编译的库，不走 APK 链路。")
                     }
                 }
             }
@@ -56,7 +56,7 @@ class PillRenderTest {
             // 避免只固定圆角背景高度，却让文字到背景顶部的距离仍然漂移。
             val regions = listOf(
                 intArrayOf(46, 138, 25, 50),
-                intArrayOf(245, 335, 55, 80),
+                intArrayOf(46, 170, 55, 80),
                 intArrayOf(46, 170, 85, 110),
             )
             val measures = regions.map { (x0, x1, y0, y1) ->

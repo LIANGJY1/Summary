@@ -11,6 +11,7 @@ JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle run      # 开发
 JAVA_HOME=$HOME/jdk/jdk-17 ~/10-tools/gradle-8.14.3/bin/gradle packageReleaseDeb   # 产出 deb
 
 # 一键更新（编译→测试→打包→安装本机）：./update.sh
+# 自动优先检测 Android Studio JBR 和 ~/.jdks/jbr-*；需要指定时设置 ATLAS_JBR（必须含 XIM spotLocation 补丁）
 # sudo 密码来源：环境变量 ATLAS_SUDO_PASS > ~/.atlas-sudo-pass > 交互式输入（均不写入仓库）
 echo '你的sudo密码' > ~/.atlas-sudo-pass && chmod 600 ~/.atlas-sudo-pass
 ./update.sh

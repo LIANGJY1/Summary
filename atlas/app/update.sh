@@ -11,12 +11,19 @@ cd "$(dirname "$0")"
 # 发布前/交付前使用：ATLAS_RUN_TESTS=1 bash update.sh
 RUN_TESTS="${ATLAS_RUN_TESTS:-0}"
 INSTALL_STAMP="$PWD/build/.last-installed-deb.sha256"
-JBR="${ATLAS_JBR:-/opt/android-studio-for-platform/jbr}"
 
 die() {
   echo "✗ $*" >&2
   exit 1
 }
+
+source "$PWD/scripts/jbr-selection.sh"
+if ! JBR="$(atlas_resolve_jbr "${ATLAS_JBR:-}" "$HOME" "/opt/android-studio-for-platform/jbr")"; then
+  if [[ -n "${ATLAS_JBR:-}" ]]; then
+    die "ATLAS_JBR 不可用或不含 XIM spotLocation 补丁：$ATLAS_JBR"
+  fi
+  die "未找到可用的 JetBrains Runtime（优先检查 /opt/android-studio-for-platform/jbr 和 ~/.jdks/jbr-*；也可设置 ATLAS_JBR）"
+fi
 
 SUDO_PASS="${ATLAS_SUDO_PASS:-}"
 if [[ -z "$SUDO_PASS" && -f "$HOME/.atlas-sudo-pass" ]]; then
@@ -31,11 +38,8 @@ sudo_run() {
 }
 
 # Atlas 的 Linux 输入法候选框依赖 JBR 的 XIM spotLocation 补丁。
-# 普通 OpenJDK 即使设置 jb.awt.newXimClient.* 也无法上报光标位置，必须在任何安装前确认运行时可用。
-[[ -x "$JBR/bin/java" && -f "$JBR/lib/libjli.so" && -f "$JBR/lib/libawt_xawt.so" ]] \
-  || die "缺少可用的 JetBrains Runtime：$JBR（设置 ATLAS_JBR 指向包含 XIM 补丁的 JBR）"
-grep -qsF spotLocation "$JBR/lib/libawt_xawt.so" \
-  || die "JBR 不含 XIM spotLocation 补丁：$JBR；输入法候选框将固定在屏幕左下角"
+# 解析器只接受存在必要运行时文件且包含补丁的 JBR，普通 OpenJDK/Corretto 不会被误选。
+echo "==> 使用 JetBrains Runtime：$JBR"
 
 atlas_pids() {
   {

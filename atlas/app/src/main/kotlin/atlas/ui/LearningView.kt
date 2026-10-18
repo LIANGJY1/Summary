@@ -691,6 +691,13 @@ internal fun safeQuestionIndex(currentIndex: Int, total: Int): Int? =
 internal fun canNavigateQuestionEditor(isSaving: Boolean, targetIndex: Int, total: Int): Boolean =
     !isSaving && targetIndex in 0 until total
 
+/** 外部改动后优先按题目身份找新快照；题面被改时退回同源文档中的原题号。 */
+internal fun latestQuestionEntryAfterConflict(
+    entries: List<SourceQuestions.Entry>,
+    stale: SourceQuestions.Entry,
+): SourceQuestions.Entry? = entries.firstOrNull { it.sourcePath == stale.sourcePath && it.id == stale.id }
+    ?: entries.firstOrNull { it.sourcePath == stale.sourcePath && it.number == stale.number }
+
 @Composable
 fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val ui = atlasUiTokens()
@@ -2520,6 +2527,8 @@ private fun EditSourceQuestionDialog(
     var stableEntries by remember { mutableStateOf(entries.toList()) }
     var currentIndex by remember { mutableStateOf(initialIndex.coerceIn(0, (stableEntries.size - 1).coerceAtLeast(0))) }
     var isSaving by remember { mutableStateOf(false) }
+    var conflictEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
+    var conflictEntryMissing by remember { mutableStateOf(false) }
     val safeIndex = safeQuestionIndex(currentIndex, stableEntries.size)
     if (safeIndex == null) {
         LaunchedEffect(Unit) { onDismiss() }
@@ -2527,19 +2536,50 @@ private fun EditSourceQuestionDialog(
     }
     val entry = stableEntries[safeIndex]
     val pastedImageRefs = remember(entry.sourcePath) { mutableStateListOf<String>() }
-    var questionValue by remember(entry.id) { mutableStateOf(TextFieldValue(entry.question)) }
+    // 用列表位置保持编辑稿：冲突重载可能改变题目 id，但不能因此丢掉尚未保存的输入。
+    var questionValue by remember(safeIndex) { mutableStateOf(TextFieldValue(entry.question)) }
     val question = questionValue.text
-    var answer by remember(entry.id) { mutableStateOf(TextFieldValue(entry.answer)) }
-    var status by remember(entry.id) { mutableStateOf(entry.status) }
-    var tagsText by remember(entry.id) { mutableStateOf(entry.tags.joinToString("，")) }
+    var answer by remember(safeIndex) { mutableStateOf(TextFieldValue(entry.answer)) }
+    var status by remember(safeIndex) { mutableStateOf(entry.status) }
+    var tagsText by remember(safeIndex) { mutableStateOf(entry.tags.joinToString("，")) }
     fun dismissEditor() {
         store.cleanupUnreferencedQuestionImages(pastedImageRefs.toList() + listOf(questionValue.text, answer.text))
         pastedImageRefs.clear()
         onDismiss()
     }
+    fun refreshConflictEntry() {
+        val latest = latestQuestionEntryAfterConflict(store.sourceQuestions, entry)
+        if (latest == null) {
+            conflictEntry = null
+            conflictEntryMissing = true
+            return
+        }
+        stableEntries = stableEntries.toMutableList().also { it[safeIndex] = latest }
+        conflictEntry = latest
+        conflictEntryMissing = false
+    }
+    fun reloadConflictEntry() {
+        val latest = conflictEntry ?: return
+        store.cleanupUnreferencedQuestionImages(pastedImageRefs.toList() + listOf(question, answer.text))
+        pastedImageRefs.clear()
+        questionValue = TextFieldValue(latest.question)
+        answer = TextFieldValue(latest.answer)
+        status = latest.status
+        tagsText = latest.tags.joinToString("，")
+        conflictEntry = null
+        conflictEntryMissing = false
+    }
+    fun saveCurrentQuestion(): Boolean {
+        val saved = store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))
+        if (!saved) refreshConflictEntry() else {
+            conflictEntry = null
+            conflictEntryMissing = false
+        }
+        return saved
+    }
     fun saveAndMove(target: Int): Boolean {
         if (question.isBlank()) return false
-        if (!store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) return false
+        if (!saveCurrentQuestion()) return false
         val updatedDocument = store.sourceQuestionFile().readText(Charsets.UTF_8)
         val updatedByNumber = SourceQuestions.parse(entry.sourcePath, updatedDocument, listOf(entry.sourcePath))
             .associateBy { it.number }
@@ -2568,27 +2608,29 @@ private fun EditSourceQuestionDialog(
                 val previous = adjacentQuestionIndex(safeIndex, stableEntries.size, -1)
                 val next = adjacentQuestionIndex(safeIndex, stableEntries.size, 1)
                 OutlinedButton(
-                    enabled = !isSaving && previous != null,
+                    enabled = !isSaving && !conflictEntryMissing && previous != null,
                     onClick = { previous?.let { saveAndMoveOnce(it) } },
                 ) {
-                    Text("保存并上一个")
+                    Text(if (conflictEntry != null) "确认覆盖并上一个" else "保存并上一个")
                 }
                 OutlinedButton(
-                    enabled = !isSaving && next != null,
+                    enabled = !isSaving && !conflictEntryMissing && next != null,
                     onClick = { next?.let { saveAndMoveOnce(it) } },
                 ) {
-                    Text("保存并下一个")
+                    Text(if (conflictEntry != null) "确认覆盖并下一个" else "保存并下一个")
                 }
                 Button(onClick = {
-                    if (!isSaving && question.isNotBlank()) {
+                    if (!isSaving && !conflictEntryMissing && question.isNotBlank()) {
                         isSaving = true
                         try {
-                            if (store.saveSourceQuestion(entry, question, answer.text, status, SourceQuestions.normalizeTags(listOf(tagsText)))) dismissEditor()
+                            if (saveCurrentQuestion()) dismissEditor()
                         } finally {
                             isSaving = false
                         }
                     }
-                }) { Text("保存到源文档") }
+                }, enabled = !isSaving && !conflictEntryMissing) {
+                    Text(if (conflictEntry != null) "确认覆盖并保存" else "保存到源文档")
+                }
             }
         },
         dismissButton = { OutlinedButton(onClick = ::dismissEditor) { Text("取消") } },
@@ -2597,6 +2639,29 @@ private fun EditSourceQuestionDialog(
                 Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                val pendingConflict = conflictEntry
+                if (pendingConflict != null) {
+                    Row(
+                        Modifier.fillMaxWidth().background(Theme.WarnOrange.copy(alpha = 0.10f), MaterialTheme.shapes.small).padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "源文档在编辑期间已修改。当前编辑稿尚未保存；确认将覆盖 Q${pendingConflict.number}「${pendingConflict.question}」的当前内容。",
+                            Modifier.weight(1f),
+                            color = Theme.WarnOrange,
+                            fontSize = 12.sp,
+                        )
+                        TextButton(onClick = ::reloadConflictEntry) { Text("重新载入") }
+                    }
+                } else if (conflictEntryMissing) {
+                    Text(
+                        "源文档已修改，且找不到原题号；当前编辑稿尚未保存。请复制需要保留的内容后取消，再重新打开题目。",
+                        Modifier.fillMaxWidth().background(Theme.WarnOrange.copy(alpha = 0.10f), MaterialTheme.shapes.small).padding(10.dp),
+                        color = Theme.WarnOrange,
+                        fontSize = 12.sp,
+                    )
+                }
                 OutlinedTextField(
                     questionValue,
                     { questionValue = it },

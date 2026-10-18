@@ -78,6 +78,67 @@ class QuestionImageStoreTest {
     }
 
     @Test
+    fun `deleting rendered document asset removes local image and markdown reference`() {
+        val root = File(tmp, "document-assets-library").apply { mkdirs() }
+        val path = "knowledge-base/01-android/01-architecture/doc.md"
+        val document = File(root, path).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 架构图？**\n\n答案。", Charsets.UTF_8)
+        }
+        val asset = File(document.parentFile, "assets/android-stack.png").apply {
+            parentFile.mkdirs()
+            writeBytes(questionPng())
+        }
+        val reference = "![](assets/android-stack.png)"
+        document.writeText("**Q1: 架构图？**\n\n$reference\n\n答案。", Charsets.UTF_8)
+        val store = AppStore(File(tmp, "config-document-assets"))
+        store.settings = store.settings.copy(
+            libraryPath = root.absolutePath,
+            sourceQuestionPaths = listOf("knowledge-base/"),
+        )
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        val entry = SourceQuestions.parse(path, document.readText(Charsets.UTF_8), listOf("knowledge-base/")).single()
+
+        assertTrue(store.deleteQuestionImageReference(entry, reference))
+
+        assertFalse(document.readText(Charsets.UTF_8).contains(reference))
+        assertFalse(asset.exists())
+    }
+
+    @Test
+    fun `deleting a local image reference preserves a file used by another document`() {
+        val root = File(tmp, "shared-document-assets-library").apply { mkdirs() }
+        val path = "knowledge-base/docs/q.md"
+        val document = File(root, path).apply {
+            parentFile.mkdirs()
+            writeText("**Q1: 图片题？**\n\n答案。", Charsets.UTF_8)
+        }
+        val asset = File(document.parentFile, "assets/shared.png").apply {
+            parentFile.mkdirs()
+            writeBytes(questionPng())
+        }
+        val reference = "![](assets/shared.png)"
+        document.writeText("**Q1: 图片题？**\n\n$reference\n\n答案。", Charsets.UTF_8)
+        val other = File(root, "knowledge-base/other/uses.md").apply {
+            parentFile.mkdirs()
+            writeText("其他文档继续使用：![](../docs/assets/shared.png)", Charsets.UTF_8)
+        }
+        val store = AppStore(File(tmp, "config-shared-document-assets"))
+        store.settings = store.settings.copy(
+            libraryPath = root.absolutePath,
+            sourceQuestionPaths = listOf("knowledge-base/"),
+        )
+        store.openLibrary(root.absolutePath, rescanIfNeeded = false)
+        val entry = SourceQuestions.parse(path, document.readText(Charsets.UTF_8), listOf("knowledge-base/")).single()
+
+        assertTrue(store.deleteQuestionImageReference(entry, reference))
+
+        assertFalse(document.readText(Charsets.UTF_8).contains(reference))
+        assertTrue(other.readText(Charsets.UTF_8).contains("../docs/assets/shared.png"))
+        assertTrue(asset.isFile)
+    }
+
+    @Test
     fun `deleting one reference keeps an asset still used by another document`() {
         val root = File(tmp, "shared-library").apply { mkdirs() }
         val path = "knowledge-base/docs/q.md"

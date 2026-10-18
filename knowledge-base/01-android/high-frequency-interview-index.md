@@ -17,7 +17,7 @@
 
 ## ★★ 高频（大厂/平台岗）
 
-1. **五层架构与进程边界**：01-system-architecture Q1；Q4；01-system-architecture Q11–Q12；01-system-architecture Q13；system_server 内容物见 04-system-server Q1
+1. **五层架构与进程边界**：01-system-architecture Q1–Q5；Q10–Q11、Q13–Q14；system_server 内容物见 04-system-server Q1
 2. **Zygote 与 fork 模型**：02-system-boot Q19–Q27（Zygote 角色、启动、预加载、fork 与进程模型）
 3. **system_server 运行机制**：04-system-server Q2–Q3（创建与装配）；Q5–Q6（Watchdog 看护与恢复）；Q8–Q11（线程纪律、AMS 双锁与 WMS/SurfaceFlinger 边界）；02-system-boot Q30（systemReady）
 4. **init/启动链**：02-system-boot Q1–Q2；02-system-boot Q3–Q4；02-system-boot Q5–Q6；02-system-boot Q7–Q8；02-system-boot Q9–Q10；02-system-boot Q11–Q12；02-system-boot Q13–Q14；02-system-boot Q15–Q16；02-system-boot Q17–Q18（启动链与 init 各阶段）；2026-10-06 扩充 Q47–Q96（boot 镜像与 AVB/dm-verity/动态分区 Q47–Q54、A/B slot 状态机与 OTA 回退 Q53/Q55、recovery/BCB/充电模式 Q56–Q57、servicemanager 与启动顺序 Q58–Q59、init 机制层 Q60–Q73、度量与杂症 Q74–Q96）

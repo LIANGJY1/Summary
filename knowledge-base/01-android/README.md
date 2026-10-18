@@ -18,8 +18,8 @@
 
 ## 01-architecture/
 
-- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 238 题）：
-  - [01-system-architecture.md](01-architecture/01-system-architecture.md)（19 题）
+- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 237 题）：
+  - [01-system-architecture.md](01-architecture/01-system-architecture.md)（18 题）
   - [02-system-boot.md](01-architecture/02-system-boot.md)（98 题）
   - [03-binder.md](01-architecture/03-binder.md)（23 题）
   - [04-system-server.md](01-architecture/04-system-server.md)（11 题）
@@ -200,7 +200,7 @@
 
 | 册 | 标题 | 题数 |
 | --- | --- | ---: |
-| [01-architecture/01-system-architecture.md](01-architecture/01-system-architecture.md) | Android 系统架构 | 19 |
+| [01-architecture/01-system-architecture.md](01-architecture/01-system-architecture.md) | Android 系统架构 | 18 |
 | [01-architecture/02-system-boot.md](01-architecture/02-system-boot.md) | Android 系统启动流程 | 98 |
 | [01-architecture/03-binder.md](01-architecture/03-binder.md) | Binder | 23 |
 | [01-architecture/04-system-server.md](01-architecture/04-system-server.md) | SystemServer | 11 |

@@ -11,6 +11,7 @@ import atlas.core.DeviceTools
 import atlas.core.DocMarker
 import atlas.core.FeishuCheckin
 import atlas.core.Inbox
+import atlas.core.LibraryUpdateCommitPolicy
 import atlas.core.Log
 import atlas.core.MarkdownImages
 import atlas.core.MdStores
@@ -982,7 +983,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     fun showToast(msg: String) { Log.i("toast: $msg"); toast.value = msg; scope.launch { delay(2600); toast.value = null } }
 
-    /** 仅提交当前选中的题库文档；已有 HEAD 时 amend 最近提交，否则创建首个 update 提交。 */
+    /** 仅提交当前选中的题库文档；首次创建待推送提交，后续只 amend Atlas 自己创建且尚未发布的提交。 */
     fun updateLibraryRepository() {
         if (!libraryUpdateLock.compareAndSet(false, true)) {
             showToast("Update 正在执行")
@@ -1027,6 +1028,28 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     }
                 }
 
+                val amendCommit = if (!hasCommit) {
+                    false
+                } else {
+                    val messageResult = runGitCommand(repository, listOf("log", "-1", "--format=%B", "HEAD"))
+                    if (messageResult.first != 0) {
+                        showGitUpdateFailure("读取最近提交", messageResult)
+                        return@launch
+                    }
+                    val remoteRefsResult = runGitCommand(
+                        repository,
+                        listOf("for-each-ref", "--contains", "HEAD", "--format=%(refname)", "refs/remotes"),
+                    )
+                    if (remoteRefsResult.first != 0) {
+                        showGitUpdateFailure("检查提交是否已发布", remoteRefsResult)
+                        return@launch
+                    }
+                    LibraryUpdateCommitPolicy.shouldAmend(
+                        headCommitMessage = messageResult.second,
+                        remoteContainsHead = remoteRefsResult.second.isNotBlank(),
+                    )
+                }
+
                 val addResult = runGitCommand(repository, listOf("add", "-A", "--", relativePath))
                 if (addResult.first != 0) {
                     showGitUpdateFailure("暂存当前文档", addResult)
@@ -1046,10 +1069,13 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     showGitUpdateFailure("检查当前文档改动", documentDiff)
                     return@launch
                 }
-                val commitArgs = if (hasCommit) {
+                val commitArgs = if (amendCommit) {
                     listOf("commit", "--amend", "--no-edit", "--only", "--", relativePath)
                 } else {
-                    listOf("commit", "-m", "update", "--only", "--", relativePath)
+                    listOf(
+                        "commit", "-m", "update", "-m", LibraryUpdateCommitPolicy.TRAILER,
+                        "--only", "--", relativePath,
+                    )
                 }
                 val commitResult = runGitCommand(repository, commitArgs, timeoutMs = 120_000L)
                 if (commitResult.first != 0) {
@@ -1057,8 +1083,8 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     return@launch
                 }
 
-                Log.i("知识库 Git Update 完成 root=${repository.absolutePath} path=$relativePath amend=$hasCommit 输出=${commitResult.second.trim().take(500)}")
-                showToast(if (hasCommit) "已将 ${document.name} 并入最近一次提交" else "已提交 ${document.name}")
+                Log.i("知识库 Git Update 完成 root=${repository.absolutePath} path=$relativePath amend=$amendCommit 输出=${commitResult.second.trim().take(500)}")
+                showToast(if (amendCommit) "已更新本地待推送提交" else "已创建本地待推送提交")
                 refreshSourceQuestionGitDiff()
             } catch (error: Exception) {
                 Log.e("知识库 Git Update 失败", error)
@@ -1761,11 +1787,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         }.toSet()
     }
 
-    /** 删除题目中的单个图片引用，并在知识库中已无引用时一并删除对应图片文件。 */
+    /** 删除题目中的单个本地图片引用；知识库里仍有引用时保留图片文件。 */
     fun deleteQuestionImageReference(entry: SourceQuestions.Entry, markdownReference: String): Boolean {
         val asset = resolveQuestionImageAsset(entry.sourcePath, markdownReference)
         if (asset == null) {
-            showToast("只能删除题库图片资源")
+            showToast("只能删除知识库目录内的本地图片")
             return false
         }
         val file = sourceDocumentFile(entry.sourcePath)
@@ -1795,11 +1821,13 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             )
             MdStores.atomicWrite(file, updated)
             reloadKnowledgeFiles()
-            val removedAssets = cleanupUnreferencedQuestionImages(listOf(markdownReference))
-            if (asset.name in removedAssets) {
+            if (isQuestionImageReferenced(asset)) {
+                showToast("图片引用已删除；其他文档仍在使用该图片，保留源文件")
+            } else if (!asset.exists() || asset.delete()) {
                 showToast("图片引用和图片文件已删除")
             } else {
-                showToast("图片引用已删除；其他内容仍在使用该图片，保留图片文件")
+                Log.w("题库图片源文件删除失败 path=${asset.absolutePath}")
+                showToast("图片引用已删除，但源文件删除失败，请检查文件权限")
             }
             Log.i("题库图片删除成功 path=${entry.sourcePath} asset=${asset.name}")
             true
@@ -1812,22 +1840,44 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     }
 
     private fun resolveQuestionImageAsset(sourcePath: String, markdownReference: String): File? = runCatching {
-        val target = Regex("!\\[[^]]*]\\(([^)]+)\\)").find(markdownReference)?.groupValues?.get(1)?.trim()
-            ?: return null
+        resolveLocalQuestionImage(sourceDocumentFile(sourcePath), markdownReference)
+    }.getOrNull()
+
+    private fun resolveLocalQuestionImage(document: File, markdownReference: String): File? = runCatching {
+        val target = markdownImageReferencePattern.find(markdownReference)?.groupValues?.get(1)?.trim() ?: return null
         val path = target.removeSurrounding("<", ">").substringBefore('#').substringBefore('?')
         if (path.isBlank() || path.startsWith("/") || path.startsWith("\\\\") ||
-            path.startsWith("http://", true) || path.startsWith("https://", true) || path.startsWith("data:", true)
+            path.startsWith("http://", true) || path.startsWith("https://", true) || path.startsWith("data:", true) ||
+            path.startsWith("file:", true) || path.matches(Regex("^[A-Za-z]:.*"))
         ) return null
-        val decoded = decodeQuestionImageReference(path)
-        val documentParent = sourceDocumentFile(sourcePath).canonicalFile.parentFile ?: return null
-        val asset = File(documentParent, decoded.replace('/', File.separatorChar)).canonicalFile
+        val decoded = decodeQuestionImageReference(path).replace('\\', '/')
+        val documentParent = document.canonicalFile.parentFile ?: return null
+        val unresolved = File(documentParent, decoded.replace('/', File.separatorChar))
+        if (java.nio.file.Files.isSymbolicLink(unresolved.toPath())) return null
+        val asset = unresolved.canonicalFile
+        val root = libraryRoot()
+        val knowledgeRoot = (if (root.name == "knowledge-base") root else File(root, "knowledge-base")).canonicalFile
+        val assetPath = asset.toPath()
+        val knowledgePath = knowledgeRoot.toPath()
+        val imageExtensions = setOf("png", "jpg", "jpeg", "gif", "bmp", "wbmp")
+        asset.takeIf { assetPath.startsWith(knowledgePath) && it.isFile && it.extension.lowercase() in imageExtensions }
+    }.getOrNull()
+
+    private fun isQuestionImageReferenced(asset: File): Boolean {
         val root = libraryRoot()
         val knowledgeRoot = if (root.name == "knowledge-base") root else File(root, "knowledge-base")
-        val assetsDir = File(knowledgeRoot, "_assets").canonicalFile
-        asset.takeIf {
-            it.parentFile == assetsDir && it.isFile && questionImageDigest(it.name) != null
-        }
-    }.getOrNull()
+        if (!knowledgeRoot.isDirectory) return false
+        val target = asset.canonicalFile
+        return knowledgeRoot.walkTopDown()
+            .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+            .filterNot { file -> file.toPath().any { part -> part.toString() == ".git" || part.toString() == "atlas" } }
+            .any { document ->
+                val content = runCatching { document.readText(Charsets.UTF_8) }.getOrDefault("")
+                markdownImageReferencePattern.findAll(content).any { match ->
+                    resolveLocalQuestionImage(document, match.value)?.canonicalFile == target
+                }
+            }
+    }
 
     private fun removeFirstImageReference(markdown: String, reference: String): String? {
         val index = markdown.indexOf(reference)
@@ -1867,6 +1917,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     }.getOrDefault(value)
 
     private val questionImageAssetPattern = Regex("(?:[\\p{L}\\p{N}-]+-)?([a-f0-9]{64})\\.png")
+    private val markdownImageReferencePattern = Regex("!\\[[^]]*]\\(([^)]+)\\)")
 
     /** 为当前源文档中选中的多道题追加同一标签，并一次性写回。 */
     fun addTagToSourceQuestions(entries: List<SourceQuestions.Entry>, rawTag: String): Boolean {

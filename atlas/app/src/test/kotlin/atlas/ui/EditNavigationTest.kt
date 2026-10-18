@@ -37,4 +37,21 @@ class EditNavigationTest {
 
         assertEquals(2, entries.map { sourceQuestionKey(it) }.distinct().size)
     }
+
+    @Test
+    fun `source conflict finds the refreshed version of the edited question`() {
+        val stale = SourceQuestions.parse(
+            "knowledge-base/test.md",
+            "**Q1: first**\nold answer\n\n**Q2: second**\nanswer",
+            listOf("knowledge-base/test.md"),
+        ).first()
+        val refreshed = SourceQuestions.parse(
+            "knowledge-base/test.md",
+            "**Q1: externally changed title**\nnew answer\n\n**Q2: second**\nanswer",
+            listOf("knowledge-base/test.md"),
+        )
+
+        assertEquals(refreshed.first(), latestQuestionEntryAfterConflict(refreshed, stale))
+        assertNull(latestQuestionEntryAfterConflict(refreshed.drop(1), stale))
+    }
 }

@@ -30,7 +30,7 @@ class SourceQuestionsTest {
             两个 Int 相除仍然是 Int。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
+        val questions = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text)
 
         assertEquals(2, questions.size)
         assertEquals(1, questions[0].number)
@@ -47,7 +47,7 @@ class SourceQuestionsTest {
 
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/03-language/kotlin/01-syntax-basics.md"))
         assertTrue(!SourceQuestions.isSupportedPath("language/kotlin/02-对象与类型设计.md"))
-        val question = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text).single()
+        val question = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text).single()
         assertEquals("中文冒号问题？", question.question)
     }
 
@@ -64,7 +64,7 @@ class SourceQuestionsTest {
 
             第二题答案。
         """.trimIndent()
-        val original = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
+        val original = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text)
 
         val updated = SourceQuestions.replace(original[0], "新问题？", "新答案。\n\n- 保留 Markdown")
 
@@ -90,8 +90,8 @@ class SourceQuestionsTest {
             第二题答案。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
-        val sections = SourceQuestions.parseSections("language/kotlin/01-syntax-basics.md", text)
+        val questions = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text)
+        val sections = SourceQuestions.parseSections(SourceQuestions.TARGET_PATH, text)
 
         assertEquals("第一题答案。", questions[0].answer)
         assertEquals("函数与集合", sections.single().title)
@@ -114,8 +114,8 @@ class SourceQuestionsTest {
             下一题答案。
         """.trimIndent()
 
-        val questions = SourceQuestions.parse("language/kotlin/01-syntax-basics.md", text)
-        val sections = SourceQuestions.parseSections("language/kotlin/01-syntax-basics.md", text)
+        val questions = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text)
+        val sections = SourceQuestions.parseSections(SourceQuestions.TARGET_PATH, text)
 
         assertEquals("上一题答案。", questions[0].answer, "章标题不得混入上一题答案")
         assertFalse(questions[0].answer.contains("函数与集合"))
