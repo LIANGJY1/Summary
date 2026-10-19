@@ -71,21 +71,22 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 
 
-**Q4: [done] 归档（archive）是什么？它和 tar、zip、gzip 是什么关系？**
+**Q4: [done] 归档（archive）是什么？它和 tar、zip、gzip、cpio 是什么关系？**
 
 归档是一个概念、一个动作：“把一堆文件打包成一个文件”，每个文件的路径、权限、时间戳都记在包里，到目的地解开还原。
 
-**归档不是 tar。**两者的关系是“概念与实现”：tar 只是实现归档的一种工具和格式，同类的还有 zip、7z、cpio（Linux initramfs 用的就是 cpio）等。就像“压缩”不等于 gzip——gzip 只是压缩工具之一。具体分工：
+**归档不是 tar。**两者的关系是“概念与实现”：tar 只是实现归档的一种工具和格式，同类的还有 zip、7z、cpio 等。就像“压缩”不等于 gzip——gzip 只是压缩工具之一。具体分工：
 
 1. **tar：**只管打包，不管压缩（tar = tape archive，起源是往磁带上备份）。.tar 文件就是“文件集合”的顺序记录。
 2. **gzip（GNU zip）/zstd（Zstandard）：**只管压缩，不管打包——把一个文件的字节压短。常见的 .tar.gz = 先 tar 打包、再 gzip 压缩，两步两个工具。
 3. **zip：**打包和压缩一步到位，还带中央目录，不解包就能单看、单抽某个文件。
+4. **cpio：**同样只管打包（名字取自 copy in/copy out），Linux 的 initramfs 归档正是它。
+
+initramfs 用 cpio 不是偏好，而是启动时序决定的。内核启动早期没有任何文件系统可挂载，能依靠的只有内核内置的 cpio 解包器（源码 init/initramfs.c）：它把归档条目逐项解包到内存中的根文件系统（rootfs），铺出目录树后执行其中的 /init——是解包，而不是挂载。initramfs 归档用的是 newc 格式，归档头以 ASCII 魔数 070701 开头，`file` 命令可识别。
 
 怎么用：解开（解包）就还原成一堆文件，目录结构和权限跟着回来。
 
 一句话：归档是“多个文件 → 一个文件”的概念，tar 是实现它的工具之一。压缩是另一件事，管把字节变短。
-
-
 
 **Q5: [done] ISO 是什么？为什么它也算镜像，还能直接拿来装系统？**
 

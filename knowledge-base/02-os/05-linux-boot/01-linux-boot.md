@@ -306,3 +306,13 @@ vda 是内核 virtio_blk 驱动给 QEMU 虚拟磁盘起的注册名，取 virtio
     3. 内容是合法 ext4：mkfs 已经做好。节点在但内核认不出文件系统时 errno 为 22。
 
     由此可以自己推出：挂载报 errno 2 时先查 /dev/vda 是否存在，而不是先怀疑盘或镜像。
+
+**Q18: [learning] 为什么 initramfs 用 cpio 归档、system 分区用文件系统镜像？**
+
+选型由“谁在什么时刻读它”倒推：最早期只有内核能读，此时还没有任何文件系统可用，只有内核自带的 cpio 解包器能把 initramfs 展开成内存中的根目录。等用户态 init 跑起来、`mount()` 可用后，system 分区要模拟的是真分区，必须是可挂载读写的文件系统镜像。无论哪个阶段，被执行的都必须是 ELF 可执行文件，而不是 `.so`。
+
+1. **首阶段只能是 cpio 归档（鸡生蛋问题）：**内核启动时还没有任何文件系统被挂载，而要执行 `/init` 又必须先有一个能按路径找到它的根文件系统，挂载则要等 init 用 `mount()` 来做。打破这一环的只有内核自己的代码：`init/initramfs.c` 内置 cpio（newc 格式）解包器，不做挂载，直接把归档里的文件名、权限与数据写进内存中的 rootfs，`/init` 随后即可执行（对应日志 `Run /init as init process`）。其他格式都不行：ext4、squashfs/erofs 这类文件系统要先有驱动、块设备和一次 `mount()` 调用，而这些正是 init 才要准备的。tar 内核不内置解包支持，老式 initrd 也要 ramdisk/loop 驱动先就位。
+2. **第二阶段必须换成文件系统镜像：**此时 PID 1 已运行，块设备、设备节点与 `mount()` 都就绪，“自举”需求消失，“当一块真分区”成为需求——内容要能按路径持续读写，ext4 还带日志与恢复。cpio 在解包完成时使命即结束，内容活在内存里，不能作为分区长期读写。真机 Android 13 的 system 镜像用的是只读压缩的 erofs（而非 ext4），容器仍是“文件系统镜像”，只是换了驱动。
+3. **执行的物种始终是 ELF 可执行文件：**execve 只认带入口的 ELF 可执行文件或 `#!` 脚本。`.so` 是运行时借用的代码，没有可执行入口，不能被直接执行。所以真正的选择从来不是“ELF 还是 `.so`”，而是“ELF 装进哪种容器”。首阶段的 `/init` 还必须静态链接——initramfs 里没有动态链接器和共享库，动态链接的 ELF 无法执行。
+
+依据：Linux 内核 `init/initramfs.c` 的解包逻辑与 `init/main.c` 的启动日志（`Run /init as init process`），Mini_Android 的 initramfs.cpio.gz 与 system.img 双阶段启动实验。
