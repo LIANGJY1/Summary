@@ -14,6 +14,8 @@
 
 一句话：镜像是对存储对象的逐字节文件化副本。
 
+
+
 **Q2: [done] 一个独立的 ext4 system 镜像（如 Android 的 system.img）解析？**
 
 ext4（fourth extended filesystem，第四代扩展文件系统）是 Linux 的文件系统格式，Android 系统分区用的就是它。ext4 system 镜像，就是把一块装好 ext4 的分区整个拷贝进一个普通文件。
@@ -31,6 +33,8 @@ $ debugfs -R "ls -l /" system.img   # 不挂载，直接看镜像里有什么
 Android 的 system.img 也是这么造的：构建系统把编译产物目录灌进镜像。用法二选一：给虚拟机当盘（QEMU/Crosvm 挂成 /dev/vda），或在宿主上 loop 挂载（需要 root）。
 
 一句话：镜像 = 装好系统的盘整个装进文件。
+
+
 
 **Q3: [learning] mkfs.ext4 全解析**
 
@@ -65,6 +69,8 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 `-d system_root` 连权限位一起灌入目录树，`-L system` 把卷标写进超级块，末尾的 `64M` 与块大小共同决定 `Block count`——4096 字节块下为 16384。`dumpe2fs` 输出中的块数、块大小与卷标和这笔账一致，即说明命令按预期执行。
 
+
+
 **Q4: [done] 归档（archive）是什么？它和 tar、zip、gzip 是什么关系？**
 
 归档是一个概念、一个动作：“把一堆文件打包成一个文件”，每个文件的路径、权限、时间戳都记在包里，到目的地解开还原。
@@ -79,7 +85,21 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 一句话：归档是“多个文件 → 一个文件”的概念，tar 是实现它的工具之一。压缩是另一件事，管把字节变短。
 
-**Q5: [done] Ubuntu 的 ISO 是怎么一步步装出系统的？**
+
+
+**Q5: [done] ISO 是什么？为什么它也算镜像，还能直接拿来装系统？**
+
+ISO 是光盘镜像——把一张 CD/DVD 上的全部内容逐扇区复刻成的文件。名字要先说清：ISO 不是英文缩写，是国际标准化组织（International Organization for Standardization）从希腊语 isos（相等）选定的定名。它发布的 ISO 9660 就是光盘上用的文件系统格式，.iso 扩展名由此而来。Ubuntu 安装镜像、Windows 安装镜像都是它。
+
+1. **为什么算镜像：**它复刻的是光盘这个“介质”的字节，不是散装文件——所以能刻回一张光盘，也能不刻盘直接挂载浏览里面的内容。
+2. **为什么能装系统：**可引导的 ISO 里带了启动记录，刻成光盘、或用工具写进 U 盘，开机就能从它启动安装程序。
+3. **跟 ext4 镜像的差别：**ISO 里面装的是 ISO 9660（新一些的光盘用 UDF，Universal Disk Format）文件系统，天生只读，适合“发布”。ext4 镜像可读写，适合“当盘用”。
+
+一句话：ISO = 一张光盘的逐字节复刻件，是发布和装系统的通用形态。
+
+
+
+**Q6: [done] Ubuntu 的 ISO 是怎么一步步装出系统的？**
 
 全流程五步（U 盘安装）：
 
@@ -97,7 +117,9 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 一句话：装系统 = 让 U 盘变成光盘 → 用它启动一个内存里的小系统 → 把系统文件解到真硬盘、装好引导。
 
-**Q6: [learning] 镜像和归档都能“把一堆东西装进一个文件”，区别在哪？**
+
+
+**Q7: [learning] 镜像和归档都能“把一堆东西装进一个文件”，区别在哪？**
 
 区别一句话：镜像抄的是盘，归档包的是文件。
 
@@ -107,7 +129,9 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 选择判断：系统分区、虚拟机盘这类“挂上就用、原地可写”的整卷内容，用镜像。源码、安装包这类“传输分发、按文件取用”的内容，用归档。system.img 能直接挂成根分区而 tar 包必须先解开，根源就是组织方式的差异。
 
-**Q7: [learning] 磁盘镜像和分区镜像怎么理解？整盘和单个分区差在哪？**
+
+
+**Q8: [learning] 磁盘镜像和分区镜像怎么理解？整盘和单个分区差在哪？**
 
 一块盘像一栋楼：分区表是“楼层分隔图”，每个分区是一层。整盘镜像是把整栋楼连分隔图一起拍下来；分区镜像是只拍其中一层——Android 的 system.img 就是一层（ext4 系统分区）的照片。
 
@@ -117,15 +141,7 @@ $ dumpe2fs -h build/system.img | grep -E 'Block count|Block size|volume name'
 
 一句话：整盘镜像连“房间怎么隔的”一起拍，分区镜像只拍一个“房间”。
 
-**Q8: [learning] ISO 是什么？为什么它也算镜像，还能直接拿来装系统？**
 
-ISO 是光盘镜像——把一张 CD/DVD 上的全部内容逐扇区复刻成的文件。名字要先说清：ISO 不是英文缩写，是国际标准化组织（International Organization for Standardization）从希腊语 isos（相等）选定的定名。它发布的 ISO 9660 就是光盘上用的文件系统格式，.iso 扩展名由此而来。Ubuntu 安装镜像、Windows 安装镜像都是它。
-
-1. **为什么算镜像：**它复刻的是光盘这个“介质”的字节，不是散装文件——所以能刻回一张光盘，也能不刻盘直接挂载浏览里面的内容。
-2. **为什么能装系统：**可引导的 ISO 里带了启动记录，刻成光盘、或用工具写进 U 盘，开机就能从它启动安装程序。
-3. **跟 ext4 镜像的差别：**ISO 里面装的是 ISO 9660（新一些的光盘用 UDF，Universal Disk Format）文件系统，天生只读，适合“发布”。ext4 镜像可读写，适合“当盘用”。
-
-一句话：ISO = 一张光盘的逐字节复刻件，是发布和装系统的通用形态。
 
 **Q9: [learning] 内存镜像（core dump）是什么？程序崩了它有什么用？**
 
@@ -137,6 +153,8 @@ ISO 是光盘镜像——把一张 CD/DVD 上的全部内容逐扇区复刻成�
 
 一句话：core dump = 程序崩溃瞬间的内存照片，专门用来事后查案。
 
+
+
 **Q10: [learning] 固件和固件镜像（.bin 烧录文件）怎么理解？为什么能“刷”进设备？**
 
 固件（firmware）是烧在硬件芯片里的程序：设备一通电就跑的那段代码——路由器、键盘、耳机、主板上的 BIOS（Basic Input/Output System）与 UEFI（Unified Extensible Firmware Interface），各有各的固件。固件镜像是把芯片里的内容（或新版本程序）存成的字节文件，扩展名常见 .bin——.bin 就是“裸字节文件”的意思，里面的布局由设备自己定义。
@@ -146,6 +164,8 @@ ISO 是光盘镜像——把一张 CD/DVD 上的全部内容逐扇区复刻成�
 3. **风险边界：**刷错版本的固件可能让设备直接起不来（“变砖”），因为很多设备启动没有回退机制。
 
 一句话：固件 = 设备与生俱来的程序；固件镜像 = 这段程序的字节形态，用来保存、传输和“刷”回芯片。
+
+
 
 **Q11: [learning] 镜像一般怎么存储、存在哪？**
 
@@ -158,6 +178,8 @@ ISO 是光盘镜像——把一张 CD/DVD 上的全部内容逐扇区复刻成�
 Docker 镜像稍有不同：平时放在 registry（镜像仓库），拉到本地存在 /var/lib/docker，用的时候由 Docker 解开分层。云端分发则走对象存储或镜像市场。
 
 一句话：镜像本质都是“装字节的文件”——raw 最直接，动态格式省空间，压缩包管运输。存在哪不重要，用的时候能还原成完整字节流就行。
+
+
 
 **Q12: [learning] 自编 x86_64 内核得到的 bzImage 是什么？它和 vmlinux 是什么关系？**
 
@@ -175,6 +197,8 @@ bzImage 是 x86 内核编译的最终启动镜像（arch/x86/boot/bzImage），Q
 
 构建完用 file 一验：会被识别为 “Linux kernel x86 boot executable bzImage”，还带内核版本字符串。
 
+
+
 **Q13: [learning] zImage 是什么？它和 bzImage 是什么关系？**
 
 zImage 就是“压缩的内核启动镜像”这个名字——z = compressed。关键要分清三个语境：
@@ -184,6 +208,8 @@ zImage 就是“压缩的内核启动镜像”这个名字——z = compressed�
 3. **arm64：**没有 zImage——原生镜像叫 Image（未压缩），要减小体积就发布 Image.gz，解压交给引导程序。
 
 判断规则：看到 zImage 先问架构——x86 是历史格式，32 位 ARM 是现役标准，arm64 没有。
+
+
 
 **Q14: [learning] vmlinux 和 objcopy 是什么？它们在内核构建流水线里干什么？**
 
