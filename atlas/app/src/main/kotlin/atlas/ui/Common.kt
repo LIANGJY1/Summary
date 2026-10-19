@@ -1053,7 +1053,9 @@ private fun ReaderMarkdownText(
                                         .then(if (compactReading) Modifier else Modifier.horizontalScroll(rememberScrollState()))
                                         .padding(horizontal = 16.dp, vertical = 15.dp),
                                 ) {
-                                    buf.forEach { code ->
+                                    // 注释弱化：识别不了的语言不着色，行为与无高亮时一致
+                                    val commentColor = codeTextColor.copy(alpha = codeTextColor.alpha * CODE_COMMENT_DIM_ALPHA)
+                                    highlightCodeComments(buf, lang, commentColor).forEach { code ->
                                         Text(
                                             code,
                                             fontFamily = FontFamily.Monospace,
