@@ -16,9 +16,19 @@ AAOS 13 的 `init_first_stage` 静态链接，`init_second_stage` 动态链接�
 
 源码依据：AAOS 13 的 `system/core/init/Android.bp`、Soong `cc` 模块实现和 Bionic 启动代码。
 
+**Q2: [done] Android 中的动态链接器是什么，算程序还是库？**
 
+是程序，不是库：内核装载动态可执行文件时按 `PT_INTERP` 先装入它并开始执行，由它加载依赖的共享库、解析符号，之后才进入主程序入口。Android 上它是 `/system/bin/linker64`（32 位设备为 `/system/bin/linker`），位于系统分区。
 
-**Q2: [learning] 结合实例验证静态链接与动态链接的区别？**
+1. **它本身可以运行：**命令行接口为 `/system/bin/linker64 [--list] PROGRAM [ARGS...]`，`--list` 等价于 ldd。
+2. **它不是链接期的库：**程序构建时链接的是 libc、libdl 等，从来不会链接 linker。它只在运行期负责加载共享库，dlopen、dlsym 等接口的底层逻辑也在它内部（libdl 只是转发）。
+3. **共享库从哪加载：**按库名在搜索路径中查找，默认是 `/system/lib64`（32 位为 `/system/lib`），`/vendor/lib64`、`/odm/lib64` 等分区目录也在其中。
+4. **文件形态是共享对象：**依赖全部静态并入，启动时不依赖任何外部库。
+5. **位置：**它与共享库同在系统分区，所以系统分区挂载前运行的程序（首阶段 init）必须静态链接。
+
+依据：AAOS 13 的 `bionic/linker/`（`Android.bp`、`linker_main.cpp`）与构建系统。
+
+**Q3: [learning] 结合实例验证静态链接与动态链接的区别？**
 
 同一份源文件在宿主 Linux 上用 g++ 编译两次，默认动态链接、加 `-static` 静态链接。两个产物都是可执行文件，按链接方式分别叫动态链接可执行文件和静态链接可执行文件；“静态库、动态库”指 `.a` 和 `.so`，程序不按库的类别命名。实测：动态版约 33K，文件里只记录依赖清单；静态版约 2.4M，把所需库代码复制进产物，自包含。
 
@@ -72,7 +82,7 @@ int main() {
 
 实验依据：宿主 Linux（x86_64、g++、glibc）上同源双编译实测。
 
-**Q3: [learning] 魔数是什么，ELF 魔数怎样标识文件格式？**
+**Q4: [learning] 魔数是什么，ELF 魔数怎样标识文件格式？**
 
 魔数是文件开头预置的固定字节序列，供读取者按内容而非文件名识别格式。ELF 的魔数是文件前四字节 `0x7f`、`E`、`L`、`F`；内核 execve 和 `file` 等工具都先读它，确认是 ELF 才按 ELF 规则继续解析。
 
@@ -92,7 +102,7 @@ int main() {
 
 依据：ELF 规范的 e_ident 定义、宿主 Linux 上 `xxd`、`readelf -h` 实测输出，命名由来见 Jargon File magic number 条目。
 
-**Q4: [done] 为什么两种链接产物都能被内核直接执行，文件名为什么没有后缀，执行过程有什么区别？**
+**Q5: [done] 为什么两种链接产物都能被内核直接执行，文件名为什么没有后缀，执行过程有什么区别？**
 
 内核判断能否执行看文件内容与权限位，不看文件名：execve 认出文件头的 ELF 魔数、文件又带执行位，就进入装载，因此两个产物都能直接执行，也都不需要后缀。二者共用的校验相同，区别在内核接手后由谁完成装载。
 
@@ -107,7 +117,7 @@ int main() {
 
 依据：宿主 Linux 的 execve 装载机制与 Mini_Android 项目实测输出。
 
-**Q5: [done] ELF 解析？**
+**Q6: [done] ELF 解析？**
 
 ELF（Executable and Linkable Format，可执行与可链接格式）是 Linux 与 Android 描述本机二进制的文件格式：可执行程序、共享库 `.so`、可重定位目标文件和核心转储都用它。ELF 只是格式规范，规定字节如何组织。一个文件能否启动，取决于它的 ELF 类型、CPU 架构和依赖，而不是“是不是 ELF”。
 
@@ -126,7 +136,7 @@ $ readelf -h out/target/product/<产品名>/system/bin/init | grep -E 'Type|Mach
 
 `file` 输出形如 `ELF 64-bit LSB pie executable, ARM aarch64`。`readelf -h` 的 `Type` 字段给出文件类型，`Machine` 给出目标架构，`Entry` 给出入口地址——三者共同回答“这是什么格式、跑在哪种 CPU、从哪里开始执行”。
 
-**Q6: [learning] ldd 查的是什么，它怎样得到结果，和 readelf -d 有什么区别？**
+**Q7: [learning] ldd 查的是什么，它怎样得到结果，和 readelf -d 有什么区别？**
 
 ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享库依赖及它们在当前系统上被解析到的路径。man-pages 没有给出 ldd 的全称展开，官方定位就是 print shared object dependencies；网上流传的 List Dynamic Dependencies 是按功能反推的助记，不是官方名称。它不是静态解析文件，而是让动态链接器真正做一遍依赖解析，因此输出反映“当前环境实际会加载哪些库”；readelf -d 只读文件里记录的 NEEDED 名字，不做解析。
 
@@ -148,7 +158,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 
 依据：宿主 glibc 的 ldd 脚本源码、man-pages ldd(1) 的 NAME 与 Security 节、ldd 实测输出，/etc/ld.so.preload 与各库 NEEDED 的交叉核对，toybox 命令表不含 ldd。
 
-**Q7: [done] Android 本机可执行文件、ELF、Soong 模块名和设备路径分别是什么？**
+**Q8: [done] Android 本机可执行文件、ELF、Soong 模块名和设备路径分别是什么？**
 
 这里的“本机可执行文件”指可由 Linux 内核按 `exec` 机制启动的本机程序，Android 平台二进制常见为 ELF。普通进程通常通过 `execve` 或 `execveat` 请求内核装载。启动时内核也可用内部的 `kernel_execve` 启动 `/init`。APK 是应用包，不是本机可执行映像。系统创建或复用应用进程后，由 ART 加载并执行其中的 DEX。共享库虽常为 ELF，仍需动态链接器加载，不能独立启动。ELF 是文件格式，不等于可执行程序。Soong 模块名用于构建依赖，产物文件名和设备安装路径由构建配置决定。
 
@@ -156,13 +166,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 2. **Soong 模块名：**构建图中的名称，例如 `init_second_stage`。它不一定是最终文件名。
 3. **产物名与路径：**`stem` 可将产物命名为 `init`，安装规则再决定它位于 ramdisk 还是 `/system/bin/init`。AAOS 13 的 `init` 就由不同模块生成并安装到不同位置。
 
-
-
-
-
-
-
-**Q8: [learning] Android 启动时执行的 /init 是什么，为什么源码里有两个 init？**
+**Q9: [learning] Android 启动时执行的 /init 是什么，为什么源码里有两个 init？**
 
 `/init` 是 ramdisk 根目录中的 ELF 可执行程序，内核启动用户空间时执行它作为 PID 1。AAOS 13 中，它由 Soong 模块 `init_first_stage` 构建。模块名不是设备上的文件名。
 
@@ -173,13 +177,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 
 这里的文件名和安装位置对应 AAOS 13 的 ramdisk 启动布局。具体产品应以实际 ramdisk 和启动配置为准。源码见 `system/core/init/Android.bp`、`first_stage_main.cpp`、`first_stage_init.cpp` 和 `main.cpp`。
 
-
-
-
-
-
-
-**Q9: [learning] 源码编译的可执行文件和预编译可执行文件有什么区别？**
+**Q10: [learning] 源码编译的可执行文件和预编译可执行文件有什么区别？**
 
 区别在输入来源：`cc_binary` 用源码为目标 Android 架构编译程序。`cc_prebuilt_binary` 将已有二进制登记进 Soong 构建图。两者都可能产出可安装、可启动的程序。
 
@@ -187,13 +185,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 2. **只有产物：**使用 `cc_prebuilt_binary` 导入，但先确认它面向 Android、匹配设备 ABI，并具备设备所需的动态链接器和依赖库。
 3. **不能只看架构：**宿主机 Linux 程序即使同为 ARM，也可能依赖 glibc。Android 通常使用 Bionic，因此不能据此认定它能在 Android 运行。
 
-
-
-
-
-
-
-**Q10: [learning] .so、静态库、Java JAR 和 APK 都是可执行文件吗？**
+**Q11: [learning] .so、静态库、Java JAR 和 APK 都是可执行文件吗？**
 
 它们用途不同：本机可执行 ELF 可作为独立程序启动。库供程序链接或加载。JAR 由运行时加载。APK 是应用安装包，安装后由 Android 框架在应用进程中启动组件。
 
@@ -203,13 +195,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 4. **Java JAR：**包含 Java/DEX 类，普通 JAR 不是内核可执行文件。设备侧程序需由 `app_process` 等运行时入口加载。
 5. **APK：**是应用安装包，不是本机可执行文件。系统通过 Zygote 创建或复用应用进程，再由 ART 加载 DEX 代码，Android 框架在进程中启动应用组件。
 
-
-
-
-
-
-
-**Q11: [learning] 构建、打进系统镜像和运行可执行文件分别由什么控制？**
+**Q12: [learning] 构建、打进系统镜像和运行可执行文件分别由什么控制？**
 
 三者是不同步骤：Soong 模块定义构建目标，`m <模块名>` 请求构建，产品配置选择是否安装进镜像，设备上的启动命令或服务配置才负责运行它。
 
@@ -217,13 +203,7 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 2. **安装进产品：**产品配置通过 `PRODUCT_PACKAGES` 等方式选择模块。模块的安装属性决定能否安装及目标分区。
 3. **启动运行：**命令行程序可由 shell 执行。系统服务通常由 init 的 `.rc` 服务项启动。Java 程序由相应 Android 运行时入口启动。
 
-
-
-
-
-
-
-**Q12: [learning] Android 可执行文件存在却无法运行，应该先查什么？**
+**Q13: [learning] Android 可执行文件存在却无法运行，应该先查什么？**
 
 先根据错误区分文件未安装、格式或 ABI 不匹配、动态依赖缺失、权限或 SELinux 拒绝。“文件存在”不能证明内核具备启动它所需的全部条件。
 
@@ -232,5 +212,4 @@ ldd 是 glibc 随附的用户态脚本，用于打印动态链接 ELF 的共享�
 3. **提示文件不存在但文件可见：**检查 `readelf -l` 中的解释器路径。动态 ELF 所需的 Android 动态链接器不存在时，也可能出现此现象。
 4. **动态库加载失败：**根据链接器错误检查 `readelf -d` 的依赖项，以及对应 `.so` 是否安装、架构和分区是否匹配。
 5. **权限被拒绝：**检查文件权限、挂载属性和 SELinux 拒绝日志。仅增加执行位不能绕过 SELinux 策略。
-
 

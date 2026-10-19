@@ -767,29 +767,7 @@ java_library {
 
 出现问题时区分 Soong 声明错误、目标 ABI 不匹配、模块未进入产品、安装路径错误、动态库缺失与运行时 API/类加载失败，避免用一次成功编译代替端到端验证。
 
-**Q20: [learning] Android 的 user、userdebug 和 eng 构建变体有什么区别，车机调试和验收该怎么选？**
-
-一句话理解：`user` 面向量产，默认收紧调试能力并贴近消费者设备。`userdebug` 保留接近 `user` 的运行特征，同时开放更多调试手段。`eng` 面向开发，构建更快，性能和功耗不作为首要目标。AOSP `lunch` 目标的最后一段指定构建变体。新版目标还可能在产品名与变体之间带 release config。[AOSP 构建说明](https://source.android.com/docs/setup/build/building)
-
-| 属性或行为 | `user` | `userdebug` | `eng` |
-|---|---|---|---|
-| 用途 | 量产与正式验收 | 开发调试、性能和功耗验证 | 日常系统开发 |
-| `ro.build.type` | `user` | `userdebug` | `eng` |
-| `ro.debuggable` | `0` | `1` | `1` |
-| `ro.secure`（AOSP 默认） | `1` | `1` | `0` |
-| ADB 提权 | 通常不支持 `adb root` | 通常支持 `adb root` | 通常默认以 root adbd 运行 |
-| SELinux | 量产设备应为 enforcing。普通 ADB 调试不能切为 permissive | 可 root 后执行 `setenforce 0` | 可 root 后执行 `setenforce 0` |
-| 调试模块 | 按产品配置安装，通常不选 debug/eng 工具 | 在 user 模块外增加 debug 工具 | 增加 debug/eng 工具 |
-
-构建变体只决定一组默认构建属性和调试策略，产品配置、设备配置和发布签名流程仍可能覆盖部分行为。[AOSP `main.mk`](https://android.googlesource.com/platform/build/%2B/HEAD/core/main.mk) 明确区分 `ro.debuggable`、`ro.secure` 和各变体安装的模块标签。Android 官方说明 `user` 用于 production，`userdebug` 保留调试能力，SELinux 可在 `userdebug`/`eng` 上通过 ADB root 切换 permissive。[SELinux 验证说明](https://source.android.com/docs/security/features/selinux/validate)
-
-1. **调试权限：**`user` 默认 `ro.debuggable=0`，`adbd` 不提供 root 提权。`userdebug` 可用 `adb root`，`eng` 通常默认使用 root adbd。`adb remount`、写系统分区和访问其他应用私有数据还分别受分区只读、Verified Boot、Linux UID 和 SELinux 限制，不能简单等同于“有 root 就都能操作”。
-2. **SELinux：**生产设备必须保持 enforcing。AOSP 支持在 `userdebug` 或 `eng` 上通过 `adb root` 后执行 `setenforce 0`。因此排查 SELinux denial 时，可先在调试版本定位策略问题，再在 `user` 版本验证 enforcing 下的真实行为。量产设备不应依赖 permissive。[AOSP SELinux 文档](https://source.android.com/docs/security/features/selinux/validate)
-3. **模块与日志：**旧式 `Android.mk` 的 `LOCAL_MODULE_TAGS` 可将模块标记为 `user`、`debug` 或 `eng`。`userdebug` 会在 `user` 模块外增加 debug 工具，`eng` 会安装 debug/eng 工具。但 APK 安装和现代产品打包还受产品配置控制，不能据 `LOCAL_MODULE_TAGS := eng` 推断所有工具或测试 APK 都必然被排除。`ALOGD`、`ALOGV` 是否输出也取决于各模块的编译宏、日志配置和运行时过滤，不是所有 user 构建统一关闭。
-4. **签名与属性：**`TARGET_BUILD_VARIANT` 是构建时变体。设备上的 `ro.build.type` 表示 `user`、`userdebug` 或 `eng`，`ro.debuggable` 和 `ro.secure` 反映调试/安全默认值。`ro.build.tags` 表示签名标签，如 `test-keys`、`dev-keys` 或 `release-keys`，不等同于构建变体。AOSP 默认构建会使用公开的 test keys，正式发布必须由厂商发布流程换成私有 release keys。所以 `user` 不会自动等于 `release-keys`，平台签名 APK 也必须使用匹配的厂商平台密钥。[AOSP 发布签名说明](https://source.android.com/docs/core/ota/sign_builds)
-5. **车机版本选择：**日常开发和需要 `adb root`、完整调试工具的排障使用 `userdebug`。量产前复现、权限验证和验收应使用与交付配置一致的 `user` 版本。`user` 上日志较少时，可结合 bugreport、系统事件日志、持久化日志和崩溃现场分析。不要把 `userdebug` 上可关闭 SELinux 或可提权的结果直接当作量产行为。
-
-**Q21: [learning] Make 与 Android.bp 的变量赋值、引用和条件语法有何区别？**
+**Q20: [learning] Make 与 Android.bp 的变量赋值、引用和条件语法有何区别？**
 
 读 `.mk` 和 `Android.bp` 时，先分清变量赋值与模块属性。以下示例只演示语法。
 
@@ -842,27 +820,7 @@ java_library {
 
 4. **Android.bp 条件：**Android.bp 不支持 Make 式 `if/ifndef`。配置差异写入 Soong 支持的模块属性（如 `soong_config_variables`），复杂逻辑由 Go 构建代码处理。
 
-**Q22: [learning] 如何结合 Android 13 源码判断项目的 adb root 权限和实际能力？**
-
-判断 `adb root` 要沿着“构建属性 → root 请求 → `adbd` 降权 → 产品覆盖”检查。两个项目的 ADB 核心实现相同，但具体产品选用的构建变体和属性覆盖决定最终结果。源码树本身不能证明某个已编译镜像当前正在运行哪种变体。
-
-1. **检查变体默认值：**两棵树的 `build/make/core/main.mk` 都根据 `TARGET_BUILD_VARIANT` 设置属性。`user` 默认 `ro.secure=1`、`ro.debuggable=0`。`userdebug` 默认 `ro.secure=1`、`ro.debuggable=1`。`eng` 默认 `ro.secure=0`、`ro.debuggable=1`。`ro.debuggable` 控制是否允许调试提权，`ro.secure` 控制 `adbd` 是否默认降权。实际值仍可能被产品配置覆盖。
-
-2. **检查 root 请求门槛：**两棵树的 `packages/modules/adb/daemon/restart_service.cpp` 相同。`restart_root_service()` 在 `__android_log_is_debuggable()` 为 false 时拒绝请求。该检查对应 `ro.debuggable`。通过后，代码设置 `service.adb.root=1` 并重启 `adbd`，让新进程重新判断是否保留 root。
-
-3. 检查 `adbd` 身份：两棵树的 `packages/modules/adb/daemon/main.cpp` 中，`should_drop_privileges()` 先以 `ro.secure` 初始化降权状态。只有 `ro.debuggable=1` 且 `service.adb.root=1` 时，才取消降权。`service.adb.root=0` 则要求降权。降权路径通过 minijail 将 `adbd` 的 UID/GID 改为 `shell`。两棵树的 `packages/modules/adb/Android.bp` 都未设置 `ALLOW_ADBD_ROOT`，因此应以实际的请求处理和降权代码为准，不能套用其他分支的宏判断。
-
-4. **区分 ADB 鉴权：**`ro.adb.secure` 控制连接主机是否需要 ADB 授权，不是 `adbd` 是否以 root 运行的开关。两棵树的 `main.cpp` 将它用于主机认证判断。因此“需要电脑端 RSA 授权”和“shell 是否拿到 root”是两个独立问题。
-
-5. **得出默认结果：**按两棵树的 `main.mk` 默认值，`user` 上 `adb root` 会被拒绝，`adbd` 以 `shell` 身份运行。`userdebug` 初始以 `shell` 运行，`adb root` 成功后重启为 root。`eng` 通常默认以 root 运行，`adb unroot` 后降为 `shell`。这只是变体默认行为，必须再检查产品配置。
-
-6. **检查项目覆盖：**Yadi 的 `vendor/yadea` 和相关 `device/sprd` 配置中没有检出 `service.adb.root` 覆盖。`AAOS13` 中 Google GS101/GS201 的 `factory_common.mk` 设置 `service.adb.root=1`，GS101 还设置 `ro.adb.secure=0`。只有继承该配置的具体产品才受影响，而且 root 结果仍需结合 `ro.debuggable` 判断。两棵树都包含 debug ramdisk 的强制调试路径，但它要求特定 debug boot image 和设备已解锁，不能据此推断普通锁定的量产镜像允许 root。
-
-7. **界定 root 的能力：**`adb root` 让 ADB shell 链路中的命令以 root 身份运行，不会自动关闭 SELinux，也不保证系统分区可写。`adb remount` 是否成功还受 Verified Boot、动态分区和 remount 配置影响。分析实际权限时，应分别确认进程 UID、SELinux enforcing 状态和分区挂载状态。
-
-8. **核对最终设备：**有设备或构建产物时，先查看 `ro.build.type`、`ro.debuggable`、`ro.secure`、`ro.adb.secure` 和 `service.adb.root`，再运行 `adb shell id` 确认实际 UID。`getenforce` 用于确认 SELinux 模式，`adb remount` 的结果用于确认分区写入能力。源码结论与设备属性不一致时，以实际产品配置和最终镜像为准。
-
-**Q23: [learning] 应用要在 Android 源码树中编译时，怎样判断 platform_apis、签名、特权身份和安装分区该如何配置？**
+**Q21: [learning] 应用要在 Android 源码树中编译时，怎样判断 platform_apis、签名、特权身份和安装分区该如何配置？**
 
 不要照抄其他应用的属性。先确认应用需要哪类 API、权限由谁授予、是否需要特权权限，以及产品要把应用安装到哪个分区。四项分别控制编译 API、签名身份、特权安装和安装位置。
 
@@ -879,7 +837,7 @@ java_library {
 
 5. **按证据核实：**在源码中搜索相似 `android_app`、权限定义、白名单 XML 和产品的 `PRODUCT_PACKAGES`。再用目标分支 Soong 文档确认属性规则，构建模块并检查 APK 签名、Manifest 和安装路径。相似模块只能作线索，最终以本应用的 API、权限和产品配置为准。
 
-**Q24: [learning] 改了 framework 性能代码后，怎样构建、同步到设备并验证改动？**
+**Q22: [learning] 改了 framework 性能代码后，怎样构建、同步到设备并验证改动？**
 
 先构建对应模块，再按安装分区同步产物。随后选择进程重启或整机重启，并用设备端证据确认运行的是新版本。
 
@@ -896,13 +854,13 @@ adb shell stop && adb shell start
 
 首次 `adb remount` 可能需要在隔离的开发设备上关闭 verity 并重启。同步后行为未变时，核对设备端文件哈希、build fingerprint 和实际安装分区。再用相同测试负载与性能 trace 验证改动是否生效。
 
-**Q25: [learning] AutoFDO 与插桩 PGO、Baseline Profile 分别差在哪？它会在用户手机运行时“自动优化”吗？**
+**Q23: [learning] AutoFDO 与插桩 PGO、Baseline Profile 分别差在哪？它会在用户手机运行时“自动优化”吗？**
 
 不会。AutoFDO（Automatic Feedback-Directed Optimization）把真实工作负载的执行样本转换成 LLVM 采样 Profile，再用同源代码与相近工具链重新编译，让编译器调整热点内联、基本块布局与分支权重——采集、转换、重编与验证都发生在研发构建流程，用户设备运行的是已用 Profile 编译好的产物。与插桩 PGO 相比，它不插入计数器、不改源码，适合接近生产的负载，代价是样本可能丢失偏斜、地址还原与负载代表性更难保证。与 Baseline Profile 相比，它作用于 C/C++ 原生二进制与内核（Clang/LLVM、按地址与分支样本、系统构建期生效），Baseline Profile 则指导 ART/dex2oat 提前编译应用 DEX 的热点方法，两者可以同时改善启动但不能互换。
 
 Profile 只改变机器码、不改变程序语义，但 Profile 偏差可能造成代码体积膨胀或性能回退，编译器链接器本身也可能有缺陷，所以发布仍要比较代码段大小、基准性能与稳定性。它也不会在 Perfetto 里生成名为 AutoFDO 的 slice——收益要从 A/B 与系统 trace 的执行成本变化里读出来，而不是找一条专用轨道。
 
-**Q26: [learning] Soong 模块怎样接入 AutoFDO？模块声明 afdo: true 能证明本地二进制已经优化了吗？**
+**Q24: [learning] Soong 模块怎样接入 AutoFDO？模块声明 afdo: true 能证明本地二进制已经优化了吗？**
 
 不能。afdo: true 只是打开模块的构建接入，是否真正使用还取决于 Profile 配置、目标架构、构建变体与产物日志。验证要看详细构建日志里的 -fprofile-sample-use= 指向的 Profile。按 AAOS13 源码核对：build/soong/cc/afdo.go 已存在，编译参数模板为 -funique-internal-linkage-names -fprofile-sample-accurate -fprofile-sample-use=%s，且 frameworks/base/libs/hwui/Android.bp（libhwui）、art/runtime/Android.bp（libart）、art/libartbase/Android.bp 均已声明 afdo: true——用户空间原生 AFDO 在 Android 13 已进入这些代表性平台模块，Android 17 延续该接入。
 

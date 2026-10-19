@@ -1,6 +1,6 @@
 # Android OTA 与升级包
 
-> Android 系统升级交付知识：整包与差分升级包（patch 包）的生成、内容与设备端应用，版本链、签名与防回滚约束。镜像本身的辨析与刷写归 `04-android-system-images.md`；源码补丁（.patch）归 Git 主题。Q 序列即结构，供 atlas 同源直读。
+> Android 系统升级交付知识：整包与差分升级包（patch 包）的生成、内容与设备端应用，版本链、签名与防回滚约束。镜像本身的辨析与刷写归 `04-system-images.md`；源码补丁（.patch）归 Git 主题。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 系统升级语境里的 patch 包（差分升级包）是什么？为什么只装差异也能完成升级？**
 

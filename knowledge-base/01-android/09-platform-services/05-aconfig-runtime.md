@@ -1,6 +1,6 @@
 # aconfig 运行时：存储与 aflags
 
-> 学习资料（文章模式沉淀，证据等级：官方文档与 AOSP 源码）。边界：本文回答 aconfig 标志的运行期值来源、设备端存储初始化与 `aflags` 操作。声明、元数据字段和构建期代码生成归 [../11-build-system/07-aconfig.md](../11-build-system/07-aconfig.md)。涉及 Android 17 的行为均按对应源码版本说明。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀，证据等级：官方文档与 AOSP 源码）。边界：本文回答 aconfig 标志的运行期值来源、设备端存储初始化与 `aflags` 操作。声明、元数据字段和构建期代码生成归 [../11-build-system/08-aconfig.md](../11-build-system/08-aconfig.md)。涉及 Android 17 的行为均按对应源码版本说明。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] aconfig 标志运行时从哪里读取值，purpose 与 storage 分别代表什么？**
 

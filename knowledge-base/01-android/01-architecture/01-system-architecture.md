@@ -31,7 +31,23 @@ flowchart TB
 
 
 
-**Q2: [learning] 一次 Android 请求会按五层顺序传递吗，不同请求实际经过哪些边界？**
+
+
+**Q2: [done] Android 中 Native 代码、库和服务如何区分？**
+
+Android NDK 文档在应用开发语境中把 C/C++ 代码称为 native code；JNI 文档把 Java/Kotlin 称为 managed code，并说明 JNI 用于两者互调。这里的 Native 指应用中的原生实现，通常编译为设备 ABI 匹配的 `.so` 并加载到进程运行。
+
+Java/Kotlin 代码由 ART 管理；即使 ART 将其编译成机器码，它仍是 managed code。Java/Kotlin 可通过 JNI 调用 Native 实现，但调用不会改变两边代码的归属。
+
+1. **应用 Native 库：**应用进程加载 APK 中的 `.so`，JNI 提供 Java/Kotlin 与 Native 代码的调用接口。
+2. **平台 Native 库：**如 Bionic、Skia、SQLite，作为共享库映射到使用它们的进程。
+3. **Native 服务：**如 SurfaceFlinger，是独立可执行程序和进程；HAL 常由此类服务实现。Linux 内核代码运行在内核态，不是用户进程中的 Native 库。
+
+依据：Android Developers《Android NDK: Concepts》《JNI tips》《Android ABIs》；AOSP《Architecture overview》。
+
+
+
+**Q3: [learning] 一次 Android 请求会按五层顺序传递吗，不同请求实际经过哪些边界？**
 
 不会。五层不是固定调用管线；请求只穿过实际参与的进程和接口。分析时要分别画出控制命令与数据的路径，并区分进程内调用、JNI、IPC（Inter-Process Communication，进程间通信）、共享内存和系统调用。
 
@@ -48,17 +64,7 @@ JNI 只适合同一进程内的 Java/native 互调，不能跨越进程边界。
 
 
 
-**Q3: [done] Android 中 Native 代码、库和服务如何区分？**
 
-Android NDK 文档在应用开发语境中把 C/C++ 代码称为 native code；JNI 文档把 Java/Kotlin 称为 managed code，并说明 JNI 用于两者互调。这里的 Native 指应用中的原生实现，通常编译为设备 ABI 匹配的 `.so` 并加载到进程运行。
-
-Java/Kotlin 代码由 ART 管理；即使 ART 将其编译成机器码，它仍是 managed code。Java/Kotlin 可通过 JNI 调用 Native 实现，但调用不会改变两边代码的归属。
-
-1. **应用 Native 库：**应用进程加载 APK 中的 `.so`，JNI 提供 Java/Kotlin 与 Native 代码的调用接口。
-2. **平台 Native 库：**如 Bionic、Skia、SQLite，作为共享库映射到使用它们的进程。
-3. **Native 服务：**如 SurfaceFlinger，是独立可执行程序和进程；HAL 常由此类服务实现。Linux 内核代码运行在内核态，不是用户进程中的 Native 库。
-
-依据：Android Developers《Android NDK: Concepts》《JNI tips》《Android ABIs》；AOSP《Architecture overview》。
 
 **Q4: [learning] 跨层性能或故障问题应如何定位，怎样避免把调用方误判为根因？**
 
@@ -82,6 +88,8 @@ Perfetto 中常见线程状态只说明线程当时的调度状态：Running 表
 
 
 
+
+
 **Q5: [learning] Android 架构层与 Linux 进程是什么关系，一个应用进程里通常有哪些组件？**
 
 架构层描述职责，进程描述隔离和资源所有权，因此两者是多对多关系。普通应用进程通常同时包含应用代码、Framework 客户端类、ART 和应用所需的原生库。
@@ -92,6 +100,8 @@ Perfetto 中常见线程状态只说明线程当时的调度状态：Running 表
 4. **原生依赖：**Bionic、图形或数据库等系统库，以及应用自身的 Native 库，按进程需要映射到该地址空间。
 
 反过来，`system_server` 可同时运行大量 Java 服务和 JNI 代码；SurfaceFlinger 通常是独立 Native 进程；HAL 可运行在独立服务进程，也可能采用同进程实现。判断崩溃、权限和性能归属时，要分别问组件属于什么职责层、运行在哪个进程、调用经过什么边界。
+
+
 
 
 
@@ -112,6 +122,8 @@ Perfetto 中常见线程状态只说明线程当时的调度状态：Running 表
 
 
 
+
+
 **Q7: [learning] 16 KB 页大小、Mainline 模块化和 VNDK 弃用分别改变了什么？**
 
 它们影响的是不同兼容边界：16 KB 页大小要求 Native 二进制和打包布局适配；Mainline 使部分系统组件可独立于整机 OTA（Over-the-Air，无线）更新；VNDK 弃用改变了 system/vendor 原生库的分发方式。三者不能互相替代。
@@ -121,6 +133,8 @@ Perfetto 中常见线程状态只说明线程当时的调度状态：Running 表
 3. **VNDK（Vendor Native Development Kit，厂商原生开发套件）弃用：**从 Android 15 起弃用该套件。为 Android 15 构建的 vendor/product 分区不再使用 VNDK 版本属性；原 VNDK 库改为按 vendor-available 库安装到 vendor 或 product 镜像。既有较旧 vendor 镜像仍可能依赖旧 VNDK。弃用 VNDK 不等于取消 linker namespace 或所有 system/vendor 隔离规则。
 
 版本依据：Android Developers《Support 16 KB page sizes》；AOSP《VNDK overview》《Mainline》。
+
+
 
 
 
@@ -142,6 +156,8 @@ Android 版本号只描述平台基线，应用兼容行为、可更新模块、
 
 
 
+
+
 **Q9: [learning] Treble 怎样降低 Framework 与 vendor 的升级耦合，GSI 能证明什么？**
 
 Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。VINTF（Vendor Interface，厂商接口）汇总设备提供的接口与 Framework 所需接口，兼容性矩阵和 manifest 用于检查双方声明是否匹配。
@@ -153,6 +169,8 @@ Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。V
 完整兼容性结论还需结合 VINTF 检查、CTS/VTS 和产品自身测试。
 
 依据：AOSP《Vendor interface object》《Generic system images》《AIDL for HALs》。
+
+
 
 
 
@@ -175,6 +193,8 @@ Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。V
 
 
 
+
+
 **Q11: [learning] 应用进程常见线程角色有哪些，点击到显示通常经过哪些执行环节？**
 
 应用进程通常有主线程、硬件加速路径中的 RenderThread、接收远程 Binder 调用的线程池，以及应用创建的后台线程。它们不是每个进程都固定具备的一组线程；点击到屏幕显示也不是单线程串行完成。
@@ -192,6 +212,8 @@ Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。V
 
 
 
+
+
 **Q12: [learning] ABI 是什么，与 API 有什么区别？**
 
 API（Application Programming Interface，应用程序接口）规定源码可以调用哪些函数、类型和行为；ABI（Application Binary Interface，应用二进制接口）规定编译后的二进制如何与处理器及系统运行时衔接。简单说，API 面向源码，ABI 面向二进制。
@@ -202,6 +224,8 @@ API（Application Programming Interface，应用程序接口）规定源码可�
 因此，同一份 Java/Kotlin 字节码可由运行时适配不同设备 ABI；Native 库则必须提供与设备 ABI 兼容的二进制。API 兼容不代表 ABI 兼容，反之亦然。
 
 依据：Android Developers《Android NDK: Concepts》《Android ABIs》。
+
+
 
 
 
@@ -223,6 +247,8 @@ JNI 不提供进程隔离、服务发现或 IPC 权限边界，因此不能用�
 
 
 
+
+
 **Q14: [learning] C++ Binder、Java Binder 和 hwbinder 是什么关系？**
 
 Java Binder 与 C++ Binder 是 Android Binder IPC 的不同语言接口；它们可以通过 Binder 驱动通信，不代表两套互不相关的 IPC 机制。`hwbinder` 则是历史上供 HIDL HAL 使用的 Binder 设备/上下文，不能把“C++ Binder”等同于 `hwbinder`。
@@ -235,6 +261,8 @@ Java Binder 与 C++ Binder 是 Android Binder IPC 的不同语言接口；它们
 分析 Binder 问题时说明进程、语言后端、Binder 设备/上下文和数据通路；只说“原生 Binder 慢”不足以定位故障。
 
 依据：AOSP《AIDL for HALs》《AIDL backends》及对应版本的 Binder 实现。
+
+
 
 
 
@@ -258,6 +286,8 @@ Android 平台使用 Java、Kotlin、C、C++ 和 Rust 等语言实现不同组�
 
 
 
+
+
 **Q16: [learning] system_server 中有哪些 Native 代码，它们为什么与 Java 服务同进程？**
 
 `system_server` 是一个进程，不是单一语言运行时：其中运行 ART/Java 服务，也可加载 JNI 库和 Native 组件。JNI 让同一进程内的 Java 与 C/C++ 代码互调；进程内共享意味着它们共享进程故障边界。
@@ -269,6 +299,8 @@ Android 平台使用 Java、Kotlin、C、C++ 和 Rust 等语言实现不同组�
 把某组件称为“Native”不表示它一定是独立进程，也不表示它由应用调用。排查时要核对该版本的 JNI 注册、加载入口和实际进程归属。
 
 依据：对应版本 AOSP `frameworks/base/services/core/jni/`、InputFlinger 和 SensorService 实现。
+
+
 
 
 
@@ -293,6 +325,8 @@ adb shell 'pid=$(pidof system_server) && cat /proc/$pid/maps' \
 4. **解释来源：**把现场路径与该设备版本的 `SystemServer` 显式加载点、`libandroid_servers` 等构建依赖及动态链接关系对照。按需加载库可能尚未出现，库也可能随后卸载。
 
 命令反映的是采样时刻的映射，不等于源码中的完整依赖闭包，也不能直接说明每个库当前正在执行。
+
+
 
 
 

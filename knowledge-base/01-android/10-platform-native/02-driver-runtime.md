@@ -1,6 +1,6 @@
 # 内核驱动运行时
 
-> 学习资料（文章模式沉淀）。边界：本文回答"字符设备/VFS 分发、file/inode/fops、设备号与 /dev 节点、copy_from_user、MMIO、ioctl/mmap、内核数据结构"；模块构建与部署归 [../11-build-system/06-kernel-modules.md](../11-build-system/06-kernel-modules.md)。材料中的固定物理地址与宿主机裸 gcc 命令不是生产做法。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答"字符设备/VFS 分发、file/inode/fops、设备号与 /dev 节点、copy_from_user、MMIO、ioctl/mmap、内核数据结构"；模块构建与部署归 [../11-build-system/07-kernel-modules.md](../11-build-system/07-kernel-modules.md)。材料中的固定物理地址与宿主机裸 gcc 命令不是生产做法。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [done] 应用开发中，常说的串口是什么，与 USB 传输有什么区别，通常用在什么场景？**
 

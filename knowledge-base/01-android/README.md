@@ -163,15 +163,15 @@
 
 ## 11-build-system/
 
-- **构建系统：产品配置、Soong 模块、可执行文件、系统镜像、内核构建、内核模块、aconfig 与 OTA 升级包**（8 册 89 题）：
-  - [01-product-config.md](11-build-system/01-product-config.md)（15 题）
-  - [02-soong-modules.md](11-build-system/02-soong-modules.md)（26 题）
-  - [03-android-executables.md](11-build-system/03-android-executables.md)（12 题）
-  - [04-android-system-images.md](11-build-system/04-android-system-images.md)（8 题）
-  - [05-android-kernel-build.md](11-build-system/05-android-kernel-build.md)（14 题）
-  - [06-kernel-modules.md](11-build-system/06-kernel-modules.md)（4 题）
-  - [07-aconfig.md](11-build-system/07-aconfig.md)（9 题）
-  - [08-ota-packages.md](11-build-system/08-ota-packages.md)（1 题）
+- **构建系统：按构建流水线组织——平台构建主线（产品配置、Soong 模块、可执行文件、系统镜像、OTA 升级包）、内核支线（内核构建、内核模块）与构建期特性开关 aconfig**（8 册 90 题）：
+  - [01-product-config.md](11-build-system/01-product-config.md)（17 题）
+  - [02-soong-modules.md](11-build-system/02-soong-modules.md)（24 题）
+  - [03-executables.md](11-build-system/03-executables.md)（13 题）
+  - [04-system-images.md](11-build-system/04-system-images.md)（8 题）
+  - [05-ota-packages.md](11-build-system/05-ota-packages.md)（1 题）
+  - [06-kernel-build.md](11-build-system/06-kernel-build.md)（14 题）
+  - [07-kernel-modules.md](11-build-system/07-kernel-modules.md)（4 题）
+  - [08-aconfig.md](11-build-system/08-aconfig.md)（9 题）
 
 ## 12-aaos/
 
@@ -304,14 +304,14 @@
 | [10-platform-native/07-bpf.md](10-platform-native/07-bpf.md) | BPF 可观测与可编程边界 | 6 |
 | [10-platform-native/08-rust-native.md](10-platform-native/08-rust-native.md) | 平台 Rust 与 FFI | 6 |
 | [10-platform-native/09-app-native-stability.md](10-platform-native/09-app-native-stability.md) | 稳定性治理：Native 检测、Hook、动态库与 SDK | 24 |
-| [11-build-system/01-product-config.md](11-build-system/01-product-config.md) | Android 产品配置与裁剪 | 15 |
-| [11-build-system/02-soong-modules.md](11-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 26 |
-| [11-build-system/03-android-executables.md](11-build-system/03-android-executables.md) | Android 可执行文件 | 12 |
-| [11-build-system/04-android-system-images.md](11-build-system/04-android-system-images.md) | Android 系统镜像 | 8 |
-| [11-build-system/05-android-kernel-build.md](11-build-system/05-android-kernel-build.md) | Android 内核构建与验证 | 14 |
-| [11-build-system/06-kernel-modules.md](11-build-system/06-kernel-modules.md) | 内核模块构建与部署 | 4 |
-| [11-build-system/07-aconfig.md](11-build-system/07-aconfig.md) | aconfig：声明与构建期代码生成 | 9 |
-| [11-build-system/08-ota-packages.md](11-build-system/08-ota-packages.md) | Android OTA 与升级包：整包与差分（patch 包） | 1 |
+| [11-build-system/01-product-config.md](11-build-system/01-product-config.md) | Android 产品配置与裁剪（含构建变体） | 17 |
+| [11-build-system/02-soong-modules.md](11-build-system/02-soong-modules.md) | AAOS 添加 Soong 模块 | 24 |
+| [11-build-system/03-executables.md](11-build-system/03-executables.md) | Android 可执行文件 | 13 |
+| [11-build-system/04-system-images.md](11-build-system/04-system-images.md) | Android 系统镜像 | 8 |
+| [11-build-system/05-ota-packages.md](11-build-system/05-ota-packages.md) | Android OTA 与升级包：整包与差分（patch 包） | 1 |
+| [11-build-system/06-kernel-build.md](11-build-system/06-kernel-build.md) | Android 内核构建与验证 | 14 |
+| [11-build-system/07-kernel-modules.md](11-build-system/07-kernel-modules.md) | 内核模块构建与部署 | 4 |
+| [11-build-system/08-aconfig.md](11-build-system/08-aconfig.md) | aconfig：声明与构建期代码生成 | 9 |
 | [12-aaos/01-vehicle-links.md](12-aaos/01-vehicle-links.md) | Android 车机九类端到端链路、通信边界与排查方法 | 3 |
 | [12-aaos/02-car-services.md](12-aaos/02-car-services.md) | CarService 服务速览 | 12 |
 | [12-aaos/03-vhal-integration.md](12-aaos/03-vhal-integration.md) | VHAL 集成与契约 | 4 |
