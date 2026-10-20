@@ -85,6 +85,7 @@ enum class ToolsDestination(val title: String, val description: String) {
     PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 100 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
     IME_FIX("输入法修复", "搜狗输入法崩溃秒修：状态检测 · 一键拉起引擎 · 重启 fcitx"),
+    CODEX_PROXY("Codex 登录修复", "登录转圈 / Token exchange failed 一键修复：探测代理 · 同步启动器 · 重启应用"),
     PROMPTS("提示词库", "常用提示词集中管理，一键复制给任意 AI"),
 }
 
@@ -132,6 +133,7 @@ fun ToolsView(store: AppStore, destination: ToolsDestination, onDestinationChang
                     ToolsDestination.PET_DEBUG -> PetDebugCard(store, Modifier.weight(1f))
                     ToolsDestination.WMS_VIEWER -> WmsViewerCard(store)
                     ToolsDestination.IME_FIX -> SogouImeCard(store)
+                    ToolsDestination.CODEX_PROXY -> CodexProxyCard(store)
                     ToolsDestination.PROMPTS -> PromptsCard(store, Modifier.weight(1f))
                 }
             }

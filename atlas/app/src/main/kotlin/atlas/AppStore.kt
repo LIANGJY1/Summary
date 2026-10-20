@@ -252,6 +252,43 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
         SogouIme.pgrepHasMatch(out)
     }.getOrDefault(false)
 
+    /** 工具页：Codex 登录修复（探测代理 → 同步启动器 → 重启 ChatGPT）的运行状态（脚本最长约 1 分钟） */
+    val codexProxyRun = mutableStateOf(Tools.CodexProxyRun())
+
+    fun checkCodexProxy() = runCodexProxyScript(checkOnly = true)
+
+    fun repairCodexProxy() = runCodexProxyScript(checkOnly = false)
+
+    private fun runCodexProxyScript(checkOnly: Boolean) {
+        if (codexProxyRun.value.running) return
+        val script = Tools.codexProxyScriptFile()
+        if (!script.isFile) {
+            Log.e("工具页：Codex 修复脚本不存在 ${script.absolutePath}")
+            codexProxyRun.value = Tools.CodexProxyRun(lines = listOf("未找到修复脚本：${script.absolutePath}"), exitCode = -1)
+            showToast("未找到修复脚本，请确认 Summary 仓库位置")
+            return
+        }
+        Log.i("工具页：运行 Codex 登录修复 checkOnly=$checkOnly")
+        codexProxyRun.value = Tools.CodexProxyRun(running = true, checkOnly = checkOnly)
+        scope.launch {
+            runCatching {
+                val proc = ProcessBuilder(Tools.codexProxyCommand(script.absolutePath, checkOnly))
+                    .redirectErrorStream(true)
+                    .start()
+                val text = proc.inputStream.bufferedReader().readText()
+                Tools.CodexProxyRun(false, checkOnly, text.lines().filter { it.isNotBlank() }, proc.waitFor())
+            }.onSuccess { run ->
+                if (run.exitCode != 0) Log.w("工具页：Codex 登录修复结束 exitCode=${run.exitCode}")
+                codexProxyRun.value = run
+                if (run.exitCode != 0) showToast("修复未成功，请查看输出详情")
+            }.onFailure { e ->
+                Log.e("工具页：Codex 登录修复异常", e)
+                codexProxyRun.value = Tools.CodexProxyRun(false, checkOnly, listOf("运行失败：${e.message}"), -1)
+                showToast("修复运行失败：${e.message}")
+            }
+        }
+    }
+
     /** 工具页：手机链路连通状态（卡片可见时由 UI 定时刷新） */
     val feishuLink = mutableStateOf<FeishuCheckin.LinkStatus?>(null)
 

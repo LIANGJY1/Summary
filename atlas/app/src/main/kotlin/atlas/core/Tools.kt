@@ -13,6 +13,9 @@ object Tools {
     /** 解密脚本相对 user.home 的位置 */
     const val HC_LOG_SCRIPT = "Project/MyProject/Summary/tools/hc/27M/hc_log_auto.py"
 
+    /** Codex 登录修复脚本相对 user.home 的位置(随本仓 atlas/scripts/ 分发) */
+    const val CODEX_PROXY_SCRIPT = "Project/MyProject/Summary/atlas/scripts/fix_codex_proxy.py"
+
     /** 拖拽/选择输入的预校验：目录直收；文件按扩展名放行（脚本自身支持这些格式） */
     private val ACCEPTED_EXTENSIONS = setOf("zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz")
 
@@ -21,6 +24,12 @@ object Tools {
 
     fun hcLogCommand(scriptPath: String, inputPath: String): List<String> =
         listOf("python3", scriptPath, inputPath)
+
+    fun codexProxyScriptFile(home: String = System.getProperty("user.home")): File =
+        File(home, CODEX_PROXY_SCRIPT)
+
+    fun codexProxyCommand(scriptPath: String, checkOnly: Boolean): List<String> =
+        listOf("python3", scriptPath) + if (checkOnly) listOf("--check") else emptyList()
 
     fun isAcceptableInput(file: File): Boolean =
         file.isDirectory || file.extension.lowercase() in ACCEPTED_EXTENSIONS
@@ -46,6 +55,14 @@ object Tools {
         val outputDir: String? = null,
         val summary: String? = null,
         val tail: List<String> = emptyList(),
+    )
+
+    /** 一次 Codex 登录修复脚本运行的 UI 状态（跨页签保留；脚本含代理探测与应用重启，最长约 1 分钟） */
+    data class CodexProxyRun(
+        val running: Boolean = false,
+        val checkOnly: Boolean = false,
+        val lines: List<String> = emptyList(),
+        val exitCode: Int? = null,
     )
 
     /**
