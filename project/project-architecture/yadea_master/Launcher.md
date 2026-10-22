@@ -2,6 +2,7 @@
 
 > 源码锚点：commit `d653d105f86b946685f3ff5133a3079d718d7882`（main）｜ 生成：2026-09-06 ｜ 范围：子系统 application/Launcher（批次 2 之二）
 > 上游文档：[ARCHITECTURE.md](ARCHITECTURE.md)（全局地图与主链路）
+> 专题：[Launcher-Vehicle-Service.md](Launcher-Vehicle-Service.md)（VehicleService 创建、生命周期绑定、业务 ready 与首页启动时序）
 
 main 源集 55 个代码文件、63 个顶层类型。近一年变更热点：`control/KanziSignalMapping.java`（27 次）、`control/KanziDataSourceManager.java`（17 次）、`services/VehicleService.java`（16 次）——三者正是本模块的协议接缝。
 

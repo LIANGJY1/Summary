@@ -1,6 +1,6 @@
 # VHAL 集成与契约
 
-> 学习资料（文章模式沉淀）。边界：本文回答 CarPropertyService 对属性访问的校验、VHAL 死亡后的服务恢复、属性订阅和事件契约，以及 HIDL 到 AIDL 迁移时的接口差异。每题只讨论对应契约，Q 序列供 Atlas 同源直读。
+> 范围：CarPropertyService 属性访问校验、VHAL 死亡恢复、属性订阅，以及 HIDL 到 AIDL 迁移时的接口差异。
 
 **Q1: [learning] CarPropertyService 为什么会对属性读写抛出 not writable at areaId 或 SecurityException？属性访问要通过哪些检查？**
 

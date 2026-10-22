@@ -1,6 +1,6 @@
 # AAOS 车辆电源、VHAL 属性与多用户服务
 
-> 学习资料（文章模式沉淀）。边界：本文回答 AAOS 车辆电源切换对应用的约束、VHAL 属性读取/订阅方式、headless system user 的驾驶员切换流程，以及 OEM 服务在多用户下的作用域选择。状态名、接口和默认行为有平台版本差异，需按目标 AAOS 源码与 car-lib 确认。Q 序列即结构，供 Atlas 同源直读。
+> 范围：AAOS 电源切换、VHAL 属性读取和订阅、多用户切换，以及 OEM 服务的用户作用域。状态与接口行为以目标平台分支为准。
 
 **Q1: [learning] AAOS 进入关机或挂起状态时，电源回调与 completion future 对应用有什么约束？**
 
@@ -43,7 +43,7 @@ OEM 可通过 `config_earlyStartupServices` 为 CarService 托管的服务声明
 
 1. **用户作用域：**`all` 表示 system 和所有可见用户，`system` 表示只在 user 0，`foreground` 表示当前前台用户，`visible` 表示所有可见用户，`backgroundVisible` 只表示可见的后台用户。`visible` 和 `backgroundVisible` 作用域从 Android 14 起受支持，较旧平台可能忽略配置。默认 user scope 是 `all`。前台用户切换时，foreground 服务会停止或解绑旧用户实例，再为新前台用户启动或绑定。
 2. **启动方式：**配置项 `bind` 可选 `bind`、`start` 或 `startForeground`。`bind` 通过 `Context.bindService()` 绑定，CarService 持有连接。`start` 通过 `Context.startService()` 启动。`startForeground` 通过 `Context.startForegroundService()` 启动，服务应按 Android 前台服务规则及时调用 `startForeground()`。未声明时默认使用 `start`。
-3. **生命周期与进程优先级：**被 CarService 绑定的服务运行在 CarService 所在持久进程关系中，进程优先级通常高于普通后台服务。它仍会受用户作用域约束，foreground/visible 用户失去对应状态后服务可能被停止。绑定服务默认也不能因此获得位置、相机、麦克风或网络访问权。
+3. **生命周期与进程优先级：**被 CarService 绑定的 OEM 服务仍运行在其自身配置的进程中，不会因 bind 自动进入 CarService 进程。绑定关系可提高服务进程的重要性，但不赋予它 CarService 的 UID、权限或持久进程身份。服务仍受用户作用域约束，foreground/visible 用户失去对应状态后可能被停止。
 4. **启动时机：**`trigger` 可选 `asap`、`resume`、`userUnlocked` 或 `userPostUnlocked`。`asap` 可在用户完全加载前启动，服务需支持 direct boot。`resume` 在设备从挂起恢复时启动。`userUnlocked` 在用户解锁时启动，是默认值。`userPostUnlocked` 在解锁后再启动，适用于非紧急服务。`maxRetries` 控制断连后的重启/重绑定尝试次数，参考源码默认值为 6，重试延迟从 4 秒起逐步加倍。
 5. **组件选型：**需要一份跨驾驶员共享并绑定 HAL 的进程内状态时，system user 作用域更合适。需要访问当前驾驶员应用数据或 UI 时，使用 foreground user。需要为同时可见的乘客区域分别提供服务时，考虑 visible 或 backgroundVisible，并确保服务代码正确处理每个 userId 的独立实例。
 6. **排查“消失/重复”：**先核对配置的 user scope 和 bind 方式，再用 `dumpsys activity services` 查看实际服务实例。命令输出按 userId 识别实例：只有一个 userId 记录通常表示单用户范围，同一组件出现在多个 userId 下可能是 `all` 或 visible 作用域的预期行为。最后确认调用方是否用正确的 UserHandle 重新绑定，以及目标用户是否仍在运行或可见。

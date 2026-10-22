@@ -1,6 +1,6 @@
 # CarService 服务速览
 
-> 学习资料（文章模式沉淀）。范围：Android Automotive OS 的 CarService 非核心服务，包括媒体源管理、蓝牙策略、遥测、诊断、车机 bugreport、设备策略、存储监控与投影宿主。机制以 LineageOS `lineage-21.0`（对应 AOSP Android 14）源码为依据，核对时间为 2026-09-25。电源、车辆属性、多用户和音频服务的内部机制不在本文范围。CarUxRestrictions 的定制方式和驾驶状态推导仅在相关问题中作为设备策略背景说明。Q 序列即结构，供 Atlas 同源直读。
+> 范围：CarService 的媒体、蓝牙、遥测、诊断、bugreport、设备策略、存储监控与投影服务。版本敏感的机制以 Android 14 的 packages/services/Car 实现为依据，具体差异以目标设备分支为准。
 
 **Q1: [learning] AAOS CarService 除车辆属性、电源和音频外，还包含哪些服务，怎样按职责建立全景？**
 
@@ -19,14 +19,14 @@ CarMediaService 为当前用户管理活动媒体源，并按 PLAYBACK 和 BROWS
 
 1. **状态存储：**媒体源状态按播放模式和 userId 保存。乘客之间的媒体状态隔离依赖座位到 occupant zone、再到 userId 的映射。独立播放配置控制同一用户是否能为播放与浏览模式选择不同的媒体源，它不表示为每个座位单独建立播放器。
 2. **应用行为的影响**：服务监听活跃 MediaSession 记录播放状态。应用卸载/禁用时回退到上一媒体源。方向盘媒体按键按 seat 找到对应用户后分发给其活跃 session。
-3. **开机恢复链：**用户解锁后，服务读取保存的播放源，再按 `config_mediaBootAutoplay` 决定是否恢复播放。Android 14 源码中该整数配置的有效值含义为：0 表示不自动播放，1 表示始终自动播放，2 表示按当前媒体源保存的上次播放状态恢复，3 表示沿用切换前媒体源的播放状态。框架默认资源值是 2。产品资源 overlay 可覆盖它。未覆盖时使用框架默认值。服务随后绑定目标应用的 MediaBrowser，并用 AUTOPLAY 参数告知恢复意图，因此目标媒体应用需提供可连接的 MediaBrowserService。
+3. **开机恢复链：**用户解锁后，服务读取保存的播放源，再按 `config_mediaBootAutoplay` 决定是否恢复播放。AOSP 默认资源值是 2，表示按保存的播放状态恢复，产品 overlay 可覆盖。CarMediaService 的判断函数还接受 0（不播放）、1（播放）和 3（沿用当前内存中的播放状态）。模式 3 主要用于媒体源切换，不能把它解释成开机前上一媒体源的持久状态。服务随后通过媒体连接组件向目标应用传递恢复意图，因此应用需提供可连接的媒体浏览服务。
 4. **权限边界：**查询和设置活动源的 CarMediaManager 接口受 `MEDIA_CONTENT_CONTROL` 保护，主要供系统 UI 或媒体中心使用。媒体应用通过正常实现 MediaSession 和 MediaBrowserService 被系统管理，不需要调用这些受保护的管理接口。
 
 **Q3: [learning] CarBluetoothService 管什么？“上车自动连蓝牙”的触发条件是什么？应用还能配优先级吗？**
 
 CarBluetoothService 管理当前用户的蓝牙设备与 profile 连接：为每个用户维护按优先级排序的已知设备列表、profile 抑制（inhibit）管理与默认自动连接策略（策略可通过 resource overlay 换成 OEM 实现）。
 
-1. **触发时机**：蓝牙开启、收到 SEAT_OCCUPANCY 座椅占用事件、init 完成时触发自动连接——且注释明确**只在 parked（P 挡）状态触发**，防止驾驶中操作并过滤行驶中的假占用信号。
+1. **触发时机**：默认策略在初始化且蓝牙已开启、蓝牙适配器切换为开启状态，以及驾驶员座椅从未占用变为占用时，可以触发自动连接。只有座椅占用事件路径额外要求 CarDrivingStateService 报告 parked，不能把这一约束套到初始化与蓝牙开启路径。parked 是车载驾驶状态，不应直接与挡位 P 画等号。
 2. **API 变化**：`CarBluetoothManager` 在 Android 14 的 car-lib 中已移除（Android 13 起废弃优先级设置接口）——应用侧只剩标准蓝牙 API，自动连接由系统策略接管。
 3. **多用户**：设备优先级列表按用户持久化——多用户车机上“换了驾驶员蓝牙列表就变了”是设计行为。
 4. **边界**：它不实现蓝牙协议栈，只是设备管理 + 连接时机策略层，底层仍用标准各 Profile。
@@ -52,7 +52,7 @@ CarTelemetryService 是 OEM 遥测的收集与处理服务：客户端推送 Met
 
 CarBugreportManagerService 走车机专用的 `carbugreportd`/`cardumpstatez` 通道：无分享确认弹窗、直接写调用方提供的两个输出 fd（主 zip + 额外输出），专为车机可控采集设计。
 
-1. 使用前提：需要 `DUMP` 权限的系统应用触发，且只在 userdebug/eng 构建可用（user build 上服务直接不可用）——线上用户版拿不到。
+1. **调用边界**：所核对的 AOSP CarBugreportManagerService 实现要求调用方具有 `DUMP` 权限，且签名与平台匹配。user 构建还要求调用方 UID 包含 `config_car_bugreport_application` 指定的应用包名。userdebug/eng 构建跳过的是这个指定应用检查，并非整个服务的构建限制。目标版本仍需核对同名服务实现。
 2. **约束**：同一时刻只允许一个 bugreport（并发返回 IN_PROGRESS）。进度经 onProgress(0–100) 回调、错误按 DUMPSTATE_FAILED/CONNECTION_FAILED 等码区分。
 3. **边界**：标准 BugreportManager 走 framework dumpstate 加用户确认 UI——两条通道不要混为一谈。
 
@@ -64,12 +64,12 @@ CarDevicePolicyService 是 DevicePolicyManager 在车机上的受限子集（创
 2. **权限**：用户管理接口要 `MANAGE_USERS` 或 `INTERACT_ACROSS_USERS`——同样是特权面。
 3. **边界**：guest/ephemeral 等用户限制逻辑实际在 CarUserService，admin 包只是门面。
 
-**Q8: [learning] CarStorageMonitoringService 还能用吗？**
+**Q8: [learning] CarStorageMonitoringService 与 CarWatchdog 的磁盘观测职责有什么不同？**
 
-处于边缘化状态：未标 `@Deprecated` 但被标为 `@OptionalFeature`——OEM 可不启用。per-UID 磁盘 I/O 观测与资源过载治理现由 CarWatchdog 相关能力承接。新代码应按目标 Android 版本的 CarWatchdog API 设计，不要仅依赖这个可选的旧服务。
+CarStorageMonitoringService 是可选的 I/O 统计观察服务。CarWatchdog 负责按配置跟踪资源超限并采取治理动作。目标设备可能关闭前者，但这不表示所有旧接口都已移除。新代码应先核对目标版本与设备启用的能力，再决定使用统计接口或 CarWatchdog 的超限通知。
 
 1. **它做什么**：从 `/proc/uid_io/stats` 周期采样 per-UID 读写统计，滑动窗口保留样本、维护开机以来累计 I/O，监听者收到 IoStats 快照——消费方主要是调试/性能工具。
-2. **现状原因**：持续向用户态广播 IoStats 会带来成本。设备可关闭此可选 feature，并使用 CarWatchdog 的 I/O 过载观测和治理能力。
+2. **能力取舍**：统计快照与超限治理回答不同问题。设备可关闭此可选 feature，并使用 CarWatchdog 的 I/O 过载观测和治理能力，但不能从“可关闭”推断出设备为何关闭。
 3. **排查提示**：接口不存在先查特性开关，再确认设备是否启用了这条旧通道。
 
 **Q9: [learning] CarProjectionService 是干什么的？手机互联（CarPlay/CarLife 类）方案和它什么关系？**
@@ -97,10 +97,12 @@ AAOS CarWatchdog 通过内核 /proc/uid_io/stats 的 per-UID I/O 统计跟踪应
 
 **Q11: [learning] 挂 R 后倒车影像出得慢甚至黑屏——CarEvsService 的触发链有哪两条？延迟差在哪？**
 
-实现中可见两种触发链：`EVS_SERVICE_REQUEST` 属性可直接通知 EVS 服务，另一种是通过 `GEAR_SELECTION==REVERSE` 变化间接触发。后者要经过“VHAL 事件 → CarPropertyService → 状态机 → 启动 EvsActivity → 分配 Surface → 首帧”，链路明显更长。
+既有 CarEvsService 实现有两种触发链：`EVS_SERVICE_REQUEST` 属性可直接通知 EVS 服务，另一种是通过 `GEAR_SELECTION==REVERSE` 变化间接触发。后者还经过 CarPropertyService、状态机、EvsActivity 和显示链路。路径差异会影响调度环节，但不能仅凭路径长度断定端到端时延。
+
+这是使用 CarEvsService/EVS 的既有实现路径。AOSP 当前已给出迁移到 Camera2 的指导，并计划弃用 EVS 摄像头 API 与 CarEvsService。新平台应先查目标分支是否仍启用该可选服务，不能把下面的状态机当作所有 AAOS 倒车影像的必经路径。
 
 1. **状态机**：UNAVAILABLE → INACTIVE → REQUESTED → ACTIVE。客户端拿到 REQUESTED 后必须在限时内发起视频流，超时回到 INACTIVE。
-2. **直通优先**：VHAL 实现了 `EVS_SERVICE_REQUEST` 属性时走直通（不再依赖挡位订阅），延迟显著更短。传统链还会用时间戳丢弃过期挡位事件。
+2. **触发选择**：目标分支启用 `EVS_SERVICE_REQUEST` 时核对它与挡位订阅的选择逻辑。传统挡位链可能根据时间戳丢弃过期事件。比较速度应实测从挂 R 信号到首帧的完整时长。
 3. **停帧根因**：EVS 帧必须逐帧归还（doneWithFrame），buffer 不归还是丢帧/停帧的常见原因。
 4. **诊断**：`logcat -s CAR.EVS` 中 `-s` 用于只显示 CAR.EVS 标签的日志，将其时间戳与 VHAL 事件对齐以测量“挂 R 到首帧”的时长。`dumpsys car_service --services CarEvsService` 中 `--services` 将输出限制到指定的 CarService 服务，可检查 CarEvsService 状态机停留位置。
 

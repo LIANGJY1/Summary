@@ -35,9 +35,18 @@ ARM64 指令固定 4 字节，`B`/`BL` 直接跳转范围约 ±128 MiB。代理�
 版本声明要拆开读。Matrix 的 Gradle 插件 README 仍声明支持 AGP 3.5/4.0/4.1，而旧 Transform API 自 AGP 8.0 起已移除（材料口径），用 AGP 8/9 的项目要选已迁移的 fork 或自行迁移到 Instrumentation/Scoped Artifacts API。KOOM 的 Java 模块声明 API 21+，Native/Thread 模块限 API 24+ 与 arm64-v8a，其 fork dump（暂停 VM、fork 子进程 dump 后恢复父进程）把冻结缩到 20 ms 量级是项目测量结果而非设备保证。KOOM Native 用“分配元数据 + 保守扫描”找不可达分配块，漏报由形似指针的值造成，它不能替代检测越界和 use-after-free 的 ASan/HWASan。组合使用还要防四件事：开销叠加（探针、Hook、unwind、dump 各自耗资源）、Hook 链冲突（两个库改写同一符号时链顺序与递归保护互相破坏）、数据缺共同主键（session 与时间源不统一就无法关联）、监控不可关闭。接入前把远程开关、采样率和失败降级写进清单，用目标低端机实测开销，不引用上游百分比。
 **Q5: [learning] 一次 draw API 调用返回后，这一帧还要经过哪些时间节点？怎么用这些节点判断“是不是 GPU 瓶颈”？**
 
-draw API 返回只说明 CPU 执行到提交点，这一帧此后还要走 GPU 执行、producer 完成后 `queueBuffer`、SurfaceFlinger latch、HWC 或 RenderEngine 合成、display present 几个节点。判断 GPU 瓶颈就是看 CPU submit、GPU 完成与显示交付哪一段越过了 deadline，而不是只看 GPU 时间长短。
+draw API 返回只说明 CPU 已录制或提交图形命令。Producer 可以在 GPU 尚未完成写入时把 buffer 连同 acquire fence 提交给 BufferQueue。消费者必须等待 fence signal 后才能安全读取。之后还要经过 SurfaceFlinger latch、HWC 或 RenderEngine 合成和 display present。判断 GPU 瓶颈要比较 CPU submit、acquire fence signal 与显示交付相对 deadline 的位置，不能把 `queueBuffer` 当成 GPU 已完成。
 
-一次完整帧的关键节点按序是：应用录制命令并 submit。GPU queue 上的工作开始与完成（completion fence）。producer 向 BufferQueue 提交 buffer（acquire fence signal）。SurfaceFlinger latch 选中本帧 buffer。HWC 硬件合成或 RenderEngine client composition。显示端 present。把 CPU/GPU/SF 各轨道放进同一时间轴后按证据定位方向：
+关键节点存在异步重叠：
+
+1. 应用录制并 submit 命令。
+2. Producer 调用 `queueBuffer`，把 buffer 和尚未 signal 的 acquire fence 一起入队。
+3. GPU 完成写入后 fence signal。
+4. SurfaceFlinger 在满足同步条件后 latch。
+5. HWC 或 RenderEngine 完成合成。
+6. 显示端 present。
+
+Android 同步框架允许 buffer 指针先交给消费者、再由 fence 表达 GPU 完成依赖。把 CPU、GPU 和 SurfaceFlinger 轨道放进同一时间轴后按证据定位：
 
 - **CPU 录制或 submit 已晚，GPU 随后正常完成**：查 CPU 调度、锁、Binder、命令录制与资源加载。
 - **CPU submit 按时，应用 GPU completion fence 越过 deadline**：应用提交的 GPU 工作量偏大，做降分辨率、关 pass 的单变量实验后进帧 profiler。

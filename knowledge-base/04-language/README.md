@@ -8,13 +8,13 @@
 
 - 某门语言的语法、类型系统、集合、并发模型、泛型/反射/元编程等语言特性与惯用法
 - 该语言标准库与官方工具链行为（编译器、构建对语言特性的处理）
-- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-ecosystem-and-android.md`）；练习/实验项目（如 `C++/cpp_practice_project/`）
+- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-ecosystem-and-android.md`）
 
-**不收**（退回 ROUTING.md 判据链 2–6）：
+**不收**（退回 ROUTING.md 重新判断）：
 
-- 把语言名换掉结论仍成立的知识——通用设计思想 → design-principles.md；第三方框架/SDK 设计 → sdk-design.md；Android UI 坑 → android-ui.md
-- 业务逻辑与工程模式，**即使示例代码是本语言写的**：判定看知识内核，不看代码语言——如「订阅监听后必须对账初值」换任何语言都成立，属工程模式不属 Kotlin 语法，归宿是项目文档或 design-principles.md，不是本域
-- 同一主题两边都够格时各写各的角度、互相不复制（例：Kotlin 协程的挂起机制 → `kotlin/`；跨库并发设计思想条目 → sdk-design.md）
+- 把语言名换掉后结论仍成立的知识：通用设计思想进入 `05-design/`，Android 专属机制进入 `01-android/`，第三方库进入相应平台主题册。
+- 业务逻辑与工程模式，即使示例代码使用本语言，也按知识内核进入设计、平台或项目主题。例如“订阅监听后必须对账初值”不是 Kotlin 语法。
+- 同一主题涉及语言和平台两个视角时分别解释各自机制并交叉引用，不复制答案。
 
 ## 分发策略（三步判定，按序执行）
 
@@ -35,6 +35,6 @@
 
 | 子目录 | 语言 | 现状 |
 |---|---|---|
-| `C++/` | C++ | 编号主题笔记见 `C++/README.md`：语言基础、编译链接、POSIX、函数与类型、数组与字符串、自定义类型、指针与内存、标准库容器；另含练习项目 |
-| `java/` | Java | 编号主题笔记（2026-10-05 按主题边界重构）：01-oop-basics / 02-strings-and-collections / 03-annotations / 04-generics / 05-reflection / 06-concurrency-and-streams / 07-exceptions-and-io / 08-serialization / 09-jvm-runtime |
-| `kotlin/` | Kotlin | 四篇主题笔记：01-syntax-basics / 02-objects-and-types / 03-functional-and-concurrency / 04-ecosystem-and-android；另保留 [Kotlin 学习笔记完整版](./kotlin/kotlin-learning-notes-complete.md)（300 题）。原 `kotlin_study_notes.md` 与该完整版重复，已去重，题目以完整版为唯一保留副本 |
+| `C++/` | C++ | 编号主题笔记见 `C++/README.md`：语言基础、编译链接、POSIX、函数与类型、数组与字符串、自定义类型、指针与内存、标准库容器 |
+| `java/` | Java | 编号主题笔记：01-oop-basics / 02-strings-and-collections / 03-annotations / 04-generics / 05-reflection / 06-concurrency-and-streams / 07-exceptions-and-io / 08-serialization / 09-jvm-runtime |
+| `kotlin/` | Kotlin | 四篇主题笔记：01-syntax-basics / 02-objects-and-types / 03-functional-and-concurrency / 04-ecosystem-and-android |

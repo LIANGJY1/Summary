@@ -216,12 +216,12 @@ Treble 通过 system/vendor 分区边界和版本化接口约束双方依赖。V
 
 **Q12: [learning] ABI 是什么，与 API 有什么区别？**
 
-API（Application Programming Interface，应用程序接口）规定源码可以调用哪些函数、类型和行为；ABI（Application Binary Interface，应用二进制接口）规定编译后的二进制如何与处理器及系统运行时衔接。简单说，API 面向源码，ABI 面向二进制。
+API（Application Programming Interface，应用程序接口）约定调用方能使用什么功能；ABI（Application Binary Interface，应用二进制接口）约定编译后的二进制如何彼此调用。开发中说“我可以给你提供 API 接口”，通常指提供可调用的功能及其参数、返回值或请求响应约定。
 
-1. **API 变化影响编译与调用：**应用使用的 API 不存在或行为不兼容时，可能无法编译，或在运行时因平台接口差异失败。Android 的 API level 用于标识平台 API 版本。
-2. **ABI 变化影响二进制加载与执行：**指令集、调用约定或数据布局不匹配时，Native 库不能在目标设备上正确加载或运行。Android 常见 ABI 有 `arm64-v8a`、`armeabi-v7a` 和 `x86_64`；APK 将 Native 库放在 `lib/<abi>/` 下，安装时系统选择设备支持的兼容版本。
+1. **API 示例：**库可以提供 `UserRepository.findById(id)`；服务端也可以提供 `GET /users/{id}`，约定请求参数和 JSON 响应。调用方按约定使用，不必了解内部实现。
+2. **ABI 示例：**Android NDK 库需提供与设备兼容的二进制，例如 APK 中 `lib/arm64-v8a/libfoo.so`。ABI 不只指指令集，也包括函数调用约定、符号和数据布局；这些不匹配时，Native 库可能无法加载或正确调用。
 
-因此，同一份 Java/Kotlin 字节码可由运行时适配不同设备 ABI；Native 库则必须提供与设备 ABI 兼容的二进制。API 兼容不代表 ABI 兼容，反之亦然。
+API 说明“调用什么、如何使用”，ABI 说明“二进制如何衔接”。API 可兼容而 ABI 不兼容，例如函数声明未变，但 Native 库改用不兼容的调用约定或数据布局。
 
 依据：Android Developers《Android NDK: Concepts》《Android ABIs》。
 

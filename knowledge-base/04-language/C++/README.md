@@ -11,5 +11,3 @@
 7. `07-pointers-and-memory.md`：指针与引用语义、数组关系、存储期、动态分配与资源管理（18 题）。
 8. `08-containers.md`：标准库容器 `std::vector`（含与数组的关系、为什么要用它）、存储模型、容量管理、迭代器失效、`push_back` 存入与 `back()` 修改最后一条、erase-remove 惯用法和 `vector<bool>` 特例（12 题）。
 9. `09-file-streams.md`：文件流 ifstream 解析：类型结构、打开模式、流状态、格式化与非格式化读取、随机访问、整文件读取和生命周期（12 题）。
-
-`cpp_practice_project/` 保存练习代码，不属于问答文档。

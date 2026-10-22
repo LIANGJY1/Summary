@@ -1,8 +1,6 @@
-# Android/AAOS 音频焦点、播放与蓝牙学习路径
+# Android/AAOS 音频焦点、播放与蓝牙知识目录
 
-2026-10-03 目录重构：01–05 册文件名改为英文 kebab-case（01-aosp-audio 等），原 11 册「一路 PCM 控制面/数据面」与原 03 册同题，现已合并入 04 册 Q2 答案（设备面表述保留）。学习主线以 AAOS 13 为基线，从“点击音和媒体怎么共存”沿应用、焦点服务、车机策略、路由、混音、HAL 到排障逐级深入。每册 Q 序列即册内学习顺序，适合 atlas 同源读取。06–12 册扩展焦点与播放专题，13 册单列蓝牙缺陷案例；01–05 册保留 AOSP、手机侧焦点、车载音频、延迟和蓝牙基础，不重复搬运正文。
-
-2026-10-04 全库顺序重排复核：本目录仍为 06-audio，01–13 册编号及下列 06–12 连续学习链保持不变。
+本目录以 AAOS 13 为基线，解释点击音和媒体如何共存，以及应用、焦点服务、车机策略、路由、混音、HAL 和排障的完整链路。01–05 册解释 AOSP、手机侧焦点、车载音频、延迟和蓝牙基础。06–12 册解释焦点与播放链路。13 册收录蓝牙缺陷案例。
 
 1. [06-音效与音源决策](./06-audio-decisions.md)：先分清普通点击、媒体、导航和安全声音；回答“混声还是抢占”的条件。
 2. [07-应用焦点契约](./07-focus-api.md)：AudioManager/AudioAttributes/AudioFocusRequest 的职责、短音申请示例、失焦和延迟处理。
@@ -15,4 +13,4 @@
 
 **先记住的判断**：系统的 `playSoundEffect()` 在 Android 13 路径中不为每次点击申请焦点。自定义 UI 音效若显式申请，AAOS 13 默认矩阵允许 `MUSIC → SYSTEM_SOUND` 并发。实际双持焦还取决于 MAY_DUCK 请求与旧持有者偏好，最终听感还取决于音区、路由和 HAL。
 
-证据优先级：目标车的运行配置与可测输出 → 对应厂商分支源码 → [公开 AAOS 13 CarService](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/) 与 [Android 13 音频服务源码](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/services/core/java/com/android/server/audio/) → [AAOS 官方音频文档](https://source.android.com/docs/automotive/audio) 和 [Android 开发者音频焦点指南](https://developer.android.com/media/optimize/audio-focus) → 社区文章。社区资料可提供问题线索，涉及版本敏感行为时须回到源码或设备验证。当前工作环境未找到仓库地图中提到的本地 `AAOS13_study`，本轮源码核对使用公开分支，不冒称本地核对。
+证据优先级：目标车的运行配置与可测输出 → 对应厂商分支源码 → [公开 AAOS 13 CarService](https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android13-release/service/src/com/android/car/audio/) 与 [Android 13 音频服务源码](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/services/core/java/com/android/server/audio/) → [AAOS 官方音频文档](https://source.android.com/docs/automotive/audio) 和 [Android 开发者音频焦点指南](https://developer.android.com/media/optimize/audio-focus) → 社区文章。社区资料可提供问题线索，涉及版本敏感行为时须回到源码或设备验证。
