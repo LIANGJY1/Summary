@@ -66,7 +66,7 @@ class DeviceToolsTest {
     @Test
     fun `工具清单含八个条目且分组正确`() {
         val tools = DeviceTools.Tool.entries
-        assertEquals(7, tools.size) // logcat 流式工具独立于一次性清单
+        assertEquals(8, tools.size) // logcat 流式工具独立于一次性清单
         assertTrue(tools.any { it.id == "push_launcher" && it.group == "设备" })
         assertTrue(tools.any { it.id == "start_3daa" && it.group == "模拟器" })
         assertTrue(tools.any { it.id == "remove_comment_slashes" && it.group == "实用" })

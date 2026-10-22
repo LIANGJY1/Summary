@@ -1591,6 +1591,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                 displayQuestion,
                                                 store.questionImageBaseDirectory(entry.sourcePath),
                                                 ui.typography.itemTitle.copy(fontWeight = FontWeight.Medium),
+                                                enableImagePreview = true,
                                                 onImageCopied = if (Platform.supportsQuestionImageActions) {
                                                     { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
                                                 } else null,
@@ -1611,6 +1612,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                             lineHeight = (store.settings.questionFontSize * 22f / 13f).sp,
                                                             fontWeight = FontWeight.Medium,
                                                         ),
+                                                        enableImagePreview = true,
                                                         onImageCopied = if (Platform.supportsQuestionImageActions) {
                                                             { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
                                                         } else null,
@@ -1689,6 +1691,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                                             dirtyLines = gitDiff?.answerDirtyLines ?: emptySet(),
                                                             maxWidth = SourceQuestionContentWidth,
                                                             imageBaseDirectory = store.questionImageBaseDirectory(entry.sourcePath),
+                                                            enableImagePreview = true,
                                                             onImageCopied = if (Platform.supportsQuestionImageActions) {
                                                                 { copied -> store.showToast(if (copied) "图片已复制" else "复制图片失败") }
                                                             } else null,
@@ -2108,6 +2111,7 @@ private fun QuestionPromptContent(
     styled: AnnotatedString,
     imageBaseDirectory: java.io.File,
     style: androidx.compose.ui.text.TextStyle,
+    enableImagePreview: Boolean = false,
     onImageCopied: ((Boolean) -> Unit)? = null,
     onImageDeleted: ((String) -> Unit)? = null,
 ) {
@@ -2131,6 +2135,7 @@ private fun QuestionPromptContent(
                 markdownReference = match.value,
                 onImageCopied = onImageCopied,
                 onImageDeleted = onImageDeleted,
+                enablePreview = enableImagePreview,
             )
             start = match.range.last + 1
         }

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="620" viewBox="0 0 1100 620" role="img" aria-labelledby="title desc">
+  <title id="title">UNIX 系统的体系结构</title>
+  <desc id="desc">广义操作系统边界包含用户空间软件、系统调用接口和内核；硬件位于边界外。狭义操作系统指内核。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1 1 L6.5 4 L1 7" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="620" rx="26" fill="#f5f7fb"/>
+  <text x="550" y="48" text-anchor="middle" fill="#17243a" font-family="sans-serif" font-size="28" font-weight="700">UNIX 系统的体系结构</text>
+  <text x="550" y="77" text-anchor="middle" fill="#59677e" font-family="sans-serif" font-size="15">内核提供核心服务；其他软件经受控接口使用这些服务</text>
+
+  <rect x="74" y="105" width="952" height="378" rx="22" fill="#ffffff" stroke="#9eb2d3" stroke-width="2.5"/>
+  <rect x="98" y="91" width="300" height="30" rx="15" fill="#e8eef9"/>
+  <text x="248" y="112" text-anchor="middle" fill="#31588e" font-family="sans-serif" font-size="15" font-weight="700">广义操作系统：完整软件环境</text>
+
+  <text x="550" y="150" text-anchor="middle" fill="#53627a" font-family="sans-serif" font-size="15" font-weight="700">用户空间软件</text>
+  <g font-family="sans-serif" text-anchor="middle">
+    <rect x="112" y="169" width="198" height="72" rx="14" fill="#edf3ff" stroke="#9db9eb" stroke-width="1.5"/>
+    <text x="211" y="200" fill="#244c83" font-size="19" font-weight="700">应用程序</text>
+    <text x="211" y="223" fill="#5d6d86" font-size="13">直接请求或调用库函数</text>
+
+    <rect x="330" y="169" width="198" height="72" rx="14" fill="#f2efff" stroke="#b7a8e7" stroke-width="1.5"/>
+    <text x="429" y="200" fill="#5b4a91" font-size="19" font-weight="700">shell</text>
+    <text x="429" y="223" fill="#68627f" font-size="13">为运行应用提供接口</text>
+
+    <rect x="548" y="169" width="198" height="72" rx="14" fill="#eef7f4" stroke="#9bcdbb" stroke-width="1.5"/>
+    <text x="647" y="200" fill="#286b55" font-size="19" font-weight="700">系统实用程序</text>
+    <text x="647" y="223" fill="#5d766d" font-size="13">系统管理与常用任务</text>
+
+    <rect x="766" y="169" width="198" height="72" rx="14" fill="#fff5e7" stroke="#edc786" stroke-width="1.5"/>
+    <text x="865" y="200" fill="#8a5a15" font-size="19" font-weight="700">公用函数库</text>
+    <text x="865" y="223" fill="#78684e" font-size="13">建立在系统调用接口之上</text>
+  </g>
+
+  <path d="M550 249 V279" fill="none" stroke="#456b9d" stroke-width="2.2" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <text x="572" y="269" fill="#59677e" font-family="sans-serif" font-size="13">按需请求服务</text>
+  <rect x="178" y="290" width="744" height="58" rx="15" fill="#e9eef6" stroke="#bac6d8" stroke-width="1.5"/>
+  <text x="550" y="315" text-anchor="middle" fill="#35445b" font-family="sans-serif" font-size="19" font-weight="700">系统调用接口</text>
+  <text x="550" y="336" text-anchor="middle" fill="#65728a" font-family="sans-serif" font-size="13">用户程序请求内核服务的边界</text>
+
+  <path d="M550 352 V374" fill="none" stroke="#456b9d" stroke-width="2.2" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <rect x="283" y="385" width="534" height="70" rx="16" fill="#344f78"/>
+  <text x="550" y="417" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="22" font-weight="700">内核</text>
+  <text x="550" y="440" text-anchor="middle" fill="#e1e9f6" font-family="sans-serif" font-size="14">管理硬件资源，提供程序运行环境</text>
+  <rect x="838" y="402" width="150" height="36" rx="18" fill="#e8eef9" stroke="#afbdd2"/>
+  <text x="913" y="426" text-anchor="middle" fill="#405673" font-family="sans-serif" font-size="14" font-weight="700">狭义操作系统</text>
+
+  <path d="M550 459 V520" fill="none" stroke="#344f78" stroke-width="2.2" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <rect x="330" y="536" width="440" height="58" rx="15" fill="#e5e9ef" stroke="#c2cad5" stroke-width="1.5"/>
+  <text x="550" y="572" text-anchor="middle" fill="#414e61" font-family="sans-serif" font-size="19" font-weight="700">计算机硬件</text>
+  <text x="550" y="611" text-anchor="middle" fill="#6d7889" font-family="sans-serif" font-size="12">示意图表达软件层次，不表示所有库函数都会触发系统调用</text>
+</svg>

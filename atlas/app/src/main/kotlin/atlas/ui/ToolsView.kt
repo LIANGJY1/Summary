@@ -80,7 +80,7 @@ import kotlinx.coroutines.launch
 enum class ToolsDestination(val title: String, val description: String) {
     LOG_DECRYPT("日志解密", "27HM 日志压缩包 / 目录 → 解压·解密·解压，一键出可读日志"),
     PHONE_AUTO("任务自动化", "adb 控制手机一键执行常用流程，无线优先、USB 兜底"),
-    DEVICE_TOOLS("设备工具箱", "推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
+    DEVICE_TOOLS("设备工具箱", "ADB/USB 修复 · 推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行"),
     AAOS_DEBUG("AAOS 调试", "源码构建与检索 · 设备命令 · 自定义 Bash 命令"),
     PET_DEBUG("萌宠调试", "事件直注 · 推荐 IPC · 100 个场景 · 专用日志，一键执行"),
     WMS_VIEWER("WMS 查看器", "窗口容器树查看与对比，排查窗口层级问题"),
@@ -684,9 +684,32 @@ private fun DeviceToolboxCard(store: AppStore) {
     var avd by remember { mutableStateOf(store.settings.emulatorAvd) }
     var logcatFilter by remember { mutableStateOf("") }
     var deviceMenu by remember { mutableStateOf(false) }
+    var pendingUsbRepair by remember { mutableStateOf(false) }
+    var usbRepairControllers by remember { mutableStateOf(emptyList<String>()) }
+    var selectedUsbRepairController by remember { mutableStateOf<String?>(null) }
+    var usbControllerMenu by remember { mutableStateOf(false) }
+    var awaitingAdbRestartCheck by remember { mutableStateOf(false) }
+    var adbRestartCheckStarted by remember { mutableStateOf(false) }
+    var usbResetPrompt by remember { mutableStateOf(false) }
 
     // 进卡片即刷新在线设备列表并按默认规则选中（优先非无线）；下拉打开时再刷一次
     LaunchedEffect(Unit) { store.refreshToolboxDevices() }
+
+    LaunchedEffect(run.toolId, run.running, run.exitCode, run.lines) {
+        if (awaitingAdbRestartCheck && run.toolId == DeviceTools.Tool.REPAIR_LOCAL_ADB_USB.id) {
+            if (run.running) adbRestartCheckStarted = true
+            if (adbRestartCheckStarted && !run.running && run.exitCode != null) {
+                awaitingAdbRestartCheck = false
+                adbRestartCheckStarted = false
+                if (run.lines.any { it.startsWith("尚未发现在线 ADB 设备") }) {
+                    usbRepairControllers = DeviceTools.xhciControllerAddresses()
+                    selectedUsbRepairController = usbRepairControllers.singleOrNull()
+                    usbResetPrompt = true
+                    pendingUsbRepair = true
+                }
+            }
+        }
+    }
 
     Surface(
         Modifier.fillMaxWidth(),
@@ -702,7 +725,7 @@ private fun DeviceToolboxCard(store: AppStore) {
                 }
                 Column(Modifier.weight(1f)) {
                     Text("设备工具箱", style = ui.typography.itemTitle)
-                    Text("推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行", style = ui.typography.secondary, color = Theme.Muted)
+                    Text("ADB/USB 修复 · 推送 · 重启 · 截屏 · 模拟器 · 日志，全部本地执行", style = ui.typography.secondary, color = Theme.Muted)
                 }
                 TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起设置" else "设置") }
             }
@@ -751,7 +774,23 @@ private fun DeviceToolboxCard(store: AppStore) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(group, style = ui.typography.secondary, color = Theme.Muted, modifier = Modifier.width(44.dp))
                     tools.forEach { tool ->
-                        OutlinedButton(onClick = { store.runTool(tool) }, enabled = !running) {
+                        OutlinedButton(
+                            onClick = {
+                                if (tool == DeviceTools.Tool.REPAIR_LOCAL_ADB_USB) {
+                                    if (!DeviceTools.isLinuxHost()) {
+                                        store.showToast("本机 USB 控制器修复仅支持 Linux")
+                                    } else {
+                                        usbRepairControllers = DeviceTools.xhciControllerAddresses()
+                                        selectedUsbRepairController = usbRepairControllers.singleOrNull()
+                                        usbResetPrompt = false
+                                        pendingUsbRepair = true
+                                    }
+                                } else {
+                                    store.runTool(tool)
+                                }
+                            },
+                            enabled = !running && (tool != DeviceTools.Tool.REPAIR_LOCAL_ADB_USB || !logcatOn),
+                        ) {
                             Text(tool.label)
                         }
                     }
@@ -819,6 +858,85 @@ private fun DeviceToolboxCard(store: AppStore) {
                 MonoOutputBlock(store.logcatLines.takeLast(12), color = Theme.Muted)
             }
         }
+    }
+
+    if (pendingUsbRepair) {
+        AlertDialog(
+            onDismissRequest = {
+                pendingUsbRepair = false
+                usbResetPrompt = false
+            },
+            title = { Text("修复本机 ADB/USB") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        if (usbResetPrompt) {
+                            "ADB 服务重启后仍未发现在线设备。可以选择控制器并授权重置；该控制器上的 USB 设备（包括键盘、鼠标和手机）会短暂断开。"
+                        } else {
+                            "先重启本机 ADB 服务（会短暂中断所有 ADB 连接）并检查设备。如果仍未恢复，我会再提示你是否重置 USB 控制器。"
+                        },
+                    )
+                    if (usbResetPrompt && usbRepairControllers.size > 1) {
+                        Box {
+                            OutlinedButton(onClick = { usbControllerMenu = true }) {
+                                Text(selectedUsbRepairController ?: "选择 USB 控制器")
+                            }
+                            DropdownMenu(
+                                expanded = usbControllerMenu,
+                                onDismissRequest = { usbControllerMenu = false },
+                            ) {
+                                usbRepairControllers.forEach { controller ->
+                                    DropdownMenuItem(
+                                        text = { Text(controller) },
+                                        onClick = {
+                                            selectedUsbRepairController = controller
+                                            usbControllerMenu = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    } else if (usbResetPrompt && usbRepairControllers.size == 1) {
+                        Text("控制器：${selectedUsbRepairController.orEmpty()}", color = Theme.Muted)
+                    } else if (usbResetPrompt) {
+                        Text("未发现由 xhci_hcd 管理的控制器，无法执行 USB 重置；请检查线材、接口或硬件。", color = Theme.Muted)
+                    }
+                    if (usbResetPrompt && usbRepairControllers.isNotEmpty()) {
+                        Text("重置控制器时系统会请求管理员授权。", color = Theme.Muted)
+                    }
+                }
+            },
+            confirmButton = {
+                if (usbResetPrompt) {
+                    Button(
+                        onClick = {
+                            selectedUsbRepairController?.let { controller ->
+                                store.runTool(DeviceTools.Tool.REPAIR_LOCAL_ADB_USB, controller, resetUsbController = true)
+                                pendingUsbRepair = false
+                                usbResetPrompt = false
+                            }
+                        },
+                        enabled = selectedUsbRepairController != null && !running && !logcatOn,
+                    ) { Text("授权并重置 USB") }
+                } else {
+                    Button(
+                        onClick = {
+                            awaitingAdbRestartCheck = true
+                            adbRestartCheckStarted = false
+                            store.runTool(DeviceTools.Tool.REPAIR_LOCAL_ADB_USB, resetUsbController = false)
+                            pendingUsbRepair = false
+                        },
+                        enabled = !running && !logcatOn,
+                    ) { Text("重启 ADB 并检查") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingUsbRepair = false
+                    usbResetPrompt = false
+                }) { Text("取消") }
+            },
+        )
     }
 }
 

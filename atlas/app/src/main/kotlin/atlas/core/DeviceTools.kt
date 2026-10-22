@@ -12,6 +12,7 @@ object DeviceTools {
     const val LAUNCHER_PACKAGE = "com.yadea.launcher"
     const val DEFAULT_PUSH_DEST = "/system_ext/priv-app/NsrLauncher"
     const val DEFAULT_AVD = "3DAA"
+    private val PCI_ADDRESS = Regex("[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\\.[0-7]")
 
     /** 一次性工具清单（顺序即 UI 展示顺序；logcat 流式工具不在此列） */
     enum class Tool(val id: String, val label: String, val group: String, val description: String) {
@@ -22,6 +23,7 @@ object DeviceTools {
         START_EMULATOR("start_3daa", "启动模拟器", "模拟器", "启动配置的 AVD（带快照）"),
         COLD_BOOT_EMULATOR("cold_boot_3daa", "冷启动模拟器", "模拟器", "不加载快照冷启动 AVD"),
         STRIP_SLASHES("remove_comment_slashes", "清理剪贴板行首斜杠", "实用", "读剪贴板去掉行首 // 并写回，可直接粘贴"),
+        REPAIR_LOCAL_ADB_USB("repair_local_adb_usb", "修复本机 ADB/USB", "本机", "重启 ADB 并重绑定 xHCI 控制器，随后验证设备"),
     }
 
     /** 一次工具运行在 UI 上的状态（单并发，跨页签保留） */
@@ -37,6 +39,8 @@ object DeviceTools {
         val f = File(home, "Android/Sdk/emulator/emulator")
         return if (f.isFile && f.canExecute()) f.absolutePath else null
     }
+
+    fun isLinuxHost(): Boolean = System.getProperty("os.name").contains("linux", ignoreCase = true)
 
     // ---------- 命令构造 ----------
 
@@ -76,6 +80,20 @@ object DeviceTools {
         withSerial(adbPath, serial, "logcat")
 
     fun devicesArgs(adbPath: String): List<String> = listOf(adbPath, "devices")
+
+    /** Linux 上由内核 xhci_hcd 驱动绑定的 PCI 控制器；返回动态发现的 PCI BDF。 */
+    fun xhciControllerAddresses(
+        driverPath: File = File("/sys/bus/pci/drivers/xhci_hcd"),
+    ): List<String> = driverPath.listFiles().orEmpty()
+        .filter { it.name.matches(PCI_ADDRESS) && it.isDirectory }
+        .map { it.name }
+        .sorted()
+
+    /** 以 positional arg 传 PCI 地址，避免将选择值拼入 shell 脚本。 */
+    fun xhciResetArgs(controllerAddress: String): List<String> {
+        require(controllerAddress.matches(PCI_ADDRESS)) { "无效的 PCI 控制器地址" }
+        return listOf("pkexec", "/bin/bash", "-c", XHCI_RESET_SCRIPT, "atlas-usb-repair", controllerAddress)
+    }
 
     /** 多设备默认选择：优先 USB/模拟器条目（serial 无冒号，语义同 FeishuCheckin.usbSerial），无线 ip:port 靠后；无在线设备返回 null */
     fun pickDefaultSerial(onlineSerials: List<String>): String? =
@@ -122,4 +140,28 @@ object DeviceTools {
                 line
             }
         }
+
+    private val XHCI_RESET_SCRIPT = """
+        set -euo pipefail
+        address="${'$'}1"
+        driver="/sys/bus/pci/drivers/xhci_hcd"
+        device="/sys/bus/pci/devices/${'$'}address"
+        if [[ ! -L "${'$'}device/driver" || "${'$'}(readlink -f "${'$'}device/driver")" != "${'$'}(readlink -f "${'$'}driver")" ]]; then
+          echo "控制器已不存在或不再由 xhci_hcd 管理：${'$'}address"
+          exit 1
+        fi
+        rebind() {
+          if [[ -e "${'$'}device" && ! -L "${'$'}device/driver" ]]; then
+            printf '%s\n' "${'$'}address" > "${'$'}driver/bind"
+          fi
+        }
+        trap rebind EXIT
+        echo "重置 USB 控制器 ${'$'}address；其 USB 设备会暂时断开。"
+        printf '%s\n' "${'$'}address" > "${'$'}driver/unbind"
+        sleep 2
+        rebind
+        trap - EXIT
+        if command -v udevadm >/dev/null 2>&1; then udevadm settle --timeout=10 || true; fi
+        echo "USB 控制器已重新绑定。"
+    """.trimIndent()
 }

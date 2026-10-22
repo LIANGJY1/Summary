@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,8 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -84,7 +87,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URLDecoder
+import kotlin.math.min
 import kotlin.math.roundToInt
+
+internal fun fitImagePreviewSize(imageWidth: Int, imageHeight: Int, maxWidth: Int, maxHeight: Int): IntSize {
+    require(imageWidth > 0 && imageHeight > 0 && maxWidth > 0 && maxHeight > 0)
+    val scale = min(maxWidth.toDouble() / imageWidth, maxHeight.toDouble() / imageHeight)
+    return IntSize(
+        (imageWidth * scale).roundToInt().coerceAtLeast(1),
+        (imageHeight * scale).roundToInt().coerceAtLeast(1),
+    )
+}
+
+internal enum class ImagePreviewState { Closed, Open }
+
+internal enum class ImagePreviewEvent { ImageClicked, OverlayDismissed, EscapePressed }
+
+internal fun reduceImagePreviewState(
+    state: ImagePreviewState,
+    event: ImagePreviewEvent,
+): ImagePreviewState = when (event) {
+    ImagePreviewEvent.ImageClicked -> ImagePreviewState.Open
+    ImagePreviewEvent.OverlayDismissed, ImagePreviewEvent.EscapePressed -> ImagePreviewState.Closed
+}
 
 /** 应用自定义色板：MaterialTheme 之外业务用到的语义色，随明暗主题切换 */
 data class AtlasPalette(
@@ -486,6 +511,7 @@ internal fun MarkdownImageBlock(
     markdownReference: String? = null,
     onImageCopied: ((Boolean) -> Unit)? = null,
     onImageDeleted: ((String) -> Unit)? = null,
+    enablePreview: Boolean = false,
 ) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, file.absolutePath) {
         value = withContext(Dispatchers.IO) { if (file.isFile) Platform.loadImage(file) else null }
@@ -496,6 +522,7 @@ internal fun MarkdownImageBlock(
     var pendingImageDeletion by remember(file.absolutePath) { mutableStateOf<String?>(null) }
     var imageWindowPosition by remember(file.absolutePath) { mutableStateOf(Offset.Zero) }
     var contextMenuPosition by remember(file.absolutePath) { mutableStateOf(IntOffset.Zero) }
+    var previewState by remember(file.absolutePath) { mutableStateOf(ImagePreviewState.Closed) }
     val cursorGapPx = with(LocalDensity.current) { 4.dp.roundToPx() }
     LaunchedEffect(pendingImageDeletion) {
         val reference = pendingImageDeletion ?: return@LaunchedEffect
@@ -520,6 +547,14 @@ internal fun MarkdownImageBlock(
                 modifier = Modifier.fillMaxWidth()
                     .heightIn(max = 520.dp)
                     .clip(RoundedCornerShape(8.dp))
+                    .then(
+                        if (enablePreview) {
+                            Modifier.clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() },
+                            ) { previewState = reduceImagePreviewState(previewState, ImagePreviewEvent.ImageClicked) }
+                        } else Modifier
+                    )
                     .onGloballyPositioned { imageWindowPosition = it.positionInWindow() }
                     .pointerInput(file.absolutePath, onImageDeleted) {
                         awaitPointerEventScope {
@@ -604,6 +639,46 @@ internal fun MarkdownImageBlock(
                                 }
                             }
                         }
+                    }
+                }
+            }
+            if (enablePreview && previewState == ImagePreviewState.Open) {
+                Dialog(
+                    onDismissRequest = {
+                        previewState = reduceImagePreviewState(previewState, ImagePreviewEvent.EscapePressed)
+                    },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = true,
+                    ),
+                ) {
+                    val noIndication = remember { MutableInteractionSource() }
+                    BoxWithConstraints(
+                        Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .clickable(indication = null, interactionSource = noIndication) {
+                                previewState = reduceImagePreviewState(previewState, ImagePreviewEvent.OverlayDismissed)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val previewSize = with(LocalDensity.current) {
+                            fitImagePreviewSize(
+                                renderedBitmap.width,
+                                renderedBitmap.height,
+                                (maxWidth * 0.94f).roundToPx(),
+                                (maxHeight * 0.94f).roundToPx(),
+                            )
+                        }
+                        val previewWidthDp = with(LocalDensity.current) { previewSize.width / density }
+                        val previewHeightDp = with(LocalDensity.current) { previewSize.height / density }
+                        Image(
+                            bitmap = renderedBitmap,
+                            contentDescription = description,
+                            modifier = Modifier.size(previewWidthDp.dp, previewHeightDp.dp)
+                                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
+                            contentScale = ContentScale.Fit,
+                        )
                     }
                 }
             }
@@ -809,17 +884,19 @@ fun MarkdownText(
     imageBaseDirectory: File? = null,
     onImageCopied: ((Boolean) -> Unit)? = null,
     onImageDeleted: ((String) -> Unit)? = null,
+    enableImagePreview: Boolean = false,
 ) =
     SelectionContainer {
         if (remember(md) { md.count { it == '\n' } + 1 } > MD_STREAM_LINE_THRESHOLD) {
             StreamedMarkdownText(
                 remember(md) { markdownBlocks(md) }, modifier, dirtyLines, maxWidth, imageBaseDirectory,
-                onImageCopied, onImageDeleted,
+                onImageCopied, onImageDeleted, enableImagePreview,
             )
         } else {
             ReaderMarkdownText(
                 md, modifier, dirtyLines, maxWidth = maxWidth, imageBaseDirectory = imageBaseDirectory,
                 onImageCopied = onImageCopied, onImageDeleted = onImageDeleted,
+                enableImagePreview = enableImagePreview,
             )
         }
     }
@@ -853,6 +930,7 @@ private fun StreamedMarkdownText(
     imageBaseDirectory: File? = null,
     onImageCopied: ((Boolean) -> Unit)? = null,
     onImageDeleted: ((String) -> Unit)? = null,
+    enableImagePreview: Boolean = false,
 ) {
     val ui = atlasUiTokens()
     val visibleBlocks = remember(blocks) { mutableIntStateOf(mdStreamFirstBlocks(blocks)) }
@@ -875,6 +953,7 @@ private fun StreamedMarkdownText(
                     imageBaseDirectory = imageBaseDirectory,
                     onImageCopied = onImageCopied,
                     onImageDeleted = onImageDeleted,
+                    enableImagePreview = enableImagePreview,
                 )
             }
         }
@@ -892,6 +971,7 @@ private fun ReaderMarkdownText(
     imageBaseDirectory: File? = null,
     onImageCopied: ((Boolean) -> Unit)? = null,
     onImageDeleted: ((String) -> Unit)? = null,
+    enableImagePreview: Boolean = false,
 ) {
     val ui = atlasUiTokens()
     val compactReading = Platform.windowWidthDp() < 600.dp
@@ -1025,6 +1105,7 @@ private fun ReaderMarkdownText(
                         markdownReference = renderedLine.trim(),
                         onImageCopied = onImageCopied,
                         onImageDeleted = onImageDeleted,
+                        enablePreview = enableImagePreview,
                     )
                 }
                 line.trimStart().startsWith("```") -> {

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 500" role="img" aria-labelledby="title desc">
+  <title id="title">Unix domain datagram socket 在两个进程之间传递消息</title>
+  <desc id="desc">发送进程用本地文件描述符引用发送 socket，并把消息和目标路径交给内核。内核按路径找到接收 socket，再让接收进程通过自己的文件描述符读取消息。</desc>
+  <defs>
+    <style>
+      text { font-family: sans-serif; fill: #172033; }
+      .heading { font-size: 25px; font-weight: 700; }
+      .panel-title { font-size: 22px; font-weight: 700; fill: #ffffff; }
+      .label { font-size: 18px; font-weight: 600; }
+      .body { font-size: 17px; }
+      .small { font-size: 15px; fill: #46536a; }
+      .mono { font-family: monospace; font-size: 16px; }
+    </style>
+  </defs>
+
+  <rect width="1260" height="500" rx="20" fill="#f7f9fc"/>
+  <text x="630" y="43" text-anchor="middle" class="heading">Unix domain datagram：消息怎样经过 socket 到达另一个进程</text>
+
+  <!-- Sender process -->
+  <rect x="30" y="75" width="355" height="345" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M46 75 H369 Q385 75 385 91 V125 H30 V91 Q30 75 46 75 Z" fill="#315a9b"/>
+  <text x="207" y="108" text-anchor="middle" class="panel-title">发送进程</text>
+  <text x="207" y="157" text-anchor="middle" class="label">logserv</text>
+  <rect x="55" y="179" width="112" height="54" rx="10" fill="#e8f0ff" stroke="#7da4e8"/>
+  <text x="111" y="212" text-anchor="middle" class="mono">fd 3</text>
+  <rect x="218" y="179" width="142" height="54" rx="10" fill="#e8f0ff" stroke="#7da4e8"/>
+  <text x="289" y="202" text-anchor="middle" class="body">发送端</text>
+  <text x="289" y="222" text-anchor="middle" class="body">socket</text>
+  <text x="207" y="266" text-anchor="middle" class="body">sendto(消息，目标地址)</text>
+  <rect x="55" y="284" width="305" height="76" rx="10" fill="#fff7e8" stroke="#edc46b"/>
+  <text x="207" y="313" text-anchor="middle" class="small">目标地址（Unix 路径）</text>
+  <text x="207" y="340" text-anchor="middle" class="mono">/path/to/logd.sock</text>
+  <text x="207" y="393" text-anchor="middle" class="small">fd 是进程内的引用编号</text>
+
+  <!-- Kernel -->
+  <rect x="452" y="75" width="355" height="345" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M468 75 H791 Q807 75 807 91 V125 H452 V91 Q452 75 468 75 Z" fill="#4b5568"/>
+  <text x="630" y="108" text-anchor="middle" class="panel-title">Linux 内核</text>
+  <rect x="485" y="157" width="289" height="64" rx="10" fill="#eef2f7" stroke="#aab4c3"/>
+  <text x="630" y="184" text-anchor="middle" class="label">按目标地址查找</text>
+  <text x="630" y="207" text-anchor="middle" class="body">接收端 socket</text>
+  <rect x="485" y="261" width="289" height="72" rx="10" fill="#eaf8f2" stroke="#83c5a8"/>
+  <text x="630" y="290" text-anchor="middle" class="label">传递一条数据报</text>
+  <text x="630" y="315" text-anchor="middle" class="body">保留消息边界</text>
+  <text x="630" y="374" text-anchor="middle" class="small">内核承接进程间的数据传递</text>
+
+  <!-- Receiver process -->
+  <rect x="875" y="75" width="355" height="345" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M891 75 H1214 Q1230 75 1230 91 V125 H875 V91 Q875 75 891 75 Z" fill="#26745d"/>
+  <text x="1052" y="108" text-anchor="middle" class="panel-title">接收进程</text>
+  <text x="1052" y="157" text-anchor="middle" class="label">logd</text>
+  <rect x="900" y="179" width="112" height="54" rx="10" fill="#eaf8f2" stroke="#83c5a8"/>
+  <text x="956" y="212" text-anchor="middle" class="mono">fd 5</text>
+  <rect x="1063" y="179" width="142" height="54" rx="10" fill="#eaf8f2" stroke="#83c5a8"/>
+  <text x="1134" y="202" text-anchor="middle" class="body">接收端</text>
+  <text x="1134" y="222" text-anchor="middle" class="body">socket</text>
+  <text x="1052" y="266" text-anchor="middle" class="body">recv(fd 5)</text>
+  <rect x="900" y="284" width="305" height="76" rx="10" fill="#fff7e8" stroke="#edc46b"/>
+  <text x="1052" y="313" text-anchor="middle" class="small">接收端绑定的地址</text>
+  <text x="1052" y="340" text-anchor="middle" class="mono">/path/to/logd.sock</text>
+  <text x="1052" y="393" text-anchor="middle" class="small">fd 5 引用接收端 socket</text>
+
+  <!-- Message path -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M167 206 H218 M208 201 L218 206 L208 211" stroke="#2563eb" stroke-width="2.5"/>
+    <path d="M1012 206 H1063 M1053 201 L1063 206 L1053 211" stroke="#16805d" stroke-width="2.5"/>
+    <path d="M630 221 V261 M624 251 L630 261 L636 251" stroke="#16805d" stroke-width="2.5"/>
+    <path d="M385 241 H452 M442 235 L452 241 L442 247" stroke="#2563eb" stroke-width="3"/>
+    <path d="M807 241 H875 M865 235 L875 241 L865 247" stroke="#16805d" stroke-width="3"/>
+  </g>
+  <text x="413" y="231" text-anchor="middle" class="small">消息</text>
+  <text x="836" y="231" text-anchor="middle" class="small">交付</text>
+
+  <text x="630" y="467" text-anchor="middle" class="small">示意图只展示按路径寻址的 Unix domain SOCK_DGRAM；fd 编号仅作示例。</text>
+</svg>

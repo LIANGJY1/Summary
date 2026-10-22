@@ -459,7 +459,11 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
 
     fun stopAaosCommand() = aaosRunner.stop()
 
-    fun runTool(tool: DeviceTools.Tool) {
+    fun runTool(
+        tool: DeviceTools.Tool,
+        xhciController: String? = null,
+        resetUsbController: Boolean = false,
+    ) {
         if (toolRun.value.running) {
             showToast("已有工具在运行，请稍候")
             return
@@ -473,7 +477,7 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 }
                 Log.i("工具页：运行工具 ${tool.id}")
                 toolRun.value = DeviceTools.ToolRun(tool.id, running = true)
-                val exit = runCatching { executeTool(tool, ::progress) }
+                val exit = runCatching { executeTool(tool, ::progress, xhciController, resetUsbController) }
                     .getOrElse { e ->
                         Log.e("工具页：工具运行异常 ${tool.id}", e)
                         progress("运行异常：${e.message}")
@@ -486,7 +490,12 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
     }
 
     /** 单个工具的执行体，返回退出码（0=成功） */
-    private fun executeTool(tool: DeviceTools.Tool, progress: (String) -> Unit): Int {
+    private fun executeTool(
+        tool: DeviceTools.Tool,
+        progress: (String) -> Unit,
+        xhciController: String?,
+        resetUsbController: Boolean,
+    ): Int {
         val adbPath = FeishuCheckin.findAdb()
         return when (tool) {
             DeviceTools.Tool.PUSH_LAUNCHER -> {
@@ -560,7 +569,99 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 progress("已处理并写回剪贴板，可直接粘贴")
                 0
             }
+            DeviceTools.Tool.REPAIR_LOCAL_ADB_USB -> repairLocalAdbUsb(adbPath, xhciController, resetUsbController, progress)
         }
+    }
+
+    /** 重启本机 ADB，再经 pkexec 重绑定所选 xHCI 控制器，最后检查设备是否恢复在线。 */
+    private fun repairLocalAdbUsb(
+        adbPath: String?,
+        xhciController: String?,
+        resetUsbController: Boolean,
+        progress: (String) -> Unit,
+    ): Int {
+        if (!DeviceTools.isLinuxHost()) {
+            progress("本机 USB 控制器修复仅支持 Linux")
+            return 1
+        }
+        val adb = adbPath ?: return failNoAdb(progress)
+
+        progress("==> 重启本机 ADB 服务")
+        val (killCode, killOutput) = execCapture(listOf(adb, "kill-server"), 15_000L)
+        killOutput.trim().takeIf { it.isNotEmpty() }?.let(progress)
+        if (killCode != 0) {
+            progress("停止 ADB 服务失败（exit=$killCode）")
+            return killCode
+        }
+        val (startCode, startOutput) = execCapture(listOf(adb, "start-server"), 15_000L)
+        startOutput.trim().takeIf { it.isNotEmpty() }?.let(progress)
+        if (startCode != 0) {
+            progress("启动 ADB 服务失败（exit=$startCode）")
+            return startCode
+        }
+        val (beforeCode, beforeOutput) = execCapture(listOf(adb, "devices", "-l"), 15_000L)
+        beforeOutput.trim().takeIf { it.isNotEmpty() }?.let {
+            progress("重置前设备状态：")
+            it.lineSequence().forEach(progress)
+        }
+        if (beforeCode != 0) progress("读取重置前设备状态失败（exit=$beforeCode）")
+        applyToolboxDevices(beforeOutput)
+
+        if (!resetUsbController) {
+            val onlineBefore = FeishuCheckin.parseDevices(beforeOutput).filter { it.second == "device" }.map { it.first }
+            if (onlineBefore.isEmpty()) {
+                progress("尚未发现在线 ADB 设备；若手机仍未连接，可再次打开本工具并选择“重置 USB 控制器”。")
+                return 1
+            }
+            progress("ADB 服务已恢复，在线设备：${onlineBefore.joinToString()}")
+            return 0
+        }
+        val controller = xhciController?.takeIf { it.isNotBlank() } ?: run {
+            progress("未选择 xHCI 控制器")
+            return 1
+        }
+
+        progress("==> 请求系统授权并重置 USB 控制器 $controller")
+        val (resetCode, resetOutput) = execCapture(DeviceTools.xhciResetArgs(controller), 120_000L)
+        resetOutput.trim().takeIf { it.isNotEmpty() }?.let { output -> output.lineSequence().forEach(progress) }
+        if (resetCode != 0) {
+            if (resetCode == 126 || resetCode == 127) progress("系统授权已取消或未完成；USB 控制器未重置")
+            else progress("USB 控制器重置失败（exit=$resetCode）")
+            return resetCode
+        }
+
+        progress("==> 重启 ADB 并验证设备")
+        val (stopCode, stopOutput) = execCapture(listOf(adb, "kill-server"), 15_000L)
+        stopOutput.trim().takeIf { it.isNotEmpty() }?.let(progress)
+        if (stopCode != 0) {
+            progress("停止 ADB 服务失败（exit=$stopCode）")
+            return stopCode
+        }
+        val (restartCode, restartOutput) = execCapture(listOf(adb, "start-server"), 15_000L)
+        restartOutput.trim().takeIf { it.isNotEmpty() }?.let(progress)
+        if (restartCode != 0) {
+            progress("重启 ADB 服务失败（exit=$restartCode）")
+            return restartCode
+        }
+        val (devicesCode, devicesOutput) = execCapture(listOf(adb, "devices", "-l"), 30_000L)
+        devicesOutput.trim().takeIf { it.isNotEmpty() }?.let { output -> output.lineSequence().forEach(progress) }
+        if (devicesCode != 0) {
+            progress("读取设备状态失败（exit=$devicesCode）")
+            return devicesCode
+        }
+        val devices = FeishuCheckin.parseDevices(devicesOutput)
+        applyToolboxDevices(devicesOutput)
+        val online = devices.filter { it.second == "device" }.map { it.first }
+        if (online.isEmpty()) {
+            val unavailable = devices.joinToString { "${it.first}（${it.second}）" }
+            progress(
+                if (unavailable.isEmpty()) "USB 控制器已重置，但未发现在线 ADB 设备；请检查数据线、手机 USB 调试和接口。"
+                else "USB 控制器已重置，但设备未授权或离线：$unavailable",
+            )
+            return 1
+        }
+        progress("连接已恢复：${online.joinToString()}")
+        return 0
     }
 
     private fun failNoAdb(progress: (String) -> Unit): Int {
