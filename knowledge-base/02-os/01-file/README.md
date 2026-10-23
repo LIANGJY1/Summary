@@ -1,8 +1,0 @@
-# 文件与文件系统
-
-- [`01-files-and-directories.md`](01-files-and-directories.md)（18 题）：文件属性与管理分工、逻辑与物理结构、文件分配方式、目录结构与路径解析、目录项和索引节点、块设备、loop 设备、设备命名、LBA 与扇区、读写链路、PCIe、NAND、设备节点与设备号。
-- [`02-file-operations-model.md`](02-file-operations-model.md)（5 题）：open/read/close 阶段、打开文件表、文件描述符及其与打开文件描述的关系、open 与 read 的语义边界、复制的原子性。
-- [`03-storage-space.md`](03-storage-space.md)（3 题）：空闲表、盘块链、盘区链、位视图换算与成组链接法。
-- [`04-sharing-and-protection.md`](04-sharing-and-protection.md)（4 题）：口令保护、加密、ACL、共享目录项删除语义、硬链接与符号链接、能力模型。
-- [`05-vfs-mounting.md`](05-vfs-mounting.md)（8 题）：VFS 分派、vnode 与 inode、挂载目的与路径查找、fstab、bind mount、mount namespace 与 overlayfs。
-- [`06-filesystem-layout.md`](06-filesystem-layout.md)（7 题）：文件系统分层、格式化与挂载、磁盘和内存信息、ext4 结构与日志、伪文件系统、procfs 内容来源与生命周期。

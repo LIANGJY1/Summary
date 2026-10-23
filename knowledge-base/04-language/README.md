@@ -8,7 +8,7 @@
 
 - 某门语言的语法、类型系统、集合、并发模型、泛型/反射/元编程等语言特性与惯用法
 - 该语言标准库与官方工具链行为（编译器、构建对语言特性的处理）
-- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-ecosystem-and-android.md`）
+- 以「学会这门语言」为骨架的学习体系笔记，可含生态应用章（如 `kotlin/04-生态与Android.md`）
 
 **不收**（退回 ROUTING.md 重新判断）：
 
@@ -36,5 +36,5 @@
 | 子目录 | 语言 | 现状 |
 |---|---|---|
 | `C++/` | C++ | 编号主题笔记见 `C++/README.md`：语言基础、编译链接、POSIX、函数与类型、数组与字符串、自定义类型、指针与内存、标准库容器 |
-| `java/` | Java | 编号主题笔记：01-oop-basics / 02-strings-and-collections / 03-annotations / 04-generics / 05-reflection / 06-concurrency-and-streams / 07-exceptions-and-io / 08-serialization / 09-jvm-runtime |
-| `kotlin/` | Kotlin | 四篇主题笔记：01-syntax-basics / 02-objects-and-types / 03-functional-and-concurrency / 04-ecosystem-and-android |
+| `java/` | Java | 编号主题笔记：01-面向对象基础 / 02-字符串与集合 / 03-注解 / 04-泛型 / 05-反射 / 06-并发与Stream / 07-异常与IO / 08-序列化 / 09-JVM运行时 |
+| `kotlin/` | Kotlin | 四篇主题笔记：01-语法基础 / 02-对象与类型 / 03-函数式与并发 / 04-生态与Android |

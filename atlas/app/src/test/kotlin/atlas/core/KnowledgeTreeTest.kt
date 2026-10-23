@@ -10,7 +10,7 @@ class KnowledgeTreeTest {
     fun `builds nested knowledge base hierarchy`() {
         val tree = KnowledgeTree.build(
             listOf(
-                "knowledge-base/language/kotlin/01-syntax-basics.md",
+                "knowledge-base/language/kotlin/01-语法基础.md",
                 "knowledge-base/language/java/泛型.md",
                 "knowledge-base/README.md",
             ),
@@ -22,7 +22,7 @@ class KnowledgeTreeTest {
         assertTrue(language.isDirectory)
         assertEquals(listOf("java", "kotlin"), language.children.map { it.name })
         assertEquals(
-            "knowledge-base/language/kotlin/01-syntax-basics.md",
+            "knowledge-base/language/kotlin/01-语法基础.md",
             language.children.last().children.single().path,
         )
     }
@@ -41,10 +41,28 @@ class KnowledgeTreeTest {
     }
 
     @Test
+    fun `sorts numbered directories and files together by sequence`() {
+        val tree = KnowledgeTree.build(
+            listOf(
+                "knowledge-base/07-能效.md",
+                "knowledge-base/06-图片加载/01-格式与体积.md",
+                "knowledge-base/02-渲染.md",
+                "knowledge-base/01-启动.md",
+                "knowledge-base/README.md",
+            ),
+        )
+
+        assertEquals(
+            listOf("01-启动.md", "02-渲染.md", "06-图片加载", "07-能效.md", "README.md"),
+            tree.children.map { it.name },
+        )
+    }
+
+    @Test
     fun `returns directory ancestors for a selected file`() {
         assertEquals(
             setOf("knowledge-base", "knowledge-base/language", "knowledge-base/language/kotlin"),
-            KnowledgeTree.ancestorPaths("knowledge-base/language/kotlin/01-syntax-basics.md"),
+            KnowledgeTree.ancestorPaths("knowledge-base/language/kotlin/01-语法基础.md"),
         )
     }
 }

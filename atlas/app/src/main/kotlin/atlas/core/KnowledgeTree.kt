@@ -49,12 +49,19 @@ object KnowledgeTree {
         normalizedDirectories.forEach { insert(it, directoryLeaf = true) }
         normalized.forEach { insert(it, directoryLeaf = false) }
 
+        val numberedName = Regex("^\\d{2}-")
         fun freeze(node: MutableNode): KnowledgeTreeNode = KnowledgeTreeNode(
             name = node.name,
             path = node.path,
             isDirectory = node.isDirectory,
             children = node.children.values
-                .sortedWith(compareBy<MutableNode> { !it.isDirectory }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                .sortedWith(compareBy<MutableNode> {
+                    when {
+                        numberedName.containsMatchIn(it.name) -> 0
+                        it.isDirectory -> 1
+                        else -> 2
+                    }
+                }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
                 .map(::freeze),
         )
         return freeze(root)

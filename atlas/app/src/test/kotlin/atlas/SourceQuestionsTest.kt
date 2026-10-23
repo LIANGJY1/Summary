@@ -45,7 +45,7 @@ class SourceQuestionsTest {
     fun `只识别目标文件并兼容中文冒号`() {
         val text = "**Q1：中文冒号问题？**\n\n答案。"
 
-        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/03-language/kotlin/01-syntax-basics.md"))
+        assertTrue(SourceQuestions.isSupportedPath("knowledge-base/04-language/kotlin/01-语法基础.md"))
         assertTrue(!SourceQuestions.isSupportedPath("language/kotlin/02-对象与类型设计.md"))
         val question = SourceQuestions.parse(SourceQuestions.TARGET_PATH, text).single()
         assertEquals("中文冒号问题？", question.question)
@@ -100,7 +100,7 @@ class SourceQuestionsTest {
 
     @Test
     fun `Markdown 标题形式的章标题同样切断答案`() {
-        // 01-syntax-basics.md 的实际写法是 "## 第 2 章 函数与集合"：不识别时章标题会被
+        // 01-语法基础.md 的实际写法是 "## 第 2 章 函数与集合"：不识别时章标题会被
         // 上一题答案吞掉（答案一直延伸到下一题标记）
         val text = """
             **Q3: 上一题？**
@@ -129,7 +129,7 @@ class SourceQuestionsTest {
 
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/language/java/01-基础.md", configured))
         assertTrue(SourceQuestions.isSupportedPath("knowledge-base/docs/面试.md", configured))
-        assertTrue(!SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-syntax-basics.md", configured))
+        assertTrue(!SourceQuestions.isSupportedPath("knowledge-base/language/kotlin/01-语法基础.md", configured))
     }
 
     @Test
@@ -137,7 +137,7 @@ class SourceQuestionsTest {
         val documents = listOf(
             "knowledge-base/language/java/01-基础.md",
             "knowledge-base/language/java/02-集合.md",
-            "knowledge-base/language/kotlin/01-syntax-basics.md",
+            "knowledge-base/language/kotlin/01-语法基础.md",
             "knowledge-base/docs/面试.md",
         )
         val configured = listOf("knowledge-base/language/java/", "knowledge-base/docs/面试.md")
