@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1010" role="img" aria-label="本机 UNIX 域套接字全流程">
+<title>本机 UNIX 域套接字全流程</title>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4b6474"/></marker>
+  <style>
+    text { font-family: 'Noto Sans CJK SC', 'Noto Sans', sans-serif; fill: #173042; }
+    .title { font-size: 30px; font-weight: 700; }
+    .subtitle { font-size: 17px; fill: #526a78; }
+    .head { font-size: 21px; font-weight: 700; }
+    .body { font-size: 17px; }
+    .small { font-size: 15px; fill: #425d6e; }
+    .tag { font-size: 16px; font-weight: 700; }
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="#f8faf9"/>
+<text x="40" y="50" class="title" text-anchor="start">本机 UNIX 域套接字：从创建到结束</text>
+<text x="40" y="79" class="subtitle" text-anchor="start">命名流套接字主线；底部补充无名 socketpair 与数据报路径</text>
+<rect x="40" y="106" width="320" height="45" rx="14" fill="#dff2ee" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="200" y="136" class="head" text-anchor="middle">服务端</text>
+<rect x="400" y="106" width="320" height="45" rx="14" fill="#e5edf7" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="560" y="136" class="head" text-anchor="middle">内核 / 地址</text>
+<rect x="760" y="106" width="320" height="45" rx="14" fill="#fff0e5" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="920" y="136" class="head" text-anchor="middle">客户端</text>
+<path d="M200,247 L200,269" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M200,365 L200,387" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M200,483 L200,505" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M200,601 L200,623" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M200,719 L200,741" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M560,247 L560,269" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M560,365 L560,387" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M560,483 L560,505" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M560,601 L560,623" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M560,719 L560,741" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M920,247 L920,269" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M920,365 L920,387" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M920,483 L920,505" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M920,601 L920,623" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M920,719 L920,741" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M361,210 L396,210" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M723,210 L758,210" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M361,328 L396,328" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M723,328 L758,328" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M361,446 L396,446" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M723,446 L758,446" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M361,564 L396,564" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M723,564 L758,564" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M361,682 L396,682" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M723,682 L758,682" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="40" y="165" width="320" height="82" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="197" class="head" text-anchor="start">1  建端点</text>
+<text x="57" y="227" class="body" text-anchor="start">socket(AF_UNIX, SOCK_STREAM, 0)</text>
+<rect x="400" y="165" width="320" height="82" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="197" class="head" text-anchor="start">定义：域与类型</text>
+<text x="417" y="227" class="body" text-anchor="start">AF_UNIX＝同机；STREAM＝字节流</text>
+<rect x="760" y="165" width="320" height="82" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="197" class="head" text-anchor="start">1  建端点</text>
+<text x="777" y="227" class="body" text-anchor="start">同样调用 socket</text>
+<rect x="40" y="269" width="320" height="96" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="301" class="head" text-anchor="start">2  公布服务</text>
+<text x="57" y="331" class="body" text-anchor="start">bind(sockaddr_un.sun_path)</text>
+<text x="57" y="358" class="body" text-anchor="start">路径文件仅用于定位，不承载数据</text>
+<rect x="400" y="269" width="320" height="96" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="301" class="head" text-anchor="start">定义：名字</text>
+<text x="417" y="331" class="body" text-anchor="start">sun_path → S_IFSOCK 目录项</text>
+<text x="417" y="358" class="body" text-anchor="start">已存在则 bind 失败</text>
+<rect x="760" y="269" width="320" height="96" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="301" class="head" text-anchor="start">2  找到服务</text>
+<text x="777" y="331" class="body" text-anchor="start">取得约定的路径名</text>
+<text x="777" y="358" class="body" text-anchor="start">通常无需显式 bind 客户端路径</text>
+<rect x="40" y="387" width="320" height="96" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="419" class="head" text-anchor="start">3  等待请求</text>
+<text x="57" y="449" class="body" text-anchor="start">listen(backlog)</text>
+<text x="57" y="476" class="body" text-anchor="start">监听 fd 留着接收更多连接</text>
+<rect x="400" y="387" width="320" height="96" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="419" class="head" text-anchor="start">定义：排队</text>
+<text x="417" y="449" class="body" text-anchor="start">连接请求进入等待队列</text>
+<text x="417" y="476" class="body" text-anchor="start">backlog 为排队提示，不是客户上限</text>
+<rect x="760" y="387" width="320" height="96" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="419" class="head" text-anchor="start">3  请求连接</text>
+<text x="777" y="449" class="body" text-anchor="start">connect(服务端路径)</text>
+<text x="777" y="476" class="body" text-anchor="start">失败须处理；连接前无数据交换</text>
+<rect x="40" y="505" width="320" height="96" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="537" class="head" text-anchor="start">4  建立独立会话</text>
+<text x="57" y="567" class="body" text-anchor="start">accept → 新的已连接 fd</text>
+<text x="57" y="594" class="body" text-anchor="start">原监听 fd 继续工作</text>
+<rect x="400" y="505" width="320" height="96" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="537" class="head" text-anchor="start">定义：两个 fd</text>
+<text x="417" y="567" class="body" text-anchor="start">监听 fd ≠ 本次会话 fd</text>
+<text x="417" y="594" class="body" text-anchor="start">每个客户有自己的连接</text>
+<rect x="760" y="505" width="320" height="96" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="537" class="head" text-anchor="start">4  取得会话</text>
+<text x="777" y="567" class="body" text-anchor="start">connect 成功后原 fd 已连接</text>
+<text x="777" y="594" class="body" text-anchor="start">可调用 getpeername 查询对端</text>
+<rect x="40" y="623" width="320" height="96" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="655" class="head" text-anchor="start">5  双向通信</text>
+<text x="57" y="685" class="body" text-anchor="start">read/write 或 send/recv</text>
+<text x="57" y="712" class="body" text-anchor="start">流无消息边界；自行定帧</text>
+<rect x="400" y="623" width="320" height="96" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="655" class="head" text-anchor="start">定义：传输语义</text>
+<text x="417" y="685" class="body" text-anchor="start">短读/短写须循环处理</text>
+<text x="417" y="712" class="body" text-anchor="start">poll/select 可等可读、可写</text>
+<rect x="760" y="623" width="320" height="96" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="655" class="head" text-anchor="start">5  双向通信</text>
+<text x="777" y="685" class="body" text-anchor="start">send/recv 或 sendmsg/recvmsg</text>
+<text x="777" y="712" class="body" text-anchor="start">send 成功≠对端程序已处理</text>
+<rect x="40" y="741" width="320" height="96" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="773" class="head" text-anchor="start">6  结束并清理</text>
+<text x="57" y="803" class="body" text-anchor="start">shutdown 可半关闭；close 关 fd</text>
+<text x="57" y="830" class="body" text-anchor="start">服务结束后 unlink 路径</text>
+<rect x="400" y="741" width="320" height="96" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="773" class="head" text-anchor="start">定义：生命周期</text>
+<text x="417" y="803" class="body" text-anchor="start">close 不自动删套接字路径</text>
+<text x="417" y="830" class="body" text-anchor="start">最后一个 fd 引用消失才释放端点</text>
+<rect x="760" y="741" width="320" height="96" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="773" class="head" text-anchor="start">6  结束</text>
+<text x="777" y="803" class="body" text-anchor="start">读完流内数据后看到 EOF</text>
+<text x="777" y="830" class="body" text-anchor="start">关闭客户端 fd</text>
+<rect x="40" y="865" width="500" height="110" rx="14" fill="#ffffff" stroke="#a8c8c1" stroke-width="1.5"/>
+<text x="57" y="899" class="head" text-anchor="start">旁路 A｜socketpair</text>
+<text x="57" y="930" class="body" text-anchor="start">一次创建两个无名、已连接、全双工 fd；</text>
+<text x="57" y="955" class="body" text-anchor="start">常在 fork 后分给父子进程。</text>
+<rect x="580" y="865" width="500" height="110" rx="14" fill="#ffffff" stroke="#e2c9b8" stroke-width="1.5"/>
+<text x="597" y="899" class="head" text-anchor="start">旁路 B｜SOCK_DGRAM</text>
+<text x="597" y="930" class="body" text-anchor="start">保留消息边界；通常不走 listen/accept；</text>
+<text x="597" y="955" class="body" text-anchor="start">用 sendto/recvfrom，或 connect 固定对端。</text>
+</svg>

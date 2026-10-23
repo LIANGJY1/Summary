@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" role="img" aria-label="UNIX 域套接字传递打开文件描述符">
+<title>UNIX 域套接字传递打开文件描述符</title>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4b6474"/></marker>
+  <style>
+    text { font-family: 'Noto Sans CJK SC', 'Noto Sans', sans-serif; fill: #173042; }
+    .title { font-size: 30px; font-weight: 700; }
+    .subtitle { font-size: 17px; fill: #526a78; }
+    .head { font-size: 21px; font-weight: 700; }
+    .body { font-size: 17px; }
+    .small { font-size: 15px; fill: #425d6e; }
+    .tag { font-size: 16px; font-weight: 700; }
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="#f8faf9"/>
+<text x="40" y="50" class="title" text-anchor="start">传递文件描述符：共享“打开文件表项”</text>
+<text x="40" y="78" class="subtitle" text-anchor="start">SCM_RIGHTS 传递访问权；接收端获得自己的 fd 编号</text>
+<rect x="40" y="120" width="300" height="105" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="152" class="head" text-anchor="start">服务端 / 发送端</text>
+<text x="57" y="182" class="body" text-anchor="start">open(path) → fd 5</text>
+<text x="57" y="209" class="body" text-anchor="start">文件或设备只需打开一次</text>
+<rect x="410" y="120" width="300" height="105" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="427" y="152" class="head" text-anchor="start">UNIX 域连接</text>
+<text x="427" y="182" class="body" text-anchor="start">sendmsg / recvmsg</text>
+<text x="427" y="209" class="body" text-anchor="start">普通数据 + 辅助数据</text>
+<rect x="780" y="120" width="300" height="105" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="797" y="152" class="head" text-anchor="start">客户端 / 接收端</text>
+<text x="797" y="182" class="body" text-anchor="start">recvmsg → 新 fd 8</text>
+<text x="797" y="209" class="body" text-anchor="start">8 是本进程分配的编号</text>
+<path d="M343,171 L405,171" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M713,171 L775,171" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="120" y="270" width="880" height="150" rx="14" fill="#ffffff" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="145" y="308" class="head" text-anchor="start">msghdr：一条消息的容器</text>
+<text x="145" y="344" class="body" text-anchor="start">msg_iov → 协议字节 / 错误文本；msg_control → cmsghdr 控制消息</text>
+<text x="145" y="377" class="body" text-anchor="start">cmsghdr：cmsg_level = SOL_SOCKET；cmsg_type = SCM_RIGHTS；数据 = fd 引用</text>
+<path d="M560,230 L560,266" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="40" y="466" width="270" height="112" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="58" y="500" class="head" text-anchor="start">发送进程 fd 表</text>
+<text x="58" y="537" class="body" text-anchor="start">fd 5 → 同一表项</text>
+<rect x="425" y="455" width="270" height="145" rx="14" fill="#e5edf7" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="443" y="489" class="head" text-anchor="start">内核：打开文件表项</text>
+<text x="443" y="526" class="body" text-anchor="start">共享文件偏移量</text>
+<text x="443" y="555" class="body" text-anchor="start">共享文件状态标志</text>
+<rect x="810" y="466" width="270" height="112" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="828" y="500" class="head" text-anchor="start">接收进程 fd 表</text>
+<text x="828" y="537" class="body" text-anchor="start">fd 8 → 同一表项</text>
+<path d="M314,522 L420,522" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M806,522 L700,522" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="425" y="655" width="270" height="75" rx="14" fill="#ffffff" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="560" y="701" class="head" text-anchor="middle">实际文件 / 设备 / 套接字</text>
+<path d="M560,603 L560,650" fill="none" stroke="#4b6474" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="40" y="765" width="500" height="100" rx="14" fill="#ffffff" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="799" class="head" text-anchor="start">关闭与状态</text>
+<text x="57" y="830" class="body" text-anchor="start">发送端 close(fd 5) 不撤销接收端 fd 8；</text>
+<text x="57" y="855" class="body" text-anchor="start">fd 标志属于各进程自己的描述符项。</text>
+<rect x="580" y="765" width="500" height="100" rx="14" fill="#ffffff" stroke="#e2c9b8" stroke-width="1.5"/>
+<text x="597" y="799" class="head" text-anchor="start">凭据与错误</text>
+<text x="597" y="830" class="body" text-anchor="start">失败走 send_err；身份可用内核凭据校验。</text>
+<text x="597" y="855" class="body" text-anchor="start">路径属主/权限/时间推断身份并不完善。</text>
+</svg>

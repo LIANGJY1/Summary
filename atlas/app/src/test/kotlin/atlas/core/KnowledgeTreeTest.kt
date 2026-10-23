@@ -65,4 +65,65 @@ class KnowledgeTreeTest {
             KnowledgeTree.ancestorPaths("knowledge-base/language/kotlin/01-语法基础.md"),
         )
     }
+
+    @Test
+    fun `filters by node name while retaining matching file ancestors`() {
+        val tree = KnowledgeTree.build(
+            listOf(
+                "knowledge-base/language/kotlin/01-语法基础.md",
+                "knowledge-base/language/java/泛型.md",
+                "knowledge-base/android/性能.md",
+            ),
+        )
+
+        val filtered = KnowledgeTree.filter(tree, "语法")
+
+        assertEquals("knowledge-base", filtered.path)
+        assertEquals(listOf("language"), filtered.children.map { it.name })
+        assertEquals(listOf("kotlin"), filtered.children.single().children.map { it.name })
+        assertEquals(listOf("01-语法基础.md"), filtered.children.single().children.single().children.map { it.name })
+        assertEquals(
+            setOf("knowledge-base", "knowledge-base/language", "knowledge-base/language/kotlin"),
+            KnowledgeTree.searchAncestorDirectoryPaths(tree, "语法"),
+        )
+        assertTrue(KnowledgeTree.filter(tree, "不存在").children.isEmpty())
+    }
+
+    @Test
+    fun `matching directory keeps its descendants and blank query restores the tree`() {
+        val tree = KnowledgeTree.build(
+            listOf(
+                "knowledge-base/language/kotlin/01-语法基础.md",
+                "knowledge-base/language/java/泛型.md",
+                "knowledge-base/android/性能.md",
+            ),
+        )
+
+        val filtered = KnowledgeTree.filter(tree, "language")
+
+        assertEquals(listOf("language"), filtered.children.map { it.name })
+        assertEquals(listOf("java", "kotlin"), filtered.children.single().children.map { it.name })
+        assertEquals(setOf("knowledge-base"), KnowledgeTree.searchAncestorDirectoryPaths(tree, "language"))
+        assertEquals(tree, KnowledgeTree.filter(tree, "  "))
+    }
+
+    @Test
+    fun `search does not treat the knowledge base root as a match`() {
+        val tree = KnowledgeTree.build(
+            listOf(
+                "knowledge-base/android/item.md",
+                "knowledge-base/data/item.md",
+                "knowledge-base/index.md",
+            ),
+        )
+
+        val filtered = KnowledgeTree.filter(tree, "a")
+
+        assertEquals(listOf("android", "data"), filtered.children.map { it.name })
+        assertEquals(setOf("knowledge-base"), KnowledgeTree.searchAncestorDirectoryPaths(tree, "a"))
+        assertEquals(
+            setOf("knowledge-base", "knowledge-base/android", "knowledge-base/data"),
+            KnowledgeTree.searchAncestorDirectoryPaths(tree, "item.md"),
+        )
+    }
 }

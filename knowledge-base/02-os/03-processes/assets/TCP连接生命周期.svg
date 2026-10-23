@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 890" role="img" aria-labelledby="title desc">
+<title id="title">TCP 套接字从创建到关闭的客户端和服务端全流程</title>
+<desc id="desc">展示客户端与服务端分别创建套接字，服务端绑定并监听，客户端连接，内核建立 TCP 连接，服务端 accept 得到独立会话描述符，双方传输字节流并关闭连接。</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#536b7b"/></marker>
+  <style>
+    text{font-family:'Noto Sans CJK SC','Noto Sans',sans-serif;fill:#173042}
+    .title{font-size:30px;font-weight:700}.sub{font-size:17px;fill:#526a78}.head{font-size:21px;font-weight:700}.body{font-size:17px}.small{font-size:15px;fill:#425d6e}
+    .line{fill:none;stroke:#536b7b;stroke-width:2.5;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1120" height="890" fill="#f8faf9"/>
+<text x="40" y="50" class="title">TCP 套接字：从创建到多客户端通信</text>
+<text x="40" y="80" class="sub">监听端点与会话端点是两个不同对象；connect 成功后，accept 才为服务端产生会话 fd</text>
+
+<rect x="40" y="112" width="310" height="48" rx="14" fill="#dff2ee" stroke="#b4d8d0"/>
+<rect x="405" y="112" width="310" height="48" rx="14" fill="#e5edf7" stroke="#bed0e4"/>
+<rect x="770" y="112" width="310" height="48" rx="14" fill="#fff0e5" stroke="#eed1bd"/>
+<text x="195" y="143" class="head" text-anchor="middle">服务端进程</text>
+<text x="560" y="143" class="head" text-anchor="middle">内核与 TCP/IP 网络</text>
+<text x="925" y="143" class="head" text-anchor="middle">客户端进程</text>
+
+<!-- Each row is one lifecycle stage; vertical arrows within a lane show local progress. -->
+<rect x="40" y="188" width="310" height="86" rx="13" fill="#eef7f5" stroke="#b4d8d0"/>
+<text x="58" y="218" class="head">① 创建监听端点</text>
+<text x="58" y="247" class="body">socket() → 监听 fd</text>
+<rect x="770" y="188" width="310" height="86" rx="13" fill="#fff6ef" stroke="#eed1bd"/>
+<text x="788" y="218" class="head">① 创建客户端端点</text>
+<text x="788" y="247" class="body">socket() → 客户端 fd</text>
+<path d="M560 177v120" class="line"/>
+<rect x="405" y="188" width="310" height="86" rx="13" fill="#f0f5fb" stroke="#bed0e4"/>
+<text x="423" y="218" class="head">两个 fd 指向各自端点</text>
+<text x="423" y="247" class="body">此时尚未建立连接</text>
+
+<path d="M195 282v25M925 282v25" class="line"/>
+<rect x="40" y="310" width="310" height="112" rx="13" fill="#eef7f5" stroke="#b4d8d0"/>
+<text x="58" y="340" class="head">② 绑定并监听</text>
+<text x="58" y="369" class="body">bind(IP:端口)</text>
+<text x="58" y="396" class="body">listen() 建立待接队列</text>
+<rect x="770" y="310" width="310" height="112" rx="13" fill="#fff6ef" stroke="#eed1bd"/>
+<text x="788" y="340" class="head">② 解析服务地址</text>
+<text x="788" y="369" class="body">getaddrinfo(host, service)</text>
+<text x="788" y="396" class="body">得到可尝试的地址列表</text>
+<path d="M365 366h32M755 366h-32" class="line"/>
+<rect x="405" y="310" width="310" height="112" rx="13" fill="#f0f5fb" stroke="#bed0e4"/>
+<text x="423" y="340" class="head">公布可达地址</text>
+<text x="423" y="369" class="body">IP 地址 + 端口定位服务</text>
+<text x="423" y="396" class="body">地址本身不是连接</text>
+
+<path d="M195 430v25M925 430v25" class="line"/>
+<rect x="40" y="458" width="310" height="112" rx="13" fill="#eef7f5" stroke="#b4d8d0"/>
+<text x="58" y="488" class="head">③ 等待连接</text>
+<text x="58" y="517" class="body">监听 fd 保持可用</text>
+<text x="58" y="544" class="body">尚未承载客户业务数据</text>
+<rect x="770" y="458" width="310" height="112" rx="13" fill="#fff6ef" stroke="#eed1bd"/>
+<text x="788" y="488" class="head">③ 发起连接</text>
+<text x="788" y="517" class="body">connect(client_fd, address)</text>
+<text x="788" y="544" class="body">成功后客户端 fd 已连接</text>
+<path d="M365 514h32M755 514h-32" class="line"/>
+<rect x="405" y="458" width="310" height="112" rx="13" fill="#f0f5fb" stroke="#bed0e4"/>
+<text x="423" y="488" class="head">④ TCP 建立连接</text>
+<text x="423" y="517" class="body">连接请求进入待接队列</text>
+<text x="423" y="544" class="body">backlog 是排队提示</text>
+
+<path d="M195 578v25M925 578v25" class="line"/>
+<rect x="40" y="606" width="310" height="112" rx="13" fill="#eef7f5" stroke="#b4d8d0"/>
+<text x="58" y="636" class="head">⑤ 接受连接</text>
+<text x="58" y="665" class="body">accept(listen_fd)</text>
+<text x="58" y="692" class="body">返回新的会话 fd</text>
+<rect x="770" y="606" width="310" height="112" rx="13" fill="#fff6ef" stroke="#eed1bd"/>
+<text x="788" y="636" class="head">⑤ 双向通信</text>
+<text x="788" y="665" class="body">send / recv，双方各自持 fd</text>
+<text x="788" y="692" class="body">字节流不保留 write 边界</text>
+<path d="M365 662h32M755 662h-32" class="line"/>
+<rect x="405" y="606" width="310" height="112" rx="13" fill="#e5edf7" stroke="#bed0e4"/>
+<text x="423" y="636" class="head">两个会话端点互通</text>
+<text x="423" y="665" class="body">服务端监听 fd 仍等待下一位</text>
+<text x="423" y="692" class="body">会话 fd 专用于当前客户端</text>
+
+<path d="M195 726v28M925 726v28" class="line"/>
+<rect x="40" y="757" width="1040" height="88" rx="13" fill="#ffffff" stroke="#bed0e4"/>
+<text x="60" y="790" class="head">⑥ 结束与清理</text>
+<text x="60" y="819" class="body">shutdown 可半关闭读/写方向；close 释放当前 fd 引用。服务端关闭会话 fd，监听 fd 继续服务其他连接。</text>
+</svg>

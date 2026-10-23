@@ -9,6 +9,41 @@ data class KnowledgeTreeNode(
 )
 
 object KnowledgeTree {
+    /** 搜索目录与文件名；保留命中节点的祖先，命中目录时保留其完整子树。 */
+    fun filter(tree: KnowledgeTreeNode, query: String): KnowledgeTreeNode {
+        val needle = query.trim()
+        if (needle.isEmpty()) return tree
+
+        fun prune(node: KnowledgeTreeNode): KnowledgeTreeNode? {
+            // knowledge-base 是结构根节点，不参与搜索；否则输入常见字母会命中根并返回全树。
+            val matches = node.path != tree.path && node.name.contains(needle, ignoreCase = true)
+            if (matches && node.isDirectory) return node
+            if (matches) return node
+            val children = node.children.mapNotNull(::prune)
+            return node.takeIf { children.isNotEmpty() }?.copy(children = children)
+        }
+
+        return prune(tree) ?: tree.copy(children = emptyList())
+    }
+
+    /** 只展开搜索命中项的祖先目录；命中目录本身及其后代保持可折叠，避免一次组合整棵子树。 */
+    fun searchAncestorDirectoryPaths(tree: KnowledgeTreeNode, query: String): Set<String> = buildSet {
+        val needle = query.trim()
+        if (needle.isEmpty()) return@buildSet
+
+        fun containsMatch(node: KnowledgeTreeNode): Boolean {
+            if (node.path != tree.path && node.name.contains(needle, ignoreCase = true)) return true
+            var childMatches = false
+            node.children.forEach { child ->
+                if (containsMatch(child)) childMatches = true
+            }
+            if (childMatches && node.isDirectory) add(node.path)
+            return childMatches
+        }
+
+        containsMatch(tree)
+    }
+
     fun safeRenameName(rawName: String, isDirectory: Boolean): String? {
         val name = rawName.trim()
         if (name.isBlank() || name == "." || name == ".." || name.contains('/') || name.contains('\\') || name.contains('\u0000')) return null

@@ -932,7 +932,6 @@ private fun StreamedMarkdownText(
     onImageDeleted: ((String) -> Unit)? = null,
     enableImagePreview: Boolean = false,
 ) {
-    val ui = atlasUiTokens()
     val visibleBlocks = remember(blocks) { mutableIntStateOf(mdStreamFirstBlocks(blocks)) }
     LaunchedEffect(blocks) {
         while (visibleBlocks.intValue < blocks.size) {
@@ -945,7 +944,7 @@ private fun StreamedMarkdownText(
             Box(Modifier.fillMaxWidth()) {
                 ReaderMarkdownText(
                     block.text,
-                    Modifier.widthIn(max = ui.readingMaxWidth).fillMaxWidth().align(Alignment.CenterStart),
+                    Modifier.fillMaxWidth().align(Alignment.CenterStart),
                     dirtyLines,
                     maxWidth,
                     lineOffset = block.startLine,
@@ -1010,7 +1009,7 @@ private fun ReaderMarkdownText(
     val listGroups = remember(lines) { markdownListGroups(lines) }
     Box(modifier.fillMaxWidth()) {
         Column(
-            Modifier.widthIn(max = effectiveMax).fillMaxWidth().align(Alignment.CenterStart),
+            Modifier.fillMaxWidth().align(Alignment.CenterStart),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             var i = 0
@@ -1046,6 +1045,7 @@ private fun ReaderMarkdownText(
                     else -> 0
                 }
                 val renderedLine = if (continuation) line.drop(minOf(sourceIndent, listStack.last().indent + 4)) else line
+                val isImageLine = imageBaseDirectory != null && markdownImageLine.matches(renderedLine.trim())
                 // 每级缩进 20dp = 标记列 14dp + 标记与正文间距 6dp：续行/代码块用 (depth+1)*20，
                 // 恰与列表项正文起点对齐；标记在列内左对齐——序号字母列笔直（右对齐会让字母随
                 // 字形宽度左右浮动），与正文间距 = 20dp − 字形宽，随标记类型略有差异。
@@ -1072,7 +1072,7 @@ private fun ReaderMarkdownText(
                     else -> 0.dp
                 }
                 Box(
-                    Modifier.fillMaxWidth()
+                    (if (isImageLine) Modifier.fillMaxWidth() else Modifier.widthIn(max = effectiveMax).fillMaxWidth())
                         .drawBehind {
                             for (level in 1..guideLevels) {
                                 val x = (level * 20 - 4).dp.toPx()
@@ -1093,7 +1093,7 @@ private fun ReaderMarkdownText(
                     i = table.endExclusive - 1
                     true
                 } == true -> Unit
-                imageBaseDirectory != null && markdownImageLine.matchEntire(renderedLine.trim()) != null -> {
+                imageBaseDirectory != null && isImageLine -> {
                     val imageLink = markdownImageLine.matchEntire(renderedLine.trim())!!
                     val decodedPath = imageLink.groupValues[2].split('/').joinToString(File.separator) {
                         URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8)

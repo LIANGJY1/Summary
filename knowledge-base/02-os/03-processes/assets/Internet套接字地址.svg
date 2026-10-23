@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 820" role="img" aria-label="本机与 Internet 套接字地址的结构及转换">
+<title>本机与 Internet 套接字地址的结构及转换</title>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4b6474"/></marker>
+  <style>
+    text { font-family: 'Noto Sans CJK SC', 'Noto Sans', sans-serif; fill: #173042; }
+    .title { font-size: 30px; font-weight: 700; }
+    .subtitle { font-size: 17px; fill: #526a78; }
+    .head { font-size: 21px; font-weight: 700; }
+    .body { font-size: 17px; }
+    .small { font-size: 15px; fill: #425d6e; }
+    .tag { font-size: 16px; font-weight: 700; }
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="#f8faf9"/>
+<text x="40" y="50" class="title" text-anchor="start">地址的定义：同一接口，三种具体地址</text>
+<text x="40" y="79" class="subtitle" text-anchor="start">sockaddr 是 API 入口；实际字段由地址族决定，调用时还须给出地址长度</text>
+<rect x="40" y="122" width="320" height="190" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="154" class="head" text-anchor="start">AF_UNIX｜sockaddr_un</text>
+<text x="57" y="184" class="body" text-anchor="start">sun_family = AF_UNIX</text>
+<text x="57" y="211" class="body" text-anchor="start">sun_path = 本机路径名</text>
+<text x="57" y="238" class="body" text-anchor="start">例：/tmp/opend.socket</text>
+<text x="57" y="265" class="body" text-anchor="start">标识本机服务，不经过 IP</text>
+<rect x="400" y="122" width="320" height="190" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="154" class="head" text-anchor="start">AF_INET｜sockaddr_in</text>
+<text x="417" y="184" class="body" text-anchor="start">sin_family = AF_INET</text>
+<text x="417" y="211" class="body" text-anchor="start">sin_port = 16 位端口</text>
+<text x="417" y="238" class="body" text-anchor="start">sin_addr = 32 位 IPv4 地址</text>
+<text x="417" y="265" class="body" text-anchor="start">标识主机上的服务</text>
+<rect x="760" y="122" width="320" height="190" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="154" class="head" text-anchor="start">AF_INET6｜sockaddr_in6</text>
+<text x="777" y="184" class="body" text-anchor="start">sin6_family = AF_INET6</text>
+<text x="777" y="211" class="body" text-anchor="start">sin6_port = 16 位端口</text>
+<text x="777" y="238" class="body" text-anchor="start">sin6_addr = 128 位 IPv6 地址</text>
+<text x="777" y="265" class="body" text-anchor="start">另有 flowinfo、scope_id</text>
+<text x="560" y="351" class="head" text-anchor="middle">都以 sockaddr* 传入 bind / connect / accept 等 API</text>
+<rect x="40" y="393" width="1040" height="138" rx="14" fill="#ffffff" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="58" y="429" class="head" text-anchor="start">为什么需要字节序转换？</text>
+<text x="58" y="467" class="body" text-anchor="start">数值 0x01020304：大端内存 [01 02 03 04]；小端内存 [04 03 02 01]</text>
+<text x="58" y="500" class="body" text-anchor="start">网络字节序＝大端；htons/ntohs 转 16 位，htonl/ntohl 转 32 位</text>
+<rect x="40" y="572" width="320" height="190" rx="14" fill="#eef7f5" stroke="#b4d8d0" stroke-width="1.5"/>
+<text x="57" y="604" class="head" text-anchor="start">名称 ↔ 地址</text>
+<text x="57" y="634" class="body" text-anchor="start">getaddrinfo：主机名 + 服务名</text>
+<text x="57" y="661" class="body" text-anchor="start">→ 候选 sockaddr 链表</text>
+<text x="57" y="688" class="body" text-anchor="start">getnameinfo：地址 → 名称</text>
+<text x="57" y="715" class="body" text-anchor="start">错误用 gai_strerror</text>
+<rect x="400" y="572" width="320" height="190" rx="14" fill="#f0f5fb" stroke="#bed0e4" stroke-width="1.5"/>
+<text x="417" y="604" class="head" text-anchor="start">文本 ↔ 二进制</text>
+<text x="417" y="634" class="body" text-anchor="start">inet_pton：文本 → 二进制</text>
+<text x="417" y="661" class="body" text-anchor="start">inet_ntop：二进制 → 文本</text>
+<text x="417" y="688" class="body" text-anchor="start">同时支持 IPv4 与 IPv6</text>
+<text x="417" y="715" class="body" text-anchor="start">结果链表用 freeaddrinfo</text>
+<rect x="760" y="572" width="320" height="190" rx="14" fill="#fff6ef" stroke="#eed1bd" stroke-width="1.5"/>
+<text x="777" y="604" class="head" text-anchor="start">绑定与查询</text>
+<text x="777" y="634" class="body" text-anchor="start">bind：给端点分配本地地址</text>
+<text x="777" y="661" class="body" text-anchor="start">getsockname：查询本地地址</text>
+<text x="777" y="688" class="body" text-anchor="start">getpeername：查询已连接对端</text>
+<text x="777" y="715" class="body" text-anchor="start">服务器须公布可发现的地址</text>
+</svg>

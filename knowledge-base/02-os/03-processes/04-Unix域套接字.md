@@ -43,7 +43,7 @@ pipe 通常提供单向字节通道。socketpair 的两个端点都可双向通�
 
 sockaddr_un 是 Unix domain 套接字使用的地址结构。sun_family 标记 AF_UNIX，sun_path 保存路径名地址或 Linux 抽象地址的字节。它们共同构成可传给 bind、connect 等接口的本地地址。
 
-1. **路径名地址：**sun_path 保存以 NUL 结尾的文件系统路径，路径字节数不得超过目标系统字段容量。
+1. **路径名地址：**sun_path 保存以 NUL 结尾的文件系统路径，路径字节数不得超过目标系统字段容量。结构前部字段布局也可能不同；《Advanced Programming in the UNIX Environment》（APUE）所比较的 FreeBSD 与 macOS 结构在 sun_family 前含 sun_len，而 Linux 与 Solaris 示例没有该字段。
 2. **抽象地址：**Linux 中 sun_path 的首字节为 NUL，后续名称由传入的 addrlen 界定。它不是 C 字符串，也不对应文件系统路径。
 3. **无名套接字：**未 bind 的流端点或 socketpair 端点可能没有可读取的路径名，不能假定 sun_path 总有内容。
 
@@ -98,6 +98,8 @@ sizeof(sockaddr_un) 可在一些路径名调用中使用，但精确长度更能
 3. **消息协议：**连接建立后仍要定义请求长度、响应状态、超时与关闭方式，因为 SOCK_STREAM 不保留调用边界。
 
 本地连接避免网络寻址，但不自动解决并发、鉴权和协议成帧。
+
+![Unix domain 流服务端 bind、listen 与客户端 connect、服务端 accept 的全流程，并对照 socketpair 和 SOCK_DGRAM](./assets/Unix域连接生命周期.svg)
 
 **Q11: [learning] 教材的 serv_listen、serv_accept 和 cli_conn 分别做什么，为什么不能把它们当成标准套接字 API？**
 
@@ -162,6 +164,8 @@ cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部�
 
 Linux 的 Unix domain 流套接字传控制消息时还须伴随至少一个普通数据字节。只传控制区而不给正文，不能作为通用做法。
 
+![发送进程的 fd 经由 Unix domain 套接字 SCM_RIGHTS 控制消息交给接收进程，接收端取得新的 fd 编号并引用同一打开文件表项](./assets/UNIX域描述符传递.svg)
+
 **Q17: [learning] 接收 SCM_RIGHTS 时为什么必须检查 MSG_CTRUNC、fd 数量和 FD_CLOEXEC？**
 
 收到部分控制消息却当作完整请求，会造成资源泄漏或错误使用对象。接收端应把控制区容量、实际数量与协议上限一起检查。
@@ -173,13 +177,14 @@ Linux 的 Unix domain 流套接字传控制消息时还须伴随至少一个普�
 
 资源清理必须覆盖成功、协议错误、接收截断和后续业务处理失败四种路径。
 
-**Q18: [learning] SO_PEERCRED、SO_PASSCRED 和 SCM_CREDENTIALS 分别用于哪种对端身份场景？**
+**Q18: [learning] Unix domain 的 SO_PEERCRED、SCM_CREDENTIALS 与 SCM_CREDS 有什么平台差异？**
 
-三者都与 Linux Unix domain 对端凭据有关，但观察时机和取得方式不同。它们返回的是内核认可的进程凭据线索，业务仍须按 UID/GID 等策略授权。
+连接级查询与消息级辅助数据可以在不同时间点取得对端凭据，但各 Unix 系统提供的接口和凭据结构不同。内核返回的凭据是授权输入，应用仍须按自己的 UID/GID 策略检查。
 
 1. **SO_PEERCRED：**对适用的已连接 Unix domain 套接字，通过 getsockopt 查询对端凭据。Linux 返回的是连接建立或 socketpair 创建等特定时点的凭据快照。
 2. **SO_PASSCRED：**在接收端启用后，使后续消息可以带 SCM_CREDENTIALS 控制消息，适合按消息观察发送方。
-3. **SCM_CREDENTIALS：**控制消息里的 ucred 含 pid、uid、gid。发送方若显式给出凭据，内核会按权限检查。没有显式给出时可使用系统提供的默认凭据。
+3. **SCM_CREDENTIALS：**Linux 控制消息里的 ucred 含 pid、uid、gid。发送方显式提供时须初始化结构，内核会校验调用者是否有权声明这些值；省略时可使用系统提供的默认凭据。
+4. **SCM_CREDS：**《Advanced Programming in the UNIX Environment》（APUE）对 FreeBSD 8.0 的示例使用此类型和 cmsgcred，字段包括 PID、真实/有效 UID、真实 GID 与组列表。Linux 3.2.0 的示例使用 SCM_CREDENTIALS 和 ucred。书中还指出 macOS 10.6.8 不支持该凭据传送方式，Solaris 10 不通过 Unix domain socket 提供它。这些是书中版本的历史对照，不是当前系统支持矩阵；部署时必须查目标系统的对应手册。
 
 不能把对端路径名的 owner 或应用自己在正文填写的 UID 当成等价机制。若进程能切换身份，还要区分连接时快照与每条消息的发送时身份。
 
@@ -198,10 +203,10 @@ Linux 的 Unix domain 流套接字传控制消息时还须伴随至少一个普�
 
 SCM_RIGHTS 只传递一个或多个打开对象引用，不告诉接收方这些对象对应哪次业务请求、是什么类型或失败时发生了什么。双方必须为控制消息之外的语义定义正文协议。
 
-1. **请求关联：**标识哪个请求得到哪个 fd，防止并发响应错配。
-2. **成功状态：**约定成功时应收到的 fd 类型和数量。没有 fd 不可被默认为空文件。
-3. **失败状态：**明确返回错误类别和可诊断信息，避免把传输中断与权限拒绝混为一谈。
-4. **边界和版本：**给消息长度上限与协议版本，防止旧客户端把新字段误读为路径或标志。
+1. **请求关联：**open 示例先发送以 NUL 结束的 `open <pathname> <openmode>` 请求，openmode 是十进制文本。常驻服务器并发处理时还需用连接状态或请求 ID 关联响应。
+2. **成功状态：**示例先发送 NUL 分隔字节与值为 0 的状态字节，再通过 SCM_RIGHTS 传 fd；fd 不是正文里的整数，而是内核辅助数据。
+3. **失败状态：**示例先发送错误文本和 NUL，再发送 1 到 255 的状态值；客户端把错误文本交给自己的回调输出。
+4. **协议边界：**NUL 与状态字节是示例应用协议的一部分，不是 sendmsg 自动添加的边界。正式协议仍需限制路径和错误文本长度、定义编码与版本。
 
 若用 SOCK_STREAM 承载，还必须成帧。一个 sendmsg 的正文边界不自动成为一个 recvmsg 的业务消息边界。
 
@@ -209,8 +214,8 @@ SCM_RIGHTS 只传递一个或多个打开对象引用，不告诉接收方这些
 
 这两种模型都可通过 Unix domain socket 接入客户端，区别在服务如何隔离并发请求与管理已连接 fd。
 
-1. **每客户端子进程：**父进程 accept 或创建通道后把请求交给子进程。进程隔离清楚，崩溃影响面较小，但 fork/exec、进程数、子进程回收和 fd 继承成本需要管理。
-2. **单进程事件循环：**一套服务进程用 select、poll 或同类机制监视监听 fd 与多个连接 fd。减少进程创建，但必须为每个客户端独立保存解析进度、身份、待发数据与超时。
+1. **每客户端子进程：**第一版在 fork 前用 socketpair 创建全双工通道，子进程把通道接到标准输入/输出后 exec opend。每个客户端启动独立服务进程，隔离清楚，但要管理 fork/exec、进程数、子进程回收和 fd 继承。
+2. **单进程事件循环：**第二版由常驻 opend 在众所周知的 Unix domain 路径监听，所有客户端建立独立连接；select 或 poll 监视监听 fd 和会话 fd。它减少每请求创建进程的成本，但必须为每个客户端独立保存解析进度、待发数据与连接状态。
 3. **共同约束：**两者都要关闭不用的 fd、限制客户端数、拒绝超长请求，并在客户端断开时清理控制消息中取得的资源。
 
 性能选择需按请求耗时、连接数、隔离要求和实测决定。书中两个 open 服务器版本是模型示例，不是固定性能排序。

@@ -104,3 +104,11 @@
 4. 对并发回调规定序号或时间裁决，避免旧事件在新状态之后再次触发进入动作。
 
 这样能覆盖项目中“某条路径漏发进入通知”和“点击路径更新了选中态、信号回灌路径漏更新派生字段”的两类问题。
+
+**Q9: [learning] Android 侧收到 Kanzi 的加载完成事件时，怎样判断它对应每次加载、Surface 重建还是整机上电？**
+
+`CarModel.KanziLoadingComplete` 不应被理解为“每次整机上电只发一次”。项目真机记录中，切换宠物形象触发预制体二次加载后，该事件再次到达；但这只能证明实际发生资源/场景重载时会再次到达，不能推出每次 Android Activity 或 Surface 重建都会触发 Kanzi 场景重载和该事件。
+
+在本项目接收端，`CarModel.KanziLoadingComplete` 且值为 `1` 时会记录 `Kanzi loading complete received`，并执行 Kanzi 就绪后的补发与监听回调。形象切换后预制体二次加载、就绪事件再次到达的真机证据记录在 `Summary/project/yadi/pet/entries/SRS_013.md`。另一个独立信号 `Button.PreviewReturnBack` 且值为 `1` 也会调用同一个加载完成监听器；因此监听器下游的 `Kanzi load complete, fade out cover` 不能单独证明前一个数据源事件发生过。
+
+要核实事件频率，应为每次冷启动、Kanzi 场景加载、Android Activity 重建和 Surface 销毁/重建分别记录时间、进程代际、事件名和值、Surface 生命周期及首帧。只有事件发送端的定义或覆盖这些周期的实测记录，才能确定它按哪种加载边界触发。若多个来源共用同一个监听器，日志应保留来源事件名，避免把不同事件合并成一个“加载完成”。

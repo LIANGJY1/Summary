@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 230" role="img" aria-labelledby="title desc">
+  <title id="title">进程文件描述符与内核套接字的对应关系</title>
+  <desc id="desc">进程 A 和 B 都以整数 3 调用 send 或 recv。内核按各自进程的文件描述符表查找，分别关联不同的套接字。套接字对象保存状态、发送队列和接收队列。连线表示访问关系，不表示数据流向。</desc>
+  <defs>
+    <style>
+      text { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif; fill: #193047; }
+      .heading { font-size: 20px; font-weight: 700; }
+      .main { font-size: 18px; font-weight: 600; }
+      .detail { font-size: 16px; fill: #445c72; }
+      .small { font-size: 15px; fill: #445c72; }
+      .process { fill: #e7f0fa; stroke: #3975a8; stroke-width: 2; }
+      .kernel { fill: #e9f5f0; stroke: #138373; stroke-width: 2; }
+      .fd { fill: #dceaff; stroke: #3975a8; stroke-width: 2; }
+      .socket { fill: #ffffff; stroke: #138373; stroke-width: 2; }
+      .link { fill: none; stroke: #607c98; stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="230" fill="#f8fafc"/>
+
+  <rect x="16" y="22" width="284" height="84" rx="12" class="process"/>
+  <text x="36" y="55" class="heading">进程 A</text>
+  <text x="36" y="84" class="main">send(3) / recv(3)</text>
+
+  <rect x="16" y="124" width="284" height="84" rx="12" class="process"/>
+  <text x="36" y="157" class="heading">进程 B</text>
+  <text x="36" y="186" class="main">send(3) / recv(3)</text>
+
+  <rect x="355" y="10" width="829" height="210" rx="14" class="kernel"/>
+  <text x="770" y="38" text-anchor="middle" class="heading">操作系统内核</text>
+
+  <rect x="400" y="53" width="238" height="56" rx="9" class="fd"/>
+  <text x="519" y="87" text-anchor="middle" class="main">A 的 fd 表[3]</text>
+  <rect x="747" y="53" width="396" height="56" rx="9" class="socket"/>
+  <text x="765" y="78" class="main">套接字 A</text>
+  <text x="765" y="99" class="detail">状态 · 发送队列 · 接收队列</text>
+
+  <rect x="400" y="130" width="238" height="56" rx="9" class="fd"/>
+  <text x="519" y="164" text-anchor="middle" class="main">B 的 fd 表[3]</text>
+  <rect x="747" y="130" width="396" height="56" rx="9" class="socket"/>
+  <text x="765" y="155" class="main">套接字 B</text>
+  <text x="765" y="176" class="detail">状态 · 发送队列 · 接收队列</text>
+
+  <path d="M300 81 H400" class="link"/>
+  <text x="328" y="72" text-anchor="middle" class="small">查表</text>
+  <path d="M638 81 H747" class="link"/>
+  <text x="692" y="72" text-anchor="middle" class="small">关联</text>
+  <path d="M300 158 H400" class="link"/>
+  <text x="328" y="149" text-anchor="middle" class="small">查表</text>
+  <path d="M638 158 H747" class="link"/>
+  <text x="692" y="149" text-anchor="middle" class="small">关联</text>
+</svg>

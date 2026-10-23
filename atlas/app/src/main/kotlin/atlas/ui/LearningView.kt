@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,6 +35,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,12 +47,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -704,6 +708,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val cardHorizontal = questionCardHorizontalMetrics()
     val compact = Platform.windowWidthDp() < 600.dp
     var query by remember { mutableStateOf("") }
+    var treeQuery by remember { mutableStateOf("") }
+    var treeSearchExpansion by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var expandedDirs by remember { mutableStateOf(setOf("knowledge-base")) }
     var renameTarget by remember { mutableStateOf<KnowledgeTreeNode?>(null) }
@@ -874,6 +880,14 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val knowledgeTree = remember(treeDocuments, directorySnapshot) {
         KnowledgeTree.build(treeDocuments, directorySnapshot)
     }
+    val filteredKnowledgeTree = remember(knowledgeTree, treeQuery) {
+        KnowledgeTree.filter(knowledgeTree, treeQuery)
+    }
+    val treeVisibleExpandedDirs = remember(knowledgeTree, treeQuery, expandedDirs, treeSearchExpansion) {
+        if (treeQuery.isBlank()) expandedDirs
+        else KnowledgeTree.searchAncestorDirectoryPaths(knowledgeTree, treeQuery) +
+            treeSearchExpansion?.takeIf { it.first == treeQuery }?.second.orEmpty()
+    }
     val selectedMappedDocument = store.selectedSourcePath.takeIf { it in mappedDocuments }.orEmpty()
     val canBatchTag = selectedMappedDocument.isNotBlank() && !directorySearchActive && !reorderMode && query.isBlank() &&
         statusFilter == QuestionStatusFilter.ALL &&
@@ -986,25 +1000,37 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 Text("${treeDocuments.size} 个题目文档 · ${directorySnapshot.size} 个子目录", fontSize = 12.sp, color = Theme.Muted)
                 if (treeDocuments.isEmpty()) {
                     Text("当前配置没有匹配的 Markdown 文档，请到设置中添加文件或目录。", fontSize = 11.sp, color = Theme.WarnOrange)
+                } else {
+                    Spacer(Modifier.height(10.dp))
+                    KnowledgeTreeSearchField(treeQuery, { treeQuery = it })
                 }
-                Spacer(Modifier.height(10.dp))
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    item(key = knowledgeTree.path) {
-                        KnowledgeTreeNodeView(
-                            node = knowledgeTree,
-                            depth = 0,
-                            expandedDirs = expandedDirs,
-                            selectedPath = store.selectedSourcePath,
-                            onToggleDirectory = { path ->
-                                expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
-                            },
-                            onSelectFile = { path ->
-                                expanded = emptySet()
-                                query = ""
-                                locateSource(path)
-                            },
-                            onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
-                        )
+                Spacer(Modifier.height(8.dp))
+                if (treeQuery.isNotBlank() && filteredKnowledgeTree.children.isEmpty()) {
+                    Text("没有找到匹配的目录或文档", fontSize = 12.sp, color = Theme.Muted, modifier = Modifier.padding(vertical = 8.dp))
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        item(key = knowledgeTree.path) {
+                            KnowledgeTreeNodeView(
+                                node = filteredKnowledgeTree,
+                                depth = 0,
+                                expandedDirs = treeVisibleExpandedDirs,
+                                selectedPath = store.selectedSourcePath,
+                                onToggleDirectory = { path ->
+                                    if (treeQuery.isBlank()) {
+                                        expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
+                                    } else {
+                                        val current = treeSearchExpansion?.takeIf { it.first == treeQuery }?.second.orEmpty()
+                                        treeSearchExpansion = treeQuery to if (path in current) current - path else current + path
+                                    }
+                                },
+                                onSelectFile = { path ->
+                                    expanded = emptySet()
+                                    query = ""
+                                    locateSource(path)
+                                },
+                                onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
+                            )
+                        }
                     }
                 }
             }
@@ -1777,26 +1803,40 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                         }
                         TextButton(onClick = { showMobileTree = false }) { Text("关闭") }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    KnowledgeTreeSearchField(treeQuery, { treeQuery = it })
+                    Spacer(Modifier.height(8.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        item(key = "mobile-${knowledgeTree.path}") {
-                            KnowledgeTreeNodeView(
-                                node = knowledgeTree,
-                                depth = 0,
-                                expandedDirs = expandedDirs,
-                                selectedPath = store.selectedSourcePath,
-                                compact = true,
-                                onToggleDirectory = { path ->
-                                    expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
-                                },
-                                onSelectFile = { path ->
-                                    expanded = emptySet()
-                                    query = ""
-                                    locateSource(path)
-                                    showMobileTree = false
-                                },
-                                onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
-                            )
+                    if (treeQuery.isNotBlank() && filteredKnowledgeTree.children.isEmpty()) {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("没有找到匹配的目录或文档", fontSize = 13.sp, color = Theme.Muted)
+                        }
+                    } else {
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            item(key = "mobile-${knowledgeTree.path}") {
+                                KnowledgeTreeNodeView(
+                                    node = filteredKnowledgeTree,
+                                    depth = 0,
+                                    expandedDirs = treeVisibleExpandedDirs,
+                                    selectedPath = store.selectedSourcePath,
+                                    compact = true,
+                                    onToggleDirectory = { path ->
+                                        if (treeQuery.isBlank()) {
+                                            expandedDirs = if (path in expandedDirs) expandedDirs - path else expandedDirs + path
+                                        } else {
+                                            val current = treeSearchExpansion?.takeIf { it.first == treeQuery }?.second.orEmpty()
+                                            treeSearchExpansion = treeQuery to if (path in current) current - path else current + path
+                                        }
+                                    },
+                                    onSelectFile = { path ->
+                                        expanded = emptySet()
+                                        query = ""
+                                        locateSource(path)
+                                        showMobileTree = false
+                                    },
+                                    onRename = { node -> if (node.path != "knowledge-base") renameTarget = node },
+                                )
+                            }
                         }
                     }
                 }
@@ -2140,6 +2180,65 @@ private fun QuestionPromptContent(
             start = match.range.last + 1
         }
         if (start < styled.length) Text(styled.subSequence(start, styled.length), style = style, color = Theme.MdH1)
+    }
+}
+
+@Composable
+private fun KnowledgeTreeSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    Row(
+        Modifier.fillMaxWidth()
+            .height(38.dp)
+            .clip(shape)
+            .background(Theme.InputBg)
+            .border(
+                1.dp,
+                if (focused) Theme.Accent.copy(alpha = 0.82f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                shape,
+            )
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⌕", fontSize = 19.sp, color = Theme.Muted)
+        Spacer(Modifier.width(7.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            interactionSource = interactionSource,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+            ),
+            cursorBrush = SolidColor(Theme.Accent),
+            decorationBox = { innerTextField ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        Text("搜索目录或文档", fontSize = 12.sp, color = Theme.Muted)
+                    }
+                    innerTextField()
+                }
+            },
+        )
+        if (value.isNotEmpty()) {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                Modifier.size(24.dp)
+                    .clip(CircleShape)
+                    .clickable { onValueChange("") }
+                    .semantics { contentDescription = "清除目录搜索" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("×", fontSize = 17.sp, color = Theme.Muted)
+            }
+        }
     }
 }
 
