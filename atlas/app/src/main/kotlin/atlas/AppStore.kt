@@ -512,6 +512,35 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     commandTimeoutsMs = mapOf(3 to APK_PUSH_TIMEOUT_MS),
                 )
             }
+            DeviceTools.Tool.PUSH_SYSTEMUI -> {
+                val apk = settings.systemuiApkPath
+                if (apk.isBlank() || !File(apk).isFile) {
+                    progress("APK 不存在：${apk.ifBlank { "未配置路径，请在设置里填写" }}")
+                    return 1
+                }
+                val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                // root → wait → remount → push → sync（overlay 落盘）→ reboot 整机加载新 apk
+                runSequence(
+                    DeviceTools.pushSystemuiCommands(adb, apk, serial),
+                    progress,
+                    commandTimeoutsMs = mapOf(3 to APK_PUSH_TIMEOUT_MS),
+                )
+            }
+            DeviceTools.Tool.PUSH_SETTING -> {
+                val apk = settings.settingApkPath
+                if (apk.isBlank() || !File(apk).isFile) {
+                    progress("APK 不存在：${apk.ifBlank { "未配置路径，请在设置里填写" }}")
+                    return 1
+                }
+                val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                runSequence(
+                    DeviceTools.pushSettingCommands(adb, apk, serial),
+                    progress,
+                    commandTimeoutsMs = mapOf(3 to APK_PUSH_TIMEOUT_MS),
+                )
+            }
             DeviceTools.Tool.REBOOT_LAUNCHER -> {
                 val adb = adbPath ?: return failNoAdb(progress)
                 val serial = toolboxSerial ?: return failNoDevice(progress)
@@ -523,6 +552,20 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     return 1
                 }
                 progress("结束进程 PID=$pid")
+                execCapture(DeviceTools.killPidArgs(adb, pid, serial))
+                0
+            }
+            DeviceTools.Tool.REBOOT_SYSTEMUI -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                progress("查找 ${DeviceTools.SYSTEMUI_PACKAGE} 进程…")
+                val (_, psOut) = execCapture(DeviceTools.listProcessesArgs(adb, serial))
+                val pid = DeviceTools.parsePid(psOut, DeviceTools.SYSTEMUI_PACKAGE)
+                if (pid == null) {
+                    progress("未找到运行中的 SystemUI 进程")
+                    return 1
+                }
+                progress("结束进程 PID=$pid（persistent，系统会秒级拉起新实例）")
                 execCapture(DeviceTools.killPidArgs(adb, pid, serial))
                 0
             }
@@ -545,6 +588,15 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                 val serial = toolboxSerial ?: return failNoDevice(progress)
                 execCapture(DeviceTools.clearLogcatArgs(adb, serial))
                 0
+            }
+            DeviceTools.Tool.DARK_MODE, DeviceTools.Tool.LIGHT_MODE -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                val dark = tool == DeviceTools.Tool.DARK_MODE
+                val (code, out) = execCapture(DeviceTools.uiModeArgs(adb, dark, serial))
+                if (code != 0) progress("切换失败：${out.trim().takeLast(120)}")
+                else progress("已切换：${out.trim().ifBlank { if (dark) "Night mode: yes" else "Night mode: no" }}")
+                code
             }
             DeviceTools.Tool.START_EMULATOR, DeviceTools.Tool.COLD_BOOT_EMULATOR -> {
                 val emu = DeviceTools.findEmulator() ?: run {

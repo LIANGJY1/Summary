@@ -4,41 +4,82 @@
 
 **Q1: [learning] Unix domain 套接字是什么，与经环回地址通信的 TCP 套接字有什么不同？**
 
-Unix domain 套接字是同一台机器上的进程间通信端点，使用 AF_UNIX 或 AF_LOCAL 域。它沿用 socket、bind、connect、send、recv 等接口，但不通过 IP 地址和端口寻址，也不需要把本机数据按 TCP/IP 网络路径发送。
+Unix domain 套接字（`AF_UNIX`，也称 `AF_LOCAL`）是同一台计算机上进程通信的端点。它使用套接字接口，但不经 IP 网络协议路径；相较于经环回地址通信的 TCP，通常省去网络报头、校验和及 TCP 序号和确认等处理。它仍由内核传递数据，不等于零拷贝，也不保证在所有负载下都更快。
 
-1. **地址：**可用文件系统路径或 Linux 抽象命名空间，也可创建无名的已连接套接字对。
-2. **传输类型：**Linux 支持 SOCK_STREAM、SOCK_DGRAM 和 SOCK_SEQPACKET。流、数据报和顺序分组的消息边界仍按各自类型判断。
-3. **额外能力：**可通过辅助数据传递打开文件描述符和经过内核检查的进程凭据，普通 TCP 套接字不提供同一套本机对象传递语义。
-4. **边界：**它不能直接连接另一台机器。性能可能受复制次数、消息大小和实现影响，不能笼统声称一定比环回 TCP 快。
+主要区别和使用方式如下：
 
-**Q2: [learning] Unix domain 的 SOCK_STREAM、SOCK_DGRAM 与 SOCK_SEQPACKET 怎样区分？**
+1. **寻址：**Unix domain 可用文件系统路径标识服务，也可用 `socketpair` 创建两个无名且已连接的端点；TCP 使用 IP 地址和端口。Unix domain 不能直接连接另一台机器。
+2. **数据类型：**Linux 支持流式、数据报和顺序分组套接字；TCP 常用流式套接字。不同类型的数据边界和连接语义不同。
+3. **通信场景：**相关进程可用 `socketpair` 直接通信；互不相关的本机进程可由服务端绑定路径、客户端连接路径来通信。
+4. **本机能力：**Unix domain 可通过辅助数据传递打开的文件描述符和进程凭据；普通 TCP 套接字没有相同的本机对象传递语义。
 
-三种类型主要按连接方式与消息边界区分，不应因为都在本机就假定表现完全一样。
+**Q2: [learning] socketpair() 创建的两个端点是什么，为什么适合父子进程通信？**
 
-1. **SOCK_STREAM：**面向连接、按序交付字节，不保留每次 write 的边界。需要应用协议自己定义消息长度。
-2. **SOCK_DGRAM：**每次发送是一条独立消息，接收保留边界。Linux unix(7) 明确说明其本地数据报可靠且不会重排，但这不是 UDP 的语义，也不代表接收进程已经处理消息。
-3. **SOCK_SEQPACKET：**面向连接、按序且保留消息边界。需要同时获得连接状态和记录边界时，可先检查目标内核及系统接口是否支持。
+`socketpair()` 一次创建两个**无名且已连接**的套接字端点，并把对应的 fd 写入数组。两个端点都能收发，组成全双工通道。父子进程通信时，通常由父进程先创建端点，再调用 `fork()` 让子进程继承它们。
 
-**Q3: [learning] socketpair() 创建的两个端点是什么，为什么适合父子进程通信？**
+1. **创建端点：**任何需要这对端点的进程都可以调用 `socketpair()`。下面省略错误处理；函数成功返回 `0`，并将两个 fd 写入 `fd` 数组，失败返回 `-1` 并设置 `errno`。
 
-socketpair 一次创建两个已相互连接且无名的套接字，把两个 fd 写入调用者提供的数组。常见组合是 AF_UNIX、SOCK_STREAM、协议参数 0。每一端都可收发，因此能建立全双工的本机通道。
+    ```c
+    #include <sys/socket.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+    int fd[2];
+    char buffer[16];
+    socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
+    pid_t pid = fork();  /* 子进程得到 0，父进程得到子进程 PID */
+    ```
 
-接口声明及调用结果如下，声明不是完整程序：
+`AF_UNIX` 选择本机通信域，`SOCK_STREAM` 选择字节流，协议参数 `0` 表示使用默认协议。流不保留每次 `read`/`write` 的边界。`fd` 是输出数组，不是函数返回值；创建成功后，`fd[0]` 和 `fd[1]` 分别引用一个已连接端点。
+
+2. **继承并区分进程：**`fork()` 成功后，父子进程的 fd 表起初都含有编号相同的 `fd[0]` 和 `fd[1]`，并引用同一对内核端点。系统不会自动指定哪一端给谁。子进程通过 `fork()` 返回值 `0` 识别自己，父进程得到子进程 PID；失败时返回 `-1`，完整程序须检查。若子进程在 `fork()` 后才调用 `socketpair()`，父进程不会自动得到新 fd。
+
+3. **约定各自使用的一端：**下面由父进程保留 `fd[0]`、子进程保留 `fd[1]`。反过来分配也可以，只要双方约定一致，并关闭不用的 fd 副本：
+
+    1. **父进程：**关闭 `fd[1]`，用 `fd[0]` 发送请求并读取响应。
+
+        ```c
+        close(fd[1]);
+        write(fd[0], "ping", 4);        /* 父 → 子 */
+        read(fd[0], buffer, sizeof buffer); /* 子 → 父 */
+        ```
+
+    2. **子进程：**关闭 `fd[0]`，用 `fd[1]` 读取请求并发送响应。
+
+        ```c
+        close(fd[0]);
+        read(fd[1], buffer, sizeof buffer); /* 父 → 子 */
+        write(fd[1], "pong", 4);        /* 子 → 父 */
+        ```
+
+收发片段只展示数据方向。完整程序须检查调用结果，并循环处理流套接字的短读、短写。关闭不用的 fd 副本很重要：只要仍有进程持有对端的 fd，另一端就可能收不到 EOF。
+
+![进程中的两个文件描述符分别引用一对已连接、可双向收发的套接字端点](./assets/UNIX域socketpair进程通信.png)
+
+4. **“无名”的含义及与因特网域的区别：**无名是指端点没有供其他进程按地址查找的名字，例如文件系统路径。调用者直接从数组取得 fd，因此 `socketpair()` 不需要地址、`bind()`、`listen()`、`connect()` 或 `accept()`。无关进程要使用这对端点，必须通过继承或 fd 传递取得 fd。因特网域（`AF_INET`/`AF_INET6`）则用 IP 地址和端口标识端点：
+
+    1. **创建与连接：**`socketpair()` 一次创建两个已连接的本机端点。因特网域通常由双方分别调用 `socket()` 创建端点，再由客户端 `connect()` 发起连接。
+    2. **服务端与客户端：**因特网域服务端通常调用 `bind()`、`listen()`、`accept()`；客户端调用 `connect()`。连接既可跨机器，也可通过环回地址发生在本机。
+    3. **共同点：**若两者都使用 `SOCK_STREAM`，都是双向字节流，`read`/`write` 边界都不保留。`socketpair()` 省去寻址和建连步骤，不改变流式收发规则。
+
+下面以 IPv4 展示因特网域的服务端和客户端调用。地址结构已填好，代码省略错误处理：
 
 ```c
-#include <sys/socket.h>
-int socketpair(int domain, int type, int protocol, int sv[2]);
+/* 服务端 */
+int listenfd = socket(AF_INET, SOCK_STREAM, 0);
+bind(listenfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+listen(listenfd, SOMAXCONN);
+int connfd = accept(listenfd, NULL, NULL);
+
+/* 客户端 */
+int clientfd = socket(AF_INET, SOCK_STREAM, 0);
+connect(clientfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
 ```
 
-domain 通常为 AF_UNIX，type 选择流或数据报等交付方式，protocol 为 0 选择默认协议。sv 是接收两个 fd 的输出数组，成功返回 0，失败返回 -1 并设置 errno。不能把返回值 0 当成新 fd，两个 fd 实际在 sv[0] 和 sv[1] 中。
+服务端的 `accept()` 返回专门与该客户端收发的 `connfd`；`listenfd` 保留，用于接入其他客户端。这与 `socketpair()` 直接返回一对已连接端点不同。互不相关的本机进程也可改用绑定到路径的有名 UNIX 域套接字，让客户端按路径发现服务。
 
-1. **创建时：**调用者拿到两个独立 fd。没有服务器路径、bind、listen 或 accept 步骤。
-2. **fork 后：**父子进程继承两个 fd，各自关闭不使用的一端，就能通过保留的一端通信。
-3. **生命周期：**例如父进程保留 sv[0]，子进程保留 sv[1]，父进程应关闭 sv[1]，子进程应关闭 sv[0]。若父进程还持有 sv[1]，即使子进程关闭它，父进程读 sv[0] 也不能据此期待立即 EOF，因为对端仍有自己的引用。
+依据：Linux `socketpair(2)`、`unix(7)`、`socket(2)`、`ip(7)`。
 
-socketpair 适合已有继承关系或能够直接交付 fd 的进程。彼此无关的进程通常需要有名的服务地址或其他 fd 交付途径。
-
-**Q4: [learning] socketpair 与 pipe 都能连接父子进程，为什么两者不能完全互换？**
+**Q3: [learning] socketpair 与 pipe 都能连接父子进程，为什么两者不能完全互换？**
 
 pipe 通常提供单向字节通道。socketpair 的两个端点都可双向通信，并可在 Unix domain 上使用套接字消息及辅助数据能力。因此是否只需传字节、是否要全双工以及是否要传 fd，决定了选择。
 
@@ -48,7 +89,7 @@ pipe 通常提供单向字节通道。socketpair 的两个端点都可双向通�
 
 把数字 fd 写进 pipe 只发送一个整数，不会在另一进程的 fd 表里创建指向同一对象的引用。
 
-**Q5: [learning] socketpair 怎样让 poll 间接等待 XSI 消息队列？**
+**Q4: [learning] socketpair 怎样让 poll 间接等待 XSI 消息队列？**
 
 XSI（X/Open System Interfaces）消息队列使用队列标识符，不能直接放进 poll 的 fd 字段。教材让线程阻塞等待队列，再把消息写到 socketpair，将队列事件转成套接字可读事件。
 
@@ -61,17 +102,17 @@ XSI（X/Open System Interfaces）消息队列使用队列标识符，不能直�
 
 桥接让主循环统一等待 fd，没有改变 XSI 队列本身的接口。教材的关键点在于转换等待方式，而不是宣称所有 IPC 对象都原生支持 poll。
 
-**Q6: [learning] sockaddr_un 中 sun_family 与 sun_path 各表示什么？**
+**Q5: [learning] sockaddr_un 中 sun_family 与 sun_path 各表示什么？**
 
-sockaddr_un 是 Unix domain 套接字使用的地址结构。sun_family 标记 AF_UNIX，sun_path 保存路径名地址或 Linux 抽象地址的字节。它们共同构成可传给 bind、connect 等接口的本地地址。
+sockaddr_un 是传给 bind、connect 等接口的地址结构；其中的“地址”是 UNIX 域套接字在本机的名字，用来让内核找到对应端点。常见形式是文件系统路径，例如 `/tmp/app.sock`：服务器用 bind 将端点绑定到这个路径，客户端用 connect 提供同一路径。路径项只用于命名端点，不存放通信数据；Linux 还支持不对应文件路径的抽象地址。
 
-1. **路径名地址：**sun_path 保存以 NUL 结尾的文件系统路径，路径字节数不得超过目标系统字段容量。结构前部字段布局也可能不同。《Advanced Programming in the UNIX Environment》（APUE）所比较的 FreeBSD 与 macOS 结构在 sun_family 前含 sun_len，而 Linux 与 Solaris 示例没有该字段。
-2. **抽象地址：**Linux 中 sun_path 的首字节为 NUL，后续名称由传入的 addrlen 界定。它不是 C 字符串，也不对应文件系统路径。
-3. **无名套接字：**未 bind 的流端点或 socketpair 端点可能没有可读取的路径名，不能假定 sun_path 总有内容。
+1. **sun_family：**标记地址族为 AF_UNIX，告诉接口按 UNIX 域地址解释其余内容。
+2. **sun_path：**承载地址名字。路径名地址中放文件系统路径；Linux 抽象地址以 NUL 字节开头，后续名称按地址长度解释。
+3. **无名端点：**未 bind 的端点或 socketpair 创建的端点没有路径名，不能假定 sun_path 总有内容。
 
-sun_path 长度在不同系统上可能不同。避免把 Linux 的固定容量写成跨 POSIX 平台保证。
+路径名必须以 NUL 结尾，且长度不能超过目标系统的 sun_path 容量。结构前部布局也可能不同：APUE 比较的 FreeBSD 与 macOS 结构在 sun_family 前含 sun_len，Linux 与 Solaris 示例没有该字段。sun_path 的容量因系统而异，不能把某个平台的固定大小当作通用保证。
 
-**Q7: [learning] 计算 Unix domain 地址长度时，为什么要用 offsetof 而不是盲传路径字符串长度？**
+**Q6: [learning] 计算 Unix domain 地址长度时，为什么要用 offsetof 而不是盲传路径字符串长度？**
 
 系统调用的 addrlen 描述整个 sockaddr_un 地址结构中实际参与寻址的字节，不只是 sun_path 里的字符数。offsetof(struct sockaddr_un, sun_path) 给出路径字段起始偏移，能适应结构前部在不同系统上的布局差异。
 
@@ -83,7 +124,7 @@ offsetof 来自 stddef.h，返回指定成员的字节偏移。应使用标准�
 
 sizeof(sockaddr_un) 可在一些路径名调用中使用，但精确长度更能表达地址实际内容。字段容量和调用契约仍以目标平台手册为准。
 
-**Q8: [learning] Unix domain 路径名地址与 Linux 抽象地址在可见性、权限和清理上有什么区别？**
+**Q7: [learning] Unix domain 路径名地址与 Linux 抽象地址在可见性、权限和清理上有什么区别？**
 
 两者都能命名本机端点，但名字存在的位置不同，安全边界也不同。
 
@@ -93,7 +134,7 @@ sizeof(sockaddr_un) 可在一些路径名调用中使用，但精确长度更能
 
 无论使用哪种地址，都不能单靠“别人不知道名字”作为访问控制。敏感服务应核验对端身份与实际授权。
 
-**Q9: [learning] 路径名 Unix socket 文件是否保存消息内容，进程退出后为什么可能留下失效路径？**
+**Q8: [learning] 路径名 Unix socket 文件是否保存消息内容，进程退出后为什么可能留下失效路径？**
 
 路径名套接字在文件系统中的条目只用于命名内核通信端点，不保存发送的消息正文，不能像普通文件那样 open 并读取消息。消息经内核套接字队列在进程间交付。
 
@@ -103,7 +144,7 @@ sizeof(sockaddr_un) 可在一些路径名调用中使用，但精确长度更能
 
 先 stat 确认类型再 unlink 仍有两个问题：stat 会跟随符号链接，观察的可能是链接目标，和 unlink 删除的目录项不是同一对象。即使改用 lstat，检查后目录项仍可能被替换，且确认为 socket 也不能证明它已经失效。应使用受控目录与服务实例协调，确认是自己可清理的残留名称后再处理。
 
-**Q10: [learning] 文件系统权限与 Unix socket 对端身份验证是什么关系？**
+**Q9: [learning] 文件系统权限与 Unix socket 对端身份验证是什么关系？**
 
 路径目录与套接字文件权限可限制谁能创建或连接，但它们不完整证明“当前连接者是谁”。Linux 会在连接路径名流套接字或向路径名数据报套接字发送时检查写权限。创建路径还需要所在目录的写与搜索权限。POSIX 不保证所有系统都以相同方式使用 socket 文件权限。
 
@@ -113,19 +154,28 @@ sizeof(sockaddr_un) 可在一些路径名调用中使用，但精确长度更能
 
 读到一个客户端自称的 PID、UID，或 stat 到一个客户端路径的 owner，都不能独立完成安全认证。路径可能被替换，身份也可能与持有路径者不同。
 
-**Q11: [learning] 无继承关系的两个本机进程怎样建立 Unix domain 流连接？**
+**Q10: [learning] 无继承关系的两个本机进程怎样建立 Unix domain 流连接？**
 
-服务器创建 AF_UNIX 流套接字，bind 到受控路径并 listen。客户端创建自己的 AF_UNIX 流套接字，connect 到服务器路径。服务器 accept 后得到只用于该客户端的新 fd，监听 fd 继续等待其他客户端。
+这段描述的是连接前后两类不同的服务端套接字。`listenfd` 绑定服务路径并等待请求。`accept()` 返回的 `connfd` 专门与某个客户端通信，客户端的 `clientfd` 与它构成一条连接。
 
-1. **服务器地址：**必须在客户端可访问的目录中创建，并处理残留路径与启动竞态。
-2. **客户端地址：**流客户端通常不必自行 bind 路径。服务端可在 accept 后通过内核凭据机制取得连接者身份，不应为识别客户端而强制每个客户端制造可被伪造或竞态替换的路径。
-3. **消息协议：**连接建立后仍要定义请求长度、响应状态、超时与关闭方式，因为 SOCK_STREAM 不保留调用边界。
+1. **连接前，服务端公布入口：**服务端创建 AF_UNIX 流套接字，将 `listenfd` 绑定到一个受控路径，再调用 `listen()`。路径是客户端找到服务端的地址。`listenfd` 等待连接请求，本身不用于某个客户端的数据收发。
+2. **客户端发起连接：**客户端创建 `clientfd`，将服务端路径交给 `connect()`。流客户端通常不必为自己绑定路径。
+3. **服务端接入请求：**服务端调用 `accept(listenfd, ...)`。有请求时，`accept()` 返回新的 `connfd`，它对应这一个客户端。原来的 `listenfd` 仍在监听，可以继续接入其他客户端。
+4. **连接后传数据：**客户端用 `clientfd` 收发，服务端用对应的 `connfd` 收发。每个已接入客户端都有自己的连接套接字，因此“唯一连接”指这一对客户端与服务端端点，不表示服务端只能接入一个客户端。
 
-本地连接避免网络寻址，但不自动解决并发、鉴权和协议成帧。
+```text
+连接前：服务端 listenfd（绑定服务路径并监听）    客户端 clientfd（尚未连接）
+连接后：服务端 listenfd（继续监听）
+        服务端 connfd  <======>  客户端 clientfd
+```
+
+服务端路径应位于客户端可访问的目录中，并处理残留路径与启动竞态。需要识别客户端时，可在连接后使用内核凭据机制；不应仅为识别客户端而强制它创建容易被伪造或竞态替换的路径。
+
+连接建立后仍要定义请求长度、响应状态、超时与关闭方式，因为 `SOCK_STREAM` 不保留调用边界。本地连接省去了 IP 网络寻址，但不会自动解决并发、鉴权和消息成帧。
 
 ![Unix domain 流服务端 bind、listen 与客户端 connect、服务端 accept 的全流程，并对照 socketpair 和 SOCK_DGRAM](./assets/Unix域连接生命周期.svg)
 
-**Q12: [learning] 教材的 serv_listen、cli_conn 和 serv_accept 怎样配合？**
+**Q11: [learning] 教材的 serv_listen、cli_conn 和 serv_accept 怎样配合？**
 
 它们是教材包装标准套接字调用的辅助函数，不是系统调用。服务端先公布路径，客户端连接该路径，服务端再取得这个客户端专用的连接 fd。
 
@@ -145,7 +195,7 @@ int serv_accept(int listenfd, uid_t *uidptr);
 
 示例的声明只说明辅助接口。它们的具体负返回值来自教材实现，不能套用为 POSIX 错误码。
 
-**Q13: [learning] 教材为什么检查客户端 socket 路径，却仍不能可靠认证连接者？**
+**Q12: [learning] 教材为什么检查客户端 socket 路径，却仍不能可靠认证连接者？**
 
 教材试图用路径的元数据推断客户端有效用户 ID，但路径和连接是两个不同对象。即使检查时路径看起来合理，也不能直接证明它属于当前持有连接的进程。
 
@@ -156,7 +206,7 @@ int serv_accept(int listenfd, uid_t *uidptr);
 
 教材展示的是历史示例的验证思路，不能把其中“这是当前系统最佳方案”的判断推广到今天的平台。
 
-**Q14: [learning] 把一个打开的 fd 发给另一进程，为什么不能只发送它的整数值？**
+**Q13: [learning] 把一个打开的 fd 发给另一进程，为什么不能只发送它的整数值？**
 
 fd 整数只在发送进程自己的描述符表中有意义。另一进程的同号 fd 可能引用完全不同的对象，甚至尚未打开。真正的描述符传递要求内核在接收进程的描述符表中建立新的引用。
 
@@ -166,7 +216,7 @@ fd 整数只在发送进程自己的描述符表中有意义。另一进程的�
 
 因此“传 fd”是传内核对象引用的能力交付，不是拷贝一个整数或重新按路径 open 文件。
 
-**Q15: [learning] SCM_RIGHTS 传递后的两个 fd 共享什么，不共享什么？**
+**Q14: [learning] SCM_RIGHTS 传递后的两个 fd 共享什么，不共享什么？**
 
 SCM_RIGHTS 的效果近似于把同一打开文件描述复制进另一个进程的 fd 表。两个进程的 fd 编号和描述符级标志各自独立，但共享打开文件描述关联的状态。
 
@@ -176,7 +226,7 @@ SCM_RIGHTS 的效果近似于把同一打开文件描述复制进另一个进程
 
 例如双方引用同一普通文件的打开文件描述，子进程 lseek 到偏移 100 后，在已同步且没有其他读写的条件下，父进程查询当前位置也会得到 100。父进程随后读取 20 字节，又会共同推进偏移。若各自重新 open 同一路径，通常有各自的偏移，不能用“都访问同一文件”推断是否共享。
 
-**Q16: [learning] cmsghdr 的 cmsg_len、cmsg_level、cmsg_type 和数据区各表示什么？**
+**Q15: [learning] cmsghdr 的 cmsg_len、cmsg_level、cmsg_type 和数据区各表示什么？**
 
 cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部和随后数据组成，可表达文件描述符、凭据等不属于普通正文的内容。
 
@@ -187,7 +237,7 @@ cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部�
 
 控制区可能包含多条消息，还要满足内存对齐要求，因此不能把 msg_control 当成单个固定结构直接强制转换后使用。
 
-**Q17: [learning] CMSG_SPACE、CMSG_LEN、CMSG_DATA、CMSG_FIRSTHDR 与 CMSG_NXTHDR 怎样配合？**
+**Q16: [learning] CMSG_SPACE、CMSG_LEN、CMSG_DATA、CMSG_FIRSTHDR 与 CMSG_NXTHDR 怎样配合？**
 
 这些宏帮助调用者按平台要求的对齐方式分配、填写和遍历辅助数据。手动假定头部紧贴下一个头部，可能在不同 ABI 上解析错位。
 
@@ -199,7 +249,7 @@ cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部�
 
 发送前要清零控制缓冲区并写对 level、type、长度。接收后遍历每条消息时仍要检查类型、长度和 MSG_CTRUNC，不能只看第一条。
 
-**Q18: [learning] SCM_RIGHTS 发送一个 fd 时，各层缓冲区怎样填写？**
+**Q17: [learning] SCM_RIGHTS 发送一个 fd 时，各层缓冲区怎样填写？**
 
 发送端需要普通正文和辅助数据两部分。正文负责协议状态，辅助数据描述待交付的内核引用，二者通过同一次 sendmsg 关联。
 
@@ -216,7 +266,7 @@ cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部�
 
 ![发送进程通过 Unix 域 SCM_RIGHTS 交付打开对象引用，接收端得到本进程的描述符](./assets/UNIX域描述符传递.svg)
 
-**Q19: [learning] 接收一个或多个文件描述符时怎样解析控制消息？**
+**Q18: [learning] 接收一个或多个文件描述符时怎样解析控制消息？**
 
 接收端要按控制消息的类型与长度取出 fd，并明确每一个已接收 fd 的关闭责任。不能看到 msg_controllen 非零就把第一段数据强转成一个 int。
 
@@ -229,7 +279,7 @@ cmsghdr 是 sendmsg/recvmsg 控制消息的头部。一条控制消息由头部�
 
 Linux 的 MSG_CMSG_CLOEXEC 可在接收 fd 时设置 FD_CLOEXEC，避免泄漏给之后 exec 的程序。否则要按平台能力设置，并考虑多线程中的竞态。
 
-**Q20: [learning] Unix domain 的 SO_PEERCRED、SCM_CREDENTIALS 与 SCM_CREDS 有什么平台差异？**
+**Q19: [learning] Unix domain 的 SO_PEERCRED、SCM_CREDENTIALS 与 SCM_CREDS 有什么平台差异？**
 
 连接级查询与消息级辅助数据可以在不同时间点取得对端凭据，但各 Unix 系统提供的接口和凭据结构不同。内核返回的凭据是授权输入，应用仍须按自己的 UID/GID 策略检查。
 
@@ -242,7 +292,7 @@ SO_PASSCRED 是接收选项，默认未启用。仅分配控制缓冲区不能�
 
 不能把对端路径名的 owner 或应用自己在正文填写的 UID 当成等价机制。若进程能切换身份，还要区分连接时快照与每条消息的发送时身份。
 
-**Q21: [learning] send_fd、send_err 和 recv_fd 为什么还要约定正文协议？**
+**Q20: [learning] send_fd、send_err 和 recv_fd 为什么还要约定正文协议？**
 
 SCM_RIGHTS 只交付打开对象引用，不表达成功、失败或错误说明。教材通过普通正文字节约定状态，再把成功响应与辅助数据中的 fd 关联。
 
@@ -262,7 +312,7 @@ int recv_fd(int channel, ssize_t (*userfunc)(int, const void *, size_t));
 
 发送遇到部分进度时，也不能无条件重发同一 SCM_RIGHTS，否则可能重复交付引用。协议实现应记录正文进度与控制消息是否已经交付。
 
-**Q22: [learning] open 服务为什么返回描述符，而不转发整个文件内容？**
+**Q21: [learning] open 服务为什么返回描述符，而不转发整个文件内容？**
 
 服务负责打开对象并交付引用，客户端拿到本进程 fd 后直接执行后续 I/O。服务因此可以封装打开过程，而无须持续中转文件内容。
 
@@ -272,7 +322,7 @@ int recv_fd(int channel, ssize_t (*userfunc)(int, const void *, size_t));
 4. **独立服务的价值：**服务实现可以作为独立程序更新并复用，也可在明确授权下拥有不同于客户端的权限。普通库函数运行在调用进程内，不能仅靠链接库获得独立进程的权限边界。
 5. **代价：**引入进程通信、错误协议和资源生命周期。权限不同的服务必须先决定哪些请求获准，不能只因技术上能 open 就交付 fd。
 
-**Q23: [learning] 第一版 csopen 怎样启动 opend 并取得文件描述符？**
+**Q22: [learning] 第一版 csopen 怎样启动 opend 并取得文件描述符？**
 
 第一版 csopen 在首次调用时创建全双工通道并启动子进程 opend，之后复用该通道发送打开请求。它是每个客户端配一个服务子进程，不是每次打开文件都 fork 一次。
 
@@ -284,7 +334,7 @@ int recv_fd(int channel, ssize_t (*userfunc)(int, const void *, size_t));
 
 exec 保留的是未设置 FD_CLOEXEC 的描述符。dup2 到标准描述符时应处理源与目标相同的情形，不能随后无条件关闭恰好仍要保留的 fd。
 
-**Q24: [learning] open 请求中的路径、模式和结尾 NUL 各有什么作用？**
+**Q23: [learning] open 请求中的路径、模式和结尾 NUL 各有什么作用？**
 
 教材请求形式为 `open <pathname> <openmode>\0`，它是一段应用协议文本，不是对 open 系统调用参数的内存拷贝。
 
@@ -297,7 +347,7 @@ exec 保留的是未设置 FD_CLOEXEC 的描述符。dup2 到标准描述符时�
 
 协议中的“打开模式”与创建文件的权限 mode 不是同一概念，后者必须在支持创建操作时另行定义。
 
-**Q25: [learning] opend 怎样从请求文本走到 send_fd？**
+**Q24: [learning] opend 怎样从请求文本走到 send_fd？**
 
 教材把读取、切分参数、验证参数和打开文件分成不同函数。理解这条调用链，才能判断哪个位置应检查协议完整性，哪个位置应执行权限策略。
 
@@ -310,7 +360,7 @@ exec 保留的是未设置 FD_CLOEXEC 的描述符。dup2 到标准描述符时�
 
 buf_args 的 argv 数组在函数返回后失效，而它指向的字符受原请求缓冲区生命周期约束。扩大参数数组只能解除数量限制，不能修复这些生命周期或协议问题。
 
-**Q26: [learning] 为什么 opend 不能把一次 read 当成一条请求？**
+**Q25: [learning] 为什么 opend 不能把一次 read 当成一条请求？**
 
 Unix 域 SOCK_STREAM 和 TCP 一样不保留 write 边界。即使通信仅发生在本机且请求很短，也可能出现一条请求分多次读取，或一次读取带回多条请求。
 
@@ -322,7 +372,7 @@ Unix 域 SOCK_STREAM 和 TCP 一样不保留 write 边界。即使通信仅发�
 
 send_fd/recv_fd 的响应同样需要解析进度。使用较大缓冲区、writev 或本机通道都不能免除成帧。
 
-**Q27: [learning] 第二版 open 服务如何让无关客户端共享一个 opend？**
+**Q26: [learning] 第二版 open 服务如何让无关客户端共享一个 opend？**
 
 第二版把 opend 改为常驻服务，公开一个 Unix 域监听路径。每个客户端连接它，服务端为各连接维护状态，从而省去每个客户端启动服务子进程的步骤。
 
@@ -334,7 +384,7 @@ send_fd/recv_fd 的响应同样需要解析进度。使用较大缓冲区、writ
 
 客户端断线后应移除监视并释放状态。服务端 fd 数、缓冲内存和打开文件数量仍需受资源上限控制。
 
-**Q28: [learning] client 数组与 pollfd 数组为什么不能随意共用下标？**
+**Q27: [learning] client 数组与 pollfd 数组为什么不能随意共用下标？**
 
 client 数组保存业务连接状态，pollfd 数组保存等待事件。只有明确维护同一排列不变量时，两者的同一下标才代表同一个客户端。
 
@@ -346,7 +396,7 @@ client 数组保存业务连接状态，pollfd 数组保存等待事件。只有
 
 上述失配可由教材图 17-27 的空槽复用规则与图 17-30 的末项搬移规则推演出来。UID 不能仅按事件数组当前位置取用。
 
-**Q29: [learning] select 版服务循环怎样维护集合与扫描范围？**
+**Q28: [learning] select 版服务循环怎样维护集合与扫描范围？**
 
 select 将输入集合改写为当前就绪集合，所以服务器要保存长期集合，每轮复制后再等待。最大 fd 和客户端数组最大下标描述不同范围，不能互换。
 
@@ -367,7 +417,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds,
 
 Linux select 可能修改 timeout，因此重复调用要重设等待时间。等待和实际 I/O 之间状态可能变化，事件循环通常仍配合非阻塞描述符。
 
-**Q30: [learning] poll 版服务循环怎样登记事件并删除客户？**
+**Q29: [learning] poll 版服务循环怎样登记事件并删除客户？**
 
 poll 通过数组逐项指定 fd 和期望事件，用 revents 返回实际事件。数组长度是待检查元素数，不是最大 fd 加 1。
 
@@ -384,7 +434,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 
 poll 避免了 fd_set 的固定编号限制，但仍要扫描数组。只有存在待发数据时才关注 POLLOUT，否则可写连接可能使循环持续立即返回。
 
-**Q31: [learning] EOF 或 POLLHUP 能否证明客户端进程已经退出？**
+**Q30: [learning] EOF 或 POLLHUP 能否证明客户端进程已经退出？**
 
 不能。它们描述通信端点的状态，不直接描述整个进程的生死。服务应依据流结束、队列数据和协议决定收尾，而不是把事件翻译成“客户已退出”。
 
@@ -394,7 +444,7 @@ poll 避免了 fd_set 的固定编号限制，但仍要扫描数组。只有存�
 4. **教材策略：**示例优先关闭挂起连接，是其服务处理策略。对于采用半关闭表示请求结束的协议，服务仍需保留发送方向交付响应。
 5. **收尾状态：**记录已读 EOF、是否存在完整请求、是否还有待发响应，再决定关闭。把这些状态压缩成一个“进程死亡”布尔值会丢失必要信息。
 
-**Q32: [learning] 知道客户端 UID 后，open 服务为什么还需要授权？**
+**Q31: [learning] 知道客户端 UID 后，open 服务为什么还需要授权？**
 
 凭据只回答请求来自谁，不回答允许打开哪些对象。open 实际使用服务进程的权限，若服务权限更高且无授权检查，就可能替客户端绕过原有访问限制。
 
@@ -404,7 +454,7 @@ poll 避免了 fd_set 的固定编号限制，但仍要扫描数组。只有存�
 4. **交付能力：**SCM_RIGHTS 交付后，客户端可使用已打开的访问能力，即使它原本不能按路径重新 open。服务关闭自己的引用不等于撤销客户端能力。
 5. **教材边界：**第二版 handle_request 收到 UID 并用于日志，但示例直接 open，没有因此自动按客户端身份访问。记录 UID 不能替代授权实现。
 
-**Q33: [learning] getopt 怎样解释 opend 的启动参数？**
+**Q32: [learning] getopt 怎样解释 opend 的启动参数？**
 
 getopt 解析启动进程的 argc/argv，不解析 socket 上传来的 open 请求。opend 用它决定是否以前台调试方式运行。
 

@@ -680,6 +680,8 @@ private fun DeviceToolboxCard(store: AppStore) {
 
     var advanced by remember { mutableStateOf(false) }
     var apkPath by remember { mutableStateOf(store.settings.pushApkPath) }
+    var systemuiApk by remember { mutableStateOf(store.settings.systemuiApkPath) }
+    var settingApk by remember { mutableStateOf(store.settings.settingApkPath) }
     var shotDir by remember { mutableStateOf(store.settings.screenshotSaveDir) }
     var avd by remember { mutableStateOf(store.settings.emulatorAvd) }
     var logcatFilter by remember { mutableStateOf("") }
@@ -773,25 +775,27 @@ private fun DeviceToolboxCard(store: AppStore) {
             DeviceTools.Tool.entries.groupBy { it.group }.forEach { (group, tools) ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(group, style = ui.typography.secondary, color = Theme.Muted, modifier = Modifier.width(44.dp))
-                    tools.forEach { tool ->
-                        OutlinedButton(
-                            onClick = {
-                                if (tool == DeviceTools.Tool.REPAIR_LOCAL_ADB_USB) {
-                                    if (!DeviceTools.isLinuxHost()) {
-                                        store.showToast("本机 USB 控制器修复仅支持 Linux")
+                    FlowRow(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        tools.forEach { tool ->
+                            OutlinedButton(
+                                onClick = {
+                                    if (tool == DeviceTools.Tool.REPAIR_LOCAL_ADB_USB) {
+                                        if (!DeviceTools.isLinuxHost()) {
+                                            store.showToast("本机 USB 控制器修复仅支持 Linux")
+                                        } else {
+                                            usbRepairControllers = DeviceTools.xhciControllerAddresses()
+                                            selectedUsbRepairController = usbRepairControllers.singleOrNull()
+                                            usbResetPrompt = false
+                                            pendingUsbRepair = true
+                                        }
                                     } else {
-                                        usbRepairControllers = DeviceTools.xhciControllerAddresses()
-                                        selectedUsbRepairController = usbRepairControllers.singleOrNull()
-                                        usbResetPrompt = false
-                                        pendingUsbRepair = true
+                                        store.runTool(tool)
                                     }
-                                } else {
-                                    store.runTool(tool)
-                                }
-                            },
-                            enabled = !running && (tool != DeviceTools.Tool.REPAIR_LOCAL_ADB_USB || !logcatOn),
-                        ) {
-                            Text(tool.label)
+                                },
+                                enabled = !running && (tool != DeviceTools.Tool.REPAIR_LOCAL_ADB_USB || !logcatOn),
+                            ) {
+                                Text(tool.label)
+                            }
                         }
                     }
                 }
@@ -821,6 +825,14 @@ private fun DeviceToolboxCard(store: AppStore) {
                         TextButton(onClick = { choosePath(directory = false, "选择 APK 文件")?.let { apkPath = it } }) { Text("浏览") }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(systemuiApk, { systemuiApk = it }, Modifier.weight(1f), label = { Text("SystemUI APK 路径") }, singleLine = true)
+                        TextButton(onClick = { choosePath(directory = false, "选择 SystemUI APK")?.let { systemuiApk = it } }) { Text("浏览") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(settingApk, { settingApk = it }, Modifier.weight(1f), label = { Text("Setting APK 路径") }, singleLine = true)
+                        TextButton(onClick = { choosePath(directory = false, "选择 Setting APK")?.let { settingApk = it } }) { Text("浏览") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(shotDir, { shotDir = it }, Modifier.weight(1f), label = { Text("截图保存目录") }, singleLine = true)
                         TextButton(onClick = { choosePath(directory = true, "选择截图目录")?.let { shotDir = it } }) { Text("浏览") }
                     }
@@ -829,6 +841,8 @@ private fun DeviceToolboxCard(store: AppStore) {
                         TextButton(onClick = {
                             store.settings = store.settings.copy(
                                 pushApkPath = apkPath.trim(),
+                                systemuiApkPath = systemuiApk.trim(),
+                                settingApkPath = settingApk.trim(),
                                 screenshotSaveDir = shotDir.trim(),
                                 emulatorAvd = avd.trim().ifBlank { DeviceTools.DEFAULT_AVD },
                             )

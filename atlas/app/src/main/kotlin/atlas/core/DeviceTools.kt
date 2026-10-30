@@ -10,16 +10,25 @@ import java.io.File
 object DeviceTools {
 
     const val LAUNCHER_PACKAGE = "com.yadea.launcher"
+    const val SYSTEMUI_PACKAGE = "com.android.systemui"
     const val DEFAULT_PUSH_DEST = "/system_ext/priv-app/NsrLauncher"
+    /** 车机实测（pm path）：SystemUI apk 在 system_ext 同分区，remount 覆盖写后 kill 自启即加载 */
+    const val SYSTEMUI_APK_DEST = "/system_ext/priv-app/NsrSystemUI/NsrSystemUI.apk"
+    const val SETTING_APK_DEST = "/system_ext/priv-app/NsrSetting/NsrSetting.apk"
     const val DEFAULT_AVD = "3DAA"
     private val PCI_ADDRESS = Regex("[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\\.[0-7]")
 
     /** 一次性工具清单（顺序即 UI 展示顺序；logcat 流式工具不在此列） */
     enum class Tool(val id: String, val label: String, val group: String, val description: String) {
         PUSH_LAUNCHER("push_launcher", "推送 Launcher APK", "设备", "root + remount + push 到系统分区后重启设备"),
+        PUSH_SYSTEMUI("push_systemui", "推送 SystemUI APK", "设备", "remount 覆盖写 NsrSystemUI.apk 后 sync 刷盘并整机重启"),
+        PUSH_SETTING("push_setting", "推送 Setting APK", "设备", "remount 覆盖写 NsrSetting.apk 后 sync 刷盘并整机重启"),
         REBOOT_LAUNCHER("reboot_launcher", "重启 Launcher 进程", "设备", "kill 设备上的 Launcher 进程让其自拉起"),
+        REBOOT_SYSTEMUI("reboot_systemui", "重启 SystemUI", "设备", "kill SystemUI（persistent）秒级自启，加载新 push 的 apk/资源"),
         SCREENSHOT("ui_screenshot", "截取设备屏幕", "调试", "当前设备截图，按序号存入截图目录"),
         CLEAR_LOGCAT("adb_logcat_clear", "清空日志缓冲", "调试", "adb logcat -c"),
+        DARK_MODE("ui_mode_dark", "深色模式", "深浅色", "adb shell cmd uimode night yes，立即生效"),
+        LIGHT_MODE("ui_mode_light", "浅色模式", "深浅色", "adb shell cmd uimode night no，立即生效"),
         START_EMULATOR("start_3daa", "启动模拟器", "模拟器", "启动配置的 AVD（带快照）"),
         COLD_BOOT_EMULATOR("cold_boot_3daa", "冷启动模拟器", "模拟器", "不加载快照冷启动 AVD"),
         STRIP_SLASHES("remove_comment_slashes", "清理剪贴板行首斜杠", "实用", "读剪贴板去掉行首 // 并写回，可直接粘贴"),
@@ -64,6 +73,25 @@ object DeviceTools {
             withSerial(adbPath, serial, "reboot"),
         )
 
+    /** 推送 SystemUI 序列：同 Launcher 前四步 + sync 刷盘；sync 确认 overlay 落盘后再 reboot 整机加载新 apk */
+    fun pushSystemuiCommands(
+        adbPath: String,
+        apkPath: String,
+        serial: String? = null,
+        destApk: String = SYSTEMUI_APK_DEST,
+    ): List<List<String>> =
+        listOf(
+            withSerial(adbPath, serial, "root"),
+            withSerial(adbPath, serial, "wait-for-device"),
+            withSerial(adbPath, serial, "remount"),
+            withSerial(adbPath, serial, "push", apkPath, destApk),
+            withSerial(adbPath, serial, "shell", "sync"),
+            withSerial(adbPath, serial, "reboot"),
+        )
+
+    fun pushSettingCommands(adbPath: String, apkPath: String, serial: String? = null): List<List<String>> =
+        pushSystemuiCommands(adbPath, apkPath, serial, destApk = SETTING_APK_DEST)
+
     fun listProcessesArgs(adbPath: String, serial: String? = null): List<String> =
         withSerial(adbPath, serial, "shell", "ps", "-A")
 
@@ -75,6 +103,10 @@ object DeviceTools {
 
     fun clearLogcatArgs(adbPath: String, serial: String? = null): List<String> =
         withSerial(adbPath, serial, "logcat", "-c")
+
+    /** 深浅色切换（Android 10+，立即生效）；命令本身回显 "Night mode: yes/no" 可直接进进度行 */
+    fun uiModeArgs(adbPath: String, dark: Boolean, serial: String? = null): List<String> =
+        withSerial(adbPath, serial, "shell", "cmd", "uimode", "night", if (dark) "yes" else "no")
 
     fun logcatArgs(adbPath: String, serial: String? = null): List<String> =
         withSerial(adbPath, serial, "logcat")

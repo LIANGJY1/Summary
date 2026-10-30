@@ -11,6 +11,22 @@ import org.junit.jupiter.api.io.TempDir
 class DeviceToolsTest {
 
     @Test
+    fun `推送 Setting 使用选中设备并覆盖系统 APK 后同步重启`() {
+        assertEquals(
+            listOf(
+                listOf("/sdk/adb", "-s", "car-1", "root"),
+                listOf("/sdk/adb", "-s", "car-1", "wait-for-device"),
+                listOf("/sdk/adb", "-s", "car-1", "remount"),
+                listOf("/sdk/adb", "-s", "car-1", "push", "/build/Setting.apk", "/system_ext/priv-app/NsrSetting/NsrSetting.apk"),
+                listOf("/sdk/adb", "-s", "car-1", "shell", "sync"),
+                listOf("/sdk/adb", "-s", "car-1", "reboot"),
+            ),
+            DeviceTools.pushSettingCommands("/sdk/adb", "/build/Setting.apk", "car-1"),
+        )
+        assertTrue(DeviceTools.Tool.entries.any { it.id == "push_setting" && it.group == "设备" })
+    }
+
+    @Test
     fun `推送 APK 命令序列按 bash 脚本语义组装`() {
         val cmds = DeviceTools.pushLauncherCommands("/sdk/adb", "/data/NsrLauncher.apk")
         assertEquals(5, cmds.size)
@@ -64,12 +80,21 @@ class DeviceToolsTest {
     }
 
     @Test
-    fun `工具清单含八个条目且分组正确`() {
+    fun `工具清单分组正确`() {
         val tools = DeviceTools.Tool.entries
-        assertEquals(8, tools.size) // logcat 流式工具独立于一次性清单
         assertTrue(tools.any { it.id == "push_launcher" && it.group == "设备" })
         assertTrue(tools.any { it.id == "start_3daa" && it.group == "模拟器" })
         assertTrue(tools.any { it.id == "remove_comment_slashes" && it.group == "实用" })
+    }
+
+    @Test
+    fun `Setting APK 路径保存在本机配置中`(@TempDir dir: File) {
+        val local = File(dir, "local.properties")
+        val synced = File(dir, "synced.properties")
+        val store = SettingsStore(local)
+        store.save(AppSettings(settingApkPath = "/build/NsrSetting.apk"), synced)
+        assertEquals("/build/NsrSetting.apk", store.load { synced }.settingApkPath)
+        assertTrue(!synced.readText().contains("settingApkPath"))
     }
 
     @Test

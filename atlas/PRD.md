@@ -1290,6 +1290,11 @@ git commit -m "feat(atlas): complete unified visual theme"
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-10-30 | — | **设备工具箱新增「推送 SystemUI APK」按钮**（设备分组）：root → wait-for-device → remount → push 覆盖写 `/system_ext/priv-app/NsrSystemUI/NsrSystemUI.apk`（车机 `pm path com.android.systemui` 实测）→ `shell sync`（overlay 写入落盘）→ `reboot` 整机重启加载新 apk（用户要求推送完必须 sync+reboot；初版实现是 kill 自启免重启，已按需求改为整机重启）。本机 APK 路径新增设置项 `systemuiApkPath`（本机层 localKeys，高级设置里多一行「SystemUI APK 路径」+ 浏览），push 步骤沿用 10 分钟超时。配套「重启 SystemUI」按钮（kill 自启）用于不换包的单独重启。 |
+| 2026-10-30 | — | **AAOS 调试页验收列表改紧凑手风琴行**：原设计 15 条各一张厚卡（标题+说明+判定标准全量展开），滚动区里只见两三张、视觉噪且"丑"。改为逐条紧凑行（序号 `%02d` 强调色 + 名称 + 一句话说明单行省略 + 小号 运行/填入 + ▸ 展开指示），点行展开判定标准（展开态底色与题库场景卡同语言 `Theme.Selected`），手风琴互斥；判定标准的语义着色（改造后/通过=绿、异常/若=红）保留。15 条默认全部一行高，滚动区一眼全览。 |
+| 2026-10-30 | — | **设备工具箱新增「重启 SystemUI」按钮**（设备分组，与「重启 Launcher 进程」同模式）：`ps -A` 找 `com.android.systemui` 的 PID → `kill`，persistent 进程秒级自启，用于加载新 push 的 SystemUI apk/资源。用 kill 而非 `am force-stop`：车机实测 force-stop 对 persistent SystemUI 完全无效（pid 纹丝不动）——这也是 Android Studio「Couldn't terminate previous instance of app」报错的根因；真机验证 kill 后 2s 内新实例起来。 |
+| 2026-10-30 | — | **AAOS 调试页布局重排：命令输出控制台固定占 2/3 高**：原布局中验收卡（340dp 限高）+ 按钮组 + 命令输入等固定内容把空间吃光，输出面板只剩底部一条缝。现改为三段式：目标设备行固定 → 验收卡与按钮组收进滚动区（`weight(1f)`，去掉内层限高滚动避免同向嵌套滚动）→ 命令输入与运行行固定在滚动区和输出台之间（滚动看卡/翻输出时输入不消失）→ 输出控制台 `weight(2f)`；顺带修输出 `LazyColumn` 用 `fillMaxSize` 在标题行下方会溢出的问题（改 `weight(1f)`）。 |
+| 2026-10-30 | — | **设备工具箱新增「深浅色」分区**：深色模式 / 浅色模式两个按钮，经 `adb shell cmd uimode night yes/no` 切换目标设备的深浅色（Android 10+，立即生效；命令本身回显 "Night mode: yes/no"，直接进进度行）。真机验证（无线手机）：yes/no 切换与回读一致。Tool 枚举新分组按既有数据驱动 UI 自动渲染，`executeTool` 补对应分支（`DeviceTools.uiModeArgs`，带 `-s serial`）。 |
 | 2026-10-23 | — | **题库答案图片扩大显示**：图片块使用卡片可用宽度，正文继续受阅读宽度约束；高分辨率图源在放大后保持清晰。 |
 | 2026-10-23 | v0.14 | **题库目录名称搜索**：左侧题库树增加按目录名和 Markdown 文件名即时筛选；命中时保留祖先并自动展开，命中目录保留其子树，无匹配时显示空状态；桌面侧栏和移动端目录弹窗使用同一交互。 |
 | 2026-10-21 | — | **设备工具箱增加本机 ADB/USB 修复**：支持先重启 ADB 并检查在线设备；仍未恢复时，确认后选择并重绑定 xHCI 控制器，再启动 ADB 验证。通过 `pkexec` 请求系统授权，明确提示该控制器的 USB 外设会暂时断开；控制器动态发现，多控制器时由用户选择。详见 §6.4.76。 |

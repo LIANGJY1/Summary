@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+  <title id="title">socketpair 创建一对已连接的套接字</title>
+  <desc id="desc">一个用户进程持有 fd[0] 和 fd[1]，它们分别引用套接字端点 A 和 B；两个端点已建立双向通信关系。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#3978a8"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#078577"/>
+    </marker>
+    <style>
+      text { font-family: sans-serif; fill: #24364b; }
+      .title { font-size: 28px; font-weight: 700; }
+      .label { font-size: 24px; font-weight: 600; }
+      .small { font-size: 17px; fill: #53677c; }
+      .process { fill: #e9f2fb; stroke: #3978a8; stroke-width: 3; }
+      .socket { fill: #eaf6f2; stroke: #078577; stroke-width: 3; }
+      .fd { fill: #fff; stroke: #3978a8; stroke-width: 2; }
+      .ref { fill: none; stroke: #3978a8; stroke-width: 3; marker-end: url(#arrow); }
+      .link { fill: none; stroke: #078577; stroke-width: 3; marker-end: url(#arrow-green); }
+    </style>
+  </defs>
+  <rect width="900" height="520" fill="#fff"/>
+  <text x="450" y="42" text-anchor="middle" class="title">socketpair() 创建一对已连接的套接字</text>
+
+  <rect x="115" y="68" width="670" height="142" rx="8" class="process"/>
+  <text x="450" y="105" text-anchor="middle" class="label">用户进程</text>
+  <rect x="215" y="130" width="150" height="52" rx="6" class="fd"/>
+  <rect x="535" y="130" width="150" height="52" rx="6" class="fd"/>
+  <text x="290" y="165" text-anchor="middle" class="label">fd[0]</text>
+  <text x="610" y="165" text-anchor="middle" class="label">fd[1]</text>
+
+  <path d="M290 182V310" class="ref"/>
+  <path d="M610 182V310" class="ref"/>
+  <text x="315" y="260" class="small">引用</text>
+  <text x="635" y="260" class="small">引用</text>
+
+  <rect x="170" y="320" width="240" height="100" rx="8" class="socket"/>
+  <rect x="490" y="320" width="240" height="100" rx="8" class="socket"/>
+  <text x="290" y="378" text-anchor="middle" class="label">套接字端点 A</text>
+  <text x="610" y="378" text-anchor="middle" class="label">套接字端点 B</text>
+  <path d="M410 440H490" class="link"/>
+  <path d="M490 460H410" class="link"/>
+  <text x="450" y="500" text-anchor="middle" class="small">端点已连接，可双向收发</text>
+</svg>

@@ -79,8 +79,10 @@ data class AppSettings(
     val feishuMode: String = "auto",
     val feishuIp: String = "",
     val feishuPort: Int = 5555,
-    /** 设备工具箱（工具页）：推送 APK 的本机路径、设备截图保存目录、模拟器 AVD 名。 */
+    /** 设备工具箱（工具页）：推送 APK 的本机路径、SystemUI APK 本机路径、设备截图保存目录、模拟器 AVD 名。 */
     val pushApkPath: String = "",
+    val systemuiApkPath: String = "",
+    val settingApkPath: String = "",
     val screenshotSaveDir: String = "",
     val emulatorAvd: String = "3DAA",
 ) {
@@ -110,7 +112,7 @@ class SettingsStore(private val file: File) {
     /** 只留在本机层的键；其余键全部进仓库同步层 */
     private val localKeys = setOf(
         "libraryPath", "selectedSourcePath", "recordingSaveDir",
-        "pushApkPath", "screenshotSaveDir", "feishuIp", "emulatorAvd",
+        "pushApkPath", "systemuiApkPath", "settingApkPath", "screenshotSaveDir", "feishuIp", "emulatorAvd",
     )
 
     fun load(): AppSettings = load(null)
@@ -156,6 +158,8 @@ class SettingsStore(private val file: File) {
             feishuIp = p.getProperty("feishuIp") ?: "",
             feishuPort = p.getProperty("feishuPort")?.toIntOrNull()?.coerceIn(1024, 65535) ?: 5555,
             pushApkPath = p.getProperty("pushApkPath") ?: "",
+            systemuiApkPath = p.getProperty("systemuiApkPath") ?: "",
+            settingApkPath = p.getProperty("settingApkPath") ?: "",
             screenshotSaveDir = p.getProperty("screenshotSaveDir") ?: "",
             emulatorAvd = p.getProperty("emulatorAvd") ?: "3DAA",
         )
@@ -213,6 +217,8 @@ class SettingsStore(private val file: File) {
         if (s.feishuIp.isNotEmpty()) p.setProperty("feishuIp", s.feishuIp)
         p.setProperty("feishuPort", s.feishuPort.toString())
         if (s.pushApkPath.isNotEmpty()) p.setProperty("pushApkPath", s.pushApkPath)
+        if (s.systemuiApkPath.isNotEmpty()) p.setProperty("systemuiApkPath", s.systemuiApkPath)
+        if (s.settingApkPath.isNotEmpty()) p.setProperty("settingApkPath", s.settingApkPath)
         if (s.screenshotSaveDir.isNotEmpty()) p.setProperty("screenshotSaveDir", s.screenshotSaveDir)
         p.setProperty("emulatorAvd", s.emulatorAvd)
         return p
