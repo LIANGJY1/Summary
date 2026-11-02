@@ -4,10 +4,14 @@
 
 **Q1: [done] POSIX 接口是什么？C++ 程序何时使用？**
 
-POSIX 函数是 POSIX（Portable Operating System Interface，可移植操作系统接口）定义的操作系统接口，不属于 ISO C++ 标准库。目标平台提供该接口时，C++ 程序可以调用。
+POSIX（Portable Operating System Interface，可移植操作系统接口）是一套**操作系统接口标准**，约定程序如何访问文件、进程、线程等系统能力。它为应用开发者提供共同的调用方式，也为系统实现者规定接口契约；它不是一份源码库，也不属于 C++ 标准库。
 
-1. **需要操作系统接口：**访问文件描述符、进程或信号等 POSIX 能力时，调用目标平台提供的接口。
-2. **需要跨平台：**优先使用 C++ 标准库，或将 POSIX 调用封装在平台适配层。`<unistd.h>` 并非所有 C++ 环境都提供。
+1. **解决的问题：**例如 Android 和 Linux 都提供 `mkdir(path, mode)` 时，开发者可以复用创建目录的 C++ 源码，而不必为每个系统改写接口。不同系统或架构通常仍需分别编译；具体接口是否可用及其行为仍需确认。
+2. **由谁实现：**各系统自行实现 POSIX 接口。例如 Android 的开源 C 库 Bionic 提供 `mkdir()`，再请求 Linux 内核创建目录。POSIX 是程序使用系统能力的接口约定，具体实现可以开源或闭源。
+3. **何时使用：**Android NDK 的 C/C++ 代码需要操作文件、进程或套接字等系统资源时，可以选用平台支持的 POSIX 接口。Kotlin 或 Java 应用通常可使用 Android SDK 或 Java 提供的高层接口。
+4. **如何确认：**并非所有系统或版本都支持全部接口。查目标平台文档、头文件和最低 API 级别，并编译链接最小调用。例如 `mkdir()` 声明在 `<sys/stat.h>`。运行时检查返回值和 `errno`，因为接口可用仍可能因权限等原因失败。
+
+依据：POSIX `<unistd.h>`、`sysconf()`，Android NDK Using newer APIs。
 
 
 
@@ -15,7 +19,33 @@ POSIX 函数是 POSIX（Portable Operating System Interface，可移植操作系
 
 
 
-**Q2: [done] C++ 调用 POSIX 函数需要包含什么头文件、链接什么库？**
+
+
+**Q2: [learning] mode_t 是什么，如何表示套接字文件权限？**
+
+`mode_t` 是 POSIX 定义的整数类型，由 `<sys/types.h>` 提供，用于表示文件模式，包括权限位。在下面的结构体中，`perm` 可以保存希望使用的权限值。
+
+```cpp
+#include <string>
+#include <sys/types.h>
+
+struct SocketDescriptor {
+    std::string name;
+    std::string type;
+    mode_t perm;
+};
+
+SocketDescriptor sock{"demo", "stream", 0660};
+```
+
+1. **权限值：**`0660` 是八进制数，依次表示所有者和所属组可读写，其他用户无权限。前面的 `0` 表示八进制。
+2. **字段作用：**`sock.perm` 只保存数值。程序需要把它传给相应接口，例如在路径名套接字创建后调用 `chmod(path, sock.perm)`，才会请求修改文件权限，还须检查调用结果。
+3. **适用范围：**Linux 的路径名 UNIX 域套接字有文件系统权限，其创建时的初始权限受 `umask` 影响。抽象地址不对应文件路径，文件权限不控制其访问。路径名套接字的权限行为也可能因系统不同而不同。
+
+依据：POSIX `<sys/types.h>`，Linux `unix(7)` 与 `chmod(2)`。
+
+
+**Q3: [done] C++ 调用 POSIX 函数需要包含什么头文件、链接什么库？**
 
 头文件提供函数声明，链接器解析函数实现。具体头文件和库依函数及目标平台而定，没有供所有 POSIX 函数统一使用的 `libposix`。
 
@@ -23,7 +53,9 @@ POSIX 函数是 POSIX（Portable Operating System Interface，可移植操作系
 2. **链接库：**Linux 上 `pause()` 由系统 C 库提供，常规 `g++` 链接流程会自动处理，无需额外指定 `-lposix` 或 `-lc`。
 3. **平台差异：**其他函数可能需要额外库、特性宏或链接选项，应查目标平台文档。
 
-**Q3: [done] wait() 解析？**
+
+
+**Q4: [done] wait() 解析？**
 
 wait 只等待本进程 fork 创建的子进程，父子关系记录在内核 task_struct 中。wait 阻塞于可中断睡眠，有两个返回出口：子进程终止时返回其 PID 并回收；被捕获信号打断时返回 -1，errno 为 EINTR（Interrupted system call，系统调用被信号中断）。
 
@@ -49,7 +81,9 @@ wait 只等待本进程 fork 创建的子进程，父子关系记录在内核 ta
 
 
 
-**Q4: [done] pause() 解析？**
+
+
+**Q5: [done] pause() 解析？**
 
 pause 无条件挂起，唯一返回方式是被信号打断：永远返回 -1 加 EINTR。具体行为取决于到达信号的处置：
 
@@ -66,7 +100,9 @@ PID 1 特权：默认处置为终止的信号发给 init 会被内核丢弃，�
 
 
 
-**Q5: [done] POSIX mkdir() 如何创建目录并处理权限与已存在路径？**
+
+
+**Q6: [done] POSIX mkdir() 如何创建目录并处理权限与已存在路径？**
 
 `mkdir()` 声明在 `<sys/stat.h>`。成功返回 `0`。失败返回 `-1`，并设置 `errno`。路径以 `/` 开头时为绝对路径，否则相对进程当前工作目录。
 
@@ -101,7 +137,9 @@ int prepare() {
 
 
 
-**Q6: [learning] exec 家族如何选择参数、环境和路径策略？**
+
+
+**Q7: [learning] exec 家族如何选择参数、环境和路径策略？**
 
 `exec` 家族函数用新程序映像替换当前进程映像，保留进程号。成功时不返回，失败时返回 `-1` 并设置 `errno`。POSIX 定义 `execl()`、`execle()`、`execlp()`、`execv()`、`execve()` 和 `execvp()` 六个接口。`execvpe()` 是 glibc 扩展，不属于 POSIX。
 
@@ -143,7 +181,9 @@ execv("/bin/echo", argv);  // 成功则后续代码不再执行
 
 
 
-**Q7: [learning] fork 是什么？C++ 程序如何使用它创建子进程？**
+
+
+**Q8: [learning] fork 是什么？C++ 程序如何使用它创建子进程？**
 
 fork 是 POSIX 提供的进程创建接口，声明在 `<unistd.h>`，不属于 ISO C++ 标准库。它把调用进程复制出一个新的子进程，调用一次返回两次：父子进程都从返回处继续执行同一段后继代码，再按返回值确定身份。子进程得到 0，父进程得到子进程的 PID，失败时返回 -1 并设置 errno，此时不会产生子进程。
 
@@ -207,7 +247,9 @@ parent: child pid = 12345
 
 
 
-**Q8: [learning] 何时应使用 execv()，何时应在 fork() 后调用它？**
+
+
+**Q9: [learning] 何时应使用 execv()，何时应在 fork() 后调用它？**
 
 是否需要在子进程中调用 `execv()`，取决于调用后父进程是否还需继续执行原程序。若当前进程只需交接给新程序，可直接替换。若父进程需等待或回收子进程，则先 `fork()`。
 
@@ -234,7 +276,9 @@ PLOG(FATAL) << "execv(\"" << path << "\") failed";
 
 
 
-**Q9: [learning] 如何用 fork 和 execv 创建服务进程？**
+
+
+**Q10: [learning] 如何用 fork 和 execv 创建服务进程？**
 
 用 fork 复制出子进程，让子进程用 execv 把自身替换成服务程序，父进程打印子进程号后继续处理下一个服务，这是 Unix 创建服务进程的固定两步。分两步的原因是 execv 替换整个当前进程：不先 fork 就连父进程一起换掉，无法继续启动其他服务。典型写法如下：
 
@@ -277,7 +321,9 @@ exec_argv.data() 把 vector 的数据交给 execv。execv 的第二个参数要�
 
 
 
-**Q10: [learning] 什么时候使用 exit()，什么时候使用 _exit()？**
+
+
+**Q11: [learning] 什么时候使用 exit()，什么时候使用 _exit()？**
 
 exit() 和 _exit() 都终止进程，区别是死前是否做清理：exit() 会刷新缓冲区并执行清理函数，_exit() 直接进内核终止。正常收尾用 exit()，保证日志落盘、清理逻辑得到执行。fork 之后、exec 之前的子进程必须用 _exit()，因为它的任务已经失败，不能信任任何继承来的状态。execv 与 exit 不是配套关系：execv 成功时进程映像已被整个替换，执行流根本走不到后面的 exit，只有失败才需要它收尾。
 
@@ -302,7 +348,9 @@ execv 失败是这个规则的典型场景。execv 成功时不返回，它后�
 
 
 
-**Q11: [learning] pause() 和 wait() 有什么区别，分别什么时候使用？**
+
+
+**Q12: [learning] pause() 和 wait() 有什么区别，分别什么时候使用？**
 
 pause() 等信号，wait() 等子进程终止：只是挂起等信号用 pause()，fork 过子进程、要感知退出用 wait()。
 
@@ -366,7 +414,9 @@ services 是解析 init.rc 得到的服务列表，每项带 oneshot 标记；St
 
 
 
-**Q12: [learning] 什么是僵尸进程，如何消除？**
+
+
+**Q13: [learning] 什么是僵尸进程，如何消除？**
 
 僵尸进程是已终止但退出状态尚未被父进程读取的子进程：代码和内存都已释放，进程表里只剩一条保存退出状态的记录。实测不 wait 时该条目在 /proc 下的状态为 Z，wait 一次后消失。它只能靠父进程回收：父进程调用 wait 读取该记录，或父进程先退出、僵尸被 init 收养后由 init 回收。
 
@@ -391,7 +441,9 @@ services 是解析 init.rc 得到的服务列表，每项带 oneshot 标记；St
 
 
 
-**Q13: [learning] pause() 配合信号处理函数能替代 wait() 回收子进程吗？**
+
+
+**Q14: [learning] pause() 配合信号处理函数能替代 wait() 回收子进程吗？**
 
 能实现，但最终仍需调用 waitpid。pause 有三个先天限制：
 
@@ -402,6 +454,4 @@ services 是解析 init.rc 得到的服务列表，每项带 oneshot 标记；St
 结论：wait 一步完成阻塞、感知子进程终止与回收；pause 加处理函数加主动查询是手工组装的替代方案，每个环节都需自行实现。
 
 只有要等待的事件没有专用系统调用时才使用信号方案，例如 Ctrl+C、定时器。子进程终止有专用接口，应直接使用 wait 家族。成熟守护进程的常见形态是信号处理函数仅设置标志，主循环用 waitpid(-1, &status, WNOHANG) 非阻塞轮询回收，WNOHANG 使其在无子进程退出时立即返回：信号负责触发，回收由 waitpid 完成。
-
-
 
