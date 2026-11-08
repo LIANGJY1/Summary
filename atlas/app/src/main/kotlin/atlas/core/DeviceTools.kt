@@ -1,6 +1,7 @@
 package atlas.core
 
 import java.io.File
+import java.time.LocalDate
 
 /**
  * 设备工具箱的纯逻辑（UI 无关，可单测）：launcher_tool 一次性命令工具的原生移植。
@@ -21,6 +22,7 @@ object DeviceTools {
     /** 一次性工具清单（顺序即 UI 展示顺序；logcat 流式工具不在此列） */
     enum class Tool(val id: String, val label: String, val group: String, val description: String) {
         PUSH_LAUNCHER("push_launcher", "推送 Launcher APK", "设备", "root + remount + push 到系统分区后重启设备"),
+        PULL_LAUNCHER("pull_launcher", "拉取 Launcher APK", "设备", "将设备 Launcher APK 保存到本机文档目录"),
         PUSH_SYSTEMUI("push_systemui", "推送 SystemUI APK", "设备", "remount 覆盖写 NsrSystemUI.apk 后 sync 刷盘并整机重启"),
         PUSH_SETTING("push_setting", "推送 Setting APK", "设备", "remount 覆盖写 NsrSetting.apk 后 sync 刷盘并整机重启"),
         REBOOT_LAUNCHER("reboot_launcher", "重启 Launcher 进程", "设备", "kill 设备上的 Launcher 进程让其自拉起"),
@@ -72,6 +74,18 @@ object DeviceTools {
             withSerial(adbPath, serial, "push", apkPath, destDir),
             withSerial(adbPath, serial, "reboot"),
         )
+
+    fun pullLauncherArgs(adbPath: String, serial: String, target: File): List<String> =
+        withSerial(adbPath, serial, "pull", "$DEFAULT_PUSH_DEST/NsrLauncher.apk", target.absolutePath)
+
+    fun nextLauncherApkFile(documents: File = File(System.getProperty("user.home"), "Documents"), date: LocalDate = LocalDate.now()): File {
+        val dir = File(documents, "yadea_apk/$date")
+        check(dir.isDirectory || dir.mkdirs()) { "无法创建目录：${dir.absolutePath}" }
+        var target = File(dir, "NsrLauncher.apk")
+        var index = 1
+        while (target.exists()) target = File(dir, "NsrLauncher_%03d.apk".format(index++))
+        return target
+    }
 
     /** 推送 SystemUI 序列：同 Launcher 前四步 + sync 刷盘；sync 确认 overlay 落盘后再 reboot 整机加载新 apk */
     fun pushSystemuiCommands(

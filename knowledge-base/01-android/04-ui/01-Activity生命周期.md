@@ -138,3 +138,25 @@ Activity 的默认实现把窗口内 View 的状态沿“Activity → Window →
 1. **保存链**：`onSaveInstanceState()` 默认实现调用 `mWindow.saveHierarchyState()` 并把结果存入 Bundle（Android 13 `Activity.java` 本地核对）。`PhoneWindow.saveHierarchyState()` 让内容容器执行 `saveHierarchyState()`，另外记录当前焦点 View 的 id 用于恢复焦点。
 2. **逐级分发**：`ViewGroup.dispatchSaveInstanceState()` 先保存自身状态，再递归通知每个子 View。`View.dispatchSaveInstanceState()` 只在设置了有效 id 且未通过 `android:saveEnabled` 关闭保存时回调 `onSaveInstanceState()`，以 id 为键写入 SparseArray，子类覆写时不调用父类实现会抛 `IllegalStateException`。
 3. **恢复链**：`onRestoreInstanceState()` 的默认实现调用 `mWindow.restoreHierarchyState()`，按同样顺序逐级分发，各 View 用自身 id 从 SparseArray 取回状态。这也决定了恢复必须发生在 View 树构建完成之后，也就是 `onStart()` 之后。
+
+**Q15: [learning] Android 的 StartingWindow 是什么，什么时候显示与移除？**
+
+StartingWindow 是系统在 Activity 启动过程中显示的临时窗口，用于在应用真实窗口准备期间提供过渡画面。它不是应用 Activity 主窗口的首帧。
+
+1. **可能的内容**：系统可根据启动类型和条件使用启动画面或任务快照。冷启动、任务切换和复用场景的选择可能不同。
+2. **出现条件**：是否创建取决于启动路径、主题和系统策略。主题中的 windowDisablePreview 也不是所有系统来源启动路径都生效，因此不能认为每次启动都有，或配置后一定没有。
+3. **移除与首帧**：真实窗口绘制就绪后，系统按启动窗口的移除和转场逻辑切换。StartingWindow 已显示或移除不等同于应用主窗口已真正显示到屏幕。
+4. **排查应用**：黑闪或白屏时应对齐 StartingWindow、应用主窗口与下层图层的出现和隐藏时刻，先确认异常帧显示的是哪个窗口。
+
+依据：Android 13 的 StartingSurfaceController、ActivityRecord.validateStartingWindowTheme 和 AppTransitionController.transitionGoodToGo。
+
+**Q16: [learning] StartingWindow 是什么？**
+
+StartingWindow 是系统在 Activity 启动过程中可能显示的临时窗口，用于在应用真实窗口准备期间提供过渡画面。它不是应用主窗口绘制的首帧。
+
+1. **内容**：系统根据启动类型和条件，可能使用启动画面或任务快照作为临时内容。
+2. **时机**：它可以在目标应用主窗口尚未完成绘制时显示。真实窗口准备好后，系统按相应移除和转场逻辑处理它。
+3. **边界**：是否创建取决于启动类型、主题和系统策略，既不能认为每次启动都有，也不能仅凭某个主题属性推断一定没有。
+4. **排查**：启动时出现黑闪或白屏，应对齐 StartingWindow、真实窗口与下层图层的出现及隐藏时间，确认异常帧实际显示的内容。
+
+依据：Android 13 的 StartingSurfaceController、ActivityRecord.validateStartingWindowTheme 和 AppTransitionController.transitionGoodToGo。

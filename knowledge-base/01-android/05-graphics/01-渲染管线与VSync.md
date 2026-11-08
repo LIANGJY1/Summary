@@ -2,7 +2,7 @@
 
 > 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）源码语境串联「VSync 预测调度 → Choreographer → ViewRootImpl/HWUI → RenderThread/GPU → SurfaceFlinger → 显示」主链路，并覆盖帧率与显示模式决策、硬件层、过度绘制、文本渲染四条支线的机制与边界。BLAST 提交与 A13 全链路时序的既有沉淀见 docs/others/framework/Android13渲染架构全链路硬核解析.md，VSync 硬件来源与软件时钟的既有沉淀见 docs/others/framework/Android显示系统/Vsync流程.md，本文只补两文未覆盖的增量视角。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] 屏幕显示一帧的全流程？**
+**Q1: [done] 屏幕显示一帧的全流程？**
 
 以 Android 13 普通硬件加速窗口为例，一帧经历应用绘制、buffer 提交、SurfaceFlinger 合成和显示系统呈现。各阶段相互衔接，但不在同一线程或同一时刻完成。
 
@@ -13,23 +13,35 @@
 
 syncAndDrawFrame 返回只表示 UI 线程与 RenderThread 的相应同步阶段结束，GPU 可能仍在执行。queueBuffer 返回、SurfaceFlinger 锁存和屏幕呈现也是不同完成时刻。静止画面、StartingWindow、SurfaceView 和设备合成策略会改变具体路径。依据：Android 13 的 ViewRootImpl、ThreadedRenderer、BLASTBufferQueue 和 SurfaceFlinger。
 
+**Q2: [done] Android 硬件渲染与软件渲染有何区别，如何选择？**
 
+以 Android 13 普通 View 窗口为例，**硬件渲染由 CPU 上的线程组织绘制，再交 GPU 参与生成像素；软件渲染由 CPU 直接计算像素**。两者都会生成窗口 buffer，交给 SurfaceFlinger 合成。
 
+CPU 和 GPU 是硬件，RenderThread 是运行在 CPU 上的软件线程。它们的分工源于处理器对**单个任务的响应速度**和**大量任务的处理吞吐量**的不同取舍：
 
+1. **CPU（Central Processing Unit，中央处理器）**：典型 CPU 核心使用缓存减少内存等待，使用分支预测和指令调度减少执行中断，适合处理步骤之间有依赖、条件经常变化的任务。例如设置页响应一次点击，需要判断点击位置、查找对应 View、检查开关状态，再决定执行哪个操作。后一步依赖前一步的结果，可同时执行的相同工作很少；交给 GPU 还需提交任务和同步结果，难以发挥其大量并行单元的优势。
+2. **GPU（Graphics Processing Unit，图形处理器）**：它安排大量执行单元并行处理数据，在一批任务等待数据时执行其他任务，以提高整体吞吐量。例如给设置页背景叠加半透明遮罩时，大量像素都要根据背景色和遮罩色计算结果，像素间通常可以独立处理，适合并行执行。CPU 也能完成，但这类大量重复计算通常更难充分利用 GPU 那样规模的并行资源。
+3. **RenderThread**：Android 硬件加速 UI 框架 HWUI（Hardware UI）中的线程。它在 CPU 上同步渲染状态、组织工作并通过图形后端向 GPU 提交任务，也可驱动部分渲染线程动画。它完成提交或同步不代表 GPU 已经完成绘制。
 
+这是架构侧重点，不是能力禁区：CPU 也能并行计算，GPU 也能处理分支。GPU 的任务过小、依赖较多或同组任务走不同分支时，并行优势可能下降；实际性能还受设备、数据传输和同步成本影响。
 
-**Q2: [learning] 硬件加速如何改变 Android 窗口渲染流程，与软件渲染有何区别？**
+以绘制设置页上的蓝色按钮为例，窗口绘制流程如下：
 
-硬件加速改变的是普通 View 窗口生成图像的方式：硬件路径由 HWUI 的渲染线程和 GPU 参与绘制，软件路径由 CPU 绘制。两者最终都要将窗口 buffer 提交给 SurfaceFlinger 合成。
+1. **共同准备**：主线程完成按钮的测量和布局。buffer 是保存窗口图像像素的内存，Surface 是应用提交窗口图像的接口。
+2. **硬件渲染**：主线程把画按钮等操作记录到 RenderNode 的绘制指令中。RenderThread 同步指令和状态，渲染后端获取窗口 buffer，GPU 等根据指令生成像素。未失效的指令可复用，但复用指令不代表无需重新生成画面。
+3. **软件渲染**：ViewRootImpl.drawSoftware 通过 Surface.lockCanvas 获取软件 Canvas，主线程调用 View 的绘制代码，由 CPU 将按钮图形直接计算成 buffer 中的像素，再通过 unlockCanvasAndPost 提交。
+4. **系统合成**：SurfaceFlinger 将窗口 buffer 与其他可见图层组合，交由 GPU 或硬件合成器处理后显示。应用使用硬件绘制与系统选择 GPU 合成是两个独立决定。
 
-1. **共同准备**：Choreographer 调度窗口遍历，ViewRootImpl 按需与窗口管理服务确定窗口范围，然后在主线程执行 View 的测量和布局。开启硬件加速不会把这些工作自动移到后台。
-2. **硬件渲染**：主线程将需要更新的 View 绘制操作记录为 RenderNode 中的绘制指令，ThreadedRenderer 将渲染状态同步给 RenderThread；渲染后端使用窗口 Surface 获取 buffer，并由 GPU 参与生成图像。未失效的绘制指令可复用，部分属性动画也可直接更新渲染属性，无需重建整个 View 的绘制内容。
-3. **软件渲染**：ViewRootImpl.drawSoftware 通过 Surface.lockCanvas 获取软件 Canvas，在执行窗口遍历的线程中调用根 View 的 draw，由 CPU 绘制像素，再通过 unlockCanvasAndPost 提交 buffer。
-4. **共同合成**：窗口 buffer 经队列和同步机制交给 SurfaceFlinger，与其他可见图层一起由 GPU 或硬件合成器处理，再交给显示设备。应用是否使用 GPU 绘制，与系统选择哪种合成方式是两个独立的决定。
-5. **性能边界**：硬件加速不保证一定更快，主线程阻塞、纹理上传、离屏层和 GPU 负载都可能造成卡顿；软件路径则可能受 CPU 绘制、内存访问和 buffer 等待影响。应在相同设备和场景下测量。
+按场景选择：
 
-以上以 Android 13 的普通 View 窗口为例；SurfaceView 等独立 Surface 的内容生产路径可能不同。依据：ViewRootImpl.draw、ViewRootImpl.drawSoftware、ThreadedRenderer.draw 和 DrawFrameTask。
+1. **普通页面、列表与动画**：优先使用硬件加速。指令复用和 GPU 并行处理通常适合界面绘制，但主线程、GPU 负载、纹理上传和离屏绘制仍可能造成卡顿。
+2. **单个 View 的硬件绘制不兼容**：先核对版本与设备并修正绘制方式。仍无法解决时，可对该 View 使用 `setLayerType(View.LAYER_TYPE_SOFTWARE, null)`，先由 CPU 绘制到位图，再合入硬件窗口。位图重绘和上传有成本，这里的 View 层也不是 SurfaceFlinger 图层。
+3. **整个 Activity 窗口不兼容**：局部处理无效时，才考虑在 Manifest 的该 Activity 上设置 `android:hardwareAccelerated="false"`。在本地 Android 13 中，application 未声明该属性时，targetSdkVersion 不低于 14 默认启用，Activity 可覆盖应用级设置。窗口标志可在设置内容视图之前请求启用，但不能用来关闭 Manifest 已启用的加速。
+4. **位图生成或 CPU 读取图像**：可在 Bitmap 对应的软件 Canvas 上绘制。即使窗口启用硬件加速，该次绘制仍可能是软件路径，应以 Canvas.isHardwareAccelerated() 判断当前画布。
+5. **内容稳定的属性动画**：实测后可临时使用 `LAYER_TYPE_HARDWARE` 缓存 View 内容。内容频繁变化时可能反复重建缓存，增加内存和渲染成本，动画结束后可恢复 `LAYER_TYPE_NONE`。
+6. **视频、相机或游戏的独立 Surface**：绘制方式由其生产者决定，普通 View 窗口的硬件加速设置不能替代对解码器、CPU 或图形 API 路径的判断。
 
+依据：Android 13 的 ViewRootImpl.drawSoftware、ThreadedRenderer.draw、View.setLayerType、PackageParser 与 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED；处理器架构参考 NVIDIA《GPU Performance Background》和 Arm《Cortex-A76》技术资料。
 
 **Q3: [learning] 同一界面里普通 View、TextureView 视频、SurfaceView 地图各自的内容画到哪个 Surface 上，选型边界是什么？**
 

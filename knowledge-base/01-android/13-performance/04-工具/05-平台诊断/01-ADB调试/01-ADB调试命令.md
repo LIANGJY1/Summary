@@ -68,11 +68,14 @@ AAOS13 的 HWUI 源码核对：`JankTracker` 使用固定 120 项的环形缓冲
 
 **Q6: [learning] 排查图层缺失或晚呈现时，Android 13 上 dumpsys SurfaceFlinger 的 --list 与 --latency 怎么用？--frontend 为什么是无效参数？**
 
-Android 13 的 dumper 注册了 `--list`（输出 Layer 精确名称）、`--latency` 与 `--latency-clear`（单 Layer 的历史帧统计）、`--displays`、`--frametimeline`、`--static-screen` 等入口（AAOS13 `SurfaceFlinger.cpp` 核对）。
+Android 13 的 `--list` 用于查找层名称，`--latency` 用于查看指定层的历史帧时间。层名存在不等于该层当前可见或参与了合成。
 
-`--frontend`、`--hwclayers`、`--scheduler` 是 Android 15 之后 FrontEnd 架构引入的视角（材料按 Android 17 核对），在 Android 13 设备上不可用——这是本文最容易被旧资料误导的版本差异。`--latency` 的用法：先用 `--list` 复制精确 layer name，输出首行是采集时刻的刷新周期信息，其后每行是一帧的三个纳秒级时间戳——期望呈现时间、实际呈现时间、帧就绪时间（三元组语义按材料口径，各版本字段含义略有差异）。
+1. **查找层**：`dumpsys SurfaceFlinger --list` 遍历当前层树并输出名称。隐藏但尚未销毁的层也可能出现在列表中，不能单靠名称判断合成状态。
+2. **检查状态**：将目标层的隐藏状态、可见区域与窗口状态对照。要判断动画期间的变化，应采集连续图层 trace，不能用单次 dump 代替全过程。
+3. **分析时间**：用精确层名查询 `--latency`。首行提供刷新周期，后续各行包含帧时间戳。需按当前版本核对列语义并过滤 0、负值和未完成哨兵。晚呈现只能说明时间偏差，不能单独定位到生产、fence 或合成阶段。
+4. **核对版本**：本树 Android 13 的 dumper 不支持 `--frontend`。诊断参数应以设备版本和实际命令输出为准，不能直接套用较新版本的命令。
 
-`actual − desired` 只能标记晚呈现，不能独立归因，晚呈现可能来自生产者、acquire fence、调度、client composition、HWC 或 present fence。解析要过滤 0、负值和未完成哨兵，三列都有效才计算差值。dump 中 CLIENT（GPU/RenderEngine 合成）与 DEVICE（HWC 硬件路径）的合成方式只代表该次采集附近的状态，跨帧结论应使用 Perfetto、Winscope 或稳定复现实验。
+依据：Android 13 的 SurfaceFlinger.listLayersLocked 和 dump 参数处理。
 
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q34 -->
@@ -108,3 +111,35 @@ Android 13 的 dumper 注册了 `--list`（输出 Layer 精确名称）、`--lat
 温度用状态门控而不是统一摄氏度：不同设备的 thermal zone、传感器位置和厂商策略不同，`/sys/class/thermal/thermal_zone*/temp` 在量产设备上可能不可读。做法是为参考机建立冷机基线（记录室温与散热配置、从 `dumpsys thermalservice` 与 Perfetto 记录热状态、试运行确定降频前的状态范围），超出门控就暂停冷却并把样本标记为环境无效，保存每轮起止热状态。
 
 `cmd thermalservice override-status` 只覆盖 `ThermalManagerService` 向 Framework 暴露的状态等级，不会关闭 Thermal HAL、内核 cpufreq、GPU 降频或厂商 thermal engine——它适合测试应用的 thermal callback，不能用来伪造“未降频”的测量环境。短路径（启动、短滑动）关心冷机状态。游戏、直播等持续负载要测热稳定态，预热数据单独保存、不混入稳态统计，稳态区间由预先定义的滑动窗口条件判定而不是看曲线后现选。
+
+**Q10: [learning] adb shell input 命令族有哪些成员？各适合什么验证？**
+
+Android 13 的 `InputShellCommand` 提供这些常用子命令：
+
+1. `tap x y`：在坐标处注入一次点击。
+2. `swipe x1 y1 x2 y2 [duration(ms)]`：从起点滑到终点，可选时长单位为毫秒。缺省为 300 ms。
+3. `draganddrop x1 y1 x2 y2 [duration(ms)]`：先长按起点，再拖到终点。可选参数控制移动阶段时长。
+4. `motionevent DOWN|MOVE|UP|CANCEL x y`：注入单个运动事件，脚本可用多次调用拼成事件序列。
+5. `keyevent [--longpress] <keycode|keyname>`：注入按键。`--longpress` 让命令构造长按事件。
+6. `text "string"`：把可映射字符转换成虚拟键盘的 `KeyEvent` 序列注入，不调用 IME 的 `InputConnection`。字符是否能映射取决于虚拟键盘字符映射表。
+7. `press` 和 `roll`：分别注入轨迹球按键和轨迹球相对位移。
+8. `keycombination [-t duration(ms)] <keycode1> <keycode2> ...`：按给定顺序注入组合键。可选 `-t` 指定组合键持续时间，省略时采用命令实现的默认时长。
+
+这些命令以 shell 身份通过系统输入注入接口发送事件。权限、窗口策略和设备构建类型仍会限制可注入范围。Android 13 中，`swipe` 默认时长是 300 ms，命令在线性插值的坐标点间注入 `MOVE`，不复现真实手指的加减速与采样抖动。验证 fling 速度时应显式提供时长和足够密集的坐标点。`draganddrop` 在开始移动前等待长按超时。需要控制每个坐标点时使用 `motionevent` 序列，快速验证路径时使用 `swipe`。
+
+按验证目标选择命令：点击与一般滑动用 `tap`/`swipe`。按键分发和长按用 `keyevent`。复现指定的运动事件轨迹用 `motionevent`。`text` 验证的是键盘字符映射与按键事件处理，不等价于测试 IME 的拼音组合、文本提交或删除行为。这类场景应通过真实 IME 或直接测试编辑器的 `InputConnection`。输入注入绕过真实硬件，注入成功而真机失败说明还需检查设备上报、驱动与 InputReader 路径。
+
+**Q11: [learning] 如何确认 system_ext 的 OverlayFS 后端与 verity 状态，并恢复推送的 APK？**
+
+先只读采集目标进程看到的挂载、upper 所在文件系统和设备映射，再判断校验状态；确认设备允许且已备份调试修改后，才执行恢复。`dm-0`、`orange` 或 `/mnt/scratch` 单独出现都不能证明完整的后端链路或 verity 状态。
+
+以下以支持 root 的 Android 13 调试设备及 `/system_ext/priv-app/Launcher/Launcher.apk` 为例。设备名、进程和路径需替换成实际值：
+
+1. **确认设备和进程**：用 `adb devices -l` 查看连接及设备信息，其中 `-l` 显示详细信息；多设备时使用 `adb -s 序列号` 指定目标，省略 `-s` 则由 ADB 选择唯一可用设备。用 `adb shell pidof 进程名` 获取目标 PID；进程未运行时不能读取它的挂载视图。
+2. **检查目标进程的挂载**：用 `adb shell cat /proc/PID/mountinfo` 查看该 PID 的挂载信息，在输出中找到 `/system_ext` 对应行。文件系统类型为 `overlay` 时，检查 super options 中的 `lowerdir`、`upperdir` 和 `workdir`；实际记录可能经过转义。直接查看 `/proc/mounts` 只能反映执行命令的 shell 所在命名空间，不能保证与目标进程相同。
+3. **从 upper 追到设备**：记录上一步实际显示的 upper 路径，在同一份 mountinfo 中找覆盖该路径的最长匹配挂载点。例如 upper 位于 `/mnt/scratch/overlay/...`，再看 `/mnt/scratch` 的文件系统类型和来源。来源若是 `/dev/block/dm-0`，它只是设备映射节点，不是最终物理位置。
+4. **继续追踪映射**：若设备提供 `dmctl`，先用 `adb shell dmctl list devices` 列出映射设备，再按实际名称运行 `adb shell dmctl table 设备名` 查看映射表；命令可用性和输出因设备而异。结合 `adb shell lpdump` 中 super 元数据里的逻辑分区和 extent 信息，确认它是否映射到 super；如果涉及镜像文件，还需检查设备的 image manager 和实际文件映射。没有完整映射证据时，结论应是“后端未确认”，不能从 dm 编号猜测。
+5. **检查 verity 线索**：verity 指受验证启动链保护的块设备完整性校验，dm-verity 在读取数据时检查其是否与可信哈希树一致。`adb shell getprop ro.boot.verifiedbootstate` 反映启动验证状态，`adb shell getprop ro.boot.veritymode` 反映相关启动参数；空值或 `orange` 都不能单独证明 system_ext 的 dm-verity 是否启用。应结合设备映射表中是否有对应 verity target、启动日志与设备实现判断。
+6. **恢复并验证**：确认 system_ext 使用 OverlayFS，且接受清理其他调试覆盖后，在支持的 userdebug/eng 设备执行 `adb root`、`adb enable-verity`，检查每一步输出并按提示重启。该操作可能影响整个调试覆盖工作区，不是只删除一个 APK。恢复后重新采集目标进程 mountinfo，核对合并路径 APK 的哈希及 `adb shell pm path 包名` 输出。`pm path` 显示包管理器使用的路径，不能单靠它证明 APK 内容；应用更新版本也可能位于 `/data`。
+
+如果 `adb root`、`dmctl`、`lpdump` 或目标进程访问不可用，应记录受限项并由平台维护者提供设备配置和只读采集结果。不要在覆盖层挂载期间直接改 upper/work，也不要通过删除合并路径假定 lower 文件一定恢复。直接重挂载可写分区时，上述 OverlayFS 清理流程不能恢复已改写的底层文件。

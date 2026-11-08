@@ -1,6 +1,6 @@
 # VHAL 集成与契约
 
-> 范围：CarPropertyService 属性访问校验、VHAL 死亡恢复、属性订阅，以及 HIDL 到 AIDL 迁移时的接口差异。
+> 范围：CarPropertyService 属性访问校验、VHAL 死亡恢复、属性订阅，以及 HIDL 到 AIDL 迁移时的接口差异、VehiclePropConfig 配置元数据与 vendor 属性接入。
 
 **Q1: [learning] CarPropertyService 为什么会对属性读写抛出 not writable at areaId 或 SecurityException？属性访问要通过哪些检查？**
 
@@ -41,3 +41,34 @@ AIDL VHAL 将属性读写改为按请求列表异步处理：一次调用可以�
 3. **大型 payload**：AIDL 使用 `LargeParcelable` 支持大型列表和共享内存传输。生产者与消费者必须使用相匹配的序列化/反序列化辅助库，按该接口版本处理 inline payload 或共享内存文件描述符，并遵守文件描述符生命周期及平台限制。不能把共享内存 fd 当普通对象直接解析，也不应假定所有版本都要求相同的显式归还调用。
 4. **能力查询与订阅**：supported values、最小值和最大值等查询由 AIDL VHAL V4（Android 16 起）提供。迁移到较早的 AIDL 版本时不能假设这些接口存在。采样率范围和同一 callback 重订阅更新仍按 AIDL VHAL 的属性订阅契约处理。
 5. **兼容性回归**：使用目标分支 VHAL AIDL 接口仓库提供的 AIDL 测试和设备侧属性测试，核对迁移覆盖的属性、状态码、异步 callback 和大 payload 路径。同时检查 `aidl_api` 冻结快照中的接口版本与签名。具体测试目标名称随仓库分支变化，不应把某一分支的 `aidl_test` 命令当作通用接口保证。
+
+**Q5: [learning] VehiclePropConfig 的每个字段控制什么？为新属性写配置时省略字段会有什么后果？**
+
+VehiclePropConfig 是 VHAL 向 CarService 声明每个属性能力的元数据载体，字段决定读写方向、上报方式、区域划分与采样范围。以下按字段覆盖 Android 13 AIDL VHAL 的全部配置项，省略后果均以接口注释为准。
+
+1. **prop**：属性标识符，按位域组成：唯一 id（0x0100 至 0xffff）+ VehiclePropertyType + VehicleArea + VehiclePropertyGroup 四段按位或，例如 INFO_VIN = 0x0100 + 0x10000000 + 0x01000000 + 0x00100000。必填，没有缺省语义。
+2. **access**：读写方向，取 `READ`、`WRITE`、`READ_WRITE` 或 `NONE`。源码显式赋默认值 `NONE`，保持 `NONE` 的属性实际上不可读写，框架侧访问校验会直接拒绝。
+3. **changeMode**：上报方式，取 `STATIC`、`ON_CHANGE` 或 `CONTINUOUS`，语义各不相同：
+
+    1. `STATIC`：属性永不变化，不支持订阅。
+    2. `ON_CHANGE`：属性状态变化时必须上报，get 必须返回当前值，set 按异步处理，状态变更后要发出变化事件。
+    3. `CONTINUOUS`：属性连续变化，需要按固定采样率读取，实现方可选择在显著变化时补充通知。
+
+4. **areaConfigs**：逐区域配置数组。全局属性只有一个区域，区域属性每个 areaId 一条 `VehicleAreaConfig`。`VehicleAreaConfig` 内含 `areaId` 与 Int32、Int64、Float 三组 min/max 范围字段，带 `@data_enum` 的属性范围留零，且类型不是 INT32、INT64、FLOAT 或 min 与 max 同时为零时范围被忽略。
+5. **configArray**：附加配置参数数组，默认为空即可。语义由具体属性定义，例如 SUPPORT_CUSTOMIZE_VENDOR_PERMISSION 用它声明 vendor 属性的权限映射，缺省时依赖该数组的属性功能不完整。
+6. **configString**：个别属性需要的附加字符串信息。注释明确“大多数属性不需要设置”，留空是常态。
+7. **minSampleRate 与 maxSampleRate**：`CONTINUOUS` 属性必须定义（注释原文注明对 CONTINUOUS 必填），其他 changeMode 不使用。订阅速率超出范围时由 Car 服务限制到该范围内。
+
+依据：Android 13 的 hardware/interfaces/automotive/vehicle/aidl/android/hardware/automotive/vehicle/ 下 VehiclePropConfig.aidl、VehicleAreaConfig.aidl、VehiclePropertyAccess.aidl 与 VehiclePropertyChangeMode.aidl 注释。
+
+**Q6: [learning] 新增 vendor 属性时属性 ID 怎么组成？Android 侧权限如何映射？**
+
+vendor 属性的 propId 用 `VehiclePropertyGroup.VENDOR`（0x20000000）与唯一 id、数据类型、区域位按位或组成。Android 侧默认权限回落到 `android.car.permission.CAR_VENDOR_EXTENSION`，需要细粒度控制时用 SUPPORT_CUSTOMIZE_VENDOR_PERMISSION 的 configArray 把属性映射到 VehicleVendorPermission 类别权限，映射为 `PERMISSION_NOT_ACCESSIBLE` 的属性 Android 侧完全不可访问。
+
+1. **ID 组成**：VehicleProperty 的注释要求每个属性由唯一 id（0x0100 至 0xffff）、数据类型（VehiclePropertyType）、组（VehiclePropertyGroup）与区域（VehicleArea）四段组成，厂商扩展属性必须使用 VENDOR 标志。Android 13 的 `VehiclePropertyGroup` 只有 `SYSTEM`（0x10000000）与 `VENDOR`（0x20000000）。
+2. **默认权限**：`PropertyHalServiceIds` 对未登记的 vendor 属性回落返回 `Car.PERMISSION_VENDOR_EXTENSION`，字符串为 `android.car.permission.CAR_VENDOR_EXTENSION`。调用方持有该权限即可读写所有未细分的 vendor 属性。
+3. **细粒度映射**：SUPPORT_CUSTOMIZE_VENDOR_PERMISSION 是一个系统属性，其 configArray 按“propId、GET 权限枚举、SET 权限枚举”的序列登记 vendor 属性。未登记的属性走默认权限，选择 `PERMISSION_NOT_ACCESSIBLE`（0xF0000000）时 Android 侧无权访问该属性。
+4. **权限字符串落地**：HAL 侧 `VehicleVendorPermission.aidl` 定义 PERMISSION_DEFAULT 与按类别编号的 GET、SET 权限枚举。Car 侧 `VehicleVendorPermission.java` 把枚举翻译成 `android.car.permission.GET_CAR_VENDOR_CATEGORY_*` 与 `SET_CAR_VENDOR_CATEGORY_*` 形式的 Android 权限字符串，应用按这些权限声明与请求。
+5. **版本边界**：以上为 Android 13 形态。AIDL VHAL 后续版本继续扩展属性能力（如 V4 的取值范围查询），迁移实现时应以目标版本的 aidl_api 冻结接口为准。
+
+依据：Android 13 的 VehiclePropertyGroup.aidl、VehicleProperty.aidl（SUPPORT_CUSTOMIZE_VENDOR_PERMISSION 注释）、VehicleVendorPermission.aidl，packages/services/Car 的 PropertyHalServiceIds.java 与 car-lib 的 VehicleVendorPermission.java。

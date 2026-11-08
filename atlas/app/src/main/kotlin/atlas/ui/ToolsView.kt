@@ -53,6 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import atlas.AppStore
@@ -1569,36 +1575,63 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf(-1) } // -1 = 新建草稿/未选中
     var name by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
+    var saveState by remember { mutableStateOf(PromptSaveState.DRAFT) }
+    var saveGeneration by remember { mutableIntStateOf(0) }
+
+    fun persistSelectedPrompt() {
+        saveGeneration++
+        val current = store.prompts.getOrNull(selected)
+        val candidate = Prompts.autoSaveCandidate(current, name, content)
+        if (candidate == null) {
+            saveState = if (name.isBlank()) PromptSaveState.NEEDS_NAME else PromptSaveState.SAVED
+            return
+        }
+        store.updatePrompt(selected, candidate.title, candidate.body)
+        saveState = PromptSaveState.SAVED
+    }
 
     fun loadEntry(index: Int) {
+        persistSelectedPrompt()
         selected = index
-        store.prompts.getOrNull(index)?.let { name = it.title; content = it.body }
+        store.prompts.getOrNull(index)?.let {
+            name = it.title
+            content = it.body
+            saveState = PromptSaveState.SAVED
+        }
     }
 
     fun clearEditor() {
         selected = -1
         name = ""
         content = ""
+        saveState = PromptSaveState.DRAFT
     }
 
     // Add 恒为新建：把编辑器当前内容追加为新条目并选中（此前误接 clearEditor，点了没有任何条目新增）
     fun addNew() {
         if (name.isBlank()) {
+            saveState = PromptSaveState.NEEDS_NAME
             store.showToast("名称不能为空")
             return
         }
+        persistSelectedPrompt()
         store.addPrompt(name, content)
         selected = store.prompts.lastIndex
+        saveState = PromptSaveState.SAVED
         store.showToast("已添加「${name.trim()}」")
     }
 
     fun saveCurrent() {
         if (name.isBlank()) {
+            saveGeneration++
+            saveState = PromptSaveState.NEEDS_NAME
             store.showToast("名称不能为空")
             return
         }
         if (selected in store.prompts.indices) {
             store.updatePrompt(selected, name, content)
+            saveGeneration++
+            saveState = PromptSaveState.SAVED
             store.showToast("已保存「${name.trim()}」")
         } else {
             addNew()
@@ -1610,6 +1643,7 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
             store.showToast("先在左侧选择一条提示词")
             return
         }
+        saveGeneration++
         val title = store.prompts[selected].title
         store.deletePrompt(selected)
         clearEditor()
@@ -1627,8 +1661,48 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
         store.showToast("已复制「${name.trim().ifBlank { "未命名提示词" }}」")
     }
 
+    LaunchedEffect(selected, name, content, saveGeneration) {
+        val current = store.prompts.getOrNull(selected)
+        if (current == null) {
+            if (selected == -1) saveState = PromptSaveState.DRAFT
+            return@LaunchedEffect
+        }
+        val candidate = Prompts.autoSaveCandidate(current, name, content)
+        if (candidate == null) {
+            saveState = if (name.isBlank()) PromptSaveState.NEEDS_NAME else PromptSaveState.SAVED
+            return@LaunchedEffect
+        }
+
+        saveState = PromptSaveState.WAITING
+        delay(500)
+        saveState = PromptSaveState.SAVING
+        runCatching { store.updatePrompt(selected, candidate.title, candidate.body) }
+            .onSuccess {
+                saveGeneration++
+                saveState = PromptSaveState.SAVED
+            }
+            .onFailure { saveState = PromptSaveState.FAILED }
+    }
+
+    val flushOnDispose by rememberUpdatedState(newValue = {
+        val candidate = Prompts.autoSaveCandidate(store.prompts.getOrNull(selected), name, content)
+        if (candidate != null) {
+            runCatching { store.updatePrompt(selected, candidate.title, candidate.body) }
+        }
+    })
+    DisposableEffect(Unit) {
+        onDispose { flushOnDispose() }
+    }
+
     Surface(
-        modifier.fillMaxWidth(),
+        modifier.fillMaxWidth().onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.key == Key.S && event.isCtrlPressed) {
+                saveCurrent()
+                true
+            } else {
+                false
+            }
+        },
         shape = MaterialTheme.shapes.medium,
         color = Theme.Panel,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)),
@@ -1648,18 +1722,19 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
                     textStyle = ui.typography.secondary,
                     placeholder = { Text("提示词名称", style = ui.typography.secondary) },
                 )
-                CompactActionButton("Add") { addNew() }
-                CompactActionButton("Save") { saveCurrent() }
-                CompactActionButton(
-                    "Delete",
-                    contentColor = Theme.BadRed,
-                    enabled = selected in store.prompts.indices,
-                ) { deleteCurrent() }
-                CompactActionButton("Copy", contentColor = Theme.OkGreen) { copyCurrent() }
             }
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.width(240.dp).fillMaxHeight()) {
-                    Text("Prompts", style = ui.typography.secondary, fontWeight = FontWeight.SemiBold, color = Theme.Muted)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Prompts", style = ui.typography.secondary, fontWeight = FontWeight.SemiBold, color = Theme.Muted)
+                        Spacer(Modifier.weight(1f))
+                        CompactActionButton("Add") { addNew() }
+                        CompactActionButton(
+                            "Delete",
+                            contentColor = Theme.BadRed,
+                            enabled = selected in store.prompts.indices,
+                        ) { deleteCurrent() }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Column(
                         Modifier.weight(1f).verticalScroll(rememberScrollState()),
@@ -1698,10 +1773,36 @@ private fun PromptsCard(store: AppStore, modifier: Modifier = Modifier) {
                         textStyle = ui.typography.secondary,
                         placeholder = { Text("提示词内容（Markdown）", style = ui.typography.secondary) },
                     )
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            saveState.label,
+                            Modifier.weight(1f),
+                            style = ui.typography.caption,
+                            color = if (saveState == PromptSaveState.FAILED || saveState == PromptSaveState.NEEDS_NAME) Theme.BadRed else Theme.Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text("Ctrl+S", style = ui.typography.caption, color = Theme.Muted)
+                        CompactActionButton("Save") { saveCurrent() }
+                        CompactActionButton("Copy", contentColor = Theme.OkGreen) { copyCurrent() }
+                    }
                 }
             }
         }
     }
+}
+
+private enum class PromptSaveState(val label: String) {
+    SAVED("已保存"),
+    WAITING("待自动保存"),
+    SAVING("保存中…"),
+    FAILED("保存失败，按 Ctrl+S 重试"),
+    DRAFT("新草稿 · 点击 Add 或 Save 保存"),
+    NEEDS_NAME("名称不能为空"),
 }
 
 /** 提示词库顶部的紧凑操作块（Add/Save/Delete/Copy）：Delete 红字、Copy 绿字、失效置灰。 */

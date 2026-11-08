@@ -60,4 +60,20 @@ LNZC@2025.net
 adb shell am broadcast -a com.yadea.petipctest.SEND --ei event 14 -p com.yadea.petipctest -f 0x20
 
 ## Atlas
-1.  按照/home/liang/Project/MyProject/Summary/knowledge-base/WRITING-GUIDE.md进行内容生成，新增或者修改/home/liang/Project/MyProject/Summary/knowledge-base中的内容，该会话中的所有修改必须全部遵守WRITING-GUIDE.md。新增的题目必须要找到对应主题范围的文件进行存储，不要全部存在同一文件中。
+1.  按照/home/liang/Project/MyProject/Summary/knowledge-base/WRITING-GUIDE.md进行内容生成，新增或者修改/home/liang/Project/MyProject/Summary/knowledge-base中的题目内容，该会话中的所有修改必须全部遵守WRITING-GUIDE.md，注意新增题目的内容边界决定需要添加至哪个文件中。
+
+## qa
+1. 屏幕显示一帧的全流程？
+2. 图形缓冲区是什么？
+3. legacy 转场是什么？
+4. windowIsFloating 是什么，此属性决定了什么，与 windowIsTranslucent 有什么关系？windowShowWallpaper又有什么关系？
+5. frame、Surface、buffer、window、Decorview、Activity 之间都是什么什么关系？大小关系呢？
+6. StartingWindow 是什么？
+7. 屏幕上显示的页面一定参与了合成渲染？
+8.  windowIsTranslucent 影响的对象与范围？
+9.同一个 windowIsTranslucent 主题属性的两条处理路径？
+11.Surface与buffer如何到达SurfaceFlinger？
+12. 转场动画是什么机制？
+
+## 话术
+1. **侧暂未收到“*********”的相关需求输入。*****现阶段仅支持 *****，****场景暂不在支持范围内。

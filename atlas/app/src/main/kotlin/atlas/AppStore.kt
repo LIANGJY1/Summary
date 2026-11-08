@@ -512,6 +512,19 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
                     commandTimeoutsMs = mapOf(3 to APK_PUSH_TIMEOUT_MS),
                 )
             }
+            DeviceTools.Tool.PULL_LAUNCHER -> {
+                val adb = adbPath ?: return failNoAdb(progress)
+                val serial = toolboxSerial ?: return failNoDevice(progress)
+                val target = DeviceTools.nextLauncherApkFile()
+                val code = runSequence(
+                    listOf(DeviceTools.pullLauncherArgs(adb, serial, target)),
+                    progress,
+                    commandTimeoutsMs = mapOf(0 to APK_PUSH_TIMEOUT_MS),
+                )
+                if (code == 0) progress("已保存 ${target.absolutePath}")
+                else if (target.exists()) target.delete()
+                code
+            }
             DeviceTools.Tool.PUSH_SYSTEMUI -> {
                 val apk = settings.systemuiApkPath
                 if (apk.isBlank() || !File(apk).isFile) {
@@ -2185,6 +2198,34 @@ class AppStore(val configDir: File = File(System.getProperty("user.home"), ".loc
             true
         }.onFailure { error ->
             Log.e("题目排序写回失败 path=$selectedSourcePath", error)
+            reloadKnowledgeFiles()
+            showToast("题目顺序保存失败：${error.message}")
+        }.getOrElse { false }
+    }
+
+    /** 将当前文档中一段连续题目整体移动；目标位次按移除该段后的列表计算。 */
+    fun reorderSourceQuestions(entries: List<SourceQuestions.Entry>, fromIndices: List<Int>, toIndex: Int): Boolean {
+        if (entries.isEmpty() || selectedSourcePath != entries.first().sourcePath) return false
+        if (fromIndices.isEmpty() || fromIndices.any { it !in entries.indices }) return false
+        val file = sourceQuestionFile()
+        val current = if (file.isFile) file.readText(Charsets.UTF_8) else ""
+        if (current != entries.first().document || entries.any { it.document != current }) {
+            reloadKnowledgeFiles()
+            showToast("源文档已被外部修改，已重新加载")
+            return false
+        }
+        val reordered = SourceQuestions.reorderEntries(current, entries, fromIndices, toIndex)
+        if (reordered == null) {
+            showToast("请选择连续题目，并在连续题目之间调整顺序")
+            return false
+        }
+        return runCatching {
+            MdStores.atomicWrite(file, reordered)
+            reloadKnowledgeFiles()
+            showToast("题目顺序已保存")
+            true
+        }.onFailure { error ->
+            Log.e("题目批量排序写回失败 path=$selectedSourcePath", error)
             reloadKnowledgeFiles()
             showToast("题目顺序保存失败：${error.message}")
         }.getOrElse { false }

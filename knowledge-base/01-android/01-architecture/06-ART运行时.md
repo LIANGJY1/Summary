@@ -193,3 +193,9 @@ ART 侧 fatal 统一走 Runtime::Abort，tombstone 呈 `Abort message: 'Check fa
 
 1. **Perfetto 判读**：`HeapTaskDaemon` 线程上每个 slice 是一次 GC 任务，slice 密集 = 频繁 GC/内存抖动。`Jit thread pool` 空闲时长期睡在任务队列是正常态，长 slice 才是在编译热点方法。
 2. **因果纪律**：判“GC 导致掉帧”要看 GC slice 与主线程 SuspendAll/慢帧是否重叠。时间相近本身不能证明因果。
+
+**Q21: [learning] 发现旧 oat 或 vdex 文件，为什么不能断定 ART 正在使用它？**
+
+文件存在只说明该路径有产物，不证明运行时选中并使用了它。ART 是否采用某个产物取决于对应代码、依赖、校验信息、类加载上下文和版本等条件，具体决策依实现而变化。
+
+应保全对应 APK、split 和产物，结合 ART 日志及产物元数据核对选择过程。删除产物后异常消失也不能单独证明它是根因，因为重启、重扫或其他状态可能同时改变；删除后 ART 的行为也不必然是立即重新编译，可能采用其他执行方式。

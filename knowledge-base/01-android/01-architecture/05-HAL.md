@@ -1,6 +1,6 @@
 # HAL
 
-> 学习资料（文章模式沉淀）。主线：HAL 的运行形态、system/vendor 兼容边界、设备排查入口与服务崩溃处理。车机 VHAL 的接口与实现细节另见 AAOS 对应主题册。本文件描述通用 Android 机制，具体行为以目标设备的平台版本、VINTF 声明和产品实现为准。
+> 学习资料（文章模式沉淀）。主线：HAL 的运行形态、system/vendor 兼容边界、服务启动与注册链路、稳定 AIDL 接口版本冻结、设备排查入口与服务崩溃处理。车机 VHAL 的接口与实现细节另见 AAOS 对应主题册。本文件描述通用 Android 机制，具体行为以目标设备的平台版本、VINTF 声明和产品实现为准。
 
 **Q1: [learning] Android HAL 有哪些运行形态？Treble 如何约束 system 与 vendor 的兼容关系？**
 
@@ -40,4 +40,26 @@ Project Treble 从 Android 8.0 起把框架与 vendor 的接口边界正式化�
 
 例如参考 VHAL 文档用 `adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default --help` 查询 AIDL 调试命令，并用 `adb shell lshal debug android.hardware.automotive.vehicle@2.0::IVehicle/default` 调试 HIDL VHAL。应以目标设备实际注册的接口版本和访问权限为准。
 
-资料来源：AOSP《AIDL for HALs》《VINTF objects》《Debug VHAL》及 `lshal` 命令实现说明。
+**Q4: [learning] AIDL 与 HIDL 的 HAL 服务进程是如何启动并注册的？**
+
+HAL 服务进程由 init 按 `.rc` 配置拉起，进程内再用各自的服务管理器注册实例。AIDL HAL 用普通 Binder 注册到 servicemanager，HIDL binderized 注册到 hwservicemanager（hwbinder 域），HIDL passthrough 不建立独立服务进程，客户端按接口名加载实现库。确认服务形态与排查启动失败都依赖这条链路。
+
+1. **AIDL HAL：**init 从接口模块的 `.rc` 启动进程。AAOS 13 默认 AIDL VHAL 的 `vhal-default-service.rc` 声明 `service vendor.vehicle-hal-default /vendor/bin/hw/android.hardware.automotive.vehicle@V1-default-service`，属 `class early_hal`、`user vehicle_network`。进程内 `VehicleService.cpp` 构造 HAL 实现后调用 `AServiceManager_addService` 注册实例名 `android.hardware.automotive.vehicle.IVehicle/default`，再启动 Binder 线程池并等待请求。注册失败会导致进程退出（如 keymint 实现用 CHECK 断言注册状态），由 init 按服务策略处理重启。
+2. **HIDL binderized：**实现进程调用 `registerAsService` 注册到 hwservicemanager，客户端经 hwbinder 取得代理。hwbinder 与框架使用的 binder 是不同的设备节点，配合 SELinux 域实现隔离。
+3. **HIDL passthrough：**没有独立服务进程。客户端侧的 PassthroughServiceManager 把接口全名解析为实现库名与入口符号，例如 android.hardware.foo@1.0::IFoo 对应 android.hardware.foo@1.0-impl.so 与 HIDL_FETCH_IFoo，按 ODM、VENDOR、VNDK-SP、SYSTEM 目录顺序查找加载，vendor 分区的库经 sphal 机制加载。因此实现库的崩溃直接发生在加载它的客户端进程内。
+
+排查衔接：独立服务进程看 init 启动日志与 `service list`、`lshal` 的注册结果。passthrough 库问题查加载方进程的 native 栈。
+
+依据：AAOS 13 的 hardware/interfaces/automotive/vehicle/aidl/impl/vhal/src/VehicleService.cpp、impl/vhal/vhal-default-service.rc，system/core/trusty/keymaster/keymint/service.cpp 及其 `.rc`，frameworks/native/cmds/lshal/ListCommand.cpp。passthrough 的库名解析与目录顺序按 HIDL ServiceManagement（libhidl）实现整理，本地树未含该源码。
+
+**Q5: [learning] 稳定 AIDL HAL 接口如何冻结版本？发布后的接口还能改吗？**
+
+稳定 AIDL 接口靠冻结快照管理版本兼容：接口首次发布时把 `.aidl` 签名快照存入 `aidl_api/接口包名/版本号/`，每个对外版本各留一份只读快照，开发中的内容放在 `current/`。构建工具对比当前 `.aidl` 与已冻结快照，不兼容改动会构建失败。已冻结版本不可修改，接口演进只能在新版本号下追加兼容性变更，VINTF manifest 按版本号声明设备提供的接口。
+
+1. **快照内容与位置**：接口仓内 `aidl_api/android.hardware.automotive.vehicle/` 下有 `1/` 与 `current/` 两份目录。`1/` 是已发布版本的全部 parcelable 与接口签名快照，`current/` 是开发中的版本，下次发布时冻结为新版本号。
+2. **兼容性规则**：冻结后的版本不能修改字段类型、删除字段或改变方法签名。向后兼容的扩展（如给 parcelable 追加带默认值的新字段）进入新版本。`.aidl` 中为字段写默认值（如 `VehiclePropConfig.access = VehiclePropertyAccess.NONE`）正是为了让读取旧数据的进程能按默认值跳过新增字段。
+3. **声明与匹配**：VINTF manifest 用 `<hal format="aidl">` 声明接口名、版本与实例，例如 VHAL 声明 `<version>1</version>` 加 `<fqname>IVehicle/default</fqname>`。框架兼容矩阵按版本与设备声明做匹配，评估对应 system/vendor 镜像组合是否兼容。
+
+依据：AAOS 13 的 hardware/interfaces/automotive/vehicle/aidl/aidl_api 目录结构、impl/vhal/vhal-default-service.xml、VehiclePropConfig.aidl 的默认值写法。
+
+资料来源：AOSP《AIDL for HALs》《VINTF objects》《Debug VHAL》及 `lshal` 命令实现说明。服务注册与接口冻结按 AAOS 13 本地源码核对。

@@ -10,6 +10,12 @@ object Prompts {
 
     data class Entry(val title: String, val body: String)
 
+    /** Returns a normalized autosave value only for an existing entry with a valid, changed title/body. */
+    fun autoSaveCandidate(current: Entry?, title: String, body: String): Entry? {
+        if (current == null || title.isBlank()) return null
+        return Entry(title.trim(), body.trim()).takeIf { it != current }
+    }
+
     fun load(file: File): List<Entry> {
         if (!file.isFile) return emptyList()
         val entries = mutableListOf<Entry>()

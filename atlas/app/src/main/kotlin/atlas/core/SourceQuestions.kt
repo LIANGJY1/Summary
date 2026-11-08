@@ -270,6 +270,32 @@ object SourceQuestions {
         return document.substring(0, start) + blocks.joinToString(separator) + document.substring(end)
     }
 
+    /** 将一段连续题目作为整体移动；[toIndex] 是移除该段后，新段在剩余列表中的插入位置。 */
+    fun reorderEntries(document: String, entries: List<Entry>, fromIndices: List<Int>, toIndex: Int): String? {
+        if (entries.isEmpty() || fromIndices.isEmpty() || fromIndices.any { it !in entries.indices }) return null
+        val orderedIndices = fromIndices.distinct().sorted()
+        if (orderedIndices.size != fromIndices.size || orderedIndices.zipWithNext().any { (a, b) -> b != a + 1 }) return null
+        if (entries.any { it.document != document }) return null
+
+        val ordered = entries.sortedBy { it.startOffset }
+        if (ordered.zipWithNext().any { (left, right) -> left.endOffset > right.startOffset }) return null
+        val gaps = ordered.zipWithNext().map { (left, right) -> document.substring(left.endOffset, right.startOffset) }
+        if (gaps.any { it.isNotBlank() }) return null
+
+        val moved = entries.toMutableList()
+        val block = orderedIndices.map { moved[it] }
+        orderedIndices.asReversed().forEach(moved::removeAt)
+        if (toIndex !in 0..moved.size) return null
+        moved.addAll(toIndex, block)
+        if (moved == entries) return document
+
+        val blocks = moved.mapIndexed { index, entry -> numberedBlock(document, entry, index + 1) }
+        val separator = gaps.firstOrNull()?.takeIf { it.isNotBlank() } ?: "\n\n"
+        val start = ordered.first().startOffset
+        val end = ordered.last().endOffset
+        return document.substring(0, start) + blocks.joinToString(separator) + document.substring(end)
+    }
+
     /**
      * 从源文档删除一道题目：整块移除该 Q 区间（题面+答案），剩余题目按文档顺序
      * 连续重新编号，题目之外的章节内容原样保留。题目在当前文档中匹配不到（源文件

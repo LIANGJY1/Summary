@@ -728,11 +728,13 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     var showMobileTree by remember { mutableStateOf(false) }
     var mobileReaderEntry by remember { mutableStateOf<SourceQuestions.Entry?>(null) }
     var reorderMode by remember { mutableStateOf(false) }
+    var reorderMultiSelect by remember { mutableStateOf(false) }
     var batchTagMode by remember { mutableStateOf(false) }
     var selectedQuestionKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchTagDialog by remember { mutableStateOf(false) }
     var batchTagText by remember { mutableStateOf("") }
     var draggingKey by remember { mutableStateOf<String?>(null) }
+    var draggingGroupIndices by remember { mutableStateOf<List<Int>>(emptyList()) }
     var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
     var dragPointerY by remember { mutableStateOf(0f) }
     var dragGrabOffset by remember { mutableStateOf(0f) }
@@ -801,6 +803,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
             selectedQuestionKeys = emptySet()
             showBatchTagDialog = false
             reorderMode = false
+            reorderMultiSelect = false
             draggingKey = null
             dragTargetIndex = null
         }
@@ -823,6 +826,9 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val canReorderList = reorderMode && !directorySearchActive && query.isBlank() &&
         statusFilter == QuestionStatusFilter.ALL && visible.size == sourceQuestionsSnapshot.size
     val selectedEntries = sourceQuestionsSnapshot.filter { sourceQuestionKey(it) in selectedQuestionKeys }
+    val reorderSelectionIndices = selectedQuestionKeys.mapNotNull(questionIndexByKey::get).sorted()
+    val reorderSelectionIsContiguous = reorderSelectionIndices.isNotEmpty() &&
+        reorderSelectionIndices.zipWithNext().all { (left, right) -> right == left + 1 }
 
     fun toggleBatchSelection(key: String) {
         selectedQuestionKeys = if (key in selectedQuestionKeys) selectedQuestionKeys - key else selectedQuestionKeys + key
@@ -832,12 +838,15 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     val dragging = reorderMode && !directorySearchActive && draggingKey != null &&
         query.isBlank() && statusFilter == QuestionStatusFilter.ALL
     val renderedQuestions = if (dragging) {
-        val from = visible.indexOfFirst { sourceQuestionKey(it) == draggingKey }
+        val groupKeys = draggingGroupIndices.mapNotNull { sourceQuestionsSnapshot.getOrNull(it)?.let(::sourceQuestionKey) }.toSet()
+        val moving = visible.filter { sourceQuestionKey(it) in groupKeys }
+        val remaining = visible.filterNot { sourceQuestionKey(it) in groupKeys }
         val to = dragTargetIndex
-        if (from >= 0 && to != null && to in visible.indices) {
-            visible.toMutableList().apply { add(to, removeAt(from)) }
+        if (moving.isNotEmpty() && to != null && to in 0..remaining.size) {
+            remaining.toMutableList().apply { addAll(to, moving) }
         } else visible
     } else visible
+    val latestRenderedQuestions by rememberUpdatedState(renderedQuestions)
     val documentItems = buildList<SourceDocumentItem> {
         renderedQuestions.forEach { add(SourceDocumentItem.Question(it)) }
         if (query.isBlank() && !directorySearchActive && statusFilter == QuestionStatusFilter.ALL && !dragging) {
@@ -926,20 +935,25 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
     fun resolveDragTarget() {
         val key = draggingKey ?: return
         val base = sourceQuestionsSnapshot
-        val from = questionIndexByKey[key] ?: return
-        val current = dragTargetIndex ?: from
+        val currentQuestions = latestRenderedQuestions
+        val draggedIndex = currentQuestions.indexOfFirst { sourceQuestionKey(it) == key }
+        if (draggedIndex < 0 || draggingGroupIndices.isEmpty()) return
+        val groupStart = draggingGroupIndices.first()
+        val grabbedOffset = (questionIndexByKey[key] ?: groupStart) - groupStart
         val target = QuestionReorder.resolveTargetIndex(
-            current = current,
+            current = draggedIndex,
             grabY = dragPointerY - dragGrabOffset,
             slots = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
                 val itemKey = info.key as? String ?: return@mapNotNull null
-                val questionIndex = questionIndexByKey[itemKey] ?: return@mapNotNull null
+                val questionIndex = currentQuestions.indexOfFirst { sourceQuestionKey(it) == itemKey }
+                    .takeIf { it >= 0 } ?: return@mapNotNull null
                 ReorderSlot(questionIndex, info.offset.toFloat(), info.size)
             },
             total = base.size,
             hysteresis = rowSpacingPx / 2f,
         )
-        if (target != current) dragTargetIndex = target
+        val nextGroupStart = (target - grabbedOffset).coerceIn(0, base.size - draggingGroupIndices.size)
+        if (nextGroupStart != dragTargetIndex) dragTargetIndex = nextGroupStart
     }
 
     LaunchedEffect(store.selectedSourcePath, mappedDocuments) {
@@ -1207,7 +1221,10 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 OutlinedButton(
                     onClick = {
                         reorderMode = !reorderMode
+                        reorderMultiSelect = false
                         if (reorderMode) expanded = emptySet() // 收起展开的答案，拖拽行高一致
+                        selectedQuestionKeys = emptySet()
+                        draggingGroupIndices = emptyList()
                         draggingKey = null
                         dragTargetIndex = null
                         dragPointerY = 0f
@@ -1216,6 +1233,22 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
                 ) {
                     Text(if (reorderMode) "完成排序" else "调整顺序", fontSize = 12.sp)
+                }
+                if (reorderMode) {
+                    OutlinedButton(onClick = { reorderMultiSelect = !reorderMultiSelect; selectedQuestionKeys = emptySet() }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp)) {
+                        Text(if (reorderMultiSelect) "取消多选" else "多选", fontSize = 12.sp)
+                    }
+                }
+                if (reorderMode && reorderMultiSelect) {
+                    Text(
+                        when {
+                            selectedQuestionKeys.isEmpty() -> "可单题拖动；勾选相邻题目后整组拖动"
+                            reorderSelectionIsContiguous -> "已选 ${reorderSelectionIndices.size} 道"
+                            else -> "已选 ${selectedQuestionKeys.size} 道，请选择连续题目"
+                        },
+                        fontSize = 11.sp,
+                        color = if (selectedQuestionKeys.isNotEmpty() && !reorderSelectionIsContiguous) Theme.WarnOrange else Theme.Muted,
+                    )
                 }
             }
             if (!directorySearchActive && batchTagMode) {
@@ -1336,7 +1369,7 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
         LazyColumn(
             Modifier.then(if (compact) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize())
                 .onGloballyPositioned { listViewportHeight = it.size.height.toFloat() }
-                .pointerInput(reorderMode, query, sourceQuestionsSnapshot) {
+                .pointerInput(reorderMode, query, sourceQuestionsSnapshot, selectedQuestionKeys) {
                     if (!canReorderList) return@pointerInput
                     detectDragGestures(
                         onDragStart = { pos ->
@@ -1346,28 +1379,35 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                             }
                             val key = hit?.key as? String
                             val from = key?.let { questionIndexByKey[it] }
-                            if (hit == null || from == null) return@detectDragGestures
+                            if (hit == null || key == null || from == null) return@detectDragGestures
+                            val group = when {
+                                selectedQuestionKeys.isNotEmpty() && !reorderSelectionIsContiguous -> return@detectDragGestures
+                                selectedQuestionKeys.isNotEmpty() && key in selectedQuestionKeys -> reorderSelectionIndices
+                                selectedQuestionKeys.isNotEmpty() -> return@detectDragGestures
+                                else -> listOf(from)
+                            }
                             draggingKey = key
-                            dragTargetIndex = from
+                            draggingGroupIndices = group
+                            dragTargetIndex = group.first()
                             dragGrabOffset = pos.y - hit.offset
                             dragPointerY = hit.offset + dragGrabOffset
                         },
                         onDragEnd = {
-                            val key = draggingKey
                             val target = dragTargetIndex
-                            if (key != null && target != null) {
-                                val from = questionIndexByKey[key]
-                                if (from != null && target != from) {
-                                    store.reorderSourceQuestions(sourceQuestionsSnapshot, from, target)
+                            if (draggingGroupIndices.isNotEmpty() && target != null && target != draggingGroupIndices.first()) {
+                                if (store.reorderSourceQuestions(sourceQuestionsSnapshot, draggingGroupIndices, target)) {
+                                    selectedQuestionKeys = emptySet()
                                 }
                             }
                             draggingKey = null
+                            draggingGroupIndices = emptyList()
                             dragTargetIndex = null
                             dragPointerY = 0f
                             dragGrabOffset = 0f
                         },
                         onDragCancel = {
                             draggingKey = null
+                            draggingGroupIndices = emptyList()
                             dragTargetIndex = null
                             dragPointerY = 0f
                             dragGrabOffset = 0f
@@ -1413,8 +1453,8 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                 }
                 val entry = (item as SourceDocumentItem.Question).entry
                 val entryKey = sourceQuestionKey(entry)
-                val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isExpanded = entryKey in expanded
+                val displayIndex = renderedQuestions.indexOfFirst { sourceQuestionKey(it) == entryKey }
                 val isBatchSelected = entryKey in selectedQuestionKeys
                 val isDragging = draggingKey == entryKey
                 val cardTopTapHeightPx = with(LocalDensity.current) { 12.dp.toPx() }
@@ -1532,20 +1572,14 @@ fun QuestionSection(store: AppStore, rootFocus: FocusRequester) {
                                     onCheckedChange = { toggleBatchSelection(entryKey) },
                                     modifier = Modifier.size(20.dp),
                                 )
-                                QuestionLeadingSlot.REORDER_POSITION -> Surface(
-                                    modifier = Modifier.size(24.dp),
-                                    color = if (isDragging) Theme.Pressed else Theme.Selected,
-                                    shape = MaterialTheme.shapes.small,
-                                ) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        val position = displayIndex + 1
-                                        Text(
-                                            "$position",
-                                            color = Theme.Accent,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = reorderPositionFontSizeSp(position).sp,
-                                            maxLines = 1,
-                                        )
+                                QuestionLeadingSlot.REORDER_POSITION -> if (reorderMultiSelect) {
+                                    Checkbox(checked = isBatchSelected, onCheckedChange = { toggleBatchSelection(entryKey) }, modifier = Modifier.size(20.dp))
+                                } else {
+                                    Surface(modifier = Modifier.size(24.dp), color = if (isDragging) Theme.Pressed else Theme.Selected, shape = MaterialTheme.shapes.small) {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            val position = displayIndex + 1
+                                            Text("$position", color = Theme.Accent, fontWeight = FontWeight.Bold, fontSize = reorderPositionFontSizeSp(position).sp, maxLines = 1)
+                                        }
                                     }
                                 }
                             }

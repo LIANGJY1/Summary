@@ -48,4 +48,14 @@ class PromptsTest {
         Prompts.save(file, listOf(Prompts.Entry("  标题  ", "\n  正文 \n")))
         assertEquals(listOf(Prompts.Entry("标题", "正文")), Prompts.load(file))
     }
+
+    @Test
+    fun `仅为已保存条目的有效修改生成自动保存内容`() {
+        val current = Prompts.Entry("qa", "原内容")
+
+        assertEquals(Prompts.Entry("qa", "新内容"), Prompts.autoSaveCandidate(current, "qa", "新内容"))
+        assertEquals(null, Prompts.autoSaveCandidate(current, " ", "新内容"))
+        assertEquals(null, Prompts.autoSaveCandidate(current, "qa", "原内容"))
+        assertEquals(null, Prompts.autoSaveCandidate(null, "新草稿", "内容"))
+    }
 }

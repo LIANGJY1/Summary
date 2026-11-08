@@ -11,6 +11,21 @@ import org.junit.jupiter.api.io.TempDir
 class DeviceToolsTest {
 
     @Test
+    fun `拉取 Launcher 保存到当天目录并避免覆盖`(@TempDir dir: File) {
+        val day = java.time.LocalDate.of(2026, 11, 5)
+        val target = DeviceTools.nextLauncherApkFile(dir, day)
+        assertEquals(File(dir, "yadea_apk/2026-11-05/NsrLauncher.apk"), target)
+        target.writeText("existing")
+        val next = DeviceTools.nextLauncherApkFile(dir, day)
+        assertEquals("NsrLauncher_001.apk", next.name)
+        assertEquals(
+            listOf("/sdk/adb", "-s", "car-1", "pull", "/system_ext/priv-app/NsrLauncher/NsrLauncher.apk", next.absolutePath),
+            DeviceTools.pullLauncherArgs("/sdk/adb", "car-1", next),
+        )
+        assertTrue(DeviceTools.Tool.entries.any { it.id == "pull_launcher" && it.group == "设备" })
+    }
+
+    @Test
     fun `推送 Setting 使用选中设备并覆盖系统 APK 后同步重启`() {
         assertEquals(
             listOf(

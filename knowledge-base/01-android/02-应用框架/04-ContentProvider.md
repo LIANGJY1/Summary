@@ -1,6 +1,6 @@
 # ContentProvider 服务链路
 
-> 学习资料（文章模式沉淀）。边界：本文回答 Provider 初始化时序、CursorWindow 的跨进程传输、框架等待超时与批量操作的事务和线程池边界。四组件入门见 `01-四大组件.md`。依据：AOSP Android 17 源码与 android-internals-wiki §1.15。Q 序列即结构，供 Atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答 Provider 初始化时序、CursorWindow 的跨进程传输、框架等待超时、批量操作的事务和线程池边界，以及客户端 stable/unstable 引用契约与包可见性过滤。四组件入门见 `01-四大组件.md`。依据：AOSP Android 17 源码与 android-internals-wiki §1.15。Q5、Q6 的客户端引用与可见性事实按 Android 13 本地源码核对。Q 序列即结构，供 Atlas 同源直读。
 
 **Q1: [learning] 进程启动时 ContentProvider 为什么早于 Application.onCreate() 初始化？initOrder 能保证什么？**
 
@@ -73,3 +73,31 @@ Provider 发布和应用初始化也不是一个原子阶段：
 2. **独立进程收益：**`android:process=":provider"` 提供独立堆、GC、Binder 线程池和崩溃隔离。
 3. **独立进程代价：**首次访问需要完整冷启动，SDK 可能在该进程重复初始化，所有调用都会变成跨进程调用。
 4. **选型边界：**独立进程适合需要故障或内存隔离的数据组件。若根因是共享数据库锁，换进程不会消除锁竞争，只会改变隔离范围，因此它不是常规数据库性能优化手段。
+
+**Q5: [learning] acquireContentProviderClient 与 acquireUnstableContentProviderClient 的契约差在哪里？provider 进程死亡时各发生什么？**
+
+stable 客户端让平台把调用方进程与 provider 生命周期绑定：provider 进程退出时，AMS 会清理依赖它的客户端进程。unstable 客户端显式关闭这套机制，调用方要自己捕获 DeadObjectException、释放旧客户端并重新获取。两个方法在 provider 不存在时都返回 null。
+
+两条路径的差异由客户端进程内的引用计数与死亡通知机制支撑：
+
+1. **引用计数：**`ActivityThread` 按 authority 维护 `ProviderRefCount` 双计数（stableCount/unstableCount）。`installProvider` 按 stable 标志初始化为 stable(1,0) 或 unstable(0,1)。系统自有且 `noReleaseNeeded` 的 provider 用 1000/1000 的大计数占位，正常使用不会把它减到零。
+2. **stable 释放的延迟回收：**释放最后一根 stable 引用时，`releaseProvider` 先把它转换为 unstable 引用（向 AMS 调用 `refContentProvider(connection, -1, 1)`），再延迟 `CONTENT_PROVIDER_RETAIN_TIME` 投递移除消息。移除前再次 acquire 会撤销待移除状态，因此短间隔重复获取不产生跨进程往返。
+3. **死亡路径：**本地缓存命中但 Binder 已死时，`acquireExistingProvider` 调用 `handleUnstableProviderDiedLocked` 清理引用账目并通知 `AMS.unstableProviderDied`。`ContentResolver.query()` 在远端进程死亡时也走 `unstableProviderDied` 再重新获取引用的恢复路径。检测 provider 线程无响应另有 `ContentProviderClient.setDetectNotResponding`，触发 `appNotRespondingViaProvider` 通知 AMS。
+
+选型按 provider 的可信程度决定：
+
+1. **系统内置、稳定的 provider**：使用 stable 客户端，直接获得生命周期保障。
+2. **第三方或不稳定的 provider**：使用 unstable 客户端，避免因 provider 死亡被连坐清理，同时自行处理失败重试与状态重建。
+
+依据：Android 13 的 ActivityThread.acquireProvider/installProvider/releaseProvider 与 ProviderRefCount、ContentResolver.acquireUnstableContentProviderClient javadoc 及 query 死亡恢复路径。
+
+**Q6: [learning] Android 11 的包可见性如何影响解析其他应用的 ContentProvider authority？**
+
+包可见性（package visibility，Android 11/API 30 起）让 authority 解析经过可见性过滤：AMS 取 provider 前先用 PackageManager 解析 authority，解析端对目标组件执行可见性判断，调用方不可见目标应用时直接按“不存在该 provider”返回 null，而不是报告权限错误。因此调用方表现为 `acquireContentProviderClient` 拿到 null 或按 authority 查询失败，容易误判为目标 provider 未实现。
+
+1. **过滤位置：**`ContentProviderHelper.getContentProviderImpl` 在 provider 已运行与冷启动两条分支上都先 `resolveContentProvider(name, 0, userId)` 探测，返回 null 即放弃，注释写明目的是不在普通应用与 instant 应用间暴露 provider。PMS 侧 `ComputerEngine.resolveContentProvider` 在返回前对目标组件调用 `shouldFilterApplication`，命中过滤即返回 null。
+2. **可见性规则的来源：**调用方 manifest 的 `<queries>` 提供三类声明：`<intent>`（对 provider 场景按 content scheme 加通配 authority 匹配）、`<package>`（按包名）、`<provider>`（按 authorities 列表，多个以分号分隔）。此外持有 `QUERY_ALL_PACKAGES` 权限、目标应用 forceQueryable、可持久化的 uri 授权等任一规则命中即可见。
+3. **豁免边界：**系统 uid 与同一应用（同 uid）之间不过滤。instant 应用之间的暴露规则单独处理。
+4. **排查衔接：**权限检查通过但解析不到 authority 时，先核对调用方是否声明了 `<queries>`、目标 authorities 拼写是否一致，再区分“被可见性过滤”与“目标确实未发布 provider”。
+
+依据：Android 13 的 ContentProviderHelper.getContentProviderImpl、ComputerEngine.resolveContentProvider 与 shouldFilterApplication、ParsingPackageUtils.parseQueries。
