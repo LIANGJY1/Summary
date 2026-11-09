@@ -12,7 +12,7 @@
 4. **数据处理与结束：**`update()`、`doFinal()` 或 `sign()` 包含传输和硬件计算。
 5. **用户认证：**认证密钥按 per-use 或 time-based 策略另有等待，需单独计时。
 
-按 Android 17 固定源码语境转写，`AndroidKeyStoreCipherSpiBase.engineInit()` 经 `ensureKeystoreOperationInitialized()` 进入 `KeyStoreSecurityLevel.createOperation()`，因此 init 时已占用 operation slot；AAOS13 本地树不含 keystore2 与该 Provider 源码。`finish()`、错误、显式 `abort()`、Binder 对象释放或 slot 紧张时的 prune 均可结束 operation；同一代理并发使用可报 `OPERATION_BUSY`。不要提前数分钟创建并闲置 Cipher/Signature/Mac；AndroidKeyStore 操作放在少量有界工作线程，`engineGenerateKey()` 与若干 init 也被 StrictMode 标为潜在慢调用。
+按 Android 17 固定源码语境转写，`AndroidKeyStoreCipherSpiBase.engineInit()` 经 `ensureKeystoreOperationInitialized()` 进入 `KeyStoreSecurityLevel.createOperation()`，因此 init 时已占用 operation slot。AAOS13 本地树不含 keystore2 与该 Provider 源码。`finish()`、错误、显式 `abort()`、Binder 对象释放或 slot 紧张时的 prune 均可结束 operation。同一代理并发使用可报 `OPERATION_BUSY`。不要提前数分钟创建并闲置 Cipher/Signature/Mac。AndroidKeyStore 操作放在少量有界工作线程，`engineGenerateKey()` 与若干 init 也被 StrictMode 标为潜在慢调用。
 
 **Q2: [learning] setUserAuthenticationRequired(true) 的 per-use 与 time-based 密钥流程差在哪，CryptoObject 为什么必须用认证回调返回的同一对象？**
 
@@ -21,7 +21,7 @@
 1. **per-use（timeout = 0）：**每次使用都需授权。先在后台初始化 Signature/Cipher，把该 operation 包入 `BiometricPrompt.CryptoObject`，认证成功后在回调返回的同一对象上签名。另建对象会得到另一个 operation，无法沿用刚才的授权。
 2. **time-based（timeout > 0）：**有效期内可直接创建 operation。若 init 抛 `UserNotAuthenticatedException`，先认证，再重新创建并初始化对象；不要复用初始化失败的对象。
 
-API 30 起 `setUserAuthenticationParameters()` 明确有效期和认证类型。Android 11+ 的 per-use key 可按策略允许 device credential；Android 10 及以下的 crypto 与 device credential 组合受限，不能把旧限制推广到全部版本。关闭安全锁屏、重置凭据或 biometric enrollment 变化可能令密钥永久失效并抛 `KeyPermanentlyInvalidatedException`；恢复前区分可重建密钥与须服务端解绑的密钥，否则旧数据可能再也无法解密。
+API 30 起 `setUserAuthenticationParameters()` 明确有效期和认证类型。Android 11+ 的 per-use key 可按策略允许 device credential。Android 10 及以下的 crypto 与 device credential 组合受限，不能把旧限制推广到全部版本。关闭安全锁屏、重置凭据或 biometric enrollment 变化可能令密钥永久失效并抛 `KeyPermanentlyInvalidatedException`。恢复前区分可重建密钥与须服务端解绑的密钥，否则旧数据可能再也无法解密。
 
 **Q3: [learning] 选择 StrongBox 或 TEE 时，安全级别、耗时与 operation slot 怎样权衡？**
 
@@ -31,4 +31,4 @@ StrongBox（Android 9+，`FEATURE_STRONGBOX_KEYSTORE`）提供更强物理隔离
 2. **preferred：**记录失败，经安全策略允许后重新生成非 StrongBox 密钥，并通知服务端。
 3. **不要求：**使用平台默认安全级别。API 31+ 可用 `KeyInfo.getSecurityLevel()` 记录实际级别。
 
-slot 资源也需单独治理。Android 12 起 KeyMint AIDL 合同要求支持 32 个并发 operation（材料按 Android 17 AIDL 转写），旧的 16 或“15+1 给 vold”不是当前合同。超过时 `begin()` 可返回 `TOO_MANY_OPERATIONS`，keystore2 可按 owner 兄弟数量与年龄等因素 prune 旧操作，无候选时可能报 `BACKEND_BUSY`；被回收的旧对象再用会报 invalid handle，没有稳定 FIFO 等待队列。提前为列表项建 Cipher、认证前久置 per-use operation、批量无界并发和超时后保留旧对象再重试都会耗尽 slot。按 TEE/StrongBox 分别压测少量有界线程，记录 busy、pruned 与 invalid-handle；调用方停止等待不保证底层操作立刻取消。
+slot 资源也需单独治理。Android 12 起 KeyMint AIDL 合同要求支持 32 个并发 operation（材料按 Android 17 AIDL 转写），旧的 16 或“15+1 给 vold”不是当前合同。超过时 `begin()` 可返回 `TOO_MANY_OPERATIONS`，keystore2 可按 owner 兄弟数量与年龄等因素 prune 旧操作，无候选时可能报 `BACKEND_BUSY`。被回收的旧对象再用会报 invalid handle，没有稳定 FIFO 等待队列。提前为列表项建 Cipher、认证前久置 per-use operation、批量无界并发和超时后保留旧对象再重试都会耗尽 slot。按 TEE/StrongBox 分别压测少量有界线程，记录 busy、pruned 与 invalid-handle。调用方停止等待不保证底层操作立刻取消。

@@ -4,5 +4,5 @@
 - [`02-文件操作模型.md`](02-文件操作模型.md)（5 题）：open/read/close 阶段、打开文件表、文件描述符及其与打开文件描述的关系、open 与 read 的语义边界、复制的原子性。
 - [`03-存储空间.md`](03-存储空间.md)（3 题）：空闲表、盘块链、盘区链、位视图换算与成组链接法。
 - [`04-共享与保护.md`](04-共享与保护.md)（4 题）：口令保护、加密、ACL、共享目录项删除语义、硬链接与符号链接、能力模型。
-- [`05-VFS与挂载.md`](05-VFS与挂载.md)（12 题）：VFS 分派、vnode 与 inode、挂载目的与路径查找、fstab、bind mount、mount namespace 与 overlayfs。
+- [`05-VFS与挂载.md`](05-VFS与挂载.md)（8 题）：VFS 分派、vnode 与 inode、挂载目的与路径查找、fstab、bind mount、mount namespace 与 overlayfs。
 - [`06-文件系统布局.md`](06-文件系统布局.md)（9 题）：文件系统分层、格式化与挂载、磁盘和内存信息、ext4 结构与日志、伪文件系统、procfs 内容来源与生命周期。

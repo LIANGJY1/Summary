@@ -2,8 +2,6 @@
 
 > 学习资料（文章模式沉淀）。主线：SELinux 拒绝（avc denial）的确认与处置——从"功能静默失效"到四元组定位、audit2allow 与 neverallow 的处理边界、service_manager 用户态检查链、ioctl allowxperm 授权与工作模式验证，覆盖应用与 framework 两级开发者场景。语境：全局 enforcing 自 Android 5.0 起；启动期策略合成与装载见 [02-系统启动.md](02-系统启动.md)；沙箱三层（UID/SELinux/seccomp）见 [09-应用沙箱.md](09-应用沙箱.md)。命令、策略书写与案例已按 AAOS13_study（Android 13）`system/sepolicy` 与 `car_product/sepolicy` 源码及官方文档（source.android.com《Validate SELinux》）核对，并遵守 [../../WRITING-GUIDE.md](../../WRITING-GUIDE.md)。Q 序列即结构，供 atlas 同源直读。
 
-
-
 **Q1: [done] [tags:SELinux] Android SELinux 是什么？它补上了 Android 哪类访问控制缺口？**
 
 SELinux（Security-Enhanced Linux，安全增强型 Linux）是 Android 基于 Linux LSM（Linux Security Modules）实现的**强制访问控制**机制。它给进程主体标记域、给受保护对象标记类型，再由内核或相应的用户态对象管理器按 `allow 域 类型:类 权限` 规则检查访问。没有匹配授权时默认拒绝。
@@ -287,7 +285,6 @@ vendor 策略由 `BOARD_VENDOR_SEPOLICY_DIRS` 指定的目录参与构建。同�
 4. **跨域对照**：launcher 和 SystemUI 点击正常、平台签名的地图应用正常、厂商自签名的多个 App 必崩。结合调用进程的域和策略匹配结果判断差异，签名、安装属性等也可能通过 seapp_contexts 影响域。
 5. **实锤对应**：`logcat -b events` 里每条 FATAL 前毫秒级都有一条 `service_manager find` denied，denial 的 pid 与崩溃 pid 一一对应（真机 10 次崩溃 10 条拒绝全对应）。
 6. **闭环验证**：补齐 allow 规则刷机重启，denied 与崩溃同时消失。
-
 
 **Q20: [learning] Android 13 AOSP 的普通应用域为什么能 find audio 服务？属性批量授权怎样起作用？**
 

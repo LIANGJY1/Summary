@@ -19,7 +19,6 @@ Battery Power 是整机口径，屏幕、基带、Wi-Fi、后台进程和系统�
 
 单个温度值不等于系统已经限频，报告应写起止温度与系统 thermal status 而不是只贴峰值。平台侧可用 `adb shell dumpsys thermalservice` 与 `dumpsys powerstats` 交叉核验“系统侧是否有数据、变化时间是否一致”（服务名 `thermalservice` 按 AAOS13 源码核对）。注意版本差异——AAOS13 的 `ThermalManagerService` 位于 `services/core/java/com/android/server/power/` 下并按 HIDL 2.0、1.1、1.0 顺序连接 HAL，材料按 Android 17 核对的实现移到 `power/thermal/` 子包且优先尝试 AIDL。精确能耗实验应使用外置功耗仪，PerfDog 更适合相对变化监控。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q40 -->
 
 **Q2: [learning] PerfDog 不要求被测 App 接入 SDK 也不要求设备 root，为什么仍不能用它代替线上 APM 和系统 trace 做根因定位？**
@@ -29,7 +28,6 @@ PerfDog 是实验室观测工具：覆盖受控环境中的单台或一组设备
 它的适合场景由这个定位推出：QA 在固定设备和固定脚本上做发版回归、快速筛出异常时间段、拿不到源码时观察第三方 App 的外部表现、经 PerfDog Service 接入实验室自动化。字段可用性取决于平台、设备、SoC、驱动与客户端版本，开始前应先查当前设备的可用指标列表，字段为空时不能拿 0 代替“未采集”。GPU 利用率与 Counter 只在部分机型支持，同一设备同一驱动上的版本对比价值较高，跨 SoC 的 GPU 绝对值通常没有可比性。
 
 判断规则：PerfDog 的结论停留在“哪个版本、设备或时间段的外部指标异常”。要回答“哪个函数造成异常”，就把异常区间交给 Perfetto 或源码 trace 继续定位。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q41 -->
 

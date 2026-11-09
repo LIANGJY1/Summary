@@ -16,13 +16,11 @@ Perfetto 是 Google 开源的 tracing 基础设施，包含采集端（data sour
 
 采集配置决定分析上限：启用调度事件才能还原线程何时运行，启用 Binder、FrameTimeline 或应用标记后才能回答对应问题。空白轨道只说明这份 trace 没有该证据，不能推断系统没有发生相应行为。采集端、分析端与 UI 可独立升级，排查解析差异时要同时记录设备 build 与工具版本。历史脉络上，Systrace（Android 4.1 引入，ftrace + atrace 生成 HTML 报告）已被取代：Android 9 起 `traced` / `traced_probes` 进入系统镜像，Android 10 完整可用，Android 11 起大多数设备默认启用（官方文档口径）。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q2 -->
 
 **Q2: [learning] tracepoint 和 tracer 有什么区别？“function / function_graph / tracepoint 三种模式”的说法准确吗？**
 
 tracer 是写入 `current_tracer` 的记录算法，tracepoint 是内核源码预先声明的静态事件点，由 `events/<group>/<name>/enable` 独立开关——启用调度事件时 `current_tracer` 通常仍是 `nop`。“三种模式”是便于入门的说法，不代表 tracepoint 是第三个 `current_tracer` 取值。成本上，未启用的 tracepoint 走静态分支快速路径，开销很小但不是绝对零。启用后要计算字段、复制并写入当前 CPU 的环形缓冲区，实际成本由事件频率与读取速度决定。`function`/`function_graph` 记录函数入口与返回关系，过滤范围过宽时事件量与扰动都会失控，适合缩小到明确函数集合后的内核调试。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q3 -->
 
@@ -40,7 +38,6 @@ tracer 是写入 `current_tracer` 的记录算法，tracepoint 是内核源码�
 
 Android 9/10 的非 Pixel 设备常见需要手动设置 `persist.traced.enable=1` 启用服务（该属性在 AAOS13 的 sepolicy property_contexts 中同样存在），Android 11 起大多数设备默认启用（官方文档口径）。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q4 -->
 
 **Q4: [learning] Android 设备上录制 system trace 时，Perfetto UI、record_android_trace 和直接调用 perfetto 怎么选？**
@@ -52,7 +49,6 @@ Android 9/10 的非 Pixel 设备常见需要手动设置 `persist.traced.enable=
 3. **可重复、精确控制的采集**：通过 `adb shell perfetto` 直接启动设备端 CLI，并按 Android 版本选择 simple mode 或 `TraceConfig`。该方式适合自动化和复现固定配置。非交互 ADB 会话中 Ctrl+C 可能不能可靠停止采集，因此应显式设置时长，或使用可控的停止流程。
 
 帧卡顿排查要确保采到 FrameTimeline、应用相关标记和所需调度事件。设备端 CLI 的 simple mode 只覆盖 ftrace/atrace 子集，完整数据源配置需用 TraceConfig。官方 Perfetto 文档将 `record_android_trace` 定义为设备端 Perfetto 的便捷包装，并说明 UI 和 System Tracing 的交互式录制路径。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q5 -->
 
@@ -68,20 +64,18 @@ Android 9/10 的非 Pixel 设备常见需要手动设置 `persist.traced.enable=
 
 simple mode 用短参数（如 `-t 10s sched freq idle am wm gfx view`）在 CLI 内部生成受限配置，只覆盖 ftrace/atrace 子集，仍依赖 `traced` / `traced_probes`，并没有绕过 tracing service。非交互 ADB 会话里 Ctrl+C 不一定能可靠停止采集，可复现场景应设置 `-t` 时长。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q6 -->
 
 **Q6: [learning] TraceConfig 的 fill_policy 与 long trace 写盘字段分别决定什么？**
 
 `fill_policy` 决定 central buffer 满时保留哪一端，先按目标时间窗选择：
 
-1. **`RING_BUFFER`：**默认用新数据覆盖旧数据，适合保留停止采集前的时间窗。
-2. **`DISCARD`：**写满后拒收新数据，保留会话开始后的早期证据；会话本身不会因写满而停止。
+1. `RING_BUFFER`：默认用新数据覆盖旧数据，适合保留停止采集前的时间窗。
+2. `DISCARD`：写满后拒收新数据，保留会话开始后的早期证据；会话本身不会因写满而停止。
 
 long trace 通过 `write_into_file: true` 让 service 周期性把 central buffer 写入文件，配套字段：`file_write_period_ms` 控制写文件周期（有效最小值 100 ms），`max_file_size_bytes` 达到上限时会停止 tracing（即使 `duration_ms` 未到）。这套字段生成一个持续增长的文件，不提供自动轮转。需要多个独立文件时改用一组有时长上限的连续会话或触发式采集。另外 `flush_period_ms` 管的是 producer 提交 shared memory 数据的节奏，与写文件周期是两件事。
 
 `duration_ms` 默认不计入设备休眠时段，跨休眠的长 trace 实际墙上时间会更长（Android 17 提供 `prefer_suspend_clock_for_duration` 把休眠计入，AAOS13 无需关注此差异时按默认语义即可）。buffer 容量应按峰值事件速率估算，先抓短 trace 查 `stats` 再调整，而不是背固定数值。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q7 -->
 
@@ -98,12 +92,11 @@ long trace 通过 `write_into_file: true` 让 service 周期性把 central buffe
 5. **Java heap dump（retained graph）**：Android 11+，门槛同上。
 6. `linux.perf` 调用栈采样：Android 12+ 平台具备（AAOS13 sepolicy 已有 `traced_perf` 域），门槛同上。
 7. **功耗 rail**：Android 10+ 且设备实现了对应 HAL，机型能力决定有无数据。
-8. **logcat in trace**：`android.log` 从 logd 读取日志，Perfetto UI 可把它们按时间放到同一 trace 的摘要轨道和消息表中，便于对齐事件与系统日志；Trace Processor 也提供 `android_logs` 表。官方标注该 data source 仅支持 userdebug build，普通 user build 不应默认视为可用；过滤器与采集到的 log buffer 还会限制可见日志范围。
+8. **logcat in trace**：`android.log` 从 logd 读取日志，Perfetto UI 可把它们按时间放到同一 trace 的摘要轨道和消息表中，便于对齐事件与系统日志。Trace Processor 也提供 `android_logs` 表。官方标注该 data source 仅支持 userdebug build，普通 user build 不应默认视为可用，过滤器与采集到的 log buffer 还会限制可见日志范围。
 
 atrace category 不是事件的别名，而是一组采集开关：`view`、`wm`、`am` 等主要控制用户空间的 `ATRACE_TAG_*` 位。`sched`、`freq`、`idle`、`binder_driver` 主要启用内核 tracepoint（AAOS13 的 `frameworks/native/cmds/atrace/atrace.cpp` 核对了这张 category 表）。一个版本差异值得记住：AAOS13 的 category 表里还有 `binder_lock`（Binder 全局锁 trace），材料按 Android 17 核对时该全局锁事件已不在追踪头文件中。AOSP category 存在不保证厂商内核提供其依赖的每个事件，以 `adb shell atrace --list_categories` 与设备的 `available_events` 为准。
 
 userdebug/eng 调试镜像可以把 profiling 扩大到更多系统进程。遇到空结果时先按这张清单核对资格与配置，而不是先怀疑查询写错。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q8 -->
 
@@ -121,7 +114,6 @@ userdebug/eng 调试镜像可以把 profiling 扩大到更多系统进程。遇�
 
 带 `traceTag` 参数的 `traceBegin`、`asyncTraceForTrackBegin/End`、`instant` 等重载是 `@hide`/`@SystemApi`，不属于普通应用 SDK（AAOS13 源码核对）。NDK 侧 `<android/trace.h>` 的同步 API 自 API 23 起可用，异步与 Counter 自 API 29 起（AAOS13 头文件注释核对）。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q9 -->
 
 **Q9: [learning] 在 Android 13 上，Trace.beginSection() 的事件实际走哪条路径？“每个埋点都双写 ATrace 和 Perfetto”的说法对吗？**
@@ -135,7 +127,6 @@ marker 编码与刷新机制（AAOS13 源码核对）：
 3. tag 启用状态来自 `debug.atrace.tags.enableflags` 属性，代码通过属性 serial 变化检测并刷新。应用事件由 `debug.atrace.app_number` / `debug.atrace.app_N` 选择。
 
 “双写”属于后续版本行为：Android 15 起 Java Trace 才接入 `tracing_perfetto` 按 category 状态选择 backend，Android 17 再补 `debug.atrace.prefer_sdk` 的并发会话仲裁（材料口径）。AAOS13 的 `frameworks/native/libs/` 下没有 `tracing_perfetto` 库，`Trace.java` 的 `setAppTracingAllowed()` 注释也写明自 Android S 起是 no-op——在 A13 语境下讨论双写会错误估计开销并预期不存在的重复事件。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q10 -->
 
@@ -159,7 +150,6 @@ ORDER BY severity, name, idx;
 
 有丢失后能否继续分析取决于损失所在的 CPU、buffer、时段是否在结论路径上。重采成本低时先修配置重采。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q11 -->
 
 **Q11: [learning] 大 trace 怎样可靠解析并保持查询结果可复现？**
@@ -171,7 +161,6 @@ ORDER BY severity, name, idx;
 1. **不需要通用 ftrace 原始表：**用 `--no-ftrace-raw` 降低内存。
 2. **需要其他输出格式：**`traceconv` 可转文本或 JSON，但结果通常更大，也不是无损往返。
 3. **需要批量查询：**`BatchTraceProcessor` 为每份 trace 启动独立实例；官方粗算内存约 `2 × 平均文件大小 × Trace 数量`，批大小按主机内存实测。版本固定是复现的硬前提：Trace Processor 的表、标准库模块和查询行为随版本演进，`pip install perfetto` 的包会绑定对应二进制版本，生产流水线应在依赖锁文件固定包版本或用 `bin_path` 指向受审核的二进制并记录校验和。`fetch_latest_trace_processor` 会让同一脚本在不同日期下载不同二进制，产生版本漂移。trace 含进程名、线程名与业务标识，`server http` 只应监听回环地址，公开 URL/外发前先脱敏。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q12 -->
 
@@ -186,19 +175,17 @@ ORDER BY severity, name, idx;
 
 两个版本相关点：AAOS13 的 Java Trace 经 libcutils 写入 trace_marker，Android 15+ 才有 TrackEvent 路径可选。用户空间埋点不可见时先查包名是否进了 `atrace_apps`、事件是否落在采集窗口内。定位后一次只改一个采集变量，并用同一复现验证。文件成功生成只证明会话结束并拿到输出，不证明数据完整。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q13 -->
 
 **Q13: [learning] slice.dur、thread_dur 与 Self Duration 三种时间分别是什么？为什么 NULL 不能按 0 处理？**
 
 三种时长量的是不同对象：
 
-1. **`slice.dur`：**slice 起点到终点的墙上时长，线程在这段时间可能运行、等待 CPU、休眠或阻塞。
-2. **`thread_dur`：**slice 消耗的线程时间。只有 Track Event 开启线程时间采集时才填充，Android ATrace 产生的普通 slice 往往没有这个字段。
+1. `slice.dur`：slice 起点到终点的墙上时长，线程在这段时间可能运行、等待 CPU、休眠或阻塞。
+2. `thread_dur`：slice 消耗的线程时间。只有 Track Event 开启线程时间采集时才填充，Android ATrace 产生的普通 slice 往往没有这个字段。
 3. **Self Duration：**`slices.self_dur` 标准库计算父 slice 墙上区间扣除同栈子 slice 覆盖后的自身墙上时长，不等于函数自身的 CPU 时间，也不扣除另一条线程上的异步工作。
 
 需要某个 slice 内的 on-CPU 时间时，把它的半开区间 `[ts, ts + dur)` 与 `thread_state.state = 'Running'` 求交。NULL 与 0 含义不同：缺失值表示没有这份数据，零表示测量结果为零——把 `thread_dur` 的 NULL 当 0 会把“无线程数据”误读成“没有消耗 CPU”。长 slice 只证明命名区间长，判定 CPU 重的依据是状态分解或线程时间，不是 slice 宽度。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q16 -->
 
@@ -211,7 +198,6 @@ state track 是 Perfetto v57.1 引入的单值状态轨道：一条轨道任一�
 1. **有明确起止的状态：**用 slice。
 2. **某时刻的状态值：**用 counter。
 3. **状态转换提示：**用 instant，生产端自行保证状态合法。这些替代缺少单值约束与专用展示，SQL 与指标名应标明所用口径。若指标需要 idle 时间，注意 state 表只为有值的区间生成行，idle 要么并入观测窗口分母、要么按相邻状态行构造，报告中说明口径。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q21 -->
 
@@ -227,7 +213,6 @@ Flow 是 trace 显式记录的跨 track 关联（UI 中的箭头），只表达�
 4. reply 何时返回，客户端从唤醒到 Running 又等了多久。
 
 嵌套 Binder、回调和线程池排队会让路径分叉，第一条箭头不能代表完整调用树。批量统计应使用 `android.binder` 标准库（工具侧能力，材料口径）而不是按名称通配 slice。FrameTimeline 也用 flow 把应用帧与 SurfaceFlinger display frame 通过 surface frame token 关联，比按时间重叠匹配可靠。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q23 -->
 
@@ -245,7 +230,6 @@ AAOS13 的 `system/memory/lmkd/lmkd.cpp` 在杀进程路径上使用 `ATRACE_INT
 
 `/proc/pressure/memory` 的 `some` / `full`（some 表示至少有任务因内存压力停顿，full 表示所有非 idle 任务同时停顿）还原 kill 前的压力环境。`sched` 与进程生命周期事件确认 lmkd 何时运行、目标进程何时退出。`onTrimMemory()` 回调不能证明 lmkd 随后执行了 kill。分析低内存与卡顿的因果时先确认压力、回收、GC、调度的先后顺序。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q24 -->
 
 **Q17: [learning] SPAN_JOIN 的输入要满足什么条件？违反约束会怎样？各变体怎么选？**
@@ -262,7 +246,6 @@ AAOS13 的 `system/memory/lmkd/lmkd.cpp` 在杀进程路径上使用 `ATRACE_INT
 
 空分区表参与 `SPAN_OUTER_JOIN` 或作为 `SPAN_LEFT_JOIN` 右表时，即使另一侧非空也可能不输出行，自动化查询要覆盖空表测试。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q25 -->
 
 **Q18: [learning] 自定义指标应该选标准库、Trace Summarization 还是 v1 指标？**
@@ -274,7 +257,6 @@ AAOS13 的 `system/memory/lmkd/lmkd.cpp` 在杀进程路径上使用 `ATRACE_INT
 3. **存量 v1 指标：**只有读取服务仍依赖 `TraceMetrics` 时继续维护；Android 17 标签与 v57.2 帮助已将其标为软弃用，接口继续工作但不新增功能。
 
 v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 与 `.proto` 文件，proto 用 `extend TraceMetrics` 挂自定义消息，字段号使用本地保留的 450–500 区间且团队内登记。输出视图必须命名为 `{扩展字段名}_output`。计数器还原出的区间数据求平均时用 `DURATION_WEIGHTED_MEAN`（按样本覆盖时长加权），普通算术平均会让只持续 1 秒的样本与持续 9 秒的样本同权重。另注意两套“宏”不是一回事：SQL 侧的 `CREATE PERFETTO MACRO` 在查询执行前展开表/表达式片段（调用以 `!` 结尾），UI 侧的命令宏是 `Settings > Macros` 里的 JSON 命令序列。指标规格应同时记录依赖的数据源、适用版本、单位、方向与空值含义。
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q26 -->
 
@@ -292,7 +274,6 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 1. **可比性：**固定平台版本、设备与刷新率、场景脚本、采集配置和 Trace Processor 版本，再把 P50/P95/P99 与样本量一起解读；最大值对单次抖动敏感，不宜单独做门禁。
 2. **阈值：**用固定设备、固定构建下未改码重复运行的噪声分布定门禁；“变慢 10%”或固定毫秒数没有跨场景通用性。凡是缺少 FrameTimeline、Binder、sched 等关键数据的结论都应降级为“不完整”并给出补采配置，而不是挑一个能算的数替代。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q27 -->
 
 **Q20: [learning] 把 Perfetto 查询放进 CI 门禁时，怎么避免诊断配置污染测量？埋点开销怎么治理？**
@@ -305,7 +286,6 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 2. **敏感数据：**账号、URL、文件路径、token 不进 trace。
 3. **事件量：**高频循环先估算事件速率，再决定采样或缩小范围。开销没有跨设备固定值：官方经验值约为每个区间 5 μs（启用态 ATrace 单事件量级 1–10 μs，材料口径），trace 关闭时走快速检查但不是零开销，应目标设备实测。发布包不要用 `-assumenosideeffects class android.os.Trace` 全局清除——该 R8 规则假定方法无副作用，会删除应用与依赖库的所有调用点并让诊断能力随构建配置漂移。更可控的做法是包装自己的可选埋点，用构建期常量（如 `BuildConfig.ENABLE_APP_TRACE`）让 R8 只移除不可达分支。
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q34 -->
 
 **Q21: [learning] 为什么启动时间不要用 “bindApplication 到第一个 doFrame” 手工拼 slice？标准库提供了什么？**
@@ -316,7 +296,6 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 2. **显示阶段：**`android.startup.time_to_display` 关联首帧与 `reportFullyDrawn()`，给出 TTID（首次显示耗时）与 TTFD（完全显示耗时）。TTFD 依赖应用调用 `reportFullyDrawn()`，空值不能当零毫秒。
 
 两个使用边界：进程在启动期间死亡重建时，一个 `startup_id` 可能关联多个 `upid`，TTID/TTFD 仍是该启动实例的一组时间。`android.startup.startup_breakdowns` 会把主线程 slice 与 `thread_state` 裁成互斥区间并生成 `reason`，但 reason 是标准库的派生分类、不是设备直接记录的原始事件，适合筛选候选原因，仍要用原始时间线与源码确认。模块源码建议采集 Binder、ART、`am`、`view` 事件，缺少时分类变粗。统计启动区间内的 Binder 事务时，要同时满足 `upid` 匹配与时间相交，且各事务可能互相重叠——`SUM(client_dur)` 是时长之和，不是启动区间中的独占时间。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q1 -->
 
@@ -330,7 +309,6 @@ v1 指标的约定（维护存量时需要）：同目录同名的一对 `.sql` 
 4. **linux.perf**：写 `perf_sample`，可与 ftrace、FrameTimeline 联合录制在同一 trace 时钟下。采样命中数不能换算成单次函数耗时。
 
 诊断分工：FrameTimeline、`slice` 与 `thread_state` 界定异常区间，区间内的 `perf_sample` 回答正在消耗 CPU 的调用路径。聚合 profile 适合快速找热点，但仍需调度数据确认目标线程得到多少 CPU、是否被抢占。全局火焰图不能代替帧级因果链。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q2 -->
 
@@ -356,7 +334,6 @@ GROUP BY thread.utid ORDER BY sample_count DESC;
 ```
 
 结果能暴露包名选错、目标线程没被采到或录制区间过短。样本数是采样命中计数，不能解释成函数执行毫秒数。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q3 -->
 
@@ -415,18 +392,18 @@ data_sources {
 
 配置值及省略后果如下：
 
-1. **`duration_ms: 10000`：**将采集限制为 10 秒，便于复现并控制开销；省略时 TraceConfig 不设定时长，由采集入口/调用方决定何时停止。
-2. **`size_kb: 40960`：**分配 40 MiB trace buffer。官方 proto 未给 `size_kb` 的省略值作固定容量承诺，配置时应显式设定；不要把缺省容量当成本例大小。
-3. **`fill_policy: DISCARD`：**缓冲区写满并遇到未读数据时停止接收新 packet，保留已有数据。省略该字段时默认使用 `RING_BUFFER`；writer 快于 reader（或停止采集后才读取）时，新 packet 会覆盖旧 packet。显式选 `DISCARD` 是为了本例保留采集窗口开头的样本。
-4. **`name: "linux.perf"`：**选择 Linux perf 数据源；未配置此数据源就不会有 perf 样本。
-5. **`counter: SW_CPU_CLOCK`：**以软件 CPU 时钟为 timebase；Perfetto 文档用它作为周期性采样计时事件。显式选择可让配置意图明确；不设置 counter 的结果未由该文档承诺，需按目标版本 schema/producer 核对。
-6. **`frequency: 100`：**请求每 CPU 每秒约 100 次采样，符合官方 cookbook 示例。内核可动态调整频率，也可能限频，因此它不是实际采样率。省略 frequency 后是否由其他 timebase 字段决定，取决于配置内容；单独省略时没有文档承诺的固定采样率。
-7. **`timestamp_clock: PERF_CLOCK_MONOTONIC`：**显式选用单调时钟，便于与 trace 的调度时间域关联。省略时官方 proto 指定由实现选择；合并/比较数据源前应核验 trace clock metadata 与转换快照。
-8. **`callstack_sampling`：**开启用户态调用栈展开；省略整个消息时只记录事件计数，不产生调用栈样本。若消息存在而 `user_frames` 未设置，官方 proto 说明默认包含用户态展开（DWARF）。
-9. **`scope.target_cmdline`：**仅保留 `/proc/<pid>/cmdline` 匹配 `com.example.app` 的进程样本。省略 scope 会保留全部进程，unwinder 负担可能升高并丢样。
-10. **`kernel_frames: true`：**将内核栈帧加入样本，以调查 CPU 热点是否进入内核；省略时 proto bool 默认 false，不采内核帧。需要 `traced_perf` 以 root 运行，或手动放开 `kptr_restrict`；Android debug build 通常由平台处理这一权限，实际行为仍需按设备核对。
-11. **`sched_switch`、`sched_waking`：**记录线程切换与唤醒事件，用于区分线程何时运行、何时被唤醒；省略 `linux.ftrace` 数据源不会有这些调度事件。
-12. **`scan_all_processes_on_start: true`：**在采集开始时扫描所有进程，补充名称和分组上下文；省略/false 时不做启动全量扫描，但 ftrace 看到线程时仍可触发进程信息补采。访问 `/proc` 仍受采集进程权限、`PTRACE_MODE_READ` 和 procfs `hidepid` 限制；没有权限时应关闭启动全量扫描，并接受进程上下文可能不完整。全量扫描会增加开始时的采集工作。
+1. `duration_ms: 10000`：将采集限制为 10 秒，便于复现并控制开销；省略时 TraceConfig 不设定时长，由采集入口/调用方决定何时停止。
+2. `size_kb: 40960`：分配 40 MiB trace buffer。官方 proto 未给 `size_kb` 的省略值作固定容量承诺，配置时应显式设定；不要把缺省容量当成本例大小。
+3. `fill_policy: DISCARD`：缓冲区写满并遇到未读数据时停止接收新 packet，保留已有数据。省略该字段时默认使用 `RING_BUFFER`；writer 快于 reader（或停止采集后才读取）时，新 packet 会覆盖旧 packet。显式选 `DISCARD` 是为了本例保留采集窗口开头的样本。
+4. `name: "linux.perf"`：选择 Linux perf 数据源；未配置此数据源就不会有 perf 样本。
+5. `counter: SW_CPU_CLOCK`：以软件 CPU 时钟为 timebase，Perfetto 文档用它作为周期性采样计时事件。显式选择可让配置意图明确。不设置 counter 的结果未由该文档承诺，需按目标版本 schema/producer 核对。
+6. `frequency: 100`：请求每 CPU 每秒约 100 次采样，符合官方 cookbook 示例。内核可动态调整频率，也可能限频，因此它不是实际采样率。省略 frequency 后是否由其他 timebase 字段决定，取决于配置内容；单独省略时没有文档承诺的固定采样率。
+7. `timestamp_clock: PERF_CLOCK_MONOTONIC`：显式选用单调时钟，便于与 trace 的调度时间域关联。省略时官方 proto 指定由实现选择；合并/比较数据源前应核验 trace clock metadata 与转换快照。
+8. `callstack_sampling`：开启用户态调用栈展开；省略整个消息时只记录事件计数，不产生调用栈样本。若消息存在而 `user_frames` 未设置，官方 proto 说明默认包含用户态展开（DWARF）。
+9. `scope.target_cmdline`：仅保留 `/proc/<pid>/cmdline` 匹配 `com.example.app` 的进程样本。省略 scope 会保留全部进程，unwinder 负担可能升高并丢样。
+10. `kernel_frames: true`：将内核栈帧加入样本，以调查 CPU 热点是否进入内核。省略时 proto bool 默认 false，不采内核帧。需要 `traced_perf` 以 root 运行，或手动放开 `kptr_restrict`。Android debug build 通常由平台处理这一权限，实际行为仍需按设备核对。
+11. `sched_switch`、`sched_waking`：记录线程切换与唤醒事件，用于区分线程何时运行、何时被唤醒；省略 `linux.ftrace` 数据源不会有这些调度事件。
+12. `scan_all_processes_on_start: true`：在采集开始时扫描所有进程，补充名称和分组上下文。省略/false 时不做启动全量扫描，但 ftrace 看到线程时仍可触发进程信息补采。访问 `/proc` 仍受采集进程权限、`PTRACE_MODE_READ` 和 procfs `hidepid` 限制。没有权限时应关闭启动全量扫描，并接受进程上下文可能不完整。全量扫描会增加开始时的采集工作。
 
 `target_cmdline` 是进程筛选条件，不是 Linux perf 的安全访问授权。采样频率、CPU 数、Java/JIT 展开与内核帧都会影响开销，必须随结果记录。
 
@@ -436,7 +413,6 @@ data_sources {
 2. 查询 `perf_sample`，按线程统计样本数并查看首末时间；目标应用完全没有样本时，检查包名匹配、应用是否运行、设备是否支持该数据源及权限。
 3. 查看 `unwind_error` 与 `stats` 中名称匹配 `perf_*` 的非零错误项，区分未展开栈、采集失败与真实的零样本线程。
 4. 将样本数理解为采样命中，不换算成函数执行毫秒；需要调度状态时与同 trace 的调度事件交叉验证。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q5 -->
 
@@ -456,7 +432,6 @@ cat raw-trace.perfetto-trace symbols.pb deobfuscation.pb > enriched-trace.perfet
 
 `symbols.pb` 与 `deobfuscation.pb` 是额外的 TracePacket 流，拼接后才得到可直接打开的 trace。`PERFETTO_PROGUARD_MAP` 格式固定为 `包名=映射文件`，多个包用冒号分隔，`R8_MAPPING_FILE` 必须来自被测 APK 的同一次构建。另一种交付方式 `traceconv bundle` 输出 TAR 归档（内含 `trace.perfetto`）：Android 17 固定源码中的 bundle 选项没有 `--proguard-map`，映射仍走环境变量。当前 v57.2 已支持可重复传入的 `--proguard-map` 并成为官方推荐，手工拼接方式主要用于兼容旧流水线（版本口径按材料转写）。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q7 -->
 
 **Q26: [learning] Agent 写 Perfetto SQL 之前必须固定什么？哪些口径错误会让语法正确的查询给出误导结果？**
@@ -475,7 +450,6 @@ cat raw-trace.perfetto-trace symbols.pb deobfuscation.pb > enriched-trace.perfet
 
 兼容性分三层评估：基础表结构层（表存在不代表 trace 有数据）、Android 标准库层（受采集字段与版本限制，FrameTimeline 从 Android 12 起可用）、厂商扩展层（显示、thermal、功耗自定义轨道按设备建词典）。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q10 -->
 
 **Q27: [learning] Perfetto 里 CPU 频率数据从哪三条采集路径来？频率轨道开头留白说明什么？**
@@ -490,7 +464,6 @@ cat raw-trace.perfetto-trace symbols.pb deobfuscation.pb > enriched-trace.perfet
 
 `power/cpu_frequency_limits` 值得与频率事件一起抓：它记录 `min_freq`、`max_freq` 与 policy 代表 CPU（Android 17 内核行为，材料口径。内核源码不在本地树），能区分“governor 没有请求更高频率”和“当前上限不允许再升频”两类线索，限制来源还要结合 thermal、Power HAL、节电模式与厂商代码确认。USB 边界：许多 Android 设备接入 USB 时 USB 驱动栈持有 wakelock，部分 idle state 不会出现，USB 采集的 idle 分布未必代表脱线使用（材料转写的官方文档口径）。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q11 -->
 
 **Q28: [learning] Perfetto 的 CPU 频率轨能当硬件实测时钟读吗？文档和实现有什么出入？**
@@ -498,7 +471,6 @@ cat raw-trace.perfetto-trace symbols.pb deobfuscation.pb > enriched-trace.perfet
 不能。`power/cpu_frequency` 记录的是 cpufreq 路径报告的一次频率切换：按材料核对的 Android 17 内核，普通切换完成后写入 `freqs->new`，快速切换路径写入驱动返回的 `freq`，这是软件可见的请求或报告值，不保证硬件在整个区间都精确运行于该频率。轮询路径的口径更有出入：Android 17 的 Perfetto 文档把轮询描述为读取 `cpuinfo_cur_freq`，但同版本 `CpuFreqInfo::ReadCpuCurrFreq()` 实现读取的是 `scaling_cur_freq`。内核文档指出 `scaling_cur_freq` 多数情况下表示 scaling driver 最近请求的 P-state，未必等于硬件瞬时频率——核对某一版本时应以该版本实现为准，并保留文档与实现的差异。
 
 要讨论有效执行周期或能耗，需要 PMU、AMU 计数器或硬件功耗计等补充证据。`cpuinfo_cur_freq`、`cpuinfo_avg_freq` 也只有在驱动具备反馈能力且 sysfs 允许读取的设备上可用。policy、governor 与 schedutil 的机制层不在本题展开，这里只强调 trace 口径：频率轨是状态信号，不是指令执行量、瞬时硬件频率或功耗。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q12 -->
 
@@ -522,7 +494,6 @@ CREATE VIRTUAL TABLE _running_freq USING SPAN_JOIN(
 
 分区键必须用 `ucpu`：`cpu` 是设备内的逻辑 CPU 编号，`ucpu` 是 Trace Processor 的可连接 CPU 标识（多机或虚拟化 trace 下仍唯一）。把 `sched.ucpu` 与 `cpu_counter_track.cpu` 直接比较会混用两个标识域。`cluster_id` 与 `capacity` 来自已采集的处理器信息，可与频点集合互相校验。目标主线程先用 `tid = pid` 定位 `utid`，之后全程用 `utid`，避开长 trace 中 tid 复用。统计结果要同时报告频率覆盖率：内连接舍弃了未知频率区间，“已知频率覆盖的 Running 时间中落在某频点的占比”不能解释成指令占比、周期占比或能耗占比。数据存在性以 SQL 为准：按材料转写的官方文档记录过缺少 idle 事件时 UI 不渲染频率轨但数据存在的显示问题。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q20 -->
 
 **Q30: [learning] android.os.Trace/ATrace_\*、Perfetto SDK 的 track_event 与 custom data source 三层埋点怎么选？**
@@ -540,7 +511,6 @@ CREATE VIRTUAL TABLE _running_freq USING SPAN_JOIN(
 
 custom data source 写出的私有 protobuf 不会自动变成 PerfettoSQL 表：没有对应 schema 与 importer 的官方 Trace Processor 会跳过未知字段，原始字节还在 trace 里但 SQL 查询不到业务数据。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q21 -->
 
 **Q31: [learning] 应用用 Perfetto SDK 起一个 in-process session，有哪些容易踩错的关键点？**
@@ -554,7 +524,6 @@ in-process backend 把 tracing service、consumer 与 producer 都放在当前�
 
 `buffer_size_kb` 按目标设备上的事件率、最长采集时间与丢包统计确定，没有通用常量：ring buffer 写满后覆盖旧 packet，`DISCARD` 策略写满后舍弃新 packet，两者丢失的时间段不同。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q22 -->
 
 **Q32: [learning] 应用以 system backend 充当 Perfetto producer 时，权限边界在哪里？Android 13 与 Android 17 有什么差别？**
@@ -562,7 +531,6 @@ in-process backend 把 tracing service、consumer 与 producer 都放在当前�
 producer 只能向设备上的 `traced` 服务提交数据。采集配置、buffer、输出文件与读取权限都归有 consumer 权限的一方管理，能连接 producer socket 不代表能启动或读取整机 trace。版本差异是关键（本地核对）：Android 13 的 `system/sepolicy/private/app.te` 用 `userdebug_or_eng(\`perfetto_producer({ appdomain })\`)` 门控——`user` 构建上普通应用进程没有 producer 权限。材料核对的 Android 17 已改为无条件 `perfetto_producer(appdomain)`。这直接影响线上方案：Android 13 user 机的 SDK system backend 埋点拿不到数据，应退回 `android.os.Trace`/`ATrace_*` 由具备权限的 consumer 采集。
 
 应用只贡献 TrackEvent 时，初始化可设 `enable_system_consumer = false` 并在代码中不显式调用 `NewTrace(kSystemBackend)`，让 linker 从最终二进制移除未使用的 system consumer IPC 代码——该字段只帮助构建工具裁剪，不负责授权，应用代码仍不得创建 system consumer，也不调用 `ReadTraceBlocking()`。adb 或受控环境采集时，外部 TraceConfig 要显式请求 `track_event` 并在 `TrackEventConfig` 中启用目标 category。抓到 ftrace 却没有应用 slice 时，依次检查 producer 是否连接、track_event descriptor 是否上报、category 是否匹配、事件是否发生在采集窗口内。manifest 的 `profileable`/`debuggable` 影响部分平台 profiler 与 shell profiling 能力，但不会让应用获得 system trace consumer 权限。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q23 -->
 
@@ -586,7 +554,6 @@ custom data source 继承 `perfetto::DataSource<T>`，每个活动 trace session
 
 团队无法长期维护 Trace Processor fork 时，退回 TrackEvent 的 category、slice、counter、flow 与长度受限的 debug annotation。数据源名称用团队控制的反向域名，减少与其他 producer 的命名冲突。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q24 -->
 
 **Q34: [learning] Perfetto SDK 的 startup tracing 与 trigger 分别解决什么问题？为什么故障后才启动 trace 看不到故障前？**
@@ -595,7 +562,6 @@ custom data source 继承 `perfetto::DataSource<T>`，每个活动 trace session
 
 trigger 解决“条件满足时给已配置 session 发信号”：`ActivateTriggers(triggers, ttl_ms)` 只向当前已连接或在 TTL 内完成连接的 backend 发送信号，本身不创建 session，也不能让应用读取 consumer buffer。trace 的 ring buffer、停止策略与输出文件仍由 consumer 配置，`ttl_ms` 由调用方按 producer 连接策略确定。故障前数据的正确姿势是提前运行 session 并使用 ring buffer：故障后才启动 trace 只能看到故障后的活动。进程被 LMK 或 native crash 直接终止时，尚未提交的 producer chunk 和应用私有文件都可能丢失，线上方案要单独验证异常退出路径。
 
-
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q25 -->
 
 **Q35: [learning] 应用集成了 Perfetto SDK 后，它的 TrackEvent 会自动出现在 ProfilingManager 的 system trace 结果里吗？**
@@ -603,7 +569,6 @@ trigger 解决“条件满足时给已配置 session 发信号”：`ActivateTri
 不会。按材料核对的 Android 17 `Configs.java`：`ProfilingManager` 的 system trace 固定配置包含 `linux.process_stats`、`android.packages_list`、目标 App 的 atrace、`linux.ftrace` 与 `android.surfaceflinger.frametimeline`，不请求 `track_event`，也不请求应用自定义 data source——SDK system backend 的 TrackEvent 不会自动进入其结果。APM 需要 SDK 专属事件时，只能由应用管理短时 in-process session 并上传自己的文件。需要系统调度证据时走公开 profiling API 或受控 consumer，两类文件的访问权限、脱敏状态与查询 schema 分别记录。
 
 版本边界：`ProfilingManager.requestProfiling()` 从 API 35（Android 15）可用，触发式注册 `ProfilingTrigger` 从 API 36 可用。Android 13（API 33）没有这套 API，线上采集依赖 atrace 加具备权限的 consumer。请求受系统 rate limiter 限制且不保证执行，回调成功后用 `ProfilingResult.getResultFilePath()` 取交付文件。结果经过 redaction（按规则删除或模糊敏感字段），不能把未脱敏 trace 中可见的字段当成公开 API 保证。埋点设计按“这份文件可能被上传用于诊断”评审：category 只描述技术模块，事件名固定，动态值写入有类型、有上限的参数。用户标识、订单号、完整 URL、token、地理位置与原始堆栈不得写入。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q27 -->
 
@@ -616,7 +581,6 @@ trigger 解决“条件满足时给已配置 session 发信号”：`ActivateTri
 3. **importer 分支**：acquire fence 在 `QUEUE` packet 被 importer 处理前已 signal 时，v57.2 importer 不创建 `GPU_` phase，避免生成起止顺序相反的区间。某帧缺 `GPU_` slice 不是数据损坏（importer 行为按材料核对的 v57.2 转写）。
 
 另外 `QUEUE` 只表示 buffer transaction 携带的提交时间，不能当成 GPU 已完成，也不表示 SF 已采纳该 buffer。缺某一帧的 `AcquireFenceSignaled` 或 `PresentFenceSignaled` 要结合 trace 尾部、buffer 是否继续复用与采集区间判断，不能写成“fence 从未 signal”。
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q28 -->
 
@@ -642,7 +606,6 @@ ORDER BY fs.ts;
 4. **Display\_（相邻 present 间隔）**：反映帧节奏，30 fps 内容在 60 Hz 屏出现约 33.3 ms 间隔可能完全正常，且不等于 buffer 从 present 到可复用的 release latency。
 
 常见误读还有：固定 16.5 ms 阈值在 90/120 Hz、VRR 与非整数帧节奏下误报，应与当前 expected timeline 和目标帧率比较。`dur = -1` 的未闭合 slice（如末尾的 `Display_`）不能参与均值、P95 或总时长统计。汇总查询里的 `NULL` 表示该 phase 没有闭合或未生成，不能用 `COALESCE(..., 0)` 把缺失证据改写成零耗时。同名 layer 在窗口销毁重建后 frame number 可能重新计数，长 trace 自动化要限制时间窗并保留原始 track name。
-
 
 <!-- 来源：00-methods-and-tools/01-performance-workflow.md · Q39 -->
 
@@ -687,10 +650,10 @@ CPU 编号更没有跨设备语义：CPU 7 可能是最高 capacity 的核心，
 
 四段往返延迟基于同一事件的四个消息节点（工具侧标准库定义，材料口径）：
 
-1. **`dispatch_latency_dur`：**应用收到 − Dispatcher 发出。
-2. **`handling_latency_dur`：**应用发 `FINISHED` − 应用收到。
-3. **`ack_latency_dur`：**系统收到确认 − 应用发出。
-4. **`total_latency_dur`：**系统收到确认 − Dispatcher 发出。
+1. `dispatch_latency_dur`：应用收到 − Dispatcher 发出。
+2. `handling_latency_dur`：应用发 `FINISHED` − 应用收到。
+3. `ack_latency_dur`：系统收到确认 − 应用发出。
+4. `total_latency_dur`：系统收到确认 − Dispatcher 发出。
 
 `end_to_end_latency_dur` 从 InputReader 读取延伸到关联帧呈现，即 `present_time - read_time`；无帧关联时为 NULL。
 
@@ -714,9 +677,9 @@ CPU 编号更没有跨设备语义：CPU 7 可能是最高 capacity 的核心，
 
 AAOS13 的 `InputDispatcher.cpp` 用 ATrace 计数器记录三类队列（本地源码逐字核对）：
 
-1. **`iq`：**尚未处理的全局入站队列。
-2. **`oq:<窗口名>`：**该连接上等待写入应用输入通道的出站队列。
-3. **`wq:<窗口名>`：**已写给应用、仍等待 `FINISHED` 确认的等待队列。
+1. `iq`：尚未处理的全局入站队列。
+2. `oq:<窗口名>`：该连接上等待写入应用输入通道的出站队列。
+3. `wq:<窗口名>`：已写给应用、仍等待 `FINISHED` 确认的等待队列。
 名称用固定 40 字节栈缓冲拼接（`char counterName[40]`），过长的通道名会被截断。旧文档中 "InputDispatcher inbound queue" 之类的名称不是源码写法，查询用 `GLOB 'oq:*'`、`GLOB 'wq:*'` 前缀匹配并 JOIN `process_counter_track` 限定 `system_server`。
 
 counter 只在值变化时记录采样点、没有 `dur`，一个值持续到同轨道的下一次采样。要按“非零持续区间”分析时用窗口函数补时长：
@@ -811,8 +774,8 @@ Linux 的 `TASK_RUNNING` 定义为 0，同时覆盖“正在 CPU 上执行”与
 
 两个字段都依赖采集 `sched/sched_blocked_reason` tracepoint，解释时仍要分开：
 
-1. **`io_wait`：**来自任务 `in_iowait` 记账标志。值为 1 只提高 I/O 等待的可能性，不含文件名、设备或调用方。
-2. **`blocked_function`：**来自 `__get_wchan()` 观察到的内核睡眠位置，需内核符号解析成功，例如配置 `symbolize_ksyms: true` 且权限允许；符号受限时可能为空。归因按证据走：`io_wait = 1` 且与块设备/文件系统事件重叠，查设备与调用栈。与回收、压缩事件重叠，查 PSI 与内存压力。`blocked_function` 指向驱动或同步路径，查对应子系统源码。非 Running 状态没有“正在执行的 CPU”，`blocked_function` 为空也不能反推“没有内核阻塞”。
+1. `io_wait`：来自任务 `in_iowait` 记账标志。值为 1 只提高 I/O 等待的可能性，不含文件名、设备或调用方。
+2. `blocked_function`：来自 `__get_wchan()` 观察到的内核睡眠位置，需内核符号解析成功，例如配置 `symbolize_ksyms: true` 且权限允许；符号受限时可能为空。归因按证据走：`io_wait = 1` 且与块设备/文件系统事件重叠，查设备与调用栈。与回收、压缩事件重叠，查 PSI 与内存压力。`blocked_function` 指向驱动或同步路径，查对应子系统源码。非 Running 状态没有“正在执行的 CPU”，`blocked_function` 为空也不能反推“没有内核阻塞”。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q17 -->
 
@@ -899,8 +862,6 @@ Trace Processor 对已在 Running/Runnable 的线程收到重复唤醒时记为 
 1. **锁等待与 Running：**同一 `utid` 上两者按定义互斥，`SPAN_JOIN` 得到空集是正确结果。
 2. **Binder、锁与 GC：**三类活动可能彼此重叠，覆盖时间相加不是“总阻塞时间”。
 3. **锁等待与睡眠：**锁时间可能已包含在睡眠状态里，再相加会重复计时。`android_monitor_contention` 的 `waiter_count` 从 0 起编号（0 表示自己是第一个等待者），不能当作等待线程总数。结论写成“FrameTimeline 将某帧标为 App Deadline Missed，UI 线程 6.2 ms 处于 R 状态，同窗口未发现 monitor 锁竞争”这样的具体命题——数字来自具体 trace，时间相关性不写成因果关系。
-
-
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q4 -->
 

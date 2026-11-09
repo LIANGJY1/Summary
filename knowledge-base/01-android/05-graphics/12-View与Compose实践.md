@@ -205,4 +205,3 @@ Node 的附着生命周期管理 owner 访问和协程，复用回调则负责�
 2. **复用清理**：`onReset()` 在节点仍附着时、即将进入复用池前调用，例如 Lazy 列表项离开视口时。随后 Node 会 detach。清除焦点、按压和拖拽进度等条目级状态，避免新数据项继承旧状态。
 3. **状态观察**：Node 中不能使用 `LaunchedEffect`。`onAttach()` 同轮其他节点未必已完成处理，需要观察整棵树最终状态时用 Node 的 `sideEffect` 延后。
 4. **CompositionLocal**：实现 `CompositionLocalConsumerModifierNode` 后，通过 `currentValueOf()` 读取附着位置的值。阶段外读取可用 `observeReads` 订阅变化，收到通知后重新读取并应用新值。
-

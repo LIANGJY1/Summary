@@ -1,16 +1,16 @@
 # ANR 与系统故障诊断
 
-应用侧证据采集边界与 ANR 事件分层见 [APM 采集架构](../04-工具/06-线上监控与APM/14-APM采集器.md)；应用退出历史和 trace 附件的 API 读取边界见 [ApplicationExitInfo 工具主题](../04-工具/05-平台诊断/06-进程退出记录.md)。Native 崩溃的信号到 tombstone 路径还依赖系统 Native 与底层实现。
+应用侧证据采集边界与 ANR 事件分层见 [APM 采集架构](../04-工具/06-线上监控与APM/14-APM采集器.md)。应用退出历史和 trace 附件的 API 读取边界见 [ApplicationExitInfo 工具主题](../04-工具/05-平台诊断/06-进程退出记录.md)。Native 崩溃的信号到 tombstone 路径还依赖系统 Native 与底层实现。
 
 **Q1: [learning] Android 的 ANR 为什么不能概括为“主线程卡 5 秒”？**
 
-ANR 是不同系统模块对不同响应义务设置的计时器，起点、截止条件和后果并不相同。AOSP 基础值可能乘 `Build.HW_TIMEOUT_MULTIPLIER`，OEM 也可调整；排查应先确认报告中的 ANR 类型与实际等待值：
+ANR 是不同系统模块对不同响应义务设置的计时器，起点、截止条件和后果并不相同。AOSP 基础值可能乘 `Build.HW_TIMEOUT_MULTIPLIER`，OEM 也可调整。排查应先确认报告中的 ANR 类型与实际等待值：
 
-1. **输入分发：**常见连接等待约 5 秒，但窗口可提供自己的 dispatch timeout；无焦点窗口是另一条路径，不能都归咎于 `onTouchEvent()`。
+1. **输入分发：**常见连接等待约 5 秒，但窗口可提供自己的 dispatch timeout。无焦点窗口是另一条路径，不能都归咎于 `onTouchEvent()`。
 2. **广播：**前台优先级约 10 秒、后台优先级约 60 秒。计时从系统向目标进程调度接收器前开始，广播在系统队列中等待不属于接收器执行窗口。Android 14 起进程长期得不到 CPU 时，可延至约 10–20 秒或 60–120 秒。
-3. **Service：**按进程前后台状态约 20 秒或 200 秒，覆盖 `onCreate()`、`onStartCommand()` 等回调完成；它与前台服务类型不是同一个维度。
+3. **Service：**按进程前后台状态约 20 秒或 200 秒，覆盖 `onCreate()`、`onStartCommand()` 等回调完成。它与前台服务类型不是同一个维度。
 4. **前台服务提升：**`startForegroundService()` 后未及时调用 `startForeground()` 有独立计时，常见默认是 30 秒超时再延迟 10 秒触发 ANR。
-5. **ContentProvider：**发布、就绪和异步回调等候分别有 10 秒、20 秒、3 秒的不同处理结果；普通 CRUD 没有统一 Provider ANR 超时。
+5. **ContentProvider：**发布、就绪和异步回调等候分别有 10 秒、20 秒、3 秒的不同处理结果。普通 CRUD 没有统一 Provider ANR 超时。
 
 这些是题内版本对应的 AOSP/Pixel 基础行为，不能作为跨设备不变的 API 常量。
 
@@ -36,7 +36,7 @@ ANR 是不同系统模块对不同响应义务设置的计时器，起点、截�
 
 前台服务有三类互不等价的期限，结果要分开统计：
 
-1. **启动后提升：**调用 startForegroundService() 后须在官方要求的几秒内调用 startForeground()。AAOS13 内部默认 30 秒超时加 10 秒 ANR 延迟，但可被 DeviceConfig 改写，不能当业务预算；到期路径可能记录 ANR，也可能抛 ForegroundServiceDidNotStartInTimeException，须按晋升契约排查。
+1. **启动后提升：**调用 startForegroundService() 后须在官方要求的几秒内调用 startForeground()。AAOS13 内部默认 30 秒超时加 10 秒 ANR 延迟，但可被 DeviceConfig 改写，不能当业务预算。到期路径可能记录 ANR，也可能抛 ForegroundServiceDidNotStartInTimeException，须按晋升契约排查。
 2. **shortService：**Android 14 起约 3 分钟到期并调用 onTimeout()，源码默认再给约 10 秒，仍未停止则走 ANR。
 3. **dataSync/mediaProcessing：**Android 15 起对 targetSdk 35+ 的后台累计约 6 小时，超时未停止会抛 ForegroundServiceDidNotStopInTimeException，不调用 appNotResponding，不能计入 ANR。
 
@@ -46,9 +46,9 @@ AAOS13（API 33）的 ServiceInfo 没有 FOREGROUND_SERVICE_TYPE_SHORT_SERVICE�
 
 三条时间线有不同起点和结果：
 
-1. **回调返回：**onStartJob()/onStopJob() 在主线程执行，超时未返回可触发 ANR。材料按 Android 17 核对默认回调预算为 8 秒（乘 HW_TIMEOUT_MULTIPLIER），对 targetSdk 34+ 显式上报；服务绑定另有约 18 秒预算，但结果是绑定失败与重新调度，不是这一 ANR 阈值。
+1. **回调返回：**onStartJob()/onStopJob() 在主线程执行，超时未返回可触发 ANR。材料按 Android 17 核对默认回调预算为 8 秒（乘 HW_TIMEOUT_MULTIPLIER），对 targetSdk 34+ 显式上报。服务绑定另有约 18 秒预算，但结果是绑定失败与重新调度，不是这一 ANR 阈值。
 2. **job 运行：**onStartJob 返回 true 后，JobScheduler 可因配额或执行时限停止 job 并调用 onStopJob。系统停止本身不是 ANR，onStopJob 仍须在回调期限内返回。
-3. **通知提供：**user-initiated job 启动后约 10 秒内须调用 setNotification()；缺失时 reason 为 `required notification not provided`，可触发 ANR。
+3. **通知提供：**user-initiated job 启动后约 10 秒内须调用 setNotification()。缺失时 reason 为 `required notification not provided`，可触发 ANR。
 
 本地 AAOS13 树未包含 jobscheduler 模块源码，以上数值按材料与官方文档转写。工程做法不变：onStartJob 中快速把工作交给有并发上限的执行器并返回 true，任务完成时调用 jobFinished()，收到 onStopJob 后快速取消或标记后台工作。在回调里等待 Future、join 或同步 Binder 会直接耗尽 8 秒窗口。
 
@@ -56,16 +56,16 @@ AAOS13（API 33）的 ServiceInfo 没有 FOREGROUND_SERVICE_TYPE_SHORT_SERVICE�
 
 AAOS13 的 ContentResolver 有四个不同预算（均乘 HW_TIMEOUT_MULTIPLIER），不能把到期一概记为 ANR：
 
-1. **publish 10 秒：**已 attach 的进程发布清单 Provider 的保护；到期以 REASON_INITIALIZATION_FAILURE 和 `timeout publishing content providers` 移除宿主，是初始化失败，不进 AnrHelper。
-2. **ready 20 秒：**调用方等待正在启动的 Provider 发布；到期获取失败，日志可见 `Failed to find provider info`。
-3. **connected callback 3 秒：**getTypeAsync 等短异步回调；到期结束等待，返回空结果或错误。
-4. **remote callback 23 秒：**经 system_server 异步获取 MIME type 等结果，期限由 ready 加 3 秒组成；到期是结果降级。
+1. **publish 10 秒：**已 attach 的进程发布清单 Provider 的保护。到期以 REASON_INITIALIZATION_FAILURE 和 `timeout publishing content providers` 移除宿主，是初始化失败，不进 AnrHelper。
+2. **ready 20 秒：**调用方等待正在启动的 Provider 发布。到期获取失败，日志可见 `Failed to find provider info`。
+3. **connected callback 3 秒：**getTypeAsync 等短异步回调。到期结束等待，返回空结果或错误。
+4. **remote callback 23 秒：**经 system_server 异步获取 MIME type 等结果，期限由 ready 加 3 秒组成。到期是结果降级。
 
 唯一进入 ANR 处理的是 call detector：特权调用方配置 ContentProviderClient.setDetectNotResponding() 后，远程调用超时会经 appNotRespondingViaProvider() 由 ContentProviderHelper 以 reason "ContentProvider not responding" 调 AnrHelper 处理 Provider 宿主（AAOS13 源码核对。Android 17 起该 reason 由 TimeoutRecord.forContentProvider 承载）。普通应用在主线程同步 query 慢而触发的 ANR，类型由外层契约决定（常是 Input），不能标成 Provider ANR。
 
 **Q8: [learning] system_server 的 Watchdog 与应用 ANR 有什么区别？AAOS13 的 pre-watchdog 抓栈发生在什么时刻？**
 
-两者都处理“长时间没有进展”，但保护对象和恢复方式不同：应用 ANR 保护应用组件、输入窗口与应用进程，由各子系统检测器判定；Watchdog 保护 system_server 的关键 Handler 与 Monitor，由 Watchdog 线程和 HandlerChecker 检查。
+两者都处理“长时间没有进展”，但保护对象和恢复方式不同：应用 ANR 保护应用组件、输入窗口与应用进程，由各子系统检测器判定。Watchdog 保护 system_server 的关键 Handler 与 Monitor，由 Watchdog 线程和 HandlerChecker 检查。
 
 AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOUT`，可被 Settings 覆盖），处理过程为：
 
@@ -94,11 +94,11 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 三类产物回答的层次不同，必须按时间与事件身份关联：
 
-1. **EventLog 的 `am_anr`：**AAOS13 的 tag 30008 依次记录 User、PID、进程名、应用 flags 和 reason，回答“何时、谁、因为什么”。events 缓冲区会循环覆盖，线上应尽早保存完整 bugreport。
+1. **EventLog 事件：**`am_anr` 事件（AAOS13 中 tag 30008）依次记录 User、PID、进程名、应用 flags 和 reason，回答“何时、谁、因为什么”。events 缓冲区会循环覆盖，线上应尽早保存完整 bugreport。
 2. **ANR trace：**AAOS13 的 `ANR_TRACE_DIR` 指向 `/data/anr/`，新版本文件名使用 `anr_` 加时间戳。它回答采样时线程在做什么，不能单独证明整个超时窗口的执行状态。
 3. **DropBox：**`ProcessErrorStateRecord` 调 `addErrorToDropBox` 保存更完整的上下文，tag 与进程类别有关，例如 `data_app_anr`、`system_app_anr`。
 
-关联时同时使用时间、PID、进程名和错误 ID；PID 可能复用，一个 bugreport 也可能包含多次 ANR。Android 11（API 30）起，应用可用 `getHistoricalProcessExitReasons()` 筛选本进程的 `REASON_ANR`，再通过 `traceInputStream` 读取保留片段。它只含目标进程第一段和前置头部，范围小于完整 bugreport；环形缓冲被覆盖时流可为 null，必须按正常缺失处理。
+关联时同时使用时间、PID、进程名和错误 ID。PID 可能复用，一个 bugreport 也可能包含多次 ANR。Android 11（API 30）起，应用可用 `getHistoricalProcessExitReasons()` 筛选本进程的 `REASON_ANR`，再通过 `traceInputStream` 读取保留片段。它只含目标进程第一段和前置头部，范围小于完整 bugreport。环形缓冲被覆盖时流可为 null，必须按正常缺失处理。
 
 **Q11: [learning] “系统发 SIGQUIT、ART 写 traces.txt”的说法现在还准确吗？**
 
@@ -120,7 +120,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 三者粒度不同，交叉验证才有效：
 
-1. **ART 状态：**Blocked、Waiting、Native、Runnable 等是 ART 在可安全暂停的 suspend point 观察到的类型。Native 表示线程在原生代码中，不区分是否消耗 CPU；主线程在 epoll 中等待消息时也是 Native。sCount 是当前 suspend 请求计数，不是历史被暂停次数。
+1. **ART 状态：**Blocked、Waiting、Native、Runnable 等是 ART 在可安全暂停的 suspend point 观察到的类型。Native 表示线程在原生代码中，不区分是否消耗 CPU。主线程在 epoll 中等待消息时也是 Native。sCount 是当前 suspend 请求计数，不是历史被暂停次数。
 2. **Linux 状态：**R/S/D 是内核在采样点看到的 task state。D 对应不可中断等待，常见于 I/O、direct reclaim、驱动等待，但状态字母本身不含原因。普通 futex 等待通常应按 S 分析。freezer 有独立的 TASK_FROZEN 状态，冻结需用 cgroup.events 的 frozen 与 freeze/unfreeze 事件确认。
 3. **Java/native 栈：**提供调用路径与等待机制，如 Object.wait、futex_wait、nativePollOnce。单看任何一列都不能定因：栈停在业务方法只说明采样时仍在该路径，不说明它消耗了整个超时时间。
 
@@ -130,7 +130,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 1. **已确认：**日志、trace、源码语义与复现或单变量 A/B 实验连成完整因果链，可写“根因已确认”。
 2. **强推断：**多项独立证据方向一致，但仍缺一段直接证据，写“高概率相关因素”并标明缺口。
-3. **未闭合：**只有相关日志、异常负载或静态堆栈，时间或对象身份无法对齐；保留线索并写下一轮采集项。
+3. **未闭合：**只有相关日志、异常负载或静态堆栈，时间或对象身份无法对齐。保留线索并写下一轮采集项。
 
 修复后在相同场景比较超时窗口内责任线程状态与 P95/P99 耗时，并检查功能回归。有效的解释必须回答“移除工作或缩短持锁后，为什么原期限可以满足”，不能只观察到采样栈顶变化。
 
@@ -140,7 +140,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 1. 从 `waiting to lock <0x...> held by thread N` 记录等待边。
 2. 从 `locked <0x...>` 记录持有边。
-3. 检查两条线程是否以相反顺序获取同一对锁并形成有向环；成环可判定死锁，不成环则继续查长临界区或锁竞争。典型案例是 Service 执行期间主线程持 DataManager 锁等 DatabaseHelper，工作线程持 DatabaseHelper 等 DataManager。不成环的锁竞争，修复方向是缩短持锁范围、把 I/O 移出临界区、跨模块锁定义固定层级。消除死锁的常见写法是先在锁内复制快照、释放锁后再调用另一对象，同时确认快照的并发安全。
+3. 检查两条线程是否以相反顺序获取同一对锁并形成有向环。成环可判定死锁，不成环则继续查长临界区或锁竞争。典型案例是 Service 执行期间主线程持 DataManager 锁等 DatabaseHelper，工作线程持 DatabaseHelper 等 DataManager。不成环的锁竞争，修复方向是缩短持锁范围、把 I/O 移出临界区、跨模块锁定义固定层级。消除死锁的常见写法是先在锁内复制快照、释放锁后再调用另一对象，同时确认快照的并发安全。
 
 跨工具追线程时注意标识符：ART 的 tid 是 ART 内部线程编号，Linux 的 sysTid 才是内核线程 ID，Perfetto 的 TID 对应 sysTid——在 ANR trace 内按 tid 找到持锁者后，切到 Perfetto 要用 sysTid 关联，不能沿用同一数字。
 
@@ -160,7 +160,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 1. **CPU 百分比：**ProcessCpuTracker 统计某采样区间，进程的 user/kernel 占比在多核上可以超过 100%。TOTAL 行用所有 CPU 的 /proc/stat 增量作分母，非 idle 部分含 iowait，不能当纯执行利用率或与进程行直接相减。fault 计数是采样点之间的缺页事件数，不等于分配量或 I/O 字节数。
 2. **Load：**1/5/15 分钟衰减平均统计可运行与不可中断等待的任务数。8 核设备 Load 为 8 可能是八个任务持续用 CPU，也可能包含 D 状态 I/O 等待。短 ANR 会被长窗口稀释，Load 不能单独证明 CPU 满载。
-3. **PSI：**some/full 与 avg10/avg60/avg300、total 描述资源停顿。当前 ANR 要用窗口内 total 增量，不用开机累计值；cpu.pressure 的 full 恒为 0。
+3. **PSI：**some/full 与 avg10/avg60/avg300、total 描述资源停顿。当前 ANR 要用窗口内 total 增量，不用开机累计值。cpu.pressure 的 full 恒为 0。
 
 这些都是环境证据，要与 trace、Perfetto 的调度和 I/O 轨迹在同一时间窗对齐后才能指向原因。
 
@@ -206,7 +206,7 @@ Android 17（API 37）加入 ActivityManager.registerAnrWarningListener()：应�
 
 四个边界决定应用如何处理 warning：
 
-1. **预警语义：**计时进入预警点，系统尚未宣告 ANR；阻塞在 deadline 前解除则计时取消。
+1. **预警语义：**计时进入预警点，系统尚未宣告 ANR。阻塞在 deadline 前解除则计时取消。
 2. **投递保证：**投递是 best-effort，系统可能来不及调用，executor 排队期间也可能到达 deadline。
 3. **回调成本：**回调不暂停、不延长原计时器，只适合记录轻量状态，不适合全线程 dump、同步写盘或网络上传。
 4. **执行线程：**官方要求 executor 不用主线程，因为主线程可能正是被监视的阻塞线程。版本门槛是运行平台 API 37（公开文档未要求 targetSdk 37），且受功能开关影响。AAOS13 源码中没有该 API 与 AnrWarningController，预警是 Android 17 新增能力，Android 14–16 也不能倒推获得。
@@ -216,7 +216,7 @@ Android 17（API 37）加入 ActivityManager.registerAnrWarningListener()：应�
 类型常量覆盖 ANR 分类，不表示每种类型都已接入产生预警的 producer。已核对的 producer 按检测入口分组：
 
 1. **输入无焦点窗口：**no-focused-window 路径可发预警。
-2. **组件期限：**广播投递、Service 执行、short FGS 与 start-foreground 计时走 AnrTimer 的 50% split point；AAOS13 没有 AnrTimer 类，广播与 Service 用 Handler 消息计时。
+2. **组件期限：**广播投递、Service 执行、short FGS 与 start-foreground 计时走 AnrTimer 的 50% split point。AAOS13 没有 AnrTimer 类，广播与 Service 用 Handler 消息计时。
 3. **未确认覆盖：**普通 window-unresponsive（输入连接超时）在 InputDispatcher 侧没有 pre-ANR producer。ContentProvider、JobService、应用启动等也不能因存在枚举就推断有预警。统计时应保留“有 ANR 无预警”与“预警后恢复”两类记录。
 
 no-focused-window 的预警时刻：pre_window = max(实际 timeout / 2, 2000 ms × HwTimeoutMultiplier)，warning_at = deadline − pre_window。默认 5 秒超时恰在一半（2.5 秒）发出。timeout 较短时预警早于 50% 进度。计算出的 warning_at 已过去则立即排队。同一等待状态只通知一次。预警经 InputDispatcher policy 回调、JNI、InputManagerCallback、WMS AnrController 到 AMS 投递给同 UID 已注册进程。正式 ANR 归因仍可能按焦点状态改判给另一进程，跨 UID 时普通应用无法关联。
@@ -235,7 +235,7 @@ Android 17 为 ApplicationExitInfo 增加了 getAnrInfo()：退出原因为 REAS
 
 AAOS13 的 Native Crash 路径按以下顺序经过系统组件：
 
-1. bionic/debuggerd 在进程内安装 `debuggerd_signal_handler`；收到信号后保存 `siginfo_t` 与 `ucontext_t`，派生 `crash_dump32` 或 `crash_dump64`。
+1. bionic/debuggerd 在进程内安装 `debuggerd_signal_handler`。收到信号后保存 `siginfo_t` 与 `ucontext_t`，派生 `crash_dump32` 或 `crash_dump64`。
 2. `crash_dump` 通过 `ptrace` 暂停并读取目标线程的寄存器、maps 与线程信息，再用 `libunwindstack` 生成线程 backtrace。
 3. `crash_dump` 连接 `tombstoned` 取得输出 fd，生成文本与 protobuf tombstone，并经 `/data/system/ndebugsocket` 通知 ActivityManager。
 

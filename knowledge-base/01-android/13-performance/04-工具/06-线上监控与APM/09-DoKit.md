@@ -12,7 +12,6 @@
 
 适用范围因此收窄：断网/超时模式只用于安全、幂等的接口（幂等指同一请求重复执行不产生额外业务结果），观察 UI 收到 400 后的状态与重试入口。Mock 用于无副作用查询接口上的空列表、字段缺失、超大列表与错误码页面。限速模式适合观察大 Body 慢速读写下的 UI 表现。对状态修改接口，改用测试环境服务端 Mock 或依赖注入替换数据层。DoKit 为第三方 SDK，未本地核对。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q19 -->
 
 **Q2: [learning] DoKit 性能浮窗的 FPS、CPU、内存、卡顿读数各来自什么数据源？为什么浮窗数值不能当版本级性能结论？**
@@ -22,7 +21,6 @@
 卡顿模块还有一个结构性冲突：它依赖 `Looper.setMessageLogging()`，而一个 Looper 只有一个 `mLogging` Printer 槽位（AAOS13 的 `Looper.java` 同为单字段）。DoKit 的卡顿与 TimeCounter 模块会互相停用、停止时把 logger 置 null，应用内其他使用同一接口的监控器也会被覆盖——现场没有记录不能证明没有卡顿。
 
 所以浮窗的用途是发现“哪个页面、哪个操作值得继续查”。版本级帧结论用 JankStats/FrameMetrics，启动与交互结论用 Macrobenchmark，网络阶段拆分用 OkHttp `EventListener` 或系统 trace。DoKit 为第三方 SDK，未本地核对。
-
 
 <!-- 来源：05-observability/03-apm-platforms.md · Q20 -->
 

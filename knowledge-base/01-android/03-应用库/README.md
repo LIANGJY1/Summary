@@ -4,5 +4,6 @@
 
 1. [Glide 图片加载库](./01-Glide.md)（11 题）：请求从创建到交付显示的阶段、with() 入口与生命周期绑定、活跃资源与内存缓存的三级查找、磁盘缓存与原始来源的取数顺序、into() 的复用与替换、TranscodeType 与 Target 分发、缩略图与备用请求树、占位图语义、模块化初始化、断网重连与默认内存预算。
 2. [RecyclerView 列表组件](./02-RecyclerView.md)（9 题）：Adapter、ViewHolder、LayoutManager 与 item 复用的关系、回收路径与缓存容量、位置 API 契约、ItemDecoration 阶段、稳定 ID、DiffUtil 算法、ItemAnimator 四类动画、自定义 LayoutManager 契约与 ConcatAdapter 隔离。
+3. [Retrofit 网络请求库](./03-Retrofit.md)（6 题）：动态代理主链与解析期/运行期分离、注解到 Request 的构造与安全语义、suspend 复用 CallAdapter、回调线程装配、OkHttpCall 状态机、工厂链注册顺序。
 
 知识内容遵守[知识库写作规范](../../WRITING-GUIDE.md)。

@@ -1,6 +1,6 @@
 # ART
 
-> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../07-内存与存储/01-内存管理.md](../07-内存与存储/01-内存管理.md)；类加载与 JNI 链接由本册对应主题覆盖；2026-09-25 增补实用调试题（Q2–Q5，按 AOSP 近版源码镜像核对）。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。主线：ART 运行时职责、执行方式演进（AOT/JIT/profile 指导）、GC 演进与 Mainline 化。堆空间与 GC 机制深挖见 [../07-内存与存储/01-内存管理.md](../07-内存与存储/01-内存管理.md)；类加载与 JNI 链接由本册对应主题覆盖，实用调试题按 AOSP 近版源码镜像核对。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] Android 中的 ART 如何理解？**
 
@@ -158,6 +158,7 @@ Android 17 `mark_compact.cc` 中的对象代际大致按以下过程推进：
 3. 安装 APK、DM，以及 ISA 匹配的 SDM。
 
 固定设备构建、ART APEX 版本、温度和存储余量，每组多轮并报告 P50/P90 与失败回退次数。用 `pm art dump`、`ART_DEX2OAT_REPORTED` 统计和 trace 分别确认“SDM 被接收”与“SDM 被运行时采用”，这两个检查点不能混为一谈。
+
 **Q17: [learning] 常用的 dalvik.vm.* 调试属性有哪些？为什么改了不重启就不生效？**
 
 ART 运行时属性由 Zygote 创建新虚拟机时读取。AndroidRuntime 会把部分属性转换为 ART 运行选项，其他属性则作为特定运行时策略输入。修改属性不会追溯改变已创建的 ART 实例，因此要让新值生效，必须重启读取它的进程，通常需要按设备策略重启 Zygote 或重启设备。
@@ -199,3 +200,35 @@ ART 侧 fatal 统一走 Runtime::Abort，tombstone 呈 `Abort message: 'Check fa
 文件存在只说明该路径有产物，不证明运行时选中并使用了它。ART 是否采用某个产物取决于对应代码、依赖、校验信息、类加载上下文和版本等条件，具体决策依实现而变化。
 
 应保全对应 APK、split 和产物，结合 ART 日志及产物元数据核对选择过程。删除产物后异常消失也不能单独证明它是根因，因为重启、重扫或其他状态可能同时改变；删除后 ART 的行为也不必然是立即重新编译，可能采用其他执行方式。
+
+**Q22: [learning] 车机 Launcher 目录中的 oat 产物有什么作用？**
+
+`oat/arm64/` 存放供 ART（Android Runtime，Android 运行时）使用的应用代码优化产物。对于预装 Launcher，这些文件通常在制作系统镜像时由平台构建系统提前生成，用于减少设备运行时的部分编译和验证工作。
+
+以本地保存的车机 Launcher 目录副本为例，按设备路径展示如下：
+
+```text
+/system_ext/priv-app/NsrLauncher/
+├── NsrLauncher.apk
+└── oat/
+    └── arm64/
+        ├── NsrLauncher.odex
+        └── NsrLauncher.vdex
+```
+
+目录和文件分别承担以下职责：
+
+1. **应用目录**：`/system_ext/priv-app/NsrLauncher/` 是示例中的预装特权应用目录。特权权限能否授予还受应用声明、授权清单和系统策略约束。
+2. **APK**：`NsrLauncher.apk` 是应用包。本地副本包含清单、资源、`classes.dex`、`classes2.dex` 和 `arm64-v8a` 原生库。DEX（Dalvik Executable）是 Android 应用字节码格式。
+3. **oat 目录**：`oat/arm64/` 中的 `arm64` 表示产物面向 64 位 ARM 指令集。
+4. **odex**：`NsrLauncher.odex` 可包含预先编译的机器码及相关信息，供 ART 在条件匹配时使用，减少部分运行时编译工作。本地文件可识别为 AArch64 ELF，但这不能证明哪些方法已编译或正在执行。
+5. **vdex**：`NsrLauncher.vdex` 保存 DEX 验证相关信息，可帮助 ART 减少重复验证，也可能包含 DEX 数据。具体内容取决于版本和构建配置。
+
+这些产物的生成和使用过程如下：
+
+1. **生成**：平台构建系统可在制作镜像时执行 dexpreopt（DEX 预优化），调用 dex2oat 生成产物并随镜像放入设备。安装、更新后或运行期间，系统也可能按策略在可写位置生成产物，并非每次启动都重新生成。
+2. **启动**：ART 检查产物与当前 APK、运行环境等是否匹配，再决定是否使用。本地副本只能证明文件存在，不能确定它们在本项目中的生成时间或当前是否生效。
+3. **缺失**：若 APK 中有可用 DEX，ART 通常仍可验证并解释执行，或使用即时编译（JIT）及其他有效产物，系统也可能按策略重新优化。因此，缺少此目录不一定导致 Launcher 无法启动，但运行耗时可能变化。
+4. **替换 APK**：通过 adb push 替换 APK 不会自动更新旧产物。ART 会检查匹配情况，不匹配时可回退到其他执行方式。旧文件仍在不代表旧代码仍在运行，需结合设备上的 dexopt 状态和 ART 日志判断。
+
+Android 13 的预优化流程可查看平台源码 `build/soong/dexpreopt/dexpreopt.go`。设备上的具体行为仍取决于项目构建配置和运行状态。

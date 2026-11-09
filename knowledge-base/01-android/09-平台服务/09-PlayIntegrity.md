@@ -10,7 +10,7 @@
 2. **Classic：**无 prepare，每次请求传一次性 nonce 重新计算 verdict。它更耗时，应低频用于高价值动作，不缓存 verdict。
 3. **失效处理：**Standard provider 报 `INTEGRITY_TOKEN_PROVIDER_INVALID` 时丢弃旧引用并重新 prepare；不能提前缓存业务 token 或重复用于另一动作。
 
-Google Play Integrity 官方 Standard、Classic 与 Setup 文档（2026-10 核对）给出量级：prepare 通常数秒、多数低于 10 秒，涉及网络，建议容纳约一分钟尾部；Standard token 通常数百毫秒、Classic 通常数秒。这些是典型值，不是 SLA。当前默认每日 token 请求配额 10,000 次，由 Classic 请求与 Standard prepare 共享；服务端解密另有每日 10,000 次默认配额。单应用实例 Standard prepare 为 5 次/分钟，Classic token 为 5 次/分钟，Standard token 无公开的每分钟固定上限，但仍有防滥用限制。配额可申请调整，正式预算须以当前 Play Console/官方文档与项目配额为准。AOSP 不含闭源 Play 组件或 verdict 生成源码。
+Google Play Integrity 官方 Standard、Classic 与 Setup 文档（2026-10 核对）给出量级：prepare 通常数秒、多数低于 10 秒，涉及网络，建议容纳约一分钟尾部。Standard token 通常数百毫秒、Classic 通常数秒。这些是典型值，不是 SLA。当前默认每日 token 请求配额 10,000 次，由 Classic 请求与 Standard prepare 共享。服务端解密另有每日 10,000 次默认配额。单应用实例 Standard prepare 为 5 次/分钟，Classic token 为 5 次/分钟，Standard token 无公开的每分钟固定上限，但仍有防滥用限制。配额可申请调整，正式预算须以当前 Play Console/官方文档与项目配额为准。AOSP 不含闭源 Play 组件或 verdict 生成源码。
 
 **Q2: [learning] requestHash 与 Classic nonce 怎样绑定动作，服务端解密后查什么？**
 
@@ -44,4 +44,4 @@ token 解密只证明 Play 返回了载荷，业务服务端仍须验证它对�
 2. **未评估：**`UNEVALUATED` 或标签缺失保留未知语义，由服务端风险策略决定，不伪装为通过或明确失败。
 3. **明确风险：**如 `UNRECOGNIZED_VERSION`，按完整性失败处置；高价值动作不能因网络超时自动放行。
 
-修复对话框由服务端解析 verdict 后指示客户端展示，修复后重新申请 token。材料所用库版本中，`GET_LICENSED` 要求 1.3.0+，`GET_INTEGRITY`/`GET_STRONG_INTEGRITY` 要求 1.5.0+；接入时按所用库的官方 remediation 文档复核。无 Play Store/Play 服务的设备需独立账号和风险策略。应用侧没有稳定的 Play 内部 Perfetto slice，可用 async trace 覆盖 token 请求的墙钟等待，并按网络、地区、机型、冷暖状态报告 P50/P90/P99；保留不调用 Integrity 的业务耗时作对照。
+修复对话框由服务端解析 verdict 后指示客户端展示，修复后重新申请 token。材料所用库版本中，`GET_LICENSED` 要求 1.3.0+，`GET_INTEGRITY`/`GET_STRONG_INTEGRITY` 要求 1.5.0+。接入时按所用库的官方 remediation 文档复核。无 Play Store/Play 服务的设备需独立账号和风险策略。应用侧没有稳定的 Play 内部 Perfetto slice，可用 async trace 覆盖 token 请求的墙钟等待，并按网络、地区、机型、冷暖状态报告 P50/P90/P99。保留不调用 Integrity 的业务耗时作对照。

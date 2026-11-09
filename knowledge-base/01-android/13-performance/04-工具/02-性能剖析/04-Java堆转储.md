@@ -12,7 +12,6 @@
 
 zygote 和 boot image 对象通常不是应用泄漏的分配主体，但会出现在 GC Root 路径中、其类与字符串 record 也可能被其他对象引用，直接删除这些二进制区段会得到引用断裂、无法解析的文件——KOOM 一类工具用配套的裁剪器和补全器维护引用关系，手工裁剪前必须理解这一点。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q14 -->
 
 **Q2: [learning] Perfetto 的 android.java_hprof 与完整 ART HPROF 差在哪？它的 fork 管线为什么停顿更短但仍不是零成本？**

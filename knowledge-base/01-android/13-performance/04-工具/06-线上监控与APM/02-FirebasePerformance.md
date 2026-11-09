@@ -12,7 +12,6 @@
 
 因此 `_app_start` 适合比较版本趋势，不能回答“首屏何时可交互”。若启动完成的定义是骨架绘制、首批数据展示或可交互，需要另建 custom trace 覆盖该区间，并用 Macrobenchmark 或 Perfetto 校验各阶段。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q3 -->
 
 **Q2: [learning] Firebase 自动 screen trace 的 slow/frozen frame 阈值和汇总口径是什么？为什么 120 Hz 设备上的卡顿可能被低估？**
@@ -22,7 +21,6 @@
 高刷新率设备被低估的原因在阈值本身：60 Hz 的刷新周期约 16.67 ms，90/120 Hz 缩短为约 11.11/8.33 ms。一帧即使错过了设备的真实刷新周期，也可能没有超过 16 ms，于是不被计入 slow frame。官方文档明确这是固定 60 Hz 口径，发布前应在真实 90/120 Hz 设备上评估偏差。
 
 采集方式上还有两个边界：Activity 的窗口是 `onActivityStarted()` 到 `onActivityStopped()`，Fragment（SDK 20.1.0+）是 `onFragmentResumed()` 到 `onFragmentPaused()`，Fragment 不独立读取一条 FrameMetrics 流，而是从宿主 Activity 的 `Window` 收集后按生命周期区间取差值——Fragment 重叠或单 Activity + Compose 导航会让页面级结果难解释。自动 screen trace 不能附加 custom metric 与 attribute，需要按 route、滚动阶段归因时应改用 JankStats 记录状态。
-
 
 <!-- 来源：05-observability/03-apm-platforms.md · Q4 -->
 
@@ -34,7 +32,6 @@
 - **运行期采集**：Manifest 元数据 `firebase_performance_collection_enabled=false` 使应用默认不采集，之后可调 `setPerformanceCollectionEnabled(true)` 动态开启（例如用户同意隐私政策后）。`firebase_performance_collection_deactivated=true` 强制停用并覆盖 enabled，只有删除该元数据并重新发版才能恢复。
 
 若只想停止采集与上传，无需关闭插桩。若 debug variant 不想携带插桩产物，才需要前者。多进程应用还有一条官方边界：只支持主进程中的 Performance Monitoring，独立 `:remote`、`:push` 等远程进程不会自动获得同等采集能力，需要观察这些进程时仍要保留应用自己的监控。接入清单还应覆盖插件分工——`com.google.gms.google-services` 处理 `google-services.json`，BoM 只管理 Firebase 库版本、不管理 Gradle plugin 版本。
-
 
 <!-- 来源：05-observability/03-apm-platforms.md · Q5 -->
 
@@ -49,7 +46,6 @@
 3. **BigQuery：**导出对象是 captured events（已被采集并接受的事件），首次启用传播最多 48 小时。它补分析能力，不取消端侧采样。
 
 落地判断：高频轮询和图片请求不会保证逐条保留。小流量分阶段发布可能因样本不足看不出变化。看板结论要同时携带采样率与限流规则。排查采集是否生效时，可在测试构建临时设置 `firebase_performance_logcat_enabled=true` 看 Logcat 的 `FirebasePerformance` 日志，验证后移除。
-
 
 <!-- 来源：04-reliability/02-stability-and-crash.md · Q4 -->
 

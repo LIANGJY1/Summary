@@ -19,11 +19,6 @@
  Next  1 查看 `/tmp/appstore_screenshots/` 目录中的截图文件                                          
        2 运行脚本并指定仅生成缺失的 7 张截图
 
-
-
-
-
-
  708
 庄河市步云山乡成凤美发店
 庄河市
@@ -33,7 +28,6 @@ l138f4268q3292
 
 庄卫公证字[2004]第090272号
 否
-
 
 951
 Lifq3639
@@ -45,7 +39,6 @@ LNZC@2025.net
 
 ## UI工程进度
 我想要在项目中模拟数据实现应用效果图与实际UI图显示完全一致，以便我进行UI走查，UI图路径为~/Documents/HC/UI/extracted_images/AppStore_全屏cn_D。我已经完成了大半部分工作，脚本为/home/liang/Project/Reachauto/HC/27M/Honda27M/AppStore/tools/screenshot/capture_appstore_screenshots.py。你帮我审查代码，看一下我的进度如何。并给出接下来计划。
-
 
 现在需要更新extracted_images/ 目录，并更新项目文档，文件源Honda_Connect5.0_UI_CheckList_AppStore0901，只提取替换D列UI图
 

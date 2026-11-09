@@ -30,8 +30,8 @@
 
 方案按机制分三类：
 
-1. **`Serializable`**：Java 标准序列化，通用但开销较高。
-2. **`Parcelable`**：Android 定制方案，按字段顺序写入 Parcel 缓冲区，服务 Binder 与组件传递。
+1. **Java 标准序列化：**`Serializable` 通用但开销较高。
+2. **Android 定制方案：**`Parcelable` 按字段顺序写入 Parcel 缓冲区，服务 Binder 与组件传递。
 3. **JSON、XML、Protobuf 等格式**：面向文本可读性或跨语言互操作，多用于持久化与网络。日常选型的基线是：组件与 Binder 传参优先 `Parcelable`，持久化与网络选带版本管理能力的格式，小体量数据用 `Serializable` 换实现便利。
 
 **Q4: [learning] Serializable 是一个没有任何成员的标记接口，对象的序列化与反序列化实际由谁完成？**

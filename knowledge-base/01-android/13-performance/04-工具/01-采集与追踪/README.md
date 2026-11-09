@@ -9,5 +9,6 @@ Perfetto、埋点和 tracing 提供者，用于记录时间线与构造可分析
 3. [Profilo](./03-Profilo追踪.md)（1 题）。
 4. [AndroidX Tracing](./04-AndroidX进程内埋点.md)（3 题）。
 5. [Xtrace](./05-Xtrace动态跟踪.md)（1 题）。
+6. [ftrace 原生动态追踪](./06-ftrace动态追踪.md)（4 题）。
 
-共 5 个工具条目、75 题。
+共 6 个工具条目、79 题。

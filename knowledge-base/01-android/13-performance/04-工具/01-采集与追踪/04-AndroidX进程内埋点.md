@@ -12,7 +12,6 @@
 
 版本坐标：稳定线 `androidx.tracing:tracing:2.0.0` 的 Android 变体 minSdk 23。仍需覆盖 API 21–22 的应用用 1.3.0 兼容线（自 1.3.0 起 `tracing-ktx` 已并入主 artifact）。平台侧的 `android.os.Trace` 机制（同步/异步/counter 语义、127 字符限制、AAOS13 的 libcutils 单路径）已在 01-Perfetto 文档核对，此处不重复。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q8 -->
 
 **Q2: [learning] 非 debuggable 进程里 Trace.isEnabled() 返回 true 需要什么条件？各 API 段允许应用写 trace 的前提有什么差别？**

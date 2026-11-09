@@ -1,6 +1,6 @@
 # 进程、启动与 ART
 
-系统服务依赖内核回收、调度与 Native 故障处理；底层机制见 [内存回收与功耗硬件](../03-底层/02-内存回收与功耗.md) 与 [内核调度与 CPU 频率](../03-底层/01-内核调度与频率.md)。ART profile 产物由[Baseline Profile 工具主题](../04-工具/03-基准与交付/01-BaselineProfile验证.md)说明，native heap 采样与内存错误检测见[heapprofd](../04-工具/02-性能剖析/03-heapprofd.md)和[内存诊断工具](../04-工具/02-性能剖析/06-原生内存诊断.md)。
+系统服务依赖内核回收、调度与 Native 故障处理。底层机制见 [内存回收与功耗硬件](../03-底层/02-内存回收与功耗.md) 与 [内核调度与 CPU 频率](../03-底层/01-内核调度与频率.md)。ART profile 产物由[Baseline Profile 工具主题](../04-工具/03-基准与交付/01-BaselineProfile验证.md)说明，native heap 采样与内存错误检测见[heapprofd](../04-工具/02-性能剖析/03-heapprofd.md)和[内存诊断工具](../04-工具/02-性能剖析/06-原生内存诊断.md)。
 
 **Q1: [learning] 并发 GC 时代 GC 还会拖慢启动吗，HeapTaskDaemon 在 Perfetto 里 Running 就等于在 GC 吗？**
 
@@ -31,16 +31,19 @@
 init 队列串行与 service 并发是两个不同层级：
 
 1. **Action 执行：**rc 按解析顺序入队，Action 依次执行，Action 内的 command 也依次执行。
-2. **阻塞命令：**`exec`/`exec_start` 会让队列等待目标进程结束；`start`/`class_start` 依次发起服务，但服务启动后的工作彼此并发；`exec_background` 启动后不阻塞后续 command。
+2. **阻塞命令：**各命令对队列的阻塞行为不同：
+    1. `exec`/`exec_start` 会让队列等待目标进程结束。
+    2. `start`/`class_start` 依次发起服务，但服务启动后的工作彼此并发。
+    3. `exec_background` 启动后不阻塞后续 command。
 3. **表达依赖：**把独立工作放进 service 并发执行，再用 property 表达完成依赖（如 `on property:vendor.prepare_cache.ready=1` 后启动下游），并为失败路径准备超时与降级。
-4. **核对触发时机：**`on boot && property:x=y` 只在 boot 事件发生时检查组合条件；boot 已过去、property 后来才满足时，Action 不会补跑。
+4. **核对触发时机：**`on boot && property:x=y` 只在 boot 事件发生时检查组合条件。boot 已过去、property 后来才满足时，Action 不会补跑。
 5. **核对 service 依赖：**把 service 移到更早 class 前，检查分区挂载、SELinux domain、设备节点、APEX 激活与 HAL 依赖。class 只提供分组，不表达依赖图。
 
 kernel 侧把慢 probe 或 module 移出关键路径也有条件：
 
-1. 选择性异步 probe 可让慢速 I2C/SPI 设备及加载 firmware 的设备并行初始化；模块还可通过 `<module>.async_probe=1` 请求异步 probe。官方示例收益 100–500 ms，取决于硬件与驱动，只表示量级。
-2. 把非必要 module 从 first-stage ramdisk 移到 second-stage，官方示例可省 500–1000 ms；同样不能当作设备保证值。
-3. 异步 probe 后，consumer 发现 supplier（时钟、电源等资源提供方）未就绪时，必须正确返回 `-EPROBE_DEFER`。显示、存储、clock、regulator、thermal 等依赖若表达错误，可能变成更晚的同步等待或功能故障；defer storm 会消耗启动期 CPU。
+1. 选择性异步 probe 可让慢速 I2C/SPI 设备及加载 firmware 的设备并行初始化。模块还可通过 `<module>.async_probe=1` 请求异步 probe。官方示例收益 100–500 ms，取决于硬件与驱动，只表示量级。
+2. 把非必要 module 从 first-stage ramdisk 移到 second-stage，官方示例可省 500–1000 ms。同样不能当作设备保证值。
+3. 异步 probe 后，consumer 发现 supplier（时钟、电源等资源提供方）未就绪时，必须正确返回 `-EPROBE_DEFER`。显示、存储、clock、regulator、thermal 等依赖若表达错误，可能变成更晚的同步等待或功能故障。defer storm 会消耗启动期 CPU。
 4. 移动 module 后验证 normal boot、recovery、fastbootd、OTA 与 crash recovery。CPUfreq/devfreq 提前上线前确认 supplier 就绪，并测量频率上升带来的功耗与温升回归。
 
 kernel 段同理：选择性异步 probe 可让慢速 I2C/SPI 设备、加载 firmware 的设备并行初始化（模块还可经 <module>.async_probe=1），官方示例收益 100–500 ms。把非必要 module 从 first-stage ramdisk 挪到 second-stage 可省 500–1000 ms——两个数字取决于硬件与驱动，只能说明量级。风险是依赖表达错误：异步 probe 后 consumer 发现 supplier（时钟、电源等资源提供方）未就绪必须正确返回 -EPROBE_DEFER，显示、存储、clock、regulator、thermal 依赖表达错会把成本变成更晚的同步等待或功能故障，defer storm（大量 probe 反复 defer 重试）会吃掉启动期 CPU。移动 module 后要同时验证 normal boot、recovery、fastbootd、OTA 与 crash recovery。CPUfreq/devfreq 提前上线前要确认 supplier 就绪，并接受频率上升带来的功耗温升回归。
@@ -55,9 +58,9 @@ lmkd 是用户态低内存终止守护进程，按 AAOS13 源码核对（system/
 
 借鉴 AppFlow 的能力取决于权限层级：
 
-1. **普通应用：**优化自身初始化、生成 Baseline Profile、记录 TTID/TTFD、预读自身文件并控制资源读取；可在 `TRIM_MEMORY_UI_HIDDEN` 释放可重建界面缓存，用 `ApplicationExitInfo` 回看退出原因。不能访问 lmkd 控制 socket、修改其他进程的 `oom_score_adj` 或 vmscan，也不能保护 page cache 中的指定文件。跨包使用历史需要 `PACKAGE_USAGE_STATS`，并由用户在设置中授予 usage access。
-2. **特权 framework 原型：**可在 platform service 中采集获授权的应用切换序列、维护带版本的文件访问记录，并在 launch observer 前后调度预读；评估预测准确率、I/O 干扰与预算。kernel 未改时预读页仍可能按常规策略被回收，因此要区分“读取内容最终被使用”和“页面留存到使用时刻”，也不要用随意降低 adj 来模拟后台存活收益。
-3. **产品级 OS：**需同时改 framework 与 kernel，建立启动会话 ID，传递文件或 inode/offset 标识，在 classic LRU 与 MGLRU 路径定义短时保护，并处理文件截断、更新、卸载与 memcg 迁移；进程排序仍限制在 AMS/lmkd 已允许终止的候选内。GKI 下 vendor module 不能替换 core mm 的回收语义；修改 core mm 会带来长期维护内核分叉与合并安全更新的成本。
+1. **普通应用：**优化自身初始化、生成 Baseline Profile、记录 TTID/TTFD、预读自身文件并控制资源读取。可在 `TRIM_MEMORY_UI_HIDDEN` 释放可重建界面缓存，用 `ApplicationExitInfo` 回看退出原因。不能访问 lmkd 控制 socket、修改其他进程的 `oom_score_adj` 或 vmscan，也不能保护 page cache 中的指定文件。跨包使用历史需要 `PACKAGE_USAGE_STATS`，并由用户在设置中授予 usage access。
+2. **特权 framework 原型：**可在 platform service 中采集获授权的应用切换序列、维护带版本的文件访问记录，并在 launch observer 前后调度预读。评估预测准确率、I/O 干扰与预算。kernel 未改时预读页仍可能按常规策略被回收，因此要区分“读取内容最终被使用”和“页面留存到使用时刻”，也不要用随意降低 adj 来模拟后台存活收益。
+3. **产品级 OS：**需同时改 framework 与 kernel，建立启动会话 ID，传递文件或 inode/offset 标识，在 classic LRU 与 MGLRU 路径定义短时保护，并处理文件截断、更新、卸载与 memcg 迁移。进程排序仍限制在 AMS/lmkd 已允许终止的候选内。GKI 下 vendor module 不能替换 core mm 的回收语义。修改 core mm 会带来长期维护内核分叉与合并安全更新的成本。
 
 三类实现都需要退出条件：出现 kernel OOM、SystemUI/Launcher 被杀、导航或音频中断、P99 变差或读放大失控时，停用优化并恢复原生行为。实验固定 cold/hot/warm 口径与分层负载，再用 ablation 分离读取提前、页面保留与进程选择的贡献。
 
@@ -65,10 +68,10 @@ lmkd 是用户态低内存终止守护进程，按 AAOS13 源码核对（system/
 
 lmkd 与 LowMemDetector 的职责不同：
 
-1. **lmkd：**在内存压力下选择并终止进程；选择策略与 oom_score_adj 见 [../../07-内存与存储/01-内存管理.md](../../07-内存与存储/01-内存管理.md)。
+1. **lmkd：**在内存压力下选择并终止进程。选择策略与 oom_score_adj 见 [../../07-内存与存储/01-内存管理.md](../../07-内存与存储/01-内存管理.md)。
 2. **LowMemDetector：**system_server 内的状态管理路径，不负责杀进程。native 层注册 PSI monitor，Java 线程经 epoll 等等级变化，并把压力等级提供给 ActivityManager，作为 memory factor 与进程统计调整的输入。
 
-AAOS13 `LowMemDetector.cpp` 的三个 monitor 阈值如下；这些数值与材料按 Android 17 核对的值一致：
+AAOS13 `LowMemDetector.cpp` 的三个 monitor 阈值如下，这些数值与材料按 Android 17 核对的值一致：
 
 1. **LOW：**PSI_SOME，1 秒窗口内 15 ms。
 2. **MEDIUM：**PSI_FULL，30 ms。
@@ -90,14 +93,14 @@ AAOS13 `LowMemDetector.cpp` 的三个 monitor 阈值如下；这些数值与材�
 
 在同一脚本下观察曲线形态与释放动作后的回落：
 
-1. **抖动：**分配速率高、GC 后大幅回落且基线稳定；查分配调用栈与 GC/慢帧重叠。
-2. **泄漏：**多轮 GC 后存活基线持续上升；查 heap dump、Retained Size 与 GC Root。
-3. **缓存或对象池：**曲线上升到容量上限后封顶；核对容量、命中率与逐出记录。
-4. **大对象突发：**单次或少数分配拉高曲线；查分配大小、调用栈与业务事件。
+1. **抖动：**分配速率高、GC 后大幅回落且基线稳定。查分配调用栈与 GC/慢帧重叠。
+2. **泄漏：**多轮 GC 后存活基线持续上升。查 heap dump、Retained Size 与 GC Root。
+3. **缓存或对象池：**曲线上升到容量上限后封顶。核对容量、命中率与逐出记录。
+4. **大对象突发：**单次或少数分配拉高曲线。查分配大小、调用栈与业务事件。
 
 判断时遵守两条边界：
 
-1. 锯齿形只是线索；若每次 GC 后基线也在上升，要同时排查存活对象。
+1. 锯齿形只是线索。若每次 GC 后基线也在上升，要同时排查存活对象。
 2. 分配很高但帧时间、CPU 和 GC 等待没有退化时，优化优先级可以后移。
 
 一次快照不能证明泄漏，一次 GC 也不能证明资源已释放。验证优化要用同一脚本、同设备、同构建复测分配、GC、帧时间与正确性。
@@ -128,9 +131,9 @@ ART TI（ART 对 JVMTI 的部分实现）从 Android 8.0/API 26 开始提供，�
 
 ART TI 的三个生命周期入口（AAOS13 `agent.cc` 已核对符号名）对应不同阶段：
 
-1. **`Agent_OnLoad`：**独立 ART 进程通过 `-Xplugin` + `-agentpath` 启动参数加载，用于 ART 自测；应用进程由 Zygote 派生，不走这条路径。
-2. **`Agent_OnAttach`：**运行中的 debuggable 进程接受附加，应用调试常用 `adb shell cmd activity attach-agent ...` 或调用 `attachJvmtiAgent()`。
-3. **`Agent_OnUnload`：**只在 ART 运行时关闭时调用。没有与 attach 对称的运行中 detach，源码明确不执行 `dlclose()`；需要无 agent 的干净基线时重启进程。agent 与应用共享同一地址空间、没有进程隔离：越界访问、死锁、ABI 不匹配或回调阻塞都会直接影响目标进程。“标准接口”只约束 JVMTI 调用语义，隔离不了 agent 自身的 native 缺陷。
+1. **随运行时启动加载：**`Agent_OnLoad` 由独立 ART 进程通过 `-Xplugin` + `-agentpath` 启动参数加载，用于 ART 自测。应用进程由 Zygote 派生，不走这条路径。
+2. **运行中附加：**`Agent_OnAttach` 在运行中的 debuggable 进程接受附加时调用，应用调试常用 `adb shell cmd activity attach-agent ...` 或调用 `attachJvmtiAgent()`。
+3. **随运行时关闭卸载：**`Agent_OnUnload` 只在 ART 运行时关闭时调用。没有与 attach 对称的运行中 detach，源码明确不执行 `dlclose()`。需要无 agent 的干净基线时重启进程。agent 与应用共享同一地址空间、没有进程隔离：越界访问、死锁、ABI 不匹配或回调阻塞都会直接影响目标进程。“标准接口”只约束 JVMTI 调用语义，隔离不了 agent 自身的 native 缺陷。
 
 **Q13: [learning] 在 ART 上启用 JVMTI 事件和类重定义会改变什么？“任意 agent 都会让全进程永久解释执行”对吗？**
 
@@ -171,9 +174,9 @@ cached process 被终止后内存立即可用，但用户再次进入该 App 时
 2. 用户返回该 App 的时间间隔。
 3. 温启动变冷启动的比例。
 4. 冷启动的 CPU、I/O、首帧与状态恢复耗时。
-5. 同一进程是否在短时间内反复启动退出；反复终止与重启说明回收没有净收益，反而延长压力窗口。
+5. 同一进程是否在短时间内反复启动退出。反复终止与重启说明回收没有净收益，反而延长压力窗口。
 
-App 侧可用 ApplicationExitInfo 识别低内存退出（REASON_LOW_MEMORY）；部分设备不支持精确报告，先查 `isLowMemoryKillReportSupported()`。不能只用末条内存曲线反推死因。
+App 侧可用 ApplicationExitInfo 识别低内存退出（REASON_LOW_MEMORY）。部分设备不支持精确报告，先查 `isLowMemoryKillReportSupported()`。不能只用末条内存曲线反推死因。
 
 **Q18: [learning] 低内存拖慢冷启动的证据链怎么建？**
 
@@ -186,7 +189,7 @@ App 侧可用 ApplicationExitInfo 识别低内存退出（REASON_LOW_MEMORY）�
 3. 同一时间窗核对 kswapd0、回收 tracepoint、meminfo/vmstat、swap/ZRAM 与 PSI。
 4. 核对 lmkd 与 ActivityManager 事件，确认进程是否反复被终止又重启。
 
-只有同一时间窗内出现低内存水位、文件页回收活跃、启动缺页等待存储等证据，才支持该因果链；单次 trace 的同核现象不足以证明调度缺陷。原文调高 extra_free_kbytes 的历史建议不能直接迁移到新产品。修复验收以同场景 A/B 的 PSI、direct reclaim、kswapd CPU 与启动耗时为准，没有量化结果的案例不要补写修复收益。
+只有同一时间窗内出现低内存水位、文件页回收活跃、启动缺页等待存储等证据，才支持该因果链。单次 trace 的同核现象不足以证明调度缺陷。原文调高 extra_free_kbytes 的历史建议不能直接迁移到新产品。修复验收以同场景 A/B 的 PSI、direct reclaim、kswapd CPU 与启动耗时为准，没有量化结果的案例不要补写修复收益。
 
 **Q19: [learning] ActivityManagerService 怎样巡检并终止 CPU 使用过量的缓存进程？**
 

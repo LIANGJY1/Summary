@@ -16,7 +16,6 @@
 
 执行机制随约束走：SDK 按采集、准入缓冲、编码、本地 spool、上传调度、指令控制、自我保护分层，各层限制各自的风险。断路器在某类操作持续超预算或失败时拒绝对应低优先级工作、冷却后半开探测。内存自保不能只靠 low-memory callback——Android 14 起不再向 App 发送 `TRIM_MEMORY_RUNNING_MODERATE/LOW/CRITICAL`（AAOS13 的 `ComponentCallbacks2` 仍有这些常量，属版本差异），要以自己的字节预算、heap headroom 和固定窗口内队列峰值为主。自监控数字要写清分子分母：“SDK CPU 占比 1%”必须说明分母是进程 CPU 还是全部 SDK 线程，否则两个 1% 不可比。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q2 -->
 
 **Q2: [learning] 用 Channel.trySend() 做 APM 事件入口时“立即返回”和“无锁”是什么关系？为什么普通 FIFO 队列保护不了崩溃证据？**
@@ -26,7 +25,6 @@
 入口配套语义：`trySend()` 失败时元素从未进入 Channel，官方契约不会触发 `onUndeliveredElement`，失败分支要自行计数，且“容量已满”与“Channel 已关闭”要分开统计（后者说明 SDK 生命周期或 worker 出错）。失败计数器预先创建、用固定枚举索引，不能在 hot path 拼 key 或建 Map entry。`capacity` 只限制 buffer 中持有的元素数，事件对象可能引用大字符串，队列节点、编码 buffer、压缩工作区都要纳入内存预算。
 
 优先级准入保护崩溃证据：FIFO 满载时普通帧样本会占满所有槽位、随后到达的 crash breadcrumb 无处可放。准入分三级：P0 故障证据（crash/ANR 摘要、renderer gone、存储损坏）用独立保留槽或直接写预分配故障区，P0 也不无限增长——用很小的独立 ring、覆盖最旧记录并记录 dropped/overwritten 计数。P1 异常样本丢弃同类旧样本或限频保留。P2 普通样本按采样率丢弃。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q3 -->
 
@@ -38,7 +36,6 @@
 
 多进程隔离：每个进程启动时生成新的 `process_instance_id`（PID 重启后会复用，不能单独当持久标识），使用自己的 active queue 与 spool 目录（`files/apm/spool/<process-name-hash>/<process-instance-id>/`）。上传协调者固定在主进程或专用诊断进程，扫描其他进程的 sealed 文件，其他进程只负责 seal 并发轻量 IPC 通知（通知丢失由下次扫描补上）。多进程提交 WorkManager 用 `RemoteWorkManager`。上传侧用 unique work 加幂等 `batch_id`（服务端对同一批次即使重复提交也只确认一次），重试按响应区分——429/503 尊重 `Retry-After`、schema 类 4xx 隔离不再重试。错峰用每设备在允许窗口内选择、配置周期内保持稳定的随机偏移，避免“每 15 分钟整点”让大量客户端同时请求。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q4 -->
 
 **Q4: [learning] 用 mmap 写 APM 日志为什么不能想当然地获得"crash-safe"？force()、SIGBUS 和文件格式各自解决什么问题？**
@@ -48,7 +45,6 @@ mmap 只是一种缓冲与访问方式：它把文件页面映射进进程地址
 `MappedByteBuffer.force()` 提供明确的 durability boundary——调用成功前修改已提交到本地设备（AAOS13 libcore 已核对该方法存在）。它可能执行同步 I/O，只能在 spool worker 上按批调用，且 `FileChannel.force()` 不替代 mapped buffer 自己的 `force()`。`ftruncate()` 扩展文件长度时文件系统可能只创建 sparse region，后续写 `MAP_SHARED` 页面若空间耗尽，进程可能收到 `SIGBUS`——Mars 与 Logan 的实现都先写零或填充预分配、映射失败退回普通 buffer。生产实现要在 worker 上检查可用空间、完整预分配小而固定的 active 文件，mapping 存续期间禁止其他线程或进程 truncate、替换底层文件，并对 ENOSPC、只读文件系统、checksum 失败分别计数。
 
 恢复能力来自文件格式而不是 mmap API：A/B 双 superblock（magic、format_version、generation、committed_offset、checksum）加 record（length、sequence、payload、checksum），单写者先写完整 record 与 checksum、再更新下一代 superblock。启动扫描只接受长度合法、checksum 正确的 record，遇到尾部半条记录停在前一个有效 offset。4 字节游标更新不是跨 crash 的事务——文件系统写入粒度与回写顺序都可能影响结果，恢复器要能接受“数据写了但游标没写”“游标较新但尾部校验失败”等组合。纯 Java 还要注意 mapping 生命周期：关闭创建 mapping 的 `FileChannel` 不会让 `MappedByteBuffer` 立即失效，公开 API 也没有可依赖的同步 unmap——可控方案是长期复用一块很小的 active journal，把已提交 block 复制成 sealed 文件后再复用。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q5 -->
 
@@ -60,7 +56,6 @@ mmap 只是一种缓冲与访问方式：它把文件页面映射进进程地址
 
 执行边界：进入 `RUNNING` 前持久化触发次数与预算预留，防止进程在写计数前被杀而反复执行。crash loop（启动后很快崩溃并反复重启）中不能每次启动都执行重指令。“特定 UserID”不应把原始账号写进配置与 APM 文件——用短期、App scoped 的 opaque cohort token 或支持流程中的一次性 case ID。Java heap dump 可能包含 token、会话与密钥材料，只允许有明确数据用途、可审计授权和严格人群范围的方案。能由端侧类计数或摘要回答的问题，不上传原始 heap。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q6 -->
 
 **Q6: [learning] 网络 APM 说“无侵入”，采集器实际插在哪里？为什么只记一个 attempt 数组的 schema 在 HTTP/2 和重试场景会失真？**
@@ -68,7 +63,6 @@ mmap 只是一种缓冲与访问方式：它把文件页面映射进进程地址
 “无侵入”只指业务开发者不必在每个接口旁手写计时代码，采集器仍集中在五类位置之一：HTTP 语义层（OkHttp `Interceptor`、Cronet 回调）、客户端事件层（OkHttp `EventListener`、Cronet metrics）、构建期插桩层（AGP Instrumentation API 加 ASM 改字节码）、Native 动态链接层（PLT/GOT Hook）、系统与内核层（TrafficStats、BPF）。各层观测对象不同，能回答的问题也不同——语义层看得到状态码但分不出 DNS 与 TLS 边界，内核层看得到 UID 字节但看不到 TLS 内的 URL。
 
 失真的根源是“HTTP 请求、DNS 查询、建连尝试、socket”不是一一对应：一次调用可能复用连接、一次解析可能并行尝试多个地址、HTTP/2 与 HTTP/3（QUIC）允许多个 stream 共享连接。样本要拆成四条相互关联的记录：`call`（业务发起的一次调用）、`dns_span`（一次解析区间，可零或多次）、`route_attempt`（对某 IP、端口、代理的一次连接尝试）、`exchange`（一轮实际发送的 request/response，重定向、鉴权挑战和故障恢复都会产生新 exchange）。关联键取自同一客户端实例的事件，底层 socket 数据还原不了 stream 时只保留连接维度关联并写入可信度。`attempt_count` 这类含糊字段应拆成 `route_attempt_count`、`exchange_count`、`retry_decision_count` 与 `follow_up_count`。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q7 -->
 
@@ -80,7 +74,6 @@ mmap 只是一种缓冲与访问方式：它把文件页面映射进进程地址
 
 版本边界：OkHttp 4.3 以前 `responseHeadersStart` 在客户端准备读取 header 时就过早触发，4.3 起才表示服务端响应 header 开始返回——旧版本不能沿用基于它的 post-send wait 算法。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q8 -->
 
 **Q8: [learning] 网络 APM 的 Exchange TTFB 和 post-send wait 应该怎么计算？“connectStart 到 connectEnd 就是 TCP 握手”为什么是错的？**
@@ -90,7 +83,6 @@ Exchange TTFB 等于 `responseHeadersStart` 减 `requestHeadersStart`，即从�
 “connectStart 到 connectEnd 是 TCP 握手”错在 HTTPS 下 `connectEnd` 发生在 `secureConnectEnd` 之后，这段区间包含 TLS。直连时 `connectStart` 到 `secureConnectStart` 才接近 TCP connect，经过 HTTP 代理时还混入 CONNECT 隧道协商，只能叫 pre-TLS transport，不能标成 TCP 再与 TLS 相加。同一 exchange 可能先收到 1xx（100 Continue、103 Early Hints），应单独保存或计数 informational header block——上表的 `responseHeadersStart` 指最终非 1xx response 的起点，101 作为协议升级的终止 response 处理。拿首个 1xx 覆盖最终 response 会同时破坏状态码和 TTFB。
 
 "Server Wait"（post-send wait 的旧称）包含上行尾部、网络 RTT、服务端排队与执行、下行首字节，端侧测到高只能说明这条路径慢，不能单独证明后端慢。需要后端耗时应结合可信的 `Server-Timing`、分布式 trace 或服务端日志。另外 `responseBodyEnd` 减 `responseBodyStart` 是应用读取或关闭 body 的消费窗口，提前 close 时字节数小于总长是有效状态，不是丢数据。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q9 -->
 
@@ -104,7 +96,6 @@ Cronet 应优先用官方 `RequestFinishedInfo.Metrics`（DNS、connect、SSL、
 
 Native 层优先接库的稳定回调。PLT/GOT Hook 只对经过动态符号入口的调用有效（`getaddrinfo`、`connect`、`send`、`recv`、`SSL_write` 等），而 Cronet 常把 BoringSSL 与网络栈静态链接、自研库可能隐藏符号或直接 syscall，覆盖率可能很低——`SSL_write` 的输入长度不等于链路发送字节，`send`/`recv` 也看不到内核 TCP 重传。eBPF 需要加载与 attach BPF 程序的 capability、SELinux 域和文件权限，量产三方应用通常不具备，可行场景限于 ROM、企业专管设备、root 或工程机诊断、CI 实验室。即使拿到 UID 流量与 TCP RTT，也无法从 TLS 密文恢复 URL、header 或 stream。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q10 -->
 
 **Q10: [learning] 网络 APM 的脱敏为什么必须在端侧生成内存样本之前完成？事件回调里哪些操作必须禁止？**
@@ -112,7 +103,6 @@ Native 层优先接库的稳定回调。PLT/GOT Hook 只对经过动态符号入
 服务端脱敏只能处理端侧已经泄露之后的数据：原始 URL、header 或 body 一旦写入样本结构、日志或崩溃附件，就已经离开设备。所以安全控制必须发生在样本生成前——先用业务路由注册表把 `/user/12345/order/888` 归一成 `/user/:userId/order/:orderId`，未命中的 path 只上报允许的 host、path 段数和模板 hash。query 的 value 默认全部丢弃、key 只保留允许清单中的名称。fragment 不会发给 HTTP 服务端，APM 也不应采集。header 默认允许清单只放 `content-type`、受控的 `content-length` 和专用 trace id，`authorization`、`cookie`、设备 id 直接丢弃。body 默认不采内容、只记录经过校验的长度与 MIME，确需采样要同时满足 endpoint 与 schema 命中、结构化字段级脱敏、小字节上限、采样与授权审计。普通 hash 只是可关联的假名，确需关联用户时使用服务端管理、定期轮换的 HMAC key。
 
 回调侧的纪律来自它在请求关键路径上：只读取时间与计数、写入固定大小结构或有界 ring buffer。禁止序列化 JSON、写文件、查数据库、打印日志或发请求。`System.nanoTime()` 只用于同一进程内计算时长，不能持久化后与 wall clock 比较。URL 归一化避免灾难性回溯的正则和大字符串复制。队列满时丢弃 APM 样本而不阻塞业务请求，上报端排除采集器自己的网络请求避免递归。大量故障同时出现时设置每分钟上限、按 route 或错误类型分组的 reservoir sampling 和丢弃计数，防止错误期进一步放大开销——失败样本诊断价值更高，降级时应先停 body 采集、降低成功样本率，让失败样本保留得更久。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q11 -->
 
@@ -124,7 +114,6 @@ Android 的默认终止链由 `RuntimeInit.commonInit()` 安装的两层处理�
 
 多 SDK 各自接管的问题：后安装者覆盖先安装者，即使每家都保存 `previous` 仍可能出现 A 到 B 再回 A 的循环链、多个 handler 依次等待 I/O 超过系统容忍、某个 handler 捕获异常后返回截断终止链，或 SDK 延迟初始化在启动检查之后悄悄覆盖。工程上指定统一负责者：由应用的 stability hub 安装唯一代理并保存系统 default handler，自研 sink 只读内存事件或有界存储，第三方 SDK 优先选“不接管 handler”的回调模式，无法关闭接管时固定初始化顺序并在启动后校验 handler 的对象身份。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q12 -->
 
 **Q12: [learning] Native 崩溃的 signal handler 里为什么只能做“读取上下文并通知外部进程”这一件事？**
@@ -135,7 +124,6 @@ Android 的默认终止链由 `RuntimeInit.commonInit()` 安装的两层处理�
 
 共存与符号化边界：与前一个 handler 共存要处理 `SA_SIGINFO` 回调签名、signal mask、`SA_RESETHAND`、备用栈与重入，同步产生的 `SIGSEGV`/`SIGBUS` 被 `SIG_IGN` 忽略后通常会再次触发。符号化依赖每个 `.so` 的 build id——只按 version name 选择符号，遇到热修复或重打包会匹配到错误版本，而符号化错了调用栈看起来仍然完整。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q13 -->
 
 **Q13: [learning] 从崩溃采集的视角看，为什么三方 APM 不能轮询 /data/anr、注册 SIGQUIT handler 或 Hook ART SignalCatcher 来抓系统 ANR？**
@@ -143,7 +131,6 @@ Android 的默认终止链由 `RuntimeInit.commonInit()` 安装的两层处理�
 系统 ANR 的取证入口全部在系统侧。`/data/anr` 目录由 init 以 `0775 system system` 创建（AAOS13 `system/core/rootdir/init.rc` 已核对），内部文件还受 SELinux 强制访问控制、文件属主与系统服务检查共同限制，三方生产应用读不到，轮询、inotify 或反射调用系统服务都不是稳定方案。系统收集 Java 线程 dump 时发出的 `SIGQUIT` 先在所有线程的 signal mask 中被屏蔽，再由 ART 的 `SignalCatcher` 线程通过 `sigwait()` 同步接收（AAOS13 `art/runtime/signal_catcher.cc` 已核对），因此应用再注册的 `sigaction` handler 根本不会被调用——这就是“ANR 取证用 SIGQUIT，应用却收不到”的原因。所谓 Signal Catcher Hook 要改信号掩码、拦截 ART 内部符号或修改 libsigchain，与 Android 版本和 ART 实现强耦合，只适合厂商 ROM、root/userdebug 诊断或可回滚实验。
 
 三方应用能做的只有应用端 main-looper watchdog：定时检查主线程消息循环是否还能响应，在卡顿期间多次采主线程栈，提前发现耗时消息、锁等待和 Binder 阻塞。它没有 system_server 掌握的输入分发、广播、Service、ContentProvider 等超时上下文，所以只能标记 `suspected_anr`。系统 ANR 结论以后续 `ApplicationExitInfo`、Vitals 或系统 trace 为准。ANR 各类超时契约与 trace 解读的机制层见 [../../02-系统/04-ANR与故障诊断.md](../../02-系统/04-ANR与故障诊断.md)。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q15 -->
 
@@ -155,7 +142,6 @@ GWP-ASan 是 Native 堆内存错误的抽样检测器：随机抽取少量 alloc
 
 关键版本差异在命中后的行为：Android 14 起默认走 Recoverable 模式——命中后生成 tombstone 再允许进程继续运行，且代表 Recoverable fault 的 `SIGSEGV` 不会调用应用自定义 signal handler（材料按 Android 17 与官方文档核对）。AAOS13 的 bionic 中没有 Recoverable 路径（已核对），A13 上默认抽样与 `always` 模式命中即按致命崩溃终止进程。因此 APM 在两个版本上都应保留系统 tombstone、GWP-ASan 错误类型、分配/释放/非法访问调用栈和模块 build id，不能把系统 handler 的内部实现复制进应用自己的 signal handler。“自己判断并放行以保持进程运行”的设计只在 A14+ 的 Recoverable 语义下才被平台明确排除，A13 上命中本来就是致命崩溃。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q16 -->
 
 **Q15: [learning] 监控线上 OOM 时为什么先要区分失败的资源？哪些信号必须靠正常运行期预采样而不是崩溃时抓取？**
@@ -165,7 +151,6 @@ GWP-ASan 是 Native 堆内存错误的抽样检测器：随机抽取少量 alloc
 各资源的可观测信号与误判点：FD 耗尽表现为 `open`/`socket`/`dup` 返回 `EMFILE`，预警阈值应按当前用量与 `RLIMIT_NOFILE` 的比例计算并保留 FD 类型分布，固定写“超过 1024”不适配不同设备。线程耗尽表现为 `pthread_create` 返回 `EAGAIN` 或 Java 建线程失败，要看线程创建速率、池大小与排队深度而不是瞬时总数。VMA 风险在 32 位进程更早暴露（有限地址空间要同时容纳 `.so`、JIT 代码、线程栈与图形映射），64 位进程很大的 `VmSize` 可能只是预留地址范围、不代表物理内存驻留。系统低内存 kill 由用户态 lmkd 结合 PSI 与 `oom_score_adj` 选择目标（AAOS13 树含 `system/memory/lmkd`），且无回调地消失还可能来自 force-stop 或掉电。
 
 预采样是唯一可靠路径：正常运行期按前后台与业务阶段低频、错峰读取 `/proc/self/status` 的 `VmRSS`、`VmSize`、`Threads`，结合 `Debug.MemoryInfo`。统计 `/proc/self/fd` 数量并在诊断抽样中解析类型。记录线程创建速率与队列等待。资源接近限制后要降低采样频率、停止高成本分类——继续频繁扫描 `/proc` 或抓 heap dump 可能成为压垮进程的额外负担。RSS/FD/线程数在崩溃现场应使用崩溃前最近一次采样，而不是在 signal handler 里临时扫描。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q17 -->
 
@@ -180,7 +165,6 @@ GWP-ASan 是 Native 堆内存错误的抽样检测器：随机抽取少量 alloc
 3. **持久化：**健康窗口使用“临时文件 → fsync → 原子重命名”，每进程独立目录，损坏文件进隔离区。SQLite 只用于恢复后的状态索引，不能作为崩溃现场唯一写入路径。
 4. **上报：**由下次启动执行，先传摘要，再按服务端策略传附件，确认后回收本地文件。服务端用 `crash_id` 与附件摘要幂等去重；fatal 与 non-fatal 分开统计。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q18 -->
 
 **Q17: [learning] 多进程应用的崩溃采集怎么归集？isolated 进程有什么限制？**
@@ -188,7 +172,6 @@ GWP-ASan 是 Native 堆内存错误的抽样检测器：随机抽取少量 alloc
 普通 `android:process` 子进程各自安装幂等的捕获模块、写以稳定进程角色命名的独立文件，但只让主进程或专用上传进程拉取配置并执行网络上传。配置由主进程写版本化只读快照供其他进程读取。进程 ID 只在一次生命周期内有效，事件 ID 用预生成 ID，或用“无法还原原始安装标识的派生值 + 单调时间 + 构建标识”组合并在服务端检测冲突。
 
 isolated 进程（`android:isolatedProcess="true"`）没有应用权限、不能直接访问应用私有状态或发起网络上传，即使它来自同一个 APK：可行设计是由宿主经受控 IPC 平时收集有限诊断数据，进程退出后用 `ApplicationExitInfo` 按进程名、UID、时间与退出原因补齐记录。隔离进程崩溃后无法保证 Binder 继续执行，不能把收尾保存寄托在崩溃后的跨进程调用上。WebView 渲染进程由系统管理，不能安装普通采集器，宿主只能经 `onRenderProcessGone` 一类回调观察退出并决定是否销毁重建 WebView（API 边界见 APM 邻居文档）。动态特性模块跟随应用 `versionCode` 管理，崩溃记录记已安装 split 与实验配置，不虚构独立的模块版本。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q20 -->
 
@@ -202,8 +185,7 @@ isolated 进程（`android:isolatedProcess="true"`）没有应用权限、不能
 2. **应用可见结果：**回调到达、扫描成功或网络字节说明该次调用成功，但不等于整个硬件活跃窗口。
 3. **系统或实验室统计：**batterystats、Perfetto、Power Profiler、Macrobenchmark `PowerMetric` 才有 UID 与硬件状态口径。普通应用进程拿不到与 `BatteryStats` 同等完整的数据；开发期可用 `dumpsys batterystats` 和系统 trace 核对。
 
-由此推出几条“API 窗口不等于硬件窗口”的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描。`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做“蜂窝耗电风险”级别的风险判断。任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [../../04-工具/04-能耗测量/17-功耗报告/01-功耗报告.md](../04-能耗测量/02-BatteryHistorian功耗报告.md)。
-
+由此推出几条“API 窗口不等于硬件窗口”的边界：BLE `startScan()` 返回不代表整个窗口内硬件持续扫描。`TrafficStats` 是 UID 累计字节、看不到 modem tail time 与能量，只能做“蜂窝耗电风险”级别的风险判断。任务运行 30 秒墙钟不代表占用 30 秒 CPU——等待网络、锁或 Binder 时 CPU time 只增加少量，多线程 2 秒墙钟内累计 CPU 时间甚至可能超过 2 秒，判断 CPU 消耗要同时保存 CPU 时间与墙钟时间。BatteryStats 的归因管线与设置页百分比口径见 [Battery Historian 与功耗报告](../04-能耗测量/02-BatteryHistorian功耗报告.md)。
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q21 -->
 
@@ -215,7 +197,6 @@ AAOS13 源码核对（`frameworks/base/core/java/android/os/PowerManager.java`�
 
 监控做法：插桩挂在四类公开调用成功返回之后（`newWakeLock`、`setReferenceCounted`、`acquire`、`release`），对象注册表用弱引用加 identity 语义，避免 APM 自身延长锁的生命周期。`acquire(timeout)` 之后在 deadline 加短宽限期处用 `isHeld()` 做保守探核——它只是一瞬间的观测，为 true 也可能是又一次 acquire。不要反射 `mToken`、`mRefCounted` 等私有字段：隐藏 API 限制、R8、厂商改动和并发访问都会让路径失效，token 也没有上传价值。告警规则按锁等级、前后台、是否提供 timeout、生命周期归属与同类样本分位数区分，固定“持有超过 30 秒就是泄漏”会大量误报。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q22 -->
 
 **Q20: [learning] 追踪 Alarm 的耗电影响时为什么要把设置、接受、取消、投递分成四个事件？精确 Alarm 权限在 Android 12 到 17 之间怎么变化？**
@@ -225,7 +206,6 @@ schedule attempt（业务发起设置）、accepted/rejected（系统是否接�
 权限版本线（AlarmManagerService 属 jobscheduler 模块、不在本地 AAOS13 树，以下按材料与其注明的官方文档转写）：Android 12 对精确 Alarm 引入 `SCHEDULE_EXACT_ALARM` special app access（target 31+ 需声明并获授权，豁免应用除外）。Android 13 起 target 33+ 可按合规场景改用 `USE_EXACT_ALARM`——安装即授予、用户不可撤销，但只适用闹钟、计时器、日历等核心场景并受商店政策约束。Android 14 起 target 31+ 未获授权时 `setExact()`、`setExactAndAllowWhileIdle()`、`setAlarmClock()` 抛 `SecurityException` 而不是自动降级为非精确，`OnAlarmListener` 路径不要求该权限，但 Android 17 中调用进程进入 cached 状态后系统可丢弃 listener Alarm。
 
 工程做法：调用前记录 `canScheduleExactAlarms()`、调用后记录成功或异常，收到授权变更广播后重新核查。样本分别保存 `requested_exact`、`accepted`、`delivered`。业务 tag 用低基数稳定 ID（`daily_sync` 之类），把时间戳或用户 ID 放进 tag 会让每条记录都像新任务并泄露隐私。可延迟的同步与上传优先 WorkManager，并把“入队”与“执行”分开记录。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q23 -->
 
@@ -237,7 +217,6 @@ AAOS13 源码核对（`frameworks/base/core/java/android/os/BatteryManager.java`
 
 精确功耗评估放到实验室：固定设备、亮度与网络条件，使用 Power Profiler、系统 trace、Macrobenchmark 电源指标或外接功耗仪。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q24 -->
 
 **Q22: [learning] Thermal status 与 thermal headroom 分别适合驱动什么决策？Android 13 上这套 API 覆盖到什么程度？**
@@ -247,7 +226,6 @@ Thermal status 是系统汇总后的整机热节流等级（`NONE` 到 `SHUTDOWN
 AAOS13 的覆盖范围（源码核对）：Android 10 的 `getCurrentThermalStatus()` 与 `OnThermalStatusChangedListener`、Android 11 的 `getThermalHeadroom(forecastSeconds)`（预测 0 到 60 秒）都已存在。Android 15 的 `getThermalHeadroomThresholds()` 与 Android 16 的 `OnThermalHeadroomChangedListener` 不在 A13——A13 只能按受控频率主动轮询 headroom 并处理 NaN。服务端注册行为 A13 已核对：`ThermalManagerService.registerThermalStatusListener()` 注册成功后立即把当前 status 投递给新 listener，应用再手工查一次会产生重复事件，直接依赖注册后的初始回调即可。
 
 策略设计：升温时立即收紧预算，降温时延迟分级恢复（迟滞避免状态在阈值附近波动时反复启停下载、视频与动画）。每项策略要幂等，NORMAL 预算必须显式恢复此前改变过的所有参数。status 不提供摄氏度、也不证明热量来自当前 App——业务负载先出现、状态随后升高、减载后下降只是增强因果判断，还需要对照实验与系统 trace。调试可用 `adb shell cmd thermalservice override-status` 注入状态、`reset` 解除（AAOS13 的 ThermalManagerService 已核对该命令存在，仅测试环境使用）。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q25 -->
 
@@ -259,7 +237,6 @@ TTI 的教训：它试图估计页面进入稳定可交互的时刻，但浏览�
 
 SPA（same-document 导航）还要另立边界：页面内导航不产生新的 Navigation Timing 也不重置 LCP，所以 H5 路由层要自己发出独立的 `route_id` 与 route start/ready，一次 document load 的 LCP 不能重复算到每个 soft navigation 上。LCP observer 给出的是候选序列，应在首次输入、页面隐藏或 pagehide 时上报末个候选并保留 `finalizationReason`。页面长期可见且无输入时的超时快照只能标 `lcp_candidate`，不能伪装成已结束的 LCP。能力缺失（provider 不支持某 entry type）写 `unsupported`，不能当成 0。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q26 -->
 
 **Q24: [learning] WebView 的 performance.now() 与 Flutter FrameTiming 的 raw timestamp 都不能直接和 elapsedRealtime 对齐，正确做法分别是什么？**
@@ -269,7 +246,6 @@ SPA（same-document 导航）还要另立边界：页面内导航不产生新的
 WebView 的校准方法是多次往返采样：Native 在调用 `evaluateJavascript("performance.now()")` 前后记录 `t0`/`t1`，暂用中点估计 JS 执行时刻、往返时间的一半作为保守不确定度，取多次采样中往返最小的一组求 offset（`nativeElapsed ≈ jsTime + offset`）。每次 main-frame 导航重新校准，进程从长时间后台恢复后再查漂移。端到端 FCP 按“映射后的 FCP 时刻减容器开始时刻”计算，不能把可能重叠的阶段时长相加。wall clock 只用于跨设备日志关联并额外记录时钟偏移。
 
 Flutter 的边界：raw timestamp 只用于同组做差、排序和按秒聚合。Native 收到 MethodChannel 批量数据的接收时间只说明“这一批最迟此时到达”（release 约每 1 秒、debug/profile 约每 100 ms 交付，首帧立即），每帧的真实时刻在批次窗口内不确定，误差不能写成对称的 ±1000 ms。要与 Native ANR、Binder 调用或合成帧精确关联时，在同一次测试中核对 Perfetto 的 engine、Choreographer 与 sched 轨迹。通用原则是把 `source_time`/`source_clock` 与 `observed_elapsed` 分开存并记录 `uncertainty`，缺失写 unknown 不写 0。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q27 -->
 
@@ -281,7 +257,6 @@ PixelCopy 的正确姿势：Android 8（API 26）起可把 Window 指定 Rect �
 
 后台边界：页面进入后台后 JS timer 与 renderer 都可能被节流或冻结，此时 heartbeat 超时与无像素只能记不可判定。线上按关键超时点采样一到两次而不按帧截图，白屏检测自身的 CPU、Bitmap 字节和执行时长也要进入 APM 自监控。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q28 -->
 
 **Q26: [learning] WebView renderer 退出和无响应分别通过什么 API 感知？为什么 renderer 崩溃不会触发 App 的 crash handler？**
@@ -292,7 +267,6 @@ Android 8 起 WebView 可把网页代码执行与绘制放在独立的 sandboxed
 
 证据分级：API 26–28 没有平台 unresponsive 回调、provider 也不支持兼容接口时，只能组合业务 ready 超时、Bridge heartbeat、DOM 状态和像素采样，这些信号不能证明 renderer 已卡死（后台节流、长任务、网络失败都会造成相似症状）。样本必须写 `signal_strength = direct | state | suspected` 三档——只有 `onRenderProcessGone()` 能把 renderer 退出写成直接事件，超时推断不能冒充 crash。
 
-
 <!-- 来源：05-observability/04-apm-architecture.md · Q29 -->
 
 **Q27: [learning] 监控 JSBridge 时为什么应优先用 addWebMessageListener？addJavascriptInterface 在 Android 13 上有哪些必须写进设计的边界？**
@@ -302,7 +276,6 @@ AndroidX WebKit 的 `WebViewCompat.addWebMessageListener()` 按 `allowedOriginRu
 AAOS13 源码核对（`frameworks/base/core/java/android/webkit/WebView.java`）的 `addJavascriptInterface()` 边界：注入对象进入页面的所有 frame 包括 iframe。JavaScript 调 Java 是同步的，JavaScript 会等方法返回。被注解的 Java 方法运行在 WebView 的私有后台线程而不是主线程。`removeJavascriptInterface()` 的变化要到下一次页面 reload 才生效。`WebView.getUrl()` 也回答不了调用来自哪个 frame。
 
 监控与安全做法：使用 Web message listener 时 allowlist 写完整 scheme、host 和必要 port、不用 `*`，回调里重复校验 main-frame 与精确 origin（降低单点配置错误风险），限制载荷大小，JSON 解析与落盘移到有容量上限的 worker 队列并记录 queue wait、payload bytes 与 drop count。监控调用拆成 direction、method_key、各阶段耗时与 queue depth。安全边界必须写清：origin 校验挡不住受信任站点自身的 XSS 调用 Bridge，敏感 Native 操作仍要验证消息 schema、业务状态与权限——“来自允许域名”不是完整授权。`evaluateJavascript()` 必须在 UI 线程调用，它虽是异步 API，调用前的排队、renderer 执行与回调派发仍可能很慢。
-
 
 <!-- 来源：05-observability/04-apm-architecture.md · Q30 -->
 

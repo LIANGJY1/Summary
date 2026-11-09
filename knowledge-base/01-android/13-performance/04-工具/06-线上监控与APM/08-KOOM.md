@@ -16,7 +16,6 @@
 
 fork 依赖的私有符号在平台侧确实存在：KOOM fast dump 解析 `libart.so` 的 `art::hprof::DumpHeap`、`art::ScopedSuspendAll`、`art::gc::ScopedGCCriticalSection` 等——AAOS13 的 `art/runtime/hprof/hprof.h`、`art/runtime/thread_list.h`、`art/runtime/gc/scoped_gc_critical_section.h` 中都能找到对应声明，native leak 依赖的 `libmemunreachable` 及其 `GetUnreachableMemoryString(bool, size_t)` 接口也在 `system/memory/libmemunreachable/` 中存在。但“源码里有”不构成应用可依赖的 ABI 承诺，平台版本升级需逐符号重新验证。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q17 -->
 
 **Q2: [learning] KOOM 用 fork 子进程写 Hprof 来降低主进程停顿——为什么诊断动作本身仍可能加速进程退出？自动路径产出的 Hprof 会脱敏吗？**

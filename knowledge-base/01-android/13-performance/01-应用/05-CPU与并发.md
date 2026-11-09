@@ -115,8 +115,6 @@ false sharing 指多个 CPU 并发访问同一 cache line 且至少一个在写�
 
 跨层边界：Thermal Headroom 系统语义见 [Thermal Headroom 系统语义](../02-系统/03-调度电源与温控.md)。
 
-
-
 **Q14: [learning] ADPF 的 HintSession 是反馈回路还是升频开关？Android 13 上能用到哪些 API？**
 
 反馈回路，不是升频开关。应用创建 session 时给出一组线程 TID 与目标工作时长（target work duration），每个周期上报实际时长（actual duration），系统比较两者后尝试调整这组线程的核放置或频率，使后续周期接近目标。公开契约只承诺“尝试调整”，可能维持频率、改 CPU 分配或受热与功耗约束失败。频率没有上升不能证明 session 失效——资源可能已经足够，或瓶颈在 GPU、内存带宽与温控。

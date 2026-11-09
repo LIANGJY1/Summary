@@ -17,7 +17,6 @@
 
 默认只跟踪已销毁的 Activity、Fragment、Fragment View、Service 和已执行 `onCleared()` 的 ViewModel，业务对象要在生命周期结束处显式调用 `AppWatcher.objectWatcher.expectWeaklyReachable(instance, reason)`。修复依据是引用链上第一条生命周期不合理的强引用，而不是路径中出现过的熟悉类名。基础依赖应使用 `debugImplementation`，避免把堆转储与分析代码带进 release APK。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q13 -->
 
 **Q2: [learning] LeakCanary 2.14 默认自动观察哪几类对象？为什么 Service watcher 被列为高版本验证重点？**
@@ -25,7 +24,6 @@
 `AppWatcher.appDefaultWatchers()` 默认安装四组 watcher：Activity（`onDestroy()` 完成）、Fragment 与 ViewModel（`onDestroy()`、fragment view 的 `onDestroyView()`、`onCleared()`）、root view（从 WindowManager 脱离）、Service（`onDestroy()` 后 system_server 收到 `serviceDoneExecuting()`）。“默认观察 View”不能推广成“所有 detached View 都会被扫一遍”——Fragment view 来自 Fragment 生命周期，root view 来自对 WindowManager 根 View 的监听，普通子 View 没有统一生命周期，业务仍要在明确终点自行调用 `expectWeaklyReachable()`。
 
 Service watcher 是重点，因为它依赖 framework 私有实现：反射 `ActivityThread.mH`、`mServices`、`Handler.mCallback`、`IActivityManagerSingleton` 并识别消息号 `STOP_SERVICE = 116`。AAOS13 源码中这些成员与消息号同样存在（`ActivityThread.java` 的 `mServices` 与 `H.STOP_SERVICE`、`Handler.java` 的 `mCallback`），但它们不属于公开 SDK 兼容契约——hidden API 策略、OEM 修改或平台演进都可能让反射失败，而 watcher 失败是静默的（记日志并放弃 Service 自动观察）。做法：测试包启动后检查 Logcat 是否出现 `Could not watch destroyed services`，关键 Service 在 `onDestroy()` 末尾再做一次业务侧观察。自定义观察放在不可逆的资源清理终点，不观察 Application、全局 cache 等设计上常驻的对象。LeakCanary 为第三方 SDK，未本地核对。反射目标存在性按 AAOS13 核对。
-
 
 <!-- 来源：05-observability/03-apm-platforms.md · Q14 -->
 
@@ -36,7 +34,6 @@ Service watcher 是重点，因为它依赖 framework 私有实现：反射 `Act
 后果来自默认断言行为：instrumentation 测试的默认 reporter 只对 Application Leak 抛 `NoLeakAssertionFailedError`——如果把自家 singleton、listener 或 adapter 的泄漏挂成 Library Leak matcher，CI 会误判为通过，而泄漏继续占内存。例外规则因此要守纪律：matcher 精确到 class、field、依赖版本，不用宽泛包名前缀。description 关联上游 issue、内部 owner、加入日期与删除条件。升级 SDK 或 Android 版本后重跑一遍不带自定义 matcher 的对照测试，删除不再命中的规则。`@SkipLeakDetection` 也要写明原因并设到期检查。
 
 对 Library Leak 本身的处置是按影响管理：记录 signature、系统版本、依赖版本与 retained size，查上游修复版本并用升级/降级对照验证。高流量页面或大 retained size 即使来自系统，也要评估生命周期顺序或隔离方案。CI 可以暂不为团队无法修复的问题失败，但要保留报告和趋势。LeakCanary 为第三方 SDK，未本地核对。
-
 
 <!-- 来源：05-observability/03-apm-platforms.md · Q15 -->
 

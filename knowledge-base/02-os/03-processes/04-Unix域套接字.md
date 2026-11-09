@@ -104,7 +104,7 @@ XSI（X/Open System Interfaces）消息队列使用队列标识符，不能直�
 
 **Q5: [learning] sockaddr_un 中 sun_family 与 sun_path 各表示什么？**
 
-sockaddr_un 是传给 bind、connect 等接口的地址结构；其中的“地址”是 UNIX 域套接字在本机的名字，用来让内核找到对应端点。常见形式是文件系统路径，例如 `/tmp/app.sock`：服务器用 bind 将端点绑定到这个路径，客户端用 connect 提供同一路径。路径项只用于命名端点，不存放通信数据；Linux 还支持不对应文件路径的抽象地址。
+sockaddr_un 是传给 bind、connect 等接口的地址结构。其中的“地址”是 UNIX 域套接字在本机的名字，用来让内核找到对应端点。常见形式是文件系统路径，例如 `/tmp/app.sock`：服务器用 bind 将端点绑定到这个路径，客户端用 connect 提供同一路径。路径项只用于命名端点，不存放通信数据。Linux 还支持不对应文件路径的抽象地址。
 
 1. **sun_family：**标记地址族为 AF_UNIX，告诉接口按 UNIX 域地址解释其余内容。
 2. **sun_path：**承载地址名字。路径名地址中放文件系统路径；Linux 抽象地址以 NUL 字节开头，后续名称按地址长度解释。

@@ -12,7 +12,6 @@ statsd 是平台侧的指标守护进程：接收 atom（用 protobuf schema 描
 
 pulled atom 由 statsd 按配置或命令向系统数据源拉取当前状态（如 `KernelWakelock`、`CpuTimePerUid`、`ProcessMemoryState`），pulled 区间的 field number（同时是 atom ID）从 10000 开始（材料口径，本地无 `atoms.proto` 无法直接核对）。statsd 过载时发送端可能收到 `EAGAIN`、写入丢失但不阻塞并维护 drop 计数——所以报告缺条目也不能单独证明事件未发生。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q32 -->
 
 **Q2: [learning] statsd 配置里的 AtomMatcher、Predicate 与各类 metric 各管什么？报告里缺条目按什么顺序排查？**
@@ -38,7 +37,6 @@ pulled atom 由 statsd 按配置或命令向系统数据源拉取当前状态（
 7. socket 或队列是否发生丢失。
 
 atom 与 metric 要分开看：报告里有条目只证明对应 atom 到达 statsd、命中配置并进入报告，它不能替代 ANR trace、tombstone、Perfetto trace 或 dumpsys 现场。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q33 -->
 

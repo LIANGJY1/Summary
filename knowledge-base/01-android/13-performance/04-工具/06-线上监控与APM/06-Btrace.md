@@ -10,7 +10,6 @@ btrace 3.0 已删除 2.0 的编译期全量插桩，改为 ShadowHook 与 JNI Ho
 
 `-m` 的误解源于版本差异：它接收的是 ProGuard/R8 mapping（混淆名到原始名的映射，用于反混淆），不是 btrace 2.0 的方法 include/exclude 插桩表——3.0 已不存在那种配置。其他边界：`RheaTrace3.init()` 会直接跳过非主进程，官方 3.0 不能采集 remote 进程的 Service。冷启动采集靠 PC 端写入系统属性再重启应用。README 把 `perfetto` 模式的默认边界写成 Android 8.1，但实现按 `SDK_INT >= 28`（Android 9）选择，文档与实现冲突时应以所用 commit 的代码为准。btrace 为第三方 SDK，未本地核对。
 
-
 <!-- 来源：05-observability/03-apm-platforms.md · Q10 -->
 
 **Q2: [learning] btrace 的开源 Android 产物为什么不能直接接入 Android 17 / API 37 生产项目？维护 source fork 至少要验收什么？**

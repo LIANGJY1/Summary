@@ -14,7 +14,6 @@
 
 Android 7.1 及以下的采集量受 File size limit 约束，Android 8.0（API 26）及以上忽略该上限；这不意味着可以无成本长时间录制。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q3 -->
 
 **Q2: [learning] Callstack Sample 的函数占比为什么不能当成单次耗时？**
@@ -27,7 +26,6 @@ Android 7.1 及以下的采集量受 File size limit 约束，Android 8.0（API 
 2. **墙钟等待：**主线程等待 Binder、锁或 I/O 时不在 CPU 上运行，样本很少也可能是关键路径。用 System Trace 的 Running、Runnable、Sleeping 等状态还原等待。
 3. **栈展示：**JNI、ART、`/apex/`、`/system/` 与内核帧可能出现在栈中；隐藏这些帧只改变展示，不改变原始样本。应用 native 采样可由 Simpleperf 后端支持。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q4 -->
 
 **Q3: [learning] 接近发布的性能问题该选 profileable 还是 debuggable 构建？**
@@ -39,7 +37,6 @@ Android 7.1 及以下的采集量受 File size limit 约束，Android 8.0（API 
 3. **量产现场：**Android 15（API 35）起 ProfilingManager 提供受系统限流和脱敏约束的生产采集入口，适用于开发机不在场的样本。
 
 材料口径的推荐环境为 API 29+、带 Google Play 的测试设备与 AGP 7.3+；采集能力仍须以目标 Studio、设备和构建版本验证。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q10 -->
 

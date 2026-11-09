@@ -10,7 +10,6 @@
 
 Builder 启用了 detector 却未显式配置 penalty 时，`build()` 自动补上 `penaltyLog()`。`setThreadPolicyMask()` 会同时更新 libcore `BlockGuard` 的 Java policy 与 Binder native 层保存的策略 mask。多进程方面，`android:process` 创建的进程会重新运行 `Application.onCreate()`，策略与违规限流状态各进程独立。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q36 -->
 
 **Q2: [learning] StrictMode 的磁盘与网络检测点在哪里？为什么 SharedPreferences 后台加载 XML 时主线程卡住、却不报 DiskReadViolation？**
@@ -20,7 +19,6 @@ Builder 启用了 detector 却未显式配置 penalty 时，`build()` 自动补�
 `SharedPreferences` 是典型盲区：`SharedPreferencesImpl` 在后台线程加载 XML，主线程 getter 只是等待加载完成——磁盘 syscall 不在主线程，主线程 StrictMode 不会产生 `DiskReadViolation`，但界面仍因等待而卡住，此时要看 Perfetto 的线程状态与工作线程 I/O。同类边界还有：直接从 native 代码发起、未经过检查点的 syscall 可能绕过检测。主线程用 `Future.get()` 等待后台 I/O 时检查点在工作线程。检测到磁盘访问不代表该访问一定慢。
 
 `detectExplicitGc()`（显式 `System.gc()` 检查）在 Android 13 是 `@hide`/`@TestApi`（AAOS13 源码与 API 表核对），材料按 Android 17 口径为 API 34 起对 SDK 公开——在 Android 13 上不能直接调用。`noteSlowCall(name)` 只标记调用点、没有耗时阈值，要知道耗时用 trace section 加 Perfetto。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q37 -->
 
@@ -37,7 +35,6 @@ penalty 决定违规被检出后的处理：
 
 listener 机制里，回调执行期间 StrictMode 会临时放开回调线程的 ThreadPolicy，避免 listener 内部的日志、入队等操作再次触发自身形成递归，但队列消费与 Executor 生命周期仍由应用负责——回调里不要同步上传网络或做重型符号化，堆栈与明文数据也可能含敏感信息。另一个读数边界：带 Looper 的线程上记录的 `durationMillis` 是从违规时刻到 Looper 完成本轮工作之间的时间，可能包含违规操作后的其他同步代码，不是磁盘 syscall 的精确耗时。同一 Looper 循环的记录数量有上限，日志条数不能当成违规发生次数。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q38 -->
 
 **Q4: [learning] 应用堆栈里出现“发生在 system_server 的 DiskReadViolation”是怎么回事？用 allowThreadDiskReads() 临时放行时要注意什么？**
@@ -49,7 +46,6 @@ listener 机制里，回调执行期间 StrictMode 会临时放开回调线程�
 这套传播只覆盖 ThreadPolicy，远端进程的 VmPolicy 不传播，回传信息也不包含 Binder 调用本身的耗时。临时放行方面：`allowThreadDiskReads()` 只清除 disk-read 检测位，`allowThreadDiskWrites()` 同时清除 disk-write 与 disk-read 位（AAOS13 的 `allowThreadDiskWritesMask()` 实现核对，因为写文件通常伴随读取元数据）。返回值是放行前的完整策略，必须在 `finally` 中恢复，异常、提前返回和嵌套调用都不能让线程永久处于宽松状态。
 
 放行不会让操作更快，注释应写明数据量上限、调用阶段和无法异步化的原因。自动化测试安装策略时，`@Before` 运行在测试线程、直接调用只改变测试线程，要用 `runOnMainSync` 切到应用主线程。依赖 GC 与 finalization 时序的 VmPolicy 违规不适合直接做确定性断言，适合先收集证据。
-
 
 <!-- 来源：05-observability/02-online-diagnostics.md · Q8 -->
 

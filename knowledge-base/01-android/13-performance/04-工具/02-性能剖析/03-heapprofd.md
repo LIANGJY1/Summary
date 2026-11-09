@@ -15,7 +15,6 @@
 
 普通 App 的线上路径是 Android 15+ 的 `ProfilingManager` 请求自己的 heap profile：系统核对 Binder 调用 UID 与包名、配置目标固定为调用方包名、受单应用与全系统限流，请求被接受只表示开始尝试、不保证生成结果文件（`ERROR_FAILED_RATE_LIMIT_PROCESS`/`_SYSTEM`/`_INVALID_REQUEST` 等错误码要分别记录）。`:remote` 等次要进程不会自动加入。AAOS13（Android 13）没有 `ProfilingManager`。QA 复现走另一条路：release APK 声明 `android:shell="true"` 后在 user build 上由 shell 侧 Perfetto/`tools/heap_profile` 采集——它依赖本地调试通道，不代表 App 能在用户手机上自行启动系统采集。
 
-
 <!-- 来源：02-tracing/03-runtime-profiling.md · Q6 -->
 
 **Q2: [learning] 用 heapprofd 判断 native 泄漏，为什么第一个 dump 不能当基线？哪些“看起来在涨”其实不是 malloc 泄漏？**
@@ -23,7 +22,6 @@
 heapprofd 只记录采集窗口内经过受支持分配器（默认 heap 为 `libc.malloc`，覆盖 Bionic 的 malloc/free 与 C++ new/delete 路径）抽样到的分配与释放，不扫描完整堆快照——attach 之前已存在的分配没有历史事件，第一个 dump 无法代表完整 native heap。判断泄漏至少需要：两个以上连续 dump（`continuous_dump_config` 周期输出）、可重复的操作序列，以及场景结束后观察是否回落的稳定窗口。用 `heap_profile_allocation` 表按 callsite 汇总正样本（分配）与负样本（释放）得到净存活字节，相同调用栈跨 dump 增长、场景退出后不回落且多轮复现一致，才构成较强线索。
 
 三类常见误判：一是分配器缓存仍保留页面——应用已 free 但分配器保留 arena/page，存活分配估算已回落而 RSS 不变。二是增长来自 mmap 或图形内存——heapprofd 默认不看 `mmap`/`munmap` 直接建立的映射，DMA-BUF 与 GPU 内存也没有分配器调用栈语义，PSS 上升而 heapprofd 平稳时应转查匿名映射、memtrack、`dmabuf_dump`。三是 Java 引用保住 native 对象——heap profile 不提供引用关系，需要 Java heap dump 补充。参数边界：`sampling_interval_bytes` 是平均每 N 字节取一个样本（1 表示逐次），增大降低开销但漏掉小分配。`block_client` 在 buffer 满时让目标进程等待，线上测量通常关闭以免阻塞高频分配线程。daemon 的 memory/CPU guardrail 每 30 秒检查一次、命中后直接关闭对应 data source，且 `max_heapprofd_memory_kb` 限制的是 heapprofd 自身而非目标 App。
-
 
 <!-- 来源：03-resource-domains/01-memory-performance.md · Q3 -->
 

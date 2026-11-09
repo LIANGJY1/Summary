@@ -12,8 +12,6 @@
 
 排查边界：公共内核源码标签（如 ACK `android17-6.18-2026-06_r6`）只能核对平台通用机制。具体设备的驱动、配置与调度策略要看设备自己的内核提交版本与 fragment，不能拿公共内核源码当设备内核源码用。
 
-
-
 **Q2: [done] ramdisk、initramfs 和 rootfs 都是什么？内核启动为什么需要它？**
 
 ramdisk 是启动时提供给内核的一份最小文件归档。内核将它展开为初始根文件系统（rootfs），再从中启动 `/init`。它解决了系统分区尚未挂载、但挂载所需程序和配置又必须先运行的依赖问题。
@@ -30,8 +28,6 @@ ramdisk 是启动时提供给内核的一份最小文件归档。内核将它展
 
 机制上，`android17-6.18` 中的 android17 是 KMI 代、6.18 是 LTS 内核版本。KMI 稳定保证分支内 vendor 模块与内核的符号与布局兼容，LTS 小版本升级不破坏模块加载。结果：分析内核行为前先用 `uname -r` 与 KMI 字符串确认实际分支，不能写死"Android 17 = 6.18"。另外解耦不止内核一层：Android 16 起推动 GBL（通用 bootloader），bootloader 也在标准化。
 
-
-
 **Q4: [learning] “系统是 Android 17”能推出内核一定是 6.18 吗？内核版本边界怎么确认？**
 
 不能。Android 17 的新 ACK 是 `android17-6.18`，但兼容表同时列出多条可用于 Android 17 的较早 GKI 内核：`android16-6.12`、`android15-6.6`、`android14-6.1`、`android14-5.15`、`android13-5.15` 等（`android12-5.10`、`android13-5.10` 自 Android 17 QPR1 起不再支持）。反方向同样要谨慎：在 `android17-6.18-2026-06_r6` 中确认存在的 Arena 或 `sched_ext`，不能写成所有 Android 17 设备都有。
@@ -44,15 +40,11 @@ adb shell uname -r
 
 这只给出版本字符串。确认它对应哪个受支持的 GKI 构建还要结合 KMI generation、安全补丁级别和厂商模块。另一个常见错误是把 Linux 6.10 当成 Android 17 的内核分支——它只是上游演进的一个版本阶段，Android 17 的 6.18 ACK 已包含 Arena、`sched_ext`、BPF iterators、BPF LSM 和 `struct_ops`。判断某项特性是否可用应直接检查目标 ACK，不凭上游版本推测回移。
 
-
-
 **Q5: [learning] 怎么确认一台设备的内核版本、KMI 和功能开关？**
 
 1. **版本与 KMI**：`uname -r` 与 `cat /proc/version`——GKI 设备的 KMI 直接体现在版本串里（形如 `5.15.78-android13-8-g…`，即“内核版本-android 平台发布”）。
 2. **功能开关**：启用 CONFIG_IKCONFIG_PROC 的内核把完整 config 挂在 `/proc/config.gz`——`su 0 zcat /proc/config.gz | grep CONFIG_PSI=` 即可验证某功能是否编入。无该节点时到对应 GKI release 页下载 config 比对。
 3. **排查顺序**：确认“某机制是否存在”先看 config、再看运行时节点（如 `/dev/binderfs`、`/proc/pressure`）、最后看厂商修改。
-
-
 
 **Q6: [learning] 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
 
@@ -60,8 +52,6 @@ vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用
 
 1. **版本纪律**：钩子集合随 KMI 版本变化（不同内核分支的 include/trace/hooks/ 内容不同，如 binder 相关钩子只在部分分支存在）——查钩子必须按设备 KMI 对应的内核分支，不能用主线树想当然。
 2. **用途**：OEM 的调度/电源策略经这些钩子挂回调。应用与框架工程师可用它们在 ftrace/perfetto 里观测内核侧事件（厂商调优的可见部分，呼应 Q1 的“厂商改什么”）。
-
-
 
 **Q7: [learning] PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
 
@@ -71,15 +61,11 @@ vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用
 2. **dmesg 过滤**：`su 0 dmesg -w | grep -iE 'binder|oom|lowmemorykiller|psi'`。user 版默认限制读 dmesg（dmesg_restrict），要用 userdebug/root。`logcat -b kernel` 依赖 logd 配置、并非所有设备可用。
 3. **衔接**：lmkd 消费 PSI 的机制见 [../07-内存与存储/01-内存管理.md](../07-内存与存储/01-内存管理.md)。调度压力与温控见 [../13-performance/03-底层/01-内核调度与频率.md](../13-performance/03-底层/01-内核调度与频率.md)。
 
-
-
 **Q8: [learning] Kernel 的 GKI 边界到底划在哪，“内核可升级”具体指什么？**
 
 GKI 把内核代码分成“稳定 ABI 的通用内核”与“随产品编译的供应商内核”两层：设备可替换的只有供应商模块与内核镜像，而稳定的通用内核片段通过 KMI（Kernel Module Interface）冻结，保证不同厂商的模块能在同一个通用内核上互操作。Android 12 引入的 GKI 2.0 进一步支持把模块按 `vendor_boot` 启动、通用内核与供应商内核解耦部署。
 
 对本仓库的实际影响是**可写范围与崩溃归因**：GKI 之外的内核代码（vendor 模块）改动不会随系统升级自动重新编译，接口不匹配会在运行期而非编译期暴露。因此“升级系统后某厂商模块行为异常”是一类需要单独归因的故障。判断规则：看到与升级相关的内核行为变化，先确认变更落在通用内核还是 vendor 模块——落在通用内核则所有设备同步生效，落在 vendor 模块则只有该产品线受影响。
-
-
 
 **Q9: [learning] 内核里某个机制“存在”就能说明设备启用了吗？评估 Android 17 GKI 6.18 的调度与内存改动要满足哪三个条件？**
 
@@ -88,8 +74,6 @@ GKI 把内核代码分成“稳定 ABI 的通用内核”与“随产品编译�
 放到 Android 17 GKI（材料按 android17-6.18-2026-06_r6 核对，内核不在本地 AAOS13 树）逐项看：EEVDF 从 Linux 6.6 起进入公平调度，不能把 6.12 写成分界点，且它的 lag/virtual deadline 模型不识别“UI 线程”语义，不保证 UI 任务总能抢先。CONFIG_SCHED_CLASS_EXT=y 只说明编入了 sched_ext，BPF 调度器加载并运行后才会接管任务，/sys/kernel/sched_ext/state 为 enabled 且 root/ops 有名字才是运行证据。F2FS 的 checkpoint_merge 要看设备挂载参数与文件系统状态。io_uring 的内核实现不等于 Android 应用契约，NDK 稳定 API 未列出 io_uring，普通应用还受 seccomp 与 SELinux 约束。dm-verity multi-buffer hashing 补丁并未合入 r6，其约 35% 的 cold-cache 吞吐数据不能记为 Android 17 收益。
 
 工程做法是建核查表：机制、启用条件、原始测试口径三列对齐。设备测试记录至少包含 platform build、kernel release、GKI tag、挂载参数、CPU 拓扑与样本统计。性能对照保持内核配置与缓解状态一致，只改一个变量，“没有检出差异”和“证明零开销”要分开表述。
-
-
 
 **Q10: [learning] ARM64 的 KASLR、KPTI 与 Spectre 缓解各自保护什么？为什么 KPTI 是否生效不能靠 CPU 型号推断？**
 

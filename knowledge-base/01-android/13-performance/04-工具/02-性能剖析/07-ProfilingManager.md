@@ -12,7 +12,6 @@ ProfilingManager 补足量产设备上“问题发生时没有开启分析工具
 
 Android 13 上不存在该 API——本地 AAOS13 树的 frameworks/base 与 packages/modules 下均无 ProfilingManager 对应类（本地源码核对），Android 13 及更早的替代是连接开发机对 debuggable/profileable 构建采集，或降级使用 Android vitals、FrameMetrics/JankStats、`ApplicationExitInfo` 等指标与记录。它属于 Mainline 模块、可经 Google Play 系统更新独立更新，因此设备实际行为可能与固定 AOSP tag 的源码有差异。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q29 -->
 
 **Q2: [learning] 发起一次 ProfilingManager 显式请求要注意什么？“提交成功”等于“采集成功”吗？**
@@ -22,7 +21,6 @@ Android 13 上不存在该 API——本地 AAOS13 树的 frameworks/base 与 pac
 显式请求的要素：按问题选 builder——SystemTraceRequestBuilder 看线程时间线与调度交叠、JavaHeapDumpRequestBuilder 看对象存活与 GC Root 引用链、HeapProfileRequestBuilder 看持续分配调用栈、StackSamplingRequestBuilder 要低开销热点线索。`executor` 与 request-specific listener 必须成对传入，两者都为 null 仅在已注册全局 listener 时有意义，没有任何 listener 的请求会被丢弃。
 
 `tag` 只取前 20 个字母、数字和连字符并转小写进入文件名，不能承载用户数据。heap dump 是某一时刻的快照、没有时长参数。`BufferFillPolicy` 只属于 system trace 请求，`RING_BUFFER` 保留停止点前的时间窗、`DISCARD` 保留采集开头的早期证据（材料口径）。结果文件只能通过返回的 `resultFilePath` 访问，成功结果用它去重。`ProfilingResult` 没有唯一结果 ID，失败时路径为 null。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q30 -->
 
@@ -35,7 +33,6 @@ Android 13 上不存在该 API——本地 AAOS13 树的 frameworks/base 与 pac
 版本上 API 36 提供 APP_FULLY_DRAWN 与 ANR，36.1 增加用户强停、最近任务移除等 kill 类 trigger 与 `requestRunningSystemTrace()`（判断用 `SDK_INT_FULL`），API 37 增加 OOM、COLD_START 等——其中 `TRIGGER_TYPE_OOM` 只覆盖 Java OOM，不含 lmkd 或 native OOM，应用自定义 `UncaughtExceptionHandler` 时必须续调默认 handler。
 
 实验设备可用 `profiling_testing` 的 DeviceConfig 开关关闭限流或指定测试包，测试后必须恢复。
-
 
 <!-- 来源：05-observability/02-online-diagnostics.md · Q23 -->
 

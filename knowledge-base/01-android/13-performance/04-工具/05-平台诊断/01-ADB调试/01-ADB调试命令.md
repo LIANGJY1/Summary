@@ -1,6 +1,6 @@
 # ADB、am 与 dumpsys 诊断命令
 
-本组按工具或紧密相关 API 归档；题目保留来源答案，标题编号在本组内连续。
+本组按工具或紧密相关 API 归档。题目保留来源答案，标题编号在本组内连续。
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q1 -->
 
@@ -10,22 +10,20 @@
 
 没有结果只表示查询时该进程不存在或过滤条件未匹配，不证明应用未安装。先检查设备连接、当前用户和实际 Manifest 进程名，再结合 `dumpsys activity processes` 查看系统记录。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q12 -->
 
 **Q2: [learning] adb shell am dumpheap 从 shell 到 ART 经过哪些层？为什么 user 构建上对普通发布应用执行会失败？**
 
 链路分四层（AAOS13 源码核对）：
 
-1. `ActivityManagerShellCommand.runDumpHeap()` 解析参数并创建输出文件描述符；输出路径省略时落到 `/data/local/tmp/heapdump-<时间>.prof`。
+1. `ActivityManagerShellCommand.runDumpHeap()` 解析参数并创建输出文件描述符。输出路径省略时落到 `/data/local/tmp/heapdump-<时间>.prof`。
 2. `ActivityManagerService.dumpHeap()` 检查调用方持有 `android.permission.SET_ACTIVITY_WATCHER`，调用 `enforceDebuggable()` 检查目标进程，并临时调用 `enableFreezer(false)` 关闭缓存应用冻结器。
-3. 请求经 Binder 到达应用进程的 `ActivityThread.handleDumpHeap()`；在 `-g` 时执行 `System.gc()`、`System.runFinalization()`、`System.gc()` 序列后按分支选择托管堆、native heap 或 malloc info。
+3. 请求经 Binder 到达应用进程的 `ActivityThread.handleDumpHeap()`。在 `-g` 时执行 `System.gc()`、`System.runFinalization()`、`System.gc()` 序列后按分支选择托管堆、native heap 或 malloc info。
 4. 最后由 ART 停止托管线程并写文件。
 
 user 构建上失败的原因是 `enforceDebuggable()` 的实现（AAOS13 核对）：`!Build.IS_DEBUGGABLE && !proc.isDebuggable()` 即抛 SecurityException——user 构建只能转储 debuggable 应用，`profileable` 声明不开放 HPROF。userdebug/eng 构建才允许转储其他目标。Android 13 的选项是 `--user`、`-n`（native heap dump）、`-g`、`-m`（malloc info）。
 
 Android 17 材料口径另有 `-b <png|jpg|webp>` 把 Bitmap 像素写进托管堆转储，属版本差异。`-n` 和 `-m` 的产物不是 HPROF，不能交给 HPROF 分析器。应用在自己进程内调用 `Debug.dumpHprofData()` 不经过 AMS 这组跨进程检查。Freezer 临时关闭的目的是防止目标进程被冻结后无法处理 Binder 请求，托管线程的暂停由 ART 负责，两者是两件事。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q16 -->
 
@@ -33,14 +31,13 @@ Android 17 材料口径另有 `-b <png|jpg|webp>` 把 Bitmap 像素写进托管�
 
 `dumpsys` 通过 ServiceManager 找到目标 Binder 服务并调用它的 dump 接口，拿到的是该服务在采集时刻愿意公开的内部状态——或是即时快照，或是某段累计统计窗口，不是时间线。事件先后要靠 Perfetto、Winscope 或日志补足。AAOS13 的 `dumpsys.cpp` 核对：无参数全量模式按服务名排序逐项 dump，单个服务默认等待 10 秒。常用全局参数（写在服务名之前）包括：
 
-- `-t`：超时单位为秒；
-- `-T`：超时单位为毫秒，默认 10 秒；
-- `-l`：列出注册且可见的服务；
-- `--pid`：只打印服务所在进程 PID；
+- `-t`：超时单位为秒。
+- `-T`：超时单位为毫秒，默认 10 秒。
+- `-l`：列出注册且可见的服务。
+- `--pid`：只打印服务所在进程 PID。
 - `--priority`：按 CRITICAL 等优先级筛选。
 
 `--proto` 筛选声明 `DUMP_FLAG_PROTO` 的服务。cpuinfo 正是“累计窗口”的例子：它输出 ActivityManager 后台 `ProcessCpuTracker` 最近两个采样点之间的增量（来自 `/proc/stat` 与 `/proc/<pid>/stat`，AAOS13 存在该类），调用命令的时刻不一定触发新的测量窗口，“瞬时 CPU”的说法高估了时间精度。进程行的 `user`/`kernel` 分列自该进程的两种态 CPU 时间，`iowait`、`irq`、`softirq` 只在 TOTAL 行传入，多线程进程能并行占用多个 CPU、百分比可能超过 100%。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q17 -->
 
@@ -52,7 +49,6 @@ OOM adjustment 是系统交给 lmkd 的进程保护分数，数值越大在内�
 
 可见进程还可能受 laddering 影响、被分配到 100–199 之间的细分值（材料口径，具体行为受设备配置控制）。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q18 -->
 
 **Q5: [learning] dumpsys gfxinfo 的 reset、framestats 与聚合统计各承担什么？"Number Slow bitmap uploads" 高就是图片解码慢吗？**
@@ -62,7 +58,6 @@ OOM adjustment 是系统交给 lmkd 的进程保护分数，数值越大在内�
 AAOS13 的 HWUI 源码核对：`JankTracker` 使用固定 120 项的环形缓冲（写满覆盖最早记录），`ProfileData` 同时输出 deadline-aware 与 legacy 两组统计（`Janky frames` 与 `Janky frames (legacy)`）及 90/95/99 分位，deadline 口径按 `GpuCompleted` 是否越过 `FrameDeadline` 判定，`FrameInfo.h` 中存在 `FrameDeadline`、`SyncStart`、`IssueDrawCommandsStart`、`GpuCompleted` 等字段。
 
 分类名是 trace 入口不是根因：`Slow bitmap uploads` 是保留的历史输出名（对应 `SyncStart → IssueDrawCommandsStart` 超阈值），不能凭名称认定发生了图片解码。`Slow issue draw commands` 也不区分 CPU、GPU、队列或 fence 等待。方法级归因回到 Perfetto 的 FrameTimeline、UI Thread、RenderThread 与 GPU 证据。
-
 
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q19 -->
 
@@ -77,7 +72,6 @@ Android 13 的 `--list` 用于查找层名称，`--latency` 用于查看指定�
 
 依据：Android 13 的 SurfaceFlinger.listLayersLocked 和 dump 参数处理。
 
-
 <!-- 来源：00-methods-and-tools/02-profiling-tools.md · Q34 -->
 
 **Q7: [learning] 一次 ANR 排查里，statsd、Perfetto、logcat、dumpsys 各能提供什么？为什么缺一类证据结论就会偏窄？**
@@ -87,7 +81,6 @@ Android 13 的 `--list` 用于查找层名称，`--latency` 用于查看指定�
 `dumpsys activity exit-info`（`ApplicationExitInfo`，Android 11+）区分 ANR、Java/native crash、low-memory kill、用户请求等退出原因，`lastanr` 保存最近一次 ANR 状态。缺任何一类结论都会偏窄：statsd 只有聚合事实没有时序，Perfetto 不知道平台统计口径，dumpsys 快照只证明当前状态，ANR trace 的线程栈要靠系统保存。LMK 同理——`LmkKillOccurred` 只记录哪个进程被杀，内存压力为什么升高要查 lmkd 日志、PSI、PSS/zRAM 与前后台状态。
 
 工程上的分工原则：线上 APM 负责应用内会话与业务维度，statsd 负责系统侧平台事件维度，后端按时间、版本、设备关联两者。只有系统侧才知道、App 无权限拿到的事件才值得引入 statsd，APM 能稳定采到的不必重复采集。
-
 
 <!-- 来源：00-methods-and-tools/01-performance-workflow.md · Q34 -->
 
@@ -100,7 +93,6 @@ Android 13 的 `--list` 用于查找层名称，`--latency` 用于查看指定�
 3. **WaitTime**：shell 在调用前后用 uptime 计算的阻塞时间，包含命令发起与返回路径，适合诊断命令等待，不替代 TotalTime。
 
 “冷”只描述进程在启动前不存在：`-S` 不清空文件页缓存、应用数据或服务端缓存。要求首次安装、首次登录或冷数据的场景必须另设，不能借 `-S` 推断。编译状态也要选一种协议并声明：保留各 App 经商店分发和正常使用形成的编译状态（回答用户现实体验），或对所有包执行同一安装与编译流程（如 `cmd package compile -m speed -f`，回答固定 ART 条件下的差异，但不能称为商店体验）。`speed-profile` 在未核验各 App profile 是否存在且质量相近时，会引入新的不一致。Android 12 起的系统 SplashScreen 早于应用首帧出现，但 TotalTime 的完成点仍是目标 Activity 窗口绘制，不表示数据可用。
-
 
 <!-- 来源：00-methods-and-tools/01-performance-workflow.md · Q30 -->
 
@@ -131,15 +123,15 @@ Android 13 的 `InputShellCommand` 提供这些常用子命令：
 
 **Q11: [learning] 如何确认 system_ext 的 OverlayFS 后端与 verity 状态，并恢复推送的 APK？**
 
-先只读采集目标进程看到的挂载、upper 所在文件系统和设备映射，再判断校验状态；确认设备允许且已备份调试修改后，才执行恢复。`dm-0`、`orange` 或 `/mnt/scratch` 单独出现都不能证明完整的后端链路或 verity 状态。
+先只读采集目标进程看到的挂载、upper 所在文件系统和设备映射，再判断校验状态。确认设备允许且已备份调试修改后，才执行恢复。`dm-0`、`orange` 或 `/mnt/scratch` 单独出现都不能证明完整的后端链路或 verity 状态。
 
 以下以支持 root 的 Android 13 调试设备及 `/system_ext/priv-app/Launcher/Launcher.apk` 为例。设备名、进程和路径需替换成实际值：
 
-1. **确认设备和进程**：用 `adb devices -l` 查看连接及设备信息，其中 `-l` 显示详细信息；多设备时使用 `adb -s 序列号` 指定目标，省略 `-s` 则由 ADB 选择唯一可用设备。用 `adb shell pidof 进程名` 获取目标 PID；进程未运行时不能读取它的挂载视图。
-2. **检查目标进程的挂载**：用 `adb shell cat /proc/PID/mountinfo` 查看该 PID 的挂载信息，在输出中找到 `/system_ext` 对应行。文件系统类型为 `overlay` 时，检查 super options 中的 `lowerdir`、`upperdir` 和 `workdir`；实际记录可能经过转义。直接查看 `/proc/mounts` 只能反映执行命令的 shell 所在命名空间，不能保证与目标进程相同。
+1. **确认设备和进程**：用 `adb devices -l` 查看连接及设备信息，其中 `-l` 显示详细信息。多设备时使用 `adb -s 序列号` 指定目标，省略 `-s` 则由 ADB 选择唯一可用设备。用 `adb shell pidof 进程名` 获取目标 PID。进程未运行时不能读取它的挂载视图。
+2. **检查目标进程的挂载**：用 `adb shell cat /proc/PID/mountinfo` 查看该 PID 的挂载信息，在输出中找到 `/system_ext` 对应行。文件系统类型为 `overlay` 时，检查 super options 中的 `lowerdir`、`upperdir` 和 `workdir`。实际记录可能经过转义。直接查看 `/proc/mounts` 只能反映执行命令的 shell 所在命名空间，不能保证与目标进程相同。
 3. **从 upper 追到设备**：记录上一步实际显示的 upper 路径，在同一份 mountinfo 中找覆盖该路径的最长匹配挂载点。例如 upper 位于 `/mnt/scratch/overlay/...`，再看 `/mnt/scratch` 的文件系统类型和来源。来源若是 `/dev/block/dm-0`，它只是设备映射节点，不是最终物理位置。
-4. **继续追踪映射**：若设备提供 `dmctl`，先用 `adb shell dmctl list devices` 列出映射设备，再按实际名称运行 `adb shell dmctl table 设备名` 查看映射表；命令可用性和输出因设备而异。结合 `adb shell lpdump` 中 super 元数据里的逻辑分区和 extent 信息，确认它是否映射到 super；如果涉及镜像文件，还需检查设备的 image manager 和实际文件映射。没有完整映射证据时，结论应是“后端未确认”，不能从 dm 编号猜测。
-5. **检查 verity 线索**：verity 指受验证启动链保护的块设备完整性校验，dm-verity 在读取数据时检查其是否与可信哈希树一致。`adb shell getprop ro.boot.verifiedbootstate` 反映启动验证状态，`adb shell getprop ro.boot.veritymode` 反映相关启动参数；空值或 `orange` 都不能单独证明 system_ext 的 dm-verity 是否启用。应结合设备映射表中是否有对应 verity target、启动日志与设备实现判断。
-6. **恢复并验证**：确认 system_ext 使用 OverlayFS，且接受清理其他调试覆盖后，在支持的 userdebug/eng 设备执行 `adb root`、`adb enable-verity`，检查每一步输出并按提示重启。该操作可能影响整个调试覆盖工作区，不是只删除一个 APK。恢复后重新采集目标进程 mountinfo，核对合并路径 APK 的哈希及 `adb shell pm path 包名` 输出。`pm path` 显示包管理器使用的路径，不能单靠它证明 APK 内容；应用更新版本也可能位于 `/data`。
+4. **继续追踪映射**：若设备提供 `dmctl`，先用 `adb shell dmctl list devices` 列出映射设备，再按实际名称运行 `adb shell dmctl table 设备名` 查看映射表。命令可用性和输出因设备而异。结合 `adb shell lpdump` 中 super 元数据里的逻辑分区和 extent 信息，确认它是否映射到 super。如果涉及镜像文件，还需检查设备的 image manager 和实际文件映射。没有完整映射证据时，结论应是“后端未确认”，不能从 dm 编号猜测。
+5. **检查 verity 线索**：verity 指受验证启动链保护的块设备完整性校验，dm-verity 在读取数据时检查其是否与可信哈希树一致。`adb shell getprop ro.boot.verifiedbootstate` 反映启动验证状态，`adb shell getprop ro.boot.veritymode` 反映相关启动参数。空值或 `orange` 都不能单独证明 system_ext 的 dm-verity 是否启用。应结合设备映射表中是否有对应 verity target、启动日志与设备实现判断。
+6. **恢复并验证**：确认 system_ext 使用 OverlayFS，且接受清理其他调试覆盖后，在支持的 userdebug/eng 设备执行 `adb root`、`adb enable-verity`，检查每一步输出并按提示重启。该操作可能影响整个调试覆盖工作区，不是只删除一个 APK。恢复后重新采集目标进程 mountinfo，核对合并路径 APK 的哈希及 `adb shell pm path 包名` 输出。`pm path` 显示包管理器使用的路径，不能单靠它证明 APK 内容。应用更新版本也可能位于 `/data`。
 
 如果 `adb root`、`dmctl`、`lpdump` 或目标进程访问不可用，应记录受限项并由平台维护者提供设备配置和只读采集结果。不要在覆盖层挂载期间直接改 upper/work，也不要通过删除合并路径假定 lower 文件一定恢复。直接重挂载可写分区时，上述 OverlayFS 清理流程不能恢复已改写的底层文件。
