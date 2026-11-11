@@ -81,9 +81,9 @@ INotificationManager
 
 ### 0.3 与既有文章的关系
 
-- 《通知服务与车机打扰治理》（`docs/md/通知服务与车机打扰治理.md`）：以"打扰治理"为主线，覆盖入队管线、importance 权限模型、ZenMode 引擎、排序流水线、buzz-beep-blink 与车机两层打扰闸门。本文第一部与其在第 2~5 章有交集，但视角不同：那篇回答"系统如何治理打扰"，本文回答"这些裁决字段中哪几个决定横幅弹不弹、如何传到 SystemUI"。重叠处本文只写横幅视角的份额，治理细节以交叉引用指向该篇对应章节。
-- 《SystemUI 源码分析》（`docs/md/SystemUI.md`）：第 3 章有通知管线（NotifCollection → shade list）的概览。本文第二部把其中的横幅支线（判定、绑定、上屏、收回）单独拉直讲透。
-- 《yadea通知接入对照与审计》（`docs/md/yadea通知接入对照与审计.md`）：本文第三部的下游篇，对雅迪车机 SystemUI 基于 CarNotificationLibrary 的定制实现做机制解剖与接入文档逐条审计。
+- 《通知服务与车机打扰治理》（AAOS13_study 仓 `docs/md/通知服务与车机打扰治理.md`）：以"打扰治理"为主线，覆盖入队管线、importance 权限模型、ZenMode 引擎、排序流水线、buzz-beep-blink 与车机两层打扰闸门。本文第一部与其在第 2~5 章有交集，但视角不同：那篇回答"系统如何治理打扰"，本文回答"这些裁决字段中哪几个决定横幅弹不弹、如何传到 SystemUI"。重叠处本文只写横幅视角的份额，治理细节以交叉引用指向该篇对应章节。
+- 《SystemUI 源码分析》（AAOS13_study 仓 `docs/md/SystemUI.md`）：第 3 章有通知管线（NotifCollection → shade list）的概览。本文第二部把其中的横幅支线（判定、绑定、上屏、收回）单独拉直讲透。
+- 《yadea通知接入对照与审计》（同目录 `yadea通知接入对照与审计.md`）：本文第三部的下游篇，对雅迪车机 SystemUI 基于 CarNotificationLibrary 的定制实现做机制解剖与接入文档逐条审计。
 
 ### 0.4 主线结论预览
 
@@ -1795,7 +1795,7 @@ Car SystemUI 的 `NotificationPanelViewController.java`（703 行，91-92 行 `e
 
 ## 附录 B：关联阅读
 
-- 《通知服务与车机打扰治理》（`docs/md/通知服务与车机打扰治理.md`）：第 2 章入队管线、第 3 章 importance 权限模型、第 4 章 ZenMode 引擎、第 5 章排序流水线、第 6 章 buzz-beep-blink、第 7 章车机两层打扰闸门——本文第一部各章的治理视角展开。
-- 《SystemUI 源码分析》（`docs/md/SystemUI.md`）：第 3 章通知管线（NotifCollection → shade list）、第 5 章下拉阴影窗口机制——本文第二部 6/11 章的宿主框架。
-- 《yadea通知接入对照与审计》（`docs/md/yadea通知接入对照与审计.md`）：本文第三部的下游篇——雅迪车机 SystemUI 对 Car 库的定制解剖与接入文档 136 条断言逐条审计。
+- 《通知服务与车机打扰治理》（AAOS13_study 仓 `docs/md/通知服务与车机打扰治理.md`）：第 2 章入队管线、第 3 章 importance 权限模型、第 4 章 ZenMode 引擎、第 5 章排序流水线、第 6 章 buzz-beep-blink、第 7 章车机两层打扰闸门——本文第一部各章的治理视角展开。
+- 《SystemUI 源码分析》（AAOS13_study 仓 `docs/md/SystemUI.md`）：第 3 章通知管线（NotifCollection → shade list）、第 5 章下拉阴影窗口机制——本文第二部 6/11 章的宿主框架。
+- 《yadea通知接入对照与审计》（同目录 `yadea通知接入对照与审计.md`）：本文第三部的下游篇——雅迪车机 SystemUI 对 Car 库的定制解剖与接入文档 136 条断言逐条审计。
 
