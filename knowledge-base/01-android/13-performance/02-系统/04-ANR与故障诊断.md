@@ -14,25 +14,13 @@ ANR 是不同系统模块对不同响应义务设置的计时器，起点、截�
 
 这些是题内版本对应的 AOSP/Pixel 基础行为，不能作为跨设备不变的 API 常量。
 
-**Q2: [learning] Input connection ANR 从哪个动作开始计时？报告里的“队首事件”能当作触发超时的那条事件吗？**
-
-计时围绕输入连接的确认回执：事件写入应用输入通道后，待确认条目留在连接的 waitQueue 中，应用处理完并通过 finishInputEvent 回执后才移除。InputDispatcher 用 mAnrTracker 维护最近的到期时间，到期并确认仍未响应后生成 reason，AAOS13 InputDispatcher.cpp 的格式是 `<通道名> is not responding. Waited N ms for <事件描述>`。基础超时为 5 秒：IInputConstants 的 UNMULTIPLIED_DEFAULT_DISPATCHING_TIMEOUT_MILLIS 为 5000，乘 HwTimeoutMultiplier，且窗口可以提供自己的 dispatching timeout，所以应以报告中的实际等待值为准。
-
-队首事件只是诊断线索：源码注释说明最老条目最适合排查，但未必是触发计时到期的那一条——等待期间窗口超时配置可能变化，较新事件可能更早到达自己的期限。观测入口有 dumpsys input 中连接的 `WaitQueue: length=` 与条目明细，以及 ATRACE 计数器 iq（入站队列）、每个连接的 oq/wq。队列长度只描述积压数量，单个条目可能是长任务也可能是刚进入等待，不能由长度直接判根因。
-
-**Q3: [learning] "Application does not have a focused window" 指向什么问题？为什么不能按“点击事件处理超过 5 秒”来排查？**
-
-这条 reason 来自 InputDispatcher 的另一条路径：系统已知道 focused application（应获得焦点的应用），却等不到可接收输入的 focused window，独立计时器到期后生成 `<应用> does not have a focused window`（AAOS13 源码原样）。它与“事件处理慢”的 connection 超时是两条路径，表示系统还没有合适窗口接收输入。
-
-常见检查方向是启动链而非事件处理：Activity 启动是否卡在 bindApplication 或 Application.onCreate、首个窗口是否迟迟未加入 WMS、窗口切换期间焦点 token 是否对应错误、显示切换或多窗口状态是否异常。责任归属由 WMS 的 AnrController 按输入 token、窗口、Activity 与 PID 判定，被记录的进程不一定是用户当时看到的界面进程。Android 17 为这条路径增加了 deadline 前的 pre-ANR 预警，AAOS13 没有该机制。
-
-**Q4: [learning] execute-service ANR 的“前台 20 秒”和前台服务（FGS）是什么关系？**
+**Q2: [learning] execute-service ANR 的“前台 20 秒”和前台服务（FGS）是什么关系？**
 
 没有直接关系。AMS 向进程调度服务生命周期事务后，ActiveServices 的 scheduleServiceTimeoutLocked 按 ProcessServiceRecord.shouldExecServicesFg() 在两档预算中选择：AAOS13 源码为 SERVICE_TIMEOUT = 20 秒 × HW_TIMEOUT_MULTIPLIER、SERVICE_BACKGROUND_TIMEOUT 为其 10 倍（200 秒）。这里的“前台”表示本次服务执行采用较高优先级调度，不能从前台服务类型推导，也不能由“它是 foreground service”直接判定预算。
 
 计时覆盖 onCreate()、onBind()、onStartCommand() 等生命周期事务的完成，可能包含服务进程冷启动消耗的时间。reason 形如 `executing service <组件名>, waited N ms`。计时责任归到进程，同一进程可并发执行多个 Service，要结合 executing service 列表、事务记录与主线程栈确认是哪次调用未完成。
 
-**Q5: [learning] 前台服务相关的超时有哪几类结果？shortService 和 dataSync 超时算 ANR 吗？**
+**Q3: [learning] 前台服务相关的超时有哪几类结果？shortService 和 dataSync 超时算 ANR 吗？**
 
 前台服务有三类互不等价的期限，结果要分开统计：
 
@@ -42,7 +30,7 @@ ANR 是不同系统模块对不同响应义务设置的计时器，起点、截�
 
 AAOS13（API 33）的 ServiceInfo 没有 FOREGROUND_SERVICE_TYPE_SHORT_SERVICE，也没有限时 FGS 路径。报告类型必须与运行平台和 target SDK 对齐。
 
-**Q6: [learning] JobService 有哪几条互相独立的时间线？job 被系统停止本身算 ANR 吗？**
+**Q4: [learning] JobService 有哪几条互相独立的时间线？job 被系统停止本身算 ANR 吗？**
 
 三条时间线有不同起点和结果：
 
@@ -52,7 +40,7 @@ AAOS13（API 33）的 ServiceInfo 没有 FOREGROUND_SERVICE_TYPE_SHORT_SERVICE�
 
 本地 AAOS13 树未包含 jobscheduler 模块源码，以上数值按材料与官方文档转写。工程做法不变：onStartJob 中快速把工作交给有并发上限的执行器并返回 true，任务完成时调用 jobFinished()，收到 onStopJob 后快速取消或标记后台工作。在回调里等待 Future、join 或同步 Binder 会直接耗尽 8 秒窗口。
 
-**Q7: [learning] ContentProvider 的 10 秒、20 秒、3 秒、23 秒分别计什么？哪一条会真正产生 ANR？**
+**Q5: [learning] ContentProvider 的 10 秒、20 秒、3 秒、23 秒分别计什么？哪一条会真正产生 ANR？**
 
 AAOS13 的 ContentResolver 有四个不同预算（均乘 HW_TIMEOUT_MULTIPLIER），不能把到期一概记为 ANR：
 
@@ -63,7 +51,7 @@ AAOS13 的 ContentResolver 有四个不同预算（均乘 HW_TIMEOUT_MULTIPLIER�
 
 唯一进入 ANR 处理的是 call detector：特权调用方配置 ContentProviderClient.setDetectNotResponding() 后，远程调用超时会经 appNotRespondingViaProvider() 由 ContentProviderHelper 以 reason "ContentProvider not responding" 调 AnrHelper 处理 Provider 宿主（AAOS13 源码核对。Android 17 起该 reason 由 TimeoutRecord.forContentProvider 承载）。普通应用在主线程同步 query 慢而触发的 ANR，类型由外层契约决定（常是 Input），不能标成 Provider ANR。
 
-**Q8: [learning] system_server 的 Watchdog 与应用 ANR 有什么区别？AAOS13 的 pre-watchdog 抓栈发生在什么时刻？**
+**Q6: [learning] system_server 的 Watchdog 与应用 ANR 有什么区别？AAOS13 的 pre-watchdog 抓栈发生在什么时刻？**
 
 两者都处理“长时间没有进展”，但保护对象和恢复方式不同：应用 ANR 保护应用组件、输入窗口与应用进程，由各子系统检测器判定。Watchdog 保护 system_server 的关键 Handler 与 Monitor，由 Watchdog 线程和 HandlerChecker 检查。
 
@@ -75,7 +63,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 版本差异：材料按 Android 17 核对的 pre-watchdog 在期限的 1/4 处触发（PRE_WATCHDOG_TIMEOUT_RATIO 为 4，默认约 15 秒），AAOS13 是过半（约 30 秒）才首次抓栈。另外，应用主线程同步等待 system_server 时可能先记录应用 ANR，若 system_server 受监控线程也持续无进展，Watchdog 才独立触发——两份报告要按时间线一起分析，不能只看归因进程名。
 
-**Q9: [learning] system_server 处理一条应用 ANR 经过哪几层？为什么报告处理要异步排队、可能只转储目标进程自身？**
+**Q7: [learning] system_server 处理一条应用 ANR 经过哪几层？为什么报告处理要异步排队、可能只转储目标进程自身？**
 
 处理链把检测和高成本报告分开：
 
@@ -90,7 +78,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 处置分支：与当前用户界面无关且未开启“显示所有 ANR”的进程按后台 silent ANR 直接终止。system_server、SystemUI、有 top UI 或 overlay UI 的进程记录 NOT_RESPONDING 并投递无响应界面。关机、调试器附着、进程已死等状态会跳过或改变处置。因此没有弹窗不能证明没有发生 ANR。
 
-**Q10: [learning] am_anr、ANR trace 与 DropBox 分别提供什么证据？**
+**Q8: [learning] am_anr、ANR trace 与 DropBox 分别提供什么证据？**
 
 三类产物回答的层次不同，必须按时间与事件身份关联：
 
@@ -100,13 +88,13 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 关联时同时使用时间、PID、进程名和错误 ID。PID 可能复用，一个 bugreport 也可能包含多次 ANR。Android 11（API 30）起，应用可用 `getHistoricalProcessExitReasons()` 筛选本进程的 `REASON_ANR`，再通过 `traceInputStream` 读取保留片段。它只含目标进程第一段和前置头部，范围小于完整 bugreport。环形缓冲被覆盖时流可为 null，必须按正常缺失处理。
 
-**Q11: [learning] “系统发 SIGQUIT、ART 写 traces.txt”的说法现在还准确吗？**
+**Q9: [learning] “系统发 SIGQUIT、ART 写 traces.txt”的说法现在还准确吗？**
 
 只在兜底路径上成立。AAOS13 的主路径是：ProcessErrorStateRecord.appNotResponding() 组织 firstPids、nativePids 等候选，调用 ActivityManagerService.dumpStackTraces() 创建 trace 文件，再经 Debug.dumpJavaBacktraceToFileTimeout() 请求 tombstoned 写入（AAOS13 AMS 源码核对）。源码注释明确“dumpStackTraces 落 trace 文件，失败则对本进程发 SIGNAL_QUIT 兜底取栈”。traces.txt 是历史文件名，新版本用 anr_ 前缀命名。
 
 解读 trace 文件本身还有两条边界：文件头之后不一定立即出现目标 PID 段。文件结束也不证明所有候选进程都成功完成 dump——转储超时、进程退出或整轮预算耗尽都会留下失败标记或截断结果，确认完整性的判据是目标进程段落成对出现且无错误标记。
 
-**Q12: [learning] ANR trace 里出现的进程都是 Binder 对端吗？什么情况下采集范围会缩小？**
+**Q10: [learning] ANR trace 里出现的进程都是 Binder 对端吗？什么情况下采集范围会缩小？**
 
 不是。候选进程来自三组：
 
@@ -116,7 +104,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 范围会缩小的场景：报告过期（AAOS13 为排队超 1 分钟，Android 17 为排队超 10 秒或开机 10 分钟内）只转储目标进程自身。后台 silent ANR、系统启动早期也会收缩采集。因此“文件里没有对端栈”推不出“系统没尝试采集对端”，更推不出对端无责任。把结论建立在缺失的段子上属于证据越界。
 
-**Q13: [learning] 同一段线程栈里的 ART 状态、Linux 状态和 Java 栈怎么区分解读？**
+**Q11: [learning] 同一段线程栈里的 ART 状态、Linux 状态和 Java 栈怎么区分解读？**
 
 三者粒度不同，交叉验证才有效：
 
@@ -124,7 +112,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 2. **Linux 状态：**R/S/D 是内核在采样点看到的 task state。D 对应不可中断等待，常见于 I/O、direct reclaim、驱动等待，但状态字母本身不含原因。普通 futex 等待通常应按 S 分析。freezer 有独立的 TASK_FROZEN 状态，冻结需用 cgroup.events 的 frozen 与 freeze/unfreeze 事件确认。
 3. **Java/native 栈：**提供调用路径与等待机制，如 Object.wait、futex_wait、nativePollOnce。单看任何一列都不能定因：栈停在业务方法只说明采样时仍在该路径，不说明它消耗了整个超时时间。
 
-**Q14: [learning] ANR 根因结论怎样按证据强度分级？**
+**Q12: [learning] ANR 根因结论怎样按证据强度分级？**
 
 报告措辞要与已闭合的因果链一致，不能把时间相关性直接写成根因：
 
@@ -134,7 +122,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 修复后在相同场景比较超时窗口内责任线程状态与 P95/P99 耗时，并检查功能回归。有效的解释必须回答“移除工作或缩短持锁后，为什么原期限可以满足”，不能只观察到采样栈顶变化。
 
-**Q15: [learning] 怎样从两段线程栈判断死锁？ART 的 tid 和 Perfetto 的 TID 有什么区别？**
+**Q13: [learning] 怎样从两段线程栈判断死锁？ART 的 tid 和 Perfetto 的 TID 有什么区别？**
 
 用锁对象地址还原等待图：
 
@@ -144,7 +132,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 跨工具追线程时注意标识符：ART 的 tid 是 ART 内部线程编号，Linux 的 sysTid 才是内核线程 ID，Perfetto 的 TID 对应 sysTid——在 ANR trace 内按 tid 找到持锁者后，切到 Perfetto 要用 sysTid 关联，不能沿用同一数字。
 
-**Q16: [learning] 主线程栈停在 nativePollOnce 能证明它空闲吗？为什么要用采集延迟校准？**
+**Q14: [learning] 主线程栈停在 nativePollOnce 能证明它空闲吗？为什么要用采集延迟校准？**
 
 不能。栈只证明采样瞬间在等待下一条消息：超时前执行的长任务可能刚结束，主线程已回到空闲。持锁线程也可能在采样后释放。反过来，栈停在业务方法中也不能单独证明该方法消耗了整个超时时间。
 
@@ -154,7 +142,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 2. 记录 ANR 进入处理队列和目标进程采样完成的时刻。
 3. 在 Perfetto 中定位采样点，再向前回看完整超时窗口。AAOS13 没有 early-dump 阶段，目标进程的栈来自 firstPids 的第一位、仍早于附加进程。材料按 Android 17 核对的 AnrHelper 会先行提交目标进程临时转储，使其更接近现场。栈与时间线互相印证时提高置信度。冲突且采集窗口不完整时，结论降级为“疑似”并列出缺失证据。没有“采样延迟低于 N 毫秒即可信”的通用阈值。
 
-**Q17: [learning] ANR 报告里的 CPU 百分比、Load 和 PSI 分别能说明什么、不能说明什么？**
+**Q15: [learning] ANR 报告里的 CPU 百分比、Load 和 PSI 分别能说明什么、不能说明什么？**
 
 报告中的三类系统量各有不同分母和时间窗：
 
@@ -164,7 +152,7 @@ AAOS13 的 Watchdog 默认期限为 60 秒（`Watchdog.java` 的 `DEFAULT_TIMEOU
 
 这些都是环境证据，要与 trace、Perfetto 的调度和 I/O 轨迹在同一时间窗对齐后才能指向原因。
 
-**Q18: [learning] “A 调 B、B 回调 A”为什么不算死锁？看到 15 条 Binder 线程能断定线程池耗尽吗？**
+**Q16: [learning] “A 调 B、B 回调 A”为什么不算死锁？看到 15 条 Binder 线程能断定线程池耗尽吗？**
 
 Binder 支持嵌套同步事务和一定重入，回调可由线程池中其他线程处理，只有资源等待关系形成循环才发生死锁。典型锁环按调用顺序形成：
 
@@ -176,18 +164,7 @@ Binder 支持嵌套同步事务和一定重入，回调可由线程池中其他�
 
 线程数方面，AAOS13 libbinder ProcessState.cpp 的 DEFAULT_MAX_BINDER_THREADS 为 15，含义是驱动可按需请求的默认上限。进程可能显式加入线程池、修改上限或采用系统进程配置，15 条 Binder 栈不能证明池已耗尽，“再留一个线程”也解不开锁环。oneway 只省去调用方等待 reply，事务仍排队并占用内核 buffer，不能当无限容量通道。诊断要画出事务方向、线程状态、锁持有关系与线程池容量。
 
-**Q19: [learning] 怀疑进程被 Cached Apps Freezer 冻结导致输入 ANR，证据链怎么建？**
-
-三类证据要在同一时间窗对齐：
-
-1. **冻结：**freeze/unfreeze 事件（am_freeze/am_unfreeze，字段为 PID 与进程名）与目标 PID 的冻结区间。
-2. **输入：**该输入连接的事件派发与超时时间线，包括 InputDispatcher reason 中的通道名与等待时长。
-3. **状态旁证：**必要时读取 cgroup.events 的 frozen 状态。
-典型案例中，输入事件派发 13 毫秒后持有该连接的进程被冻结，约 5 秒后未完成事件触发超时。关闭 freezer 后复现消失、重新开启又复现（A/B 验证），时间、对象 PID 与开关实验互相吻合后才能写成已确认。
-
-两个反例提醒：D 状态或栈中的 __refrigerator 都不足以单独证明冻结。该案例是个别 OEM 分支在 Gesture Monitor 仍有未完成输入事件时冻结进程的生命周期协同缺陷，不能外推为所有 Android 版本的通病。系统侧修复方向是：持有活跃输入 monitor 或未完成 WaitQueue 事件的进程不进入可冻结状态，monitor 销毁时先停止派发再允许降级。Freezer 本体的资格判断与冻结顺序见 [../../07-内存与存储/01-内存管理.md](../../07-内存与存储/01-内存管理.md)。
-
-**Q20: [learning] NotificationManager.notify() 是异步的吗？发布线程在等 system_server 做什么？**
+**Q17: [learning] NotificationManager.notify() 是异步的吗？发布线程在等 system_server 做什么？**
 
 不是异步。`notify()` 最终调用 `INotificationManager.enqueueNotificationWithTag()`，该 AIDL 方法未声明 oneway，是同步 Binder 调用（AAOS13 接口核对）。`INotificationListener.aidl` 则声明为 oneway，所以 listener 回调与 SystemUI 上屏都不属于本次调用的返回条件。
 
@@ -200,7 +177,7 @@ Binder 支持嵌套同步事务和一定重入，回调可由线程池中其他�
 
 因此主线程构造大通知（读文件、缩放图片、大量 action）或等待 NMS 同步段都可能拖过输入期限，形成发布应用的 Input ANR。排查时用应用自定义 trace section 分开“构造”与“发布”两段，再结合 Binder transaction 看 system_server 侧耗时。notify 很快返回但显示慢，则转查 NMS handler 与 SystemUI 消费链。
 
-**Q21: [learning] Android 17 的 ANR 预警回调提供什么信息？有哪些边界？AAOS13 能用吗？**
+**Q18: [learning] Android 17 的 ANR 预警回调提供什么信息？有哪些边界？AAOS13 能用吗？**
 
 Android 17（API 37）加入 ActivityManager.registerAnrWarningListener()：应用注册 Executor 与 Consumer，在部分 ANR 检测路径接近 deadline 时收到 AnrWarningResult。载荷只有五项：anrId、anrType、consumedMillis、timeoutMillis、description（格式不稳定，只能原文保留，不能当协议解析）。没有 PID、线程栈、锁状态或组件对象。
 
@@ -211,7 +188,7 @@ Android 17（API 37）加入 ActivityManager.registerAnrWarningListener()：应�
 3. **回调成本：**回调不暂停、不延长原计时器，只适合记录轻量状态，不适合全线程 dump、同步写盘或网络上传。
 4. **执行线程：**官方要求 executor 不用主线程，因为主线程可能正是被监视的阻塞线程。版本门槛是运行平台 API 37（公开文档未要求 targetSdk 37），且受功能开关影响。AAOS13 源码中没有该 API 与 AnrWarningController，预警是 Android 17 新增能力，Android 14–16 也不能倒推获得。
 
-**Q22: [learning] Android 17 的预警覆盖为什么小于 AnrTypes 的 11 个枚举？no-focused-window 的预警时刻怎么算？**
+**Q19: [learning] Android 17 的预警覆盖为什么小于 AnrTypes 的 11 个枚举？no-focused-window 的预警时刻怎么算？**
 
 类型常量覆盖 ANR 分类，不表示每种类型都已接入产生预警的 producer。已核对的 producer 按检测入口分组：
 
@@ -221,7 +198,7 @@ Android 17（API 37）加入 ActivityManager.registerAnrWarningListener()：应�
 
 no-focused-window 的预警时刻：pre_window = max(实际 timeout / 2, 2000 ms × HwTimeoutMultiplier)，warning_at = deadline − pre_window。默认 5 秒超时恰在一半（2.5 秒）发出。timeout 较短时预警早于 50% 进度。计算出的 warning_at 已过去则立即排队。同一等待状态只通知一次。预警经 InputDispatcher policy 回调、JNI、InputManagerCallback、WMS AnrController 到 AMS 投递给同 UID 已注册进程。正式 ANR 归因仍可能按焦点状态改判给另一进程，跨 UID 时普通应用无法关联。
 
-**Q23: [learning] warning 的 anrId 与最终 ANR 如何关联？多进程应用为什么会收到重复通知？**
+**Q20: [learning] warning 的 anrId 与最终 ANR 如何关联？多进程应用为什么会收到重复通知？**
 
 Android 17 为 ApplicationExitInfo 增加了 getAnrInfo()：退出原因为 REASON_ANR 且系统保留结构化信息时，提供 anrId、anrType、timeoutMillis 与 isUserPerceptible。warning 的 anrId 可与之匹配。anrId 只保证在每个 anrType 内唯一，持久化键至少用 (type, id) 并附加 boot/session，避免跨重启混数据。匹配应保留三类结果：
 
@@ -231,7 +208,7 @@ Android 17 为 ApplicationExitInfo 增加了 getAnrInfo()：退出原因为 REAS
 
 多进程重复的根源：AMS 的回调表按 UID 分组，同一 UID 的多个已注册进程都会收到同一 warning，而载荷没有目标 PID。应对：记录中加入 Application.getProcessName()，按 (type, id, boot/session) 去重后上传，预先决定由哪个进程持久化，并且不从“收到回调的进程”推断“发生阻塞的进程”。
 
-**Q24: [learning] AAOS13 中 Native Crash 从致命信号到 tombstone 经过哪些系统组件？为什么不经过 Java UncaughtExceptionHandler？**
+**Q21: [learning] AAOS13 中 Native Crash 从致命信号到 tombstone 经过哪些系统组件？为什么不经过 Java UncaughtExceptionHandler？**
 
 AAOS13 的 Native Crash 路径按以下顺序经过系统组件：
 
@@ -243,7 +220,7 @@ AAOS13 的 Native Crash 路径按以下顺序经过系统组件：
 
 应用可见性的边界：普通应用不能直接遍历 `/data/tombstones`——AAOS13 的 tombstoned 默认保留 32 组产物（属性 `tombstoned.max_tombstone_count`），槽位会被轮转。可用入口是 bugreport、平台崩溃报告、API 30 起的 `getHistoricalProcessExitReasons()`，以及 Android 12（API 31）起对 `REASON_CRASH_NATIVE` 调用 `getTraceInputStream()` 读取 protobuf tombstone。protobuf 必须按 schema 解析并限制输入大小，返回值可能因环形缓冲轮转为 `null`。
 
-**Q25: [learning] 为什么只凭 SIGSEGV、SIGABRT 的信号编号不能完成 Native 崩溃归因？**
+**Q22: [learning] 为什么只凭 SIGSEGV、SIGABRT 的信号编号不能完成 Native 崩溃归因？**
 
 信号只给出故障入口：CPU、内核、运行库和应用代码都可能触发同一信号，归因要同时读 `si_code`（内核细分原因）、fault address、abort message、寄存器与分配器报告。`SIGABRT` 尤其常见误判——它常常是检测器发现错误后的结果，根因在 abort message 与上游栈，而不是 abort 本身。
 
@@ -257,13 +234,13 @@ AAOS13 的 Native Crash 路径按以下顺序经过系统组件：
 
 `SEGV_MAPERR` 表示地址没有有效映射，`SEGV_ACCERR` 表示映射存在但权限不允许。MTE、GWP-ASan 与 Scudo 会在 Cause 或 abort message 中补充更强证据，优先采用。
 
-**Q26: [learning] tombstone 里的 pc 是绝对地址吗？解读一份 tombstone 应按什么顺序？**
+**Q23: [learning] tombstone 里的 pc 是绝对地址吗？解读一份 tombstone 应按什么顺序？**
 
 backtrace 中的 `pc` 列通常是模块相对地址（rel_pc）：系统回溯器先找到地址所属内存映射，再换算成 ELF 内的相对地址，非栈顶帧还做过返回地址修正。因此拿到 tombstone 后不要再减一次 ASLR 基址，`base.apk!libfoo.so (offset 0x2a4000)` 中的 offset 描述 ELF 在容器文件内的位置，也不能从 pc 再减一次。把进程绝对 pc 原样交给 `addr2line` 经常得到错误结果。
 
 解读顺序：先核对 ABI、时间、进程与线程（决定用哪套构建产物，`pid == tid` 通常表示主线程，cmdline 与包名相似但不能一律称为包名）。再读 signal、`si_code`、`Cause` 与 abort message。寄存器部分要守住 ABI 边界——ARM64 的 `x0-x7` 是入口参数寄存器，但崩溃可能发生在函数中部、寄存器早已复用，`x0 == 0` 不能证明第一个源码参数为空，`x30` 在优化或叶函数中也不一定等于可靠调用者。最后用 backtrace 与 maps 做符号化，优先把整份 tombstone 交给 `ndk-stack`，或使用报告中明确标出的 relative pc。
 
-**Q27: [learning] 疑似系统负载导致的 ANR 怎样识别与过滤，才不会变成“甩锅”？**
+**Q24: [learning] 疑似系统负载导致的 ANR 怎样识别与过滤，才不会变成“甩锅”？**
 
 系统负载是解释与分组的证据维度，不是删除记录的理由：一条“疑似系统负载”判断需要 ANR 窗口内多信号一致——本进程与系统 CPU 时间、I/O wait 与读写量、内存 PSI 与回收活动、Binder 事务排队、设备温度与降频状态、同型号同时间窗其他进程是否一起变慢。任何单一阈值（“I/O wait 大于某百分比”“RAM 小于 2 GB”）都不足以确定原因。低端设备也要单独分组并保留在整体指标中，从分母排除只会让看板变好、不会改善用户体验。
 

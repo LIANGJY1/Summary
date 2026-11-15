@@ -43,3 +43,5 @@ __pycache__/
 .qoder/
 .sisyphus/
 .DS_Store
+
+docs/others/framework/Android性能/AppList性能分析

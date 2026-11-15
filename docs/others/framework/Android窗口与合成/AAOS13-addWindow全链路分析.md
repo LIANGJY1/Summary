@@ -557,7 +557,7 @@ sequenceDiagram
 
 ### LayoutParams.type 速查表
 
-`WindowManager.LayoutParams.type` 的源码定义位于 [WindowManager.java](file:///home/liang/Project/MyProject/Summary/WindowManager.java#L1242-L1724)。在 Android 13 中，它严格分成 **应用窗口**、**子窗口**、**系统窗口** 三大区间。WMS 在 `addWindow()` 中会先根据 `type` 判断窗口家族，再决定 token 校验路径、层级归属和权限边界。
+`WindowManager.LayoutParams.type` 的源码定义位于 [WindowManager.java](../../../../../AAOS13_study/frameworks/base/core/java/android/view/WindowManager.java#L1242-L1724)。在 Android 13 中，它严格分成 **应用窗口**、**子窗口**、**系统窗口** 三大区间。WMS 在 `addWindow()` 中会先根据 `type` 判断窗口家族，再决定 token 校验路径、层级归属和权限边界。
 
 #### 1. 范围总览
 

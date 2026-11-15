@@ -5,12 +5,12 @@
 ## 边界
 
 - **收**：ContentProvider 访问路径与系统 Provider 的架构事实；ContentObserver 等变化通知机制的行为细节与正确用法范式；跨进程数据监听"拿不到值/漏通知/状态不一致"类坑与解法
-- **不收**：编程语言特性（→ [language/](04-language/)）；SDK/组件设计模式（→ [sdk-design.md](sdk-design.md)）；Android UI 域（→ [android-ui.md](android-ui.md)）；等
-- **分工**：本文收"机制层怎么运作、怎么用才对"；权衡与思维方式 → [design-principles.md](design-principles.md)
+- **不收**：编程语言特性（→ [language/](../../../../knowledge-base/04-language/)）；SDK/组件设计模式（→ [sdk-design.md](../../注解与设计总结/sdk-design.md)）；Android UI 域（→ [android-ui.md](android-ui.md)）；等
+- **分工**：本文收"机制层怎么运作、怎么用才对"；权衡与思维方式 → [design-principles.md](../../注解与设计总结/design-principles.md)
 
 ## 写作规范
 
-本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../knowledge-base/WRITING-GUIDE.md)。
+本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../../../../knowledge-base/WRITING-GUIDE.md)。
 
 ## 目录
 
@@ -130,4 +130,4 @@ public void addOnIviReadyListener(OnIviReadyListener l) {
 - 一次性沿与状态型信号处理方式分叉：状态型"注册后读现值对账"，一次性沿靠源头粘性补发或消费方查询已发生标记（适用：握手/回执/一次性通知型监听）
 - 补发放信号源的注册入口（addXxxListener 里）比放消费方好：语义就是"这个事实成立过"，所有迟到者统一受益，消费方零改动（适用：自己维护监听登记表的系统服务/进程内单例）
 - 幂等护栏先行：下游对重复沿无副作用，才允许源头做补发/重放（适用：一切带补发语义的事件设计）
-- 抽象原则同源：[design-principles「迟加入者补课到当下」](design-principles.md#迟加入者补课到当下)——本文是其单布尔状态的最简重放形态
+- 抽象原则同源：[design-principles「迟加入者补课到当下」](../../注解与设计总结/design-principles.md#迟加入者补课到当下)——本文是其单布尔状态的最简重放形态

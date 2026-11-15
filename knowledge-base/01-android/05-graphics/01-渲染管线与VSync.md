@@ -1,6 +1,6 @@
 # 渲染管线与 VSync 调度
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）源码语境串联「VSync 预测调度 → Choreographer → ViewRootImpl/HWUI → RenderThread/GPU → SurfaceFlinger → 显示」主链路，并覆盖帧率与显示模式决策、硬件层、过度绘制、文本渲染四条支线的机制与边界。BLAST 提交与 A13 全链路时序的既有沉淀见 docs/others/framework/Android13渲染架构全链路硬核解析.md，VSync 硬件来源与软件时钟的既有沉淀见 docs/others/framework/Android显示系统/Vsync流程.md，本文只补两文未覆盖的增量视角。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）源码语境串联「VSync 预测调度 → Choreographer → ViewRootImpl/HWUI → RenderThread/GPU → SurfaceFlinger → 显示」主链路，并覆盖帧率与显示模式决策、硬件层、过度绘制、文本渲染四条支线的机制与边界。BLAST 提交与 A13 全链路时序的既有沉淀见 docs/others/framework/Android显示系统/Android13渲染架构全链路硬核解析.md，VSync 硬件来源与软件时钟的既有沉淀见 docs/others/framework/Android显示系统/Vsync流程.md，本文只补两文未覆盖的增量视角。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [done] 屏幕显示一帧的全流程？**
 

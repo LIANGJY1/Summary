@@ -5,12 +5,12 @@
 ## 边界
 
 - **收**：AudioFocus / AudioPlaybackConfiguration / 音源识别 / 音频路由相关的机制层事实与踩坑
-- **不收**：UI 域坑（→ [android-ui.md](android-ui.md)）、跨进程共享与监听机制（→ [android-provider.md](android-provider.md)）、通用设计权衡（→ [design-principles.md](design-principles.md)）
+- **不收**：UI 域坑（→ [android-ui.md](android-ui.md)）、跨进程共享与监听机制（→ [android-provider.md](android-provider.md)）、通用设计权衡（→ [design-principles.md](../../注解与设计总结/design-principles.md)）
 - **分工**：本文收音频域"机制是什么、哪里有陷阱"；"该怎么设计"的通用思想只在 design-principles.md 出现
 
 ## 写作规范
 
-本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../knowledge-base/WRITING-GUIDE.md)。
+本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../../../../knowledge-base/WRITING-GUIDE.md)。
 
 ## 目录
 

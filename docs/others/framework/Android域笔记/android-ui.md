@@ -5,12 +5,12 @@
 ## 边界
 
 - **收**：UI 组件运行期修改的断层与副作用契约、资源变体与 ViewBinding 的工程风险、约束/测量语义的保语义适配
-- **不收**：Android 基础常识与官方文档可得的知识；本次任务的操作步骤与分工结论（工作记录，归宿：项目文档/交接）；具体页面×具体数值的走查项（归宿：项目交接文档）；可重复的收编操作流程（归宿：session-to-skill）；跨库设计模式（归宿：[sdk-design.md](sdk-design.md)）；纯思维方法（归宿：[design-principles.md](design-principles.md)）
+- **不收**：Android 基础常识与官方文档可得的知识；本次任务的操作步骤与分工结论（工作记录，归宿：项目文档/交接）；具体页面×具体数值的走查项（归宿：项目交接文档）；可重复的收编操作流程（归宿：session-to-skill）；跨库设计模式（归宿：[sdk-design.md](../../注解与设计总结/sdk-design.md)）；纯思维方法（归宿：[design-principles.md](../../注解与设计总结/design-principles.md)）
 - **分工**：本文收"Android UI 域改不动/改不对时的坑与解法"；sdk-design.md 收"AAR/SDK 设计怎么做"；design-principles.md 收"怎么想"
 
 ## 写作规范
 
-本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../knowledge-base/WRITING-GUIDE.md)。
+本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../../../../knowledge-base/WRITING-GUIDE.md)。
 
 ## 目录
 

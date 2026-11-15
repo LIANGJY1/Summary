@@ -10,7 +10,7 @@
 
 ## 写作规范
 
-本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../knowledge-base/WRITING-GUIDE.md)。
+本文的条目结构、标题、示例和表达统一遵守 [WRITING-GUIDE.md](../../../knowledge-base/WRITING-GUIDE.md)。
 
 ## 目录
 

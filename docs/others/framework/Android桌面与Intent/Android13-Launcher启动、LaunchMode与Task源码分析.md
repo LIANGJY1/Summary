@@ -13,7 +13,7 @@
 - [4. findTask：任务复用匹配器与类型兼容的不对称性](#4-findtask任务复用匹配器与类型兼容的不对称性)
 - [5. 五种 launchMode 逐一推导](#5-五种-launchmode-逐一推导)
 - [6. 跨进程：从 resume 裁决到客户端 onCreate 与 onNewIntent](#6-跨进程从-resume-裁决到客户端-oncreate-与-onnewintent)
-- [7. Task 日志怎么读：stringName 缓存与活字段](#7-task-日志怎么读stringname-缓存与活字段)
+- [7. Task 日志怎么读：stringName 缓存与实时字段](#7-task-日志怎么读stringname-缓存与实时字段)
 - [8. 事故全推演：雅迪车机 Launcher 双实例](#8-事故全推演雅迪车机-launcher-双实例)
 - [附录 A：EventLog 标签速查](#附录-aeventlog-标签速查)
 - [附录 B：常量与词汇表](#附录-b常量与词汇表)
@@ -95,7 +95,7 @@ Launcher 启动与普通 Activity 启动走的是同一条 `ActivityStarter` 主
 
 系统开机路径上，HOME 的第一次启动挂在 `ActivityManagerService.systemReady` 的回调里：
 
-[ActivityManagerService.java#L9217](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java#L9217)
+[ActivityManagerService.java#L9217](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java#L9217)
 
 ```java
 boolean isBootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
@@ -141,7 +141,7 @@ if (bootingSystemUser) {
 
 无论哪个触发点，系统侧 HOME 启动最终都汇入 `RootWindowContainer` 的同一条链：
 
-[RootWindowContainer.java#L1495](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1495)
+[RootWindowContainer.java#L1495](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1495)
 
 ```java
 boolean startHomeOnAllDisplays(int userId, String reason) {
@@ -156,7 +156,7 @@ boolean startHomeOnAllDisplays(int userId, String reason) {
 
 `RootWindowContainer` 的直接子节点是各 `DisplayContent`，倒序遍历即从最上层显示开始。每个显示再展开到它的所有任务显示区（TaskDisplayArea，下称 TDA）：
 
-[RootWindowContainer.java#L1522](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1522)
+[RootWindowContainer.java#L1522](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1522)
 
 ```java
 boolean startHomeOnDisplay(int userId, String reason, int displayId, boolean allowInstrumenting,
@@ -181,7 +181,7 @@ boolean startHomeOnDisplay(int userId, String reason, int displayId, boolean all
 
 这是发起侧的核心方法，做四件事：选意图、解析活动、资格校验、交给启动器。
 
-[RootWindowContainer.java#L1549](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1549)
+[RootWindowContainer.java#L1549](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1549)
 
 ```java
 boolean startHomeOnTaskDisplayArea(int userId, String reason, TaskDisplayArea taskDisplayArea,
@@ -237,7 +237,7 @@ boolean startHomeOnTaskDisplayArea(int userId, String reason, TaskDisplayArea ta
 
 `getHomeIntent` 本体很短，但每个字段都是后文判定的输入：
 
-[ActivityTaskManagerService.java#L5420](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskManagerService.java#L5420)
+[ActivityTaskManagerService.java#L5420](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskManagerService.java#L5420)
 
 ```java
 Intent getHomeIntent() {
@@ -258,7 +258,7 @@ Intent getHomeIntent() {
 
 **第二步：解析活动。** `resolveHomeActivity` 把隐式意图变成具体的 `ActivityInfo`：
 
-[RootWindowContainer.java#L1612](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1612)
+[RootWindowContainer.java#L1612](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1612)
 
 ```java
 ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
@@ -295,7 +295,7 @@ ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
 
 带组件的分支注释写着 "Factory test."——正常路径永远走 `resolveIntent` 隐式解析。解析失败会打 `Slog.wtf("No home screen found ...")`，这是排查「开机无桌面」时的第一关键字。若解析出多个候选（用户没设默认桌面），PackageManager 会返回 ResolverActivity，后文会看到系统对「解析器不算 HOME」有专门处理。
 
-**第三步：资格校验。** `canStartHomeOnDisplayArea`（[RootWindowContainer.java#L1803](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1803)）拦两类情况：该区不允许放 HOME（如不受信任的虚拟显示），以及仪表（instrumentation）接管期间的特殊限制。校验不过直接返回 false，本区无桌面。
+**第三步：资格校验。** `canStartHomeOnDisplayArea`（[RootWindowContainer.java#L1803](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1803)）拦两类情况：该区不允许放 HOME（如不受信任的虚拟显示），以及仪表（instrumentation）接管期间的特殊限制。校验不过直接返回 false，本区无桌面。
 
 **第四步：回写并发射。** 解析出的组件被 `setComponent` 写回意图，`FLAG_ACTIVITY_NEW_TASK` 被补上。为什么必须补 NEW_TASK？因为发起方是 system_server 自己，不是某个 Activity 的上下文——没有「调用者所在的栈」可以挂靠，只能要求开新任务。这条规则对一切「非 Activity 上下文发起的启动」都成立，第 3 章会看到 `computeLaunchingTaskFlags` 里对普通应用也有同样的强制（那里带一条著名的 `Slog.w` 警告日志）。
 
@@ -303,7 +303,7 @@ ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
 
 ### 1.4 startHomeActivity：进 ActivityStarter 前的最后一棒
 
-[ActivityStartController.java#L176](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStartController.java#L176)
+[ActivityStartController.java#L176](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStartController.java#L176)
 
 ```java
 void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason,
@@ -357,7 +357,7 @@ void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason,
 
 `getOrCreateRootHomeTask` 本体：
 
-[TaskDisplayArea.java#L1724](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskDisplayArea.java#L1724)
+[TaskDisplayArea.java#L1724](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskDisplayArea.java#L1724)
 
 ```java
 Task getOrCreateRootHomeTask(boolean onTop) {
@@ -371,13 +371,13 @@ Task getOrCreateRootHomeTask(boolean onTop) {
 }
 ```
 
-`canHostHomeTask` 挡掉不受信任的显示区（虚拟屏、投屏），所以外接屏不会有自己的桌面。`createRootTask` 直接走 `Task.Builder`，`ACTIVITY_TYPE_HOME` 在这里就写进根任务——**root home task 是系统里少数几个「出生即带类型」的任务**，这个类型随后成为 HOME 活动挂载点的判定依据（第 3 章），也成为事故日志里 `rootTaskId=1` 的那个「1」。
+`canHostHomeTask` 挡掉不受信任的显示区（虚拟屏、投屏），所以外接屏不会有自己的桌面。`createRootTask` 直接走 `Task.Builder`，`ACTIVITY_TYPE_HOME` 在这里就写进根任务——**root home task 是系统里少数几个「创建即带类型」的任务**，这个类型随后成为 HOME 活动挂载点的判定依据（第 3 章），也成为事故日志里 `rootTaskId=1` 的那个「1」。
 
-### 1.5 Task 1 的出生：WMS 初始化时就建好了
+### 1.5 Task 1 的创建：WMS 初始化时就建好了
 
 上面 1.4 的 `getOrCreateRootHomeTask` 只是「取或建」；实际上默认显示的 root home task 在 WindowManager 初始化阶段就建好了：
 
-[RootWindowContainer.java#L1386](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1386)
+[RootWindowContainer.java#L1386](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1386)
 
 ```java
 void setWindowManager(WindowManagerService wm) {
@@ -403,11 +403,11 @@ void setWindowManager(WindowManagerService wm) {
 }
 ```
 
-为每块显示建 `DisplayContent` 之后，立刻对默认 TDA 调 `getOrCreateRootHomeTask(ON_TOP)`。**这就是事故日志里 05:44:03.755 那条 `wm_task_created: [1,-1]` 的出处**【推断，机制见 7.4 节】：新 system_server 起来，WMS 初始化走到这里，root home task（Task 1）诞生——此时它是个空容器，没有任何 Activity，`wm_task_created` 的第二个字段 -1 是构造期打印的固定值（第 7 章展开）。
+为每块显示建 `DisplayContent` 之后，立刻对默认 TDA 调 `getOrCreateRootHomeTask(ON_TOP)`。**这就是事故日志里 05:44:03.755 那条 `wm_task_created: [1,-1]` 的出处**【推断，机制见 7.4 节】：新 system_server 起来，WMS 初始化走到这里，root home task（Task 1）创建——此时它是个空容器，没有任何 Activity，`wm_task_created` 的第二个字段 -1 是构造期打印的固定值（第 7 章展开）。
 
 TDA 侧对 HOME 类型根任务还有一个直达缓存：
 
-[TaskDisplayArea.java#L225](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskDisplayArea.java#L225)
+[TaskDisplayArea.java#L225](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskDisplayArea.java#L225)
 
 ```java
 Task getRootTask(int windowingMode, int activityType) {
@@ -429,13 +429,13 @@ Task getRootTask(int windowingMode, int activityType) {
 }
 ```
 
-HOME 与 PINNED 各有一个成员变量直取（`mRootHomeTask`、`mRootPinnedTask`），不做遍历——一个 TDA 至多一个 home 根任务、一个 PIP 根任务，这是容器树给两类特殊任务留的专用车位。第 3 章选根任务时会回到这个方法。
+HOME 与 PINNED 各有一个成员变量直取（`mRootHomeTask`、`mRootPinnedTask`），不做遍历——一个 TDA 至多一个 home 根任务、一个 PIP 根任务，这是容器树为两类特殊任务预留的专用根任务引用。第 3 章选根任务时会回到这个方法。
 
 ### 1.6 多屏车机：SECONDARY_HOME 的解析优先级
 
 非默认 TDA（典型如车机副屏、乘客屏）不直接用主桌面，而是走 secondary home 解析。方法头注释把优先级写得很清楚：
 
-[RootWindowContainer.java#L1537](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1537)
+[RootWindowContainer.java#L1537](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1537)
 
 ```java
 /**
@@ -453,7 +453,7 @@ HOME 与 PINNED 各有一个成员变量直取（`mRootHomeTask`、`mRootPinnedT
 
 实现里最关键的一段：
 
-[RootWindowContainer.java#L1649](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1649)
+[RootWindowContainer.java#L1649](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L1649)
 
 ```java
 Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId,
@@ -481,7 +481,7 @@ Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId,
 }
 ```
 
-语义：副屏桌面必须声明 `CATEGORY_SECONDARY_HOME`；解析时优先在**主桌面包内**找 secondary home 活动（主桌面是雅迪 Launcher，副屏就优先用雅迪 Launcher 自己声明的 secondary 入口），找不到再退回 config 里配置的系统 secondary home（`config_secondaryHomePackage`）。主桌面没设默认（解析出 ResolverActivity）时，直接走 config 兜底。对车机开发的实际意义：**一块副屏要不要独立桌面、桌面是谁，由 manifest 的 SECONDARY_HOME 声明与 overlay 配置共同决定**，不是自动复制主屏。
+语义：副屏桌面必须声明 `CATEGORY_SECONDARY_HOME`；解析时优先在**主桌面包内**找 secondary home 活动（主桌面是雅迪 Launcher，副屏就优先用雅迪 Launcher 自己声明的 secondary 入口），找不到再退回 config 里配置的系统 secondary home（`config_secondaryHomePackage`）。主桌面没设默认（解析出 ResolverActivity）时，直接走 config 回退。对车机开发的实际意义：**一块副屏要不要独立桌面、桌面是谁，由 manifest 的 SECONDARY_HOME 声明与 overlay 配置共同决定**，不是自动复制主屏。
 
 ### 1.7 非 AOSP 发起方：雅迪 SystemUI 的 goLauncher
 
@@ -533,13 +533,13 @@ fun handleWakeUpSignal(wakeType: Int) {
 
 整车 MCU 通过数字钥匙通道送来唤醒信号：`wakeType=0x1` 弹密码锁屏，`wakeType=0x2`（WAKE_UP_SHOW_LAUNCHER）回桌面。事故日志 122035 行的 `handleWakeUpSignal: wakeType=0x2` 与 122037 行的 `goLauncher:::#` 正是这条链【日志事实】。
 
-这个自定义发起点对全文的意义：**Launcher 的启动请求不止一种「意图形状」**。同一个 MainActivity，可以被人以 HOME 类别拉起（本节），也可以被人以 LAUNCHER 类别拉起（Monkey、桌面图标点击都是这种）——两种拉起在服务端被认定成**不同的 activityType**，而 activityType 直接参与任务复用匹配。这是第 4 章的主定理，也是第 8 章事故的根因；此处先埋下第一颗钉子：`goLauncher` 用的是 HOME 类别。
+这个自定义发起点对全文的意义：**Launcher 的启动请求不止一种「意图类别」**。同一个 MainActivity，可以被人以 HOME 类别拉起（本节），也可以被人以 LAUNCHER 类别拉起（Monkey、桌面图标点击都是这种）——两种拉起在服务端被认定成**不同的 activityType**，而 activityType 直接参与任务复用匹配。这是第 4 章的主定理，也是第 8 章事故的根因；此处先标明第一点：`goLauncher` 用的是 HOME 类别。
 
 ### 1.8 本章小结与 Q&A
 
 发起侧全景（按本文口径从「最系统」到「最应用」排列）：
 
-| 发起点 | 意图形状 | 触发时机 |
+| 发起点 | 意图类别 | 触发时机 |
 | --- | --- | --- |
 | AMS.systemReady（AOSP） | getHomeIntent：MAIN+HOME，NEW_TASK 后补 | 开机，非 headless 且 system user |
 | UserController 链（雅迪树实际路径） | 同上 | 用户启动事件 |
@@ -555,10 +555,10 @@ fun handleWakeUpSignal(wakeType: Int) {
 > A：不一定。每个 TDA 起的是「一个 HOME Activity 记录」；同包 Activity 默认同进程，所以多屏 HOME 通常共用一个进程、多个 Activity 实例。副屏走 SECONDARY_HOME 时甚至可能是不同组件。
 >
 > **Q3：为什么 1.4 节要先建 root home task 再启动活动，而不是让 ActivityStarter 顺手建？**
-> A：因为 HOME 活动的落位规则是「挂进已存在的 home 根任务」（第 3 章 `alwaysCreateRootTask` 对 HOME 返回 false），ActivityStarter 只找不建这种特殊根任务；先备好容器，启动时才有车位可停。同时 `beginDeferResume` 包住建任务过程，避免容器变化触发一轮无谓的 resume 调度。
+> A：因为 HOME 活动的落位规则是「挂进已存在的 home 根任务」（第 3 章 `alwaysCreateRootTask` 对 HOME 返回 false），ActivityStarter 只找不建这种特殊根任务；先备好容器，启动时才有根任务可挂入。同时 `beginDeferResume` 包住建任务过程，避免容器变化触发一轮无谓的 resume 调度。
 >
 > **Q4：SystemUI 的 `goLauncher` 与系统 HOME 启动，服务端能区分吗？**
-> A：能，但只体现在三处：调用 uid/pid（START 日志的 `from uid` 字段）、flag 组合（有没有 RESET_TASK_IF_NEEDED）、以及 reason 串（系统路径带 `startHomeActivity:` 前缀）。意图形状与解析结果相同，activityType 认定也相同（都满足 HOME 三条件，见 2.5 节）。**对任务复用而言，两者等价**——这是第 8 章推演的前提之一。
+> A：能，但只体现在三处：调用 uid/pid（START 日志的 `from uid` 字段）、flag 组合（有没有 RESET_TASK_IF_NEEDED）、以及 reason 串（系统路径带 `startHomeActivity:` 前缀）。意图类别与解析结果相同，activityType 认定也相同（都满足 HOME 三条件，见 2.5 节）。**对任务复用而言，两者等价**——这是第 8 章推演的前提之一。
 
 下一章进入主干：这个 Intent 过了 Binder 之后，服务端如何一步步把它变成一条 `ActivityRecord`，以及 HOME/STANDARD 类型在哪一行代码上定型。
 
@@ -570,7 +570,7 @@ fun handleWakeUpSignal(wakeType: Int) {
 
 ### 2.1 ATMS.startActivityAsUser 与 obtainStarter 链
 
-[ActivityTaskManagerService.java#L1303](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskManagerService.java#L1303)
+[ActivityTaskManagerService.java#L1303](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskManagerService.java#L1303)
 
 ```java
 private int startActivityAsUser(IApplicationThread caller, String callingPackage,
@@ -618,7 +618,7 @@ private int startActivityAsUser(IApplicationThread caller, String callingPackage
 
 `execute()` 的前半段做两件事——拒绝带文件描述符的意图（防 fd 泄漏），以及**预解析**：
 
-[ActivityStarter.java#L693](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L693)
+[ActivityStarter.java#L693](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L693)
 
 ```java
 int execute() {
@@ -651,9 +651,9 @@ int execute() {
 
 ### 2.2 组件解析与回写：隐式意图何时长出 cmp=
 
-`Request.resolveActivity`（[ActivityStarter.java#L523](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L523)）补齐调用身份后，转给 supervisor 做真正的解析：
+`Request.resolveActivity`（[ActivityStarter.java#L523](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L523)）补齐调用身份后，转给 supervisor 做真正的解析：
 
-[ActivityTaskSupervisor.java#L698](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L698)
+[ActivityTaskSupervisor.java#L698](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L698)
 
 ```java
 ActivityInfo resolveActivity(Intent intent, ResolveInfo rInfo, int startFlags,
@@ -674,11 +674,13 @@ ActivityInfo resolveActivity(Intent intent, ResolveInfo rInfo, int startFlags,
 > **Q：日志里 `START u0 {... cmp=com.yadea.launcher/.function.main.view.MainActivity}` 带 cmp=，能不能说明调用方发的是显式意图？**
 > A：**不能。** `START` 日志在解析之后打印（见 2.3 节），隐式意图经回写后同样带 cmp=。事故日志里 SystemUI `goLauncher` 的请求就是隐式意图（Kotlin 源码没设组件），START 行照样打出 cmp=（日志 122044 行）。要区分显式/隐式，得看调用方源码或 `componentSpecified` 字段的行为（2.6 节），不能看这一行日志。
 
+解析链与回写机制的深剖——从 Intent.resolveActivity 硬编码 MATCH_DEFAULT_ONLY，到 buildResolveList 五关、chooseBestActivity 决胜、cmp= 回写全链推导——见姊妹篇[《Android13 Intent 与 IntentFilter 源码分析》](Android13-Intent与IntentFilter源码分析.md) §6，尤其 §6.6 收口三。
+
 ### 2.3 executeRequest：身份归一、START 日志与权限闸
 
 `execute()` 后半段进入 `executeRequest`，这是服务端上半程的主体：
 
-[ActivityStarter.java#L909](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L909)
+[ActivityStarter.java#L909](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L909)
 
 ```java
 private int executeRequest(Request request) {
@@ -721,11 +723,11 @@ private int executeRequest(Request request) {
 - `from uid`：调用方 uid。经过 `callerApp` 归一：Binder 调用方若能对应到进程记录，用进程的 uid（这就是为什么 SystemUI 的请求打 `from uid 1000`）；系统内部路径（如 systemReady 的 HOME 启动）caller 为 null 时走 `setCallingUid` 预设值。事故日志里 Monkey 的请求打 `from uid 0, pid 13116`——uid 0 是 root，Monkey 以 root 身份跑【日志事实】。
 - 事故日志里 START 行末尾的 `, pid 13116` 后缀是**雅迪树版本的日志格式**（yadi 树 ActivityStarter.java:909-910 多拼了 `", pid " + callingPid`），学习树这一行没有 pid 字段——两树日志版本有差异，字段语义一致【源码事实·两树对照】。调用方进程找不到时打 `Unable to find app for caller` 并直接 `START_PERMISSION_DENIED`。
 
-`START` 日志之后是一串资格检查：后台启动限制 `shouldAbortBackgroundActivityStart`（[ActivityStarter.java#L1353](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1353)，Android 10 引入的 BAL 限制主入口，豁免名单含 uid 1000、持有 START_ACTIVITIES_FROM_BACKGROUND 权限者、 Companion 设备等）、挂起包检查、重权限检查等。全部通过后，构造 `ActivityRecord`。
+`START` 日志之后是一串资格检查：后台启动限制 `shouldAbortBackgroundActivityStart`（[ActivityStarter.java#L1353](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1353)，Android 10 引入的 BAL 限制主入口，豁免名单含 uid 1000、持有 START_ACTIVITIES_FROM_BACKGROUND 权限者、 Companion 设备等）、挂起包检查、重权限检查等。全部通过后，构造 `ActivityRecord`。
 
-### 2.4 ActivityRecord 的诞生：launchMode 与 taskAffinity 定型
+### 2.4 ActivityRecord 的创建：launchMode 与 taskAffinity 定型
 
-[ActivityStarter.java#L1239](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1239)
+[ActivityStarter.java#L1239](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1239)
 
 ```java
 final ActivityRecord r = new ActivityRecord.Builder(mService)
@@ -748,9 +750,9 @@ final ActivityRecord r = new ActivityRecord.Builder(mService)
         .build();
 ```
 
-`ActivityRecord` 是服务端为一个「将要存在的 Activity 实例」建立的档案：token、intent、info、调用方身份、launchMode、taskAffinity、activityType 全在这里定。构造函数里的三步关键赋值：
+`ActivityRecord` 是服务端为一个「将要存在的 Activity 实例」建立的记录：token、intent、info、调用方身份、launchMode、taskAffinity、activityType 全在这里定。构造函数里的三步关键赋值：
 
-[ActivityRecord.java#L2134](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2134)
+[ActivityRecord.java#L2134](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2134)
 
 ```java
 info.taskAffinity = computeTaskAffinity(info.taskAffinity, info.applicationInfo.uid,
@@ -758,7 +760,7 @@ info.taskAffinity = computeTaskAffinity(info.taskAffinity, info.applicationInfo.
 taskAffinity = info.taskAffinity;
 ```
 
-[ActivityRecord.java#L2228](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2228)
+[ActivityRecord.java#L2228](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2228)
 
 ```java
 static String computeTaskAffinity(String affinity, int uid, int launchMode) {
@@ -774,7 +776,7 @@ static String computeTaskAffinity(String affinity, int uid, int launchMode) {
 - 前缀规则：affinity 不以 uid 开头时，强制加 `uid:` 前缀（singleInstance 是 `uid-si:` 前缀）。**Launcher 的 uid 是 1000**（系统应用），所以算出来的 affinity 是 `1000:com.yadea.launcher`——事故日志里每个 Task 打印的 `A=1000:com.yadea.launcher` 就是这一行的产物【源码事实 + 日志事实互证】。
 - uid 前缀的作用是隔离：不同应用即使写了相同的 taskAffinity 字符串，加前缀后也不同，防止跨应用劫持任务。`-si:` 变体让 singleInstance 活动的 affinity 与普通活动天然不同，配合第 5 章的特殊查找路径。
 
-[ActivityRecord.java#L2169](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2169)
+[ActivityRecord.java#L2169](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2169)
 
 ```java
 launchMode = aInfo.launchMode;
@@ -790,7 +792,7 @@ setActivityType(_componentSpecified, _launchedFromUid, _intent, options, sourceR
 
 ### 2.5 setActivityType：HOME 是怎么被认定的
 
-[ActivityRecord.java#L3001](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L3001)
+[ActivityRecord.java#L3001](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L3001)
 
 ```java
 private void setActivityType(boolean componentSpecified, int launchedFromUid, Intent intent,
@@ -825,7 +827,7 @@ private void setActivityType(boolean componentSpecified, int launchedFromUid, In
 
 **第一关：`!componentSpecified || canLaunchHomeActivity(...)`。** 意图没指定组件，直接过；指定了组件，则要求调用方有「拉 HOME 的特权」：
 
-[ActivityRecord.java#L2973](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2973)
+[ActivityRecord.java#L2973](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2973)
 
 ```java
 boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
@@ -845,9 +847,9 @@ boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
 
 放行名单：SYSTEM_UID（1000）、root（0）、recents 组件、解析器/选择器活动。这一关的用途是防「显式指定组件冒充 HOME」——但对 uid 0 与 1000 完全放行，所以 **Monkey（uid 0）与 SystemUI（uid 1000）都过得去**，真正的分叉不在这里。
 
-**第二关：`isHomeIntent(intent)`。** 意图形状必须是「纯 HOME」：
+**第二关：`isHomeIntent(intent)`。** 意图类别必须是「纯 HOME」：
 
-[ActivityRecord.java#L2953](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2953)
+[ActivityRecord.java#L2953](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2953)
 
 ```java
 private boolean isHomeIntent(Intent intent) {
@@ -863,12 +865,14 @@ private boolean isHomeIntent(Intent intent) {
 四个条件缺一不可：MAIN 动作、带 HOME 或 SECONDARY_HOME 类别、**类别集合大小为 1**（HOME 与 LAUNCHER 同时带上就不算）、无 data、无 type。对照两类请求：
 
 - 雅迪 `goLauncher`：MAIN + 仅 CATEGORY_HOME，无 data/type → **是 HOME 意图**。
-- Monkey / 图标点击：MAIN + 仅 CATEGORY_LAUNCHER → `hasCategory(CATEGORY_HOME)` 不成立 → **不是 HOME 意图**。旁边还有个 `isMainIntent`（[ActivityRecord.java#L2963](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2963)）专门描述这种 MAIN+LAUNCHER 形状，但它不参与类型认定。
-- 雅迪 Launcher 的 manifest 把 HOME、LAUNCHER、DEFAULT 三个 category 声明在**同一个 intent-filter**（priority=1000）里【源码事实·应用树，AndroidManifest.xml:89-95】——这决定同一个 MainActivity 既能被 HOME 意图解析到、也能被 LAUNCHER 意图解析到。**manifest 的类别声明不改变活动的 launchMode，也不预先决定 activityType；类型完全由「这一次请求的意图形状 + 调用方」在运行时认定。**
+- Monkey / 图标点击：MAIN + 仅 CATEGORY_LAUNCHER → `hasCategory(CATEGORY_HOME)` 不成立 → **不是 HOME 意图**。旁边还有个 `isMainIntent`（[ActivityRecord.java#L2963](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L2963)）专门描述这种 MAIN+LAUNCHER 类别，但它不参与类型认定。
+- 雅迪 Launcher 的 manifest 把 HOME、LAUNCHER、DEFAULT 三个 category 声明在**同一个 intent-filter**（priority=1000）里【源码事实·应用树，AndroidManifest.xml:89-95】——这决定同一个 MainActivity 既能被 HOME 意图解析到、也能被 LAUNCHER 意图解析到。**manifest 的类别声明不改变活动的 launchMode，也不预先决定 activityType；类型完全由「这一次请求的意图类别 + 调用方」在运行时认定。**
 
 **第三关：`!isResolverOrDelegateActivity()`。** 解析器不算 HOME，与 1.4 节 `startHomeActivity` 不给 Resolver 设 HOME options 呼应：HOME 类型意味着「落进 home 根任务、参与桌面语义」，而解析器只是临时盖在前台之上。
 
 三关全过 → `ACTIVITY_TYPE_HOME`，顺带把非显式声明的 resizeable 抹掉（HOME 不许自由缩放）。任何一关不过 → 落入后续 else-if（RECENTS/ASSISTANT/DREAM 各有专门认定），全不沾边则**保持 UNDEFINED**。
+
+类别子集匹配、DEFAULT 闸门与 isHomeIntent/isMainIntent 类别判定（size==1 互斥闸）的机制深剖，见姊妹篇[《Android13 Intent 与 IntentFilter 源码分析》](Android13-Intent与IntentFilter源码分析.md) §2.5、§3.5。
 
 ### 2.6 componentSpecified 的真相：Binder 路径上它恒为 false
 
@@ -876,8 +880,8 @@ private boolean isHomeIntent(Intent intent) {
 
 | 写入点 | 位置 | 值 |
 | --- | --- | --- |
-| `Request.reset` | [ActivityStarter.java#L454](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L454) | false（每次复用 Request 时复位） |
-| heavyweight switcher 换道 | [ActivityStarter.java#L856](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L856) | true |
+| `Request.reset` | [ActivityStarter.java#L454](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L454) | false（每次复用 Request 时复位） |
+| 重进程切换重定向（HeavyWeightSwitcherActivity） | [ActivityStarter.java#L856](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L856) | true |
 | `startActivities` 多启动 | ActivityStartController.java:435、482 | `intent.getComponent() != null` |
 | 任务/活动记录恢复 | ActivityRecord.java:10043、10091，Task.java:5841 | 从 XML 属性读 |
 
@@ -890,7 +894,7 @@ final boolean componentSpecified = intent.getComponent() != null;
 intent = new Intent(intent);
 ```
 
-而 **2.1 节的单次 `startActivityAsUser → obtainStarter` 链上没有 `setComponentSpecified`**，`ActivityStarter.setIntent`（[ActivityStarter.java#L3248](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3248)）也只赋意图不碰这个字段：
+而 **2.1 节的单次 `startActivityAsUser → obtainStarter` 链上没有 `setComponentSpecified`**，`ActivityStarter.setIntent`（[ActivityStarter.java#L3248](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3248)）也只赋意图不碰这个字段：
 
 ```java
 ActivityStarter setIntent(Intent intent) {
@@ -903,7 +907,7 @@ ActivityStarter setIntent(Intent intent) {
 
 推论有两层：
 
-1. 对 Binder 路径，`setActivityType` 第一关的 `!componentSpecified` 恒真、短路成立，`canLaunchHomeActivity` 根本不会被调用。**HOME 认定的实际判据只剩意图形状（isHomeIntent）与解析器排除。** 这意味着 A13 上任何应用发一个 `MAIN+CATEGORY_HOME` 的意图，其记录都会被认定为 HOME 类型（能不能真的启动成功另说，还有 BAL 限制等闸门）——类型认定与启动许可是两套机制。
+1. 对 Binder 路径，`setActivityType` 第一关的 `!componentSpecified` 恒真、短路成立，`canLaunchHomeActivity` 根本不会被调用。**HOME 认定的实际判据只剩意图类别（isHomeIntent）与解析器排除。** 这意味着 A13 上任何应用发一个 `MAIN+CATEGORY_HOME` 的意图，其记录都会被认定为 HOME 类型（能不能真的启动成功另说，还有 BAL 限制等闸门）——类型认定与启动许可是两套机制。
 2. Monkey 的显式意图（cmp= 直指 MainActivity）同样 `componentSpecified=false`；它没成为 HOME 的原因**纯粹是第二关**：类别是 LAUNCHER 不是 HOME。
 
 > **Q：那第一关的 `canLaunchHomeActivity` 岂不是形同虚设？**
@@ -913,7 +917,7 @@ ActivityStarter setIntent(Intent intent) {
 
 2.5 节说了 HOME 在构造时定型、其余保持 UNDEFINED。那么普通应用的 STANDARD 类型何时出现？答案在任务侧，`Task.onDescendantActivityAdded`：
 
-[Task.java#L1580](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1580)
+[Task.java#L1580](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1580)
 
 ```java
 /** Called when an {@link ActivityRecord} is added as a descendant */
@@ -953,13 +957,13 @@ void onDescendantActivityAdded(boolean hadActivity, int activityType, ActivityRe
 这条规则的直接后果要到第 4 章才展开（UNDEFINED 与所有类型兼容，而 HOME 与 STANDARD 互斥），这里先把它的两个即时影响说清：
 
 - 新建任务的类型跟着第一个活动走：第一个活动是 HOME → 任务 HOME；是 UNDEFINED → 补成 STANDARD → 任务 STANDARD（第 3 章 3.6 节）。
-- 日志打印的 `type=` 字段可能是过期缓存（第 7 章）；判断记录的真实类型要回到「构造时的意图形状」，判断任务的真实类型要回到「第一个入栈活动的类型」。
+- 日志打印的 `type=` 字段可能是过期缓存（第 7 章）；判断记录的真实类型要回到「构造时的意图类别」，判断任务的真实类型要回到「第一个入栈活动的类型」。
 
 ### 2.8 startActivityUnchecked：进入不回退区
 
 `executeRequest` 的终点是把记录交给 `startActivityUnchecked`：
 
-[ActivityStarter.java#L1279](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1279)
+[ActivityStarter.java#L1279](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1279)
 
 ```java
 mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
@@ -967,7 +971,7 @@ mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
         inTask, inTaskFragment, restrictedBgActivity, intentGrants);
 ```
 
-[ActivityStarter.java#L1720](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1720)
+[ActivityStarter.java#L1720](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1720)
 
 ```java
 private int startActivityUnchecked(final ActivityRecord r, ActivityRecord sourceRecord,
@@ -1013,7 +1017,7 @@ private int startActivityUnchecked(final ActivityRecord r, ActivityRecord source
 
 - `deferWindowLayout() / continueWindowLayout()`：整个 `startActivityInner` 期间冻结窗口布局计算，结束时一次性重排——启动过程中的中间态（任务建了一半、活动挂了一半）不触发布局。
 - `transitionController.collect(r)`：Shell 转场（A13 的 Transitions 机制）从此刻开始收集本次启动涉及的容器变化。
-- `handleStartResult`（[ActivityStarter.java#L1767](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1767)）：结果不成功时把「半接入」的记录从任务摘除、空任务连带移除——启动失败的现场不留半成品。
+- `handleStartResult`（[ActivityStarter.java#L1767](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1767)）：结果不成功时把「半接入」的记录从任务摘除、空任务连带移除——启动失败的现场不留半成品。
 - `Trace.traceBegin("startActivityInner")`：systrace 上那条著名的泳道就在这里开闭。
 
 下一章进入 `startActivityInner` 本体：flag 怎么被改写、复用还是新建怎么裁决、任务树怎么长。
@@ -1022,11 +1026,11 @@ private int startActivityUnchecked(final ActivityRecord r, ActivityRecord source
 
 ## 3. startActivityInner：flag 裁决与任务的创建、复用
 
-`startActivityInner` 是任务裁决的总现场：一次启动到底**复用哪个任务、还是新建任务、还是只给栈顶送一个 onNewIntent**，全部在这一个方法里定案。它也是第 8 章事故推演的骨架——A 实例走的是「新建根任务」分支，B 实例走的也是「新建根任务」分支，但两者新建的原因完全不同；Monkey 第 3 次启动走的是「交付给栈顶」分支，却交付到了 B 头上。要读懂那三个分叉，先把本章的每个裁决点拆开。
+`startActivityInner` 是任务裁决的总现场：一次启动到底**复用哪个任务、还是新建任务、还是只给栈顶送一个 onNewIntent**，全部在这一个方法里定案。它也是第 8 章事故推演的主线——A 实例走的是「新建根任务」分支，B 实例走的也是「新建根任务」分支，但两者新建的原因完全不同；Monkey 第 3 次启动走的是「交付给栈顶」分支，却交付给了 B。要读懂那三个分叉，先把本章的每个裁决点拆开。
 
-### 3.1 十步骨架
+### 3.1 十步主线
 
-[ActivityStarter.java#L1893](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1893)
+[ActivityStarter.java#L1893](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L1893)
 
 ```java
 int startActivityInner(final ActivityRecord r, ActivityRecord sourceRecord,
@@ -1121,19 +1125,19 @@ int startActivityInner(final ActivityRecord r, ActivityRecord sourceRecord,
 1. **`setInitialState`**：把 Request 摊平成成员变量，并对 flag 做第一轮归一（3.2 节）。
 2. **`computeLaunchingTaskFlags`**：第二轮 flag 归一，核心是三种「强制 NEW_TASK」（3.3 节）。
 3. **`getReusableTask`**：查历史——这个意图/组件是否已有可复用的任务（3.4 节，匹配器本体在第 4 章）。
-4. **`computeTargetTask`**：`reusedTask` 为空时的兜底目标（3.5 节）。`targetTask == null` 即 `newTask = true`。
+4. **`computeTargetTask`**：`reusedTask` 为空时的默认目标（3.5 节）。`targetTask == null` 即 `newTask = true`。
 5. **`isAllowedToStart`**：HOME 能不能落这个显示区、任务归属与多屏许可等资格复查。
 6. **`recycleTask`**：目标任务非空时先「回收」它——把目标任务调整成本次启动需要的样子（3.7 节）。
 7. **`deliverToCurrentTopIfNeeded`**：栈顶短路——要启动的活动恰好是焦点根任务栈顶、且带 singleTop 语义时，不启动新实例，只送 onNewIntent，返回 `START_DELIVERED_TO_TOP`（3.7 节）。
 8. **`getOrCreateRootTask` + `setNewTask`/`addOrReparentStartingActivity`**：定案落点——新任务在根任务下建出来，或把记录加进既有任务（3.6 节）。
 9. **日志与转场**：`wm_create_task`、`wm_create_activity` 事件，`startActivityLocked` 建窗口、准备 app transition。
-10. **`resumeFocusedTasksTopActivities`**：把接力棒交给第 6 章的 resume 机器。
+10. **`resumeFocusedTasksTopActivities`**：把控制权交给第 6 章的 resume 流程。
 
 一个容易误读的点：`recycleTask` 与 `deliverToCurrentTopIfNeeded` 都可能提前 return——**方法返回值不只是错误码，还是路由**：`START_DELIVERED_TO_TOP` 意味着「这次启动到此为止，没有新实例」。第 8 章里 Monkey 重复启动走的就是这条路由。
 
 ### 3.2 setInitialState：flag 的第一轮归一
 
-[ActivityStarter.java#L2595](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2595)
+[ActivityStarter.java#L2595](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2595)
 
 ```java
 private void setInitialState(ActivityRecord r, ActivityOptions options, Task inTask,
@@ -1190,7 +1194,7 @@ private void setInitialState(ActivityRecord r, ActivityOptions options, Task inT
 
 ### 3.3 computeLaunchingTaskFlags：三种强制 NEW_TASK
 
-[ActivityStarter.java#L2828](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2828)
+[ActivityStarter.java#L2828](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2828)
 
 ```java
 if (mInTask == null) {
@@ -1224,11 +1228,11 @@ if (mInTask == null) {
 > **Q：既然 singleTask 会被强制 NEW_TASK，那 singleTask 与「NEW_TASK 的 standard 活动」在 flag 层面还有区别吗？**
 > A：flag 层面趋同，但裁决层面有三个区别：`getReusableTask` 的 `putIntoExistingTask` 条件里 singleTask **不需要 NEW_TASK 也参与复用查找**（3.4 节）；`complyActivityFlags` 里 singleTask 走 CLEAR_TOP 同款清栈分支（3.7 节）；匹配器的类型闸门对两者的记录类型认定不同（第 4 章、第 5 章）。
 
-方法尾部还有一段 LAUNCH_ADJACENT 清理（[ActivityStarter.java#L2850](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2850)）：无源记录或没带 NEW_TASK 时把该 flag 抹掉——分屏「相邻启动」必须有源才有意义。
+方法尾部还有一段 LAUNCH_ADJACENT 清理（[ActivityStarter.java#L2850](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2850)）：无源记录或没带 NEW_TASK 时把该 flag 抹掉——分屏「相邻启动」必须有源才有意义。
 
 ### 3.4 getReusableTask：要不要查历史
 
-[ActivityStarter.java#L2862](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2862)
+[ActivityStarter.java#L2862](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2862)
 
 ```java
 private Task getReusableTask() {
@@ -1296,9 +1300,9 @@ private Task getReusableTask() {
 - **两道一票否决**：singleInstancePerTask 匹配到的任务若根活动组件不同（说明只是 affinity 撞上），拒绝复用；**HOME 语义跨显示区否决**——只要本次记录或匹配记录任一方是 HOME 类型，且对方不在同一 TaskDisplayArea，就不复用。这是多屏车机的关键规则：**每个屏的桌面各归各的任务区，主屏 HOME 请求永远不会复用副屏的 HOME 任务**（1.6 节的解析优先级管「用哪个 HOME 应用」，这一条管「用哪个 HOME 任务」）。
 - 对照事故日志：A（Monkey）与 B（SystemUI）的请求都过准入（NEW_TASK、singleTask）。A 发起时全场只有空的 HOME 根任务 Task 1，`findTask` 无从匹配；B 发起时场上有装着 A 的 Task 2，`findTask` 却因类型闸门视而不见——这就是第 4 章的主题。
 
-### 3.5 computeTargetTask：兜底目标
+### 3.5 computeTargetTask：默认目标
 
-[ActivityStarter.java#L2078](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2078)
+[ActivityStarter.java#L2078](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2078)
 
 ```java
 private Task computeTargetTask() {
@@ -1339,9 +1343,9 @@ private Task computeTargetTask() {
 
 #### 3.6.1 getOrCreateRootTask 与 resolveActivityType
 
-ActivityStarter 侧只是个转发（[ActivityStarter.java#L3222](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3222)），主体在 RootWindowContainer：
+ActivityStarter 侧只是个转发（[ActivityStarter.java#L3222](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3222)），主体在 RootWindowContainer：
 
-[RootWindowContainer.java#L3011](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L3011)
+[RootWindowContainer.java#L3011](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L3011)
 
 ```java
 Task getOrCreateRootTask(@Nullable ActivityRecord r,
@@ -1387,7 +1391,7 @@ Task getOrCreateRootTask(@Nullable ActivityRecord r,
 
 优先级链是：options 指定的根任务 → options 指定的任务 id → 首选 TaskDisplayArea → 候选/源任务所在的根任务（要求窗口模式与活动类型兼容）→ 缺省 TDA。**注意 `resolveActivityType` 在进 TDA 之前算好**，它决定 TDA 里「找现成根任务还是建新根任务」用哪个类型：
 
-[RootWindowContainer.java#L3137](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L3137)
+[RootWindowContainer.java#L3137](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L3137)
 
 ```java
 int resolveActivityType(@Nullable ActivityRecord r, @Nullable ActivityOptions options,
@@ -1408,13 +1412,13 @@ int resolveActivityType(@Nullable ActivityRecord r, @Nullable ActivityOptions op
 }
 ```
 
-四问走一遍——**规则**：活动自身类型优先，其次候选任务类型，再次 options，全空则兜底 STANDARD。**设置者**：调用链上的 ActivityStarter（记录在构造时定型，2.5/2.7 节）。**执行**：本方法在每次 `getOrCreateRootTask` 时跑。**后果**：这是 UNDEFINED 记录第一次被「视作 STANDARD」的地方——但注意，**它只影响根任务的查找/创建，不回写记录**；记录本体要等入栈才补 STANDARD（2.7 节）。HOME 请求在这里返回 HOME，于是 TDA 直接命中 `mRootHomeTask` 缓存（1.5 节），根本不新建根任务。
+四问走一遍——**规则**：活动自身类型优先，其次候选任务类型，再次 options，全空则回退 STANDARD。**设置者**：调用链上的 ActivityStarter（记录在构造时定型，2.5/2.7 节）。**执行**：本方法在每次 `getOrCreateRootTask` 时跑。**后果**：这是 UNDEFINED 记录第一次被「视作 STANDARD」的地方——但注意，**它只影响根任务的查找/创建，不回写记录**；记录本体要等入栈才补 STANDARD（2.7 节）。HOME 请求在这里返回 HOME，于是 TDA 直接命中 `mRootHomeTask` 缓存（1.5 节），根本不新建根任务。
 
 #### 3.6.2 alwaysCreateRootTask：STANDARD 全屏为什么必有根任务
 
 TDA 的 `getOrCreateRootTask`（TaskDisplayArea.java:977）先问一句：这种组合是否「必须自建根任务」？
 
-[DisplayContent.java#L6220](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/DisplayContent.java#L6220)
+[DisplayContent.java#L6220](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/DisplayContent.java#L6220)
 
 ```java
 static boolean alwaysCreateRootTask(int windowingMode, int activityType) {
@@ -1428,11 +1432,11 @@ static boolean alwaysCreateRootTask(int windowingMode, int activityType) {
 }
 ```
 
-条件是 **STANDARD 类型 + 全屏/自由窗口/画中画/多窗口模式之一**。命中则不复用现成根任务，直接建一个新的；HOME/RECENTS 等类型不命中（HOME 永远进 `mRootHomeTask`）。这条规则的动机在注释里：每个应用任务自己当根，视觉排序（z 序）与返回类型（回桌面还是回上个应用）才能按根任务粒度管理。对照事故：A 的请求经 `resolveActivityType` 得到 STANDARD（记录此刻 UNDEFINED → 兜底），窗口模式 fullscreen → 命中 → **新建根任务 Task 2**。
+条件是 **STANDARD 类型 + 全屏/自由窗口/画中画/多窗口模式之一**。命中则不复用现成根任务，直接建一个新的；HOME/RECENTS 等类型不命中（HOME 永远进 `mRootHomeTask`）。这条规则的动机在注释里：每个应用任务自己当根，视觉排序（z 序）与返回类型（回桌面还是回上个应用）才能按根任务粒度管理。对照事故：A 的请求经 `resolveActivityType` 得到 STANDARD（记录此刻 UNDEFINED → 回退），窗口模式 fullscreen → 命中 → **新建根任务 Task 2**。
 
 #### 3.6.3 setNewTask：reuseOrCreateTask 与「根转正叶」
 
-[ActivityStarter.java#L3073](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3073)
+[ActivityStarter.java#L3073](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3073)
 
 ```java
 private void setNewTask(Task taskToAffiliate) {
@@ -1449,7 +1453,7 @@ private void setNewTask(Task taskToAffiliate) {
 }
 ```
 
-`reuseOrCreateTask`（[Task.java#L6218](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L6218)）在根任务内部做第二次裁决：
+`reuseOrCreateTask`（[Task.java#L6218](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L6218)）在根任务内部做第二次裁决：
 
 ```java
 Task reuseOrCreateTask(TaskInfo info, Intent intent, IVoiceInteractionSession voiceSession,
@@ -1482,7 +1486,7 @@ Task reuseOrCreateTask(TaskInfo info, Intent intent, IVoiceInteractionSession vo
 }
 ```
 
-[Task.java#L6264](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L6264)
+[Task.java#L6264](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L6264)
 
 ```java
 private boolean canReuseAsLeafTask() {
@@ -1500,7 +1504,7 @@ private boolean canReuseAsLeafTask() {
 
 刚建出来的根任务满足三个条件：非 organizer 创建、是叶子（还没孩子）、`alwaysCreateRootTask` 命中（它就是因此被建出来的）——于是 `reuseAsLeafTask` **原地转正**：
 
-[Task.java#L748](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L748)
+[Task.java#L748](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L748)
 
 ```java
 Task reuseAsLeafTask(IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor,
@@ -1527,7 +1531,7 @@ Task reuseAsLeafTask(IVoiceInteractionSession _voiceSession, IVoiceInteractor _v
 
 #### 3.6.4 addOrReparentStartingActivity：记录入栈
 
-[ActivityStarter.java#L3105](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3105)
+[ActivityStarter.java#L3105](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3105)
 
 ```java
 private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
@@ -1565,13 +1569,13 @@ private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
 }
 ```
 
-Activity Embedding（Jetpack WindowManager 的分屏嵌入）会在这里改道：任务内若有嵌入 TaskFragment 且允许嵌入，记录挂进 TaskFragment 而不是 Task 本体。车机 Launcher 场景没有嵌入，`newParent` 就是 task 本身，走 `addChild(mStartActivity, POSITION_TOP)`。**`addChild` 正是触发 `onDescendantActivityAdded` 的入口**——2.7 节那条「UNDEFINED 记录此刻补成 STANDARD、任务类型跟着第一个活动定」的规则，就在这一跳生效。A 入 Task 2 的瞬间，记录与任务同时变成 standard。
+Activity Embedding（Jetpack WindowManager 的分屏嵌入）会在这里转向：任务内若有嵌入 TaskFragment 且允许嵌入，记录挂进 TaskFragment 而不是 Task 本体。车机 Launcher 场景没有嵌入，`newParent` 就是 task 本身，走 `addChild(mStartActivity, POSITION_TOP)`。**`addChild` 正是触发 `onDescendantActivityAdded` 的入口**——2.7 节那条「UNDEFINED 记录此刻补成 STANDARD、任务类型跟着第一个活动定」的规则，就在这一跳生效。A 入 Task 2 的瞬间，记录与任务同时变成 standard。
 
 ### 3.7 复用路径：recycleTask、栈顶短路与 complyActivityFlags
 
-`targetTask != null` 时先 `recycleTask`（[ActivityStarter.java#L2269](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2269)）：跨用户任务只挂靠不清理；`reusedTask` 非空时把 TASK_ON_HOME flag 同步进任务意图（回桌面时任务压 HOME 之上的语义）；然后 `setTargetRootTaskIfNeeded(targetTaskTop)`（[ActivityStarter.java#L2929](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2929)）按源/目标任务关系定 `mTargetRootTask`；最后调 `complyActivityFlags` 按 flag 清理目标任务。
+`targetTask != null` 时先 `recycleTask`（[ActivityStarter.java#L2269](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2269)）：跨用户任务只挂靠不清理；`reusedTask` 非空时把 TASK_ON_HOME flag 同步进任务意图（回桌面时任务压 HOME 之上的语义）；然后 `setTargetRootTaskIfNeeded(targetTaskTop)`（[ActivityStarter.java#L2929](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2929)）按源/目标任务关系定 `mTargetRootTask`；最后调 `complyActivityFlags` 按 flag 清理目标任务。
 
-**deliverToCurrentTopIfNeeded——栈顶短路**（[ActivityStarter.java#L2362](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2362)）：
+**deliverToCurrentTopIfNeeded——栈顶短路**（[ActivityStarter.java#L2362](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2362)）：
 
 ```java
 private int deliverToCurrentTopIfNeeded(Task topRootTask, NeededUriGrants intentGrants) {
@@ -1596,9 +1600,9 @@ private int deliverToCurrentTopIfNeeded(Task topRootTask, NeededUriGrants intent
 }
 ```
 
-`dontStart` 五个条件全过才短路：焦点根任务的栈顶（非 delayed）就是同组件、同用户、**已附着进程**、带 singleTop 语义（flag 或 launchMode）、且 HOME 记录不跨显示区。`attachedToProcess()` 这一条很实际：栈顶记录若还没绑上进程（进程还没起来或刚死），短路没有意义——onNewIntent 没人可送，不如老实启动。注意这条短路**与 findTask 复用是两回事**：它不看任务归属，只看「焦点根任务栈顶是不是同一个组件」。事故里 Monkey 第 2、3 次启动都返回了 `wm_new_intent`（第 8 章会证明第 3 次走的其实不是这条短路，而是 recycleTask → complyActivityFlags 的 singleTask 分支——两条路都通向 `deliverNewIntent`，日志形态却一样，这正是日志阅读的陷阱）。
+`dontStart` 五个条件全过才短路：焦点根任务的栈顶（非 delayed）就是同组件、同用户、**已附着进程**、带 singleTop 语义（flag 或 launchMode）、且 HOME 记录不跨显示区。`attachedToProcess()` 这一条很实际：栈顶记录若还没绑上进程（进程还没起来或刚死），短路没有意义——onNewIntent 没人可送，不如老实启动。注意这条短路**与 findTask 复用是两回事**：它不看任务归属，只看「焦点根任务栈顶是不是同一个组件」。事故里 Monkey 第 2、3 次启动都返回了 `wm_new_intent`（第 8 章会证明第 3 次走的其实不是这条短路，而是 recycleTask → complyActivityFlags 的 singleTask 分支——两条路都通向 `deliverNewIntent`，日志形态却一样，这正是日志容易误读的地方）。
 
-**complyActivityFlags**（[ActivityStarter.java#L2412](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2412)）是复用路径的 flag 执行器，五段裁决按序：
+**complyActivityFlags**（[ActivityStarter.java#L2412](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2412)）是复用路径的 flag 执行器，五段裁决按序：
 
 ```java
 if ((mLaunchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK))
@@ -1653,9 +1657,9 @@ if ((mLaunchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK))
 
 1. **singleTask 与 CLEAR_TOP 同段处理**——第二段 else-if 把 `LAUNCH_SINGLE_TASK` 与 `FLAG_ACTIVITY_CLEAR_TOP` 并列：找到目标任务里匹配的记录，清掉它之上的所有活动，命中记录 `deliverNewIntent`。**singleTask 的「清栈回到唯一实例」语义，实现上就是 CLEAR_TOP 那一套**（performClearTop 的细节在第 5 章）。
 2. 所有「不新建实例」的出口都汇到 `deliverNewIntent`。
-3. `mAddingToTask = true` 的出口回到 3.1 骨架第 8 步的 `addOrReparentStartingActivity(targetTask, "adding to task")`——复用任务但压新实例。
+3. `mAddingToTask = true` 的出口回到 3.1 主线第 8 步的 `addOrReparentStartingActivity(targetTask, "adding to task")`——复用任务但压新实例。
 
-**deliverNewIntent 与 wm_new_intent 日志**（[ActivityStarter.java#L3090](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3090)）：
+**deliverNewIntent 与 wm_new_intent 日志**（[ActivityStarter.java#L3090](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L3090)）：
 
 ```java
 private void deliverNewIntent(ActivityRecord activity, NeededUriGrants intentGrants) {
@@ -1670,7 +1674,7 @@ private void deliverNewIntent(ActivityRecord activity, NeededUriGrants intentGra
 }
 ```
 
-先打 `wm_new_intent` 事件再投递。`logStartActivity`（[ActivityRecord.java#L4831](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L4831)）的字段构成：
+先打 `wm_new_intent` 事件再投递。`logStartActivity`（[ActivityRecord.java#L4831](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L4831)）的字段构成：
 
 ```java
 void logStartActivity(int tag, Task task) {
@@ -1684,9 +1688,9 @@ void logStartActivity(int tag, Task task) {
 }
 ```
 
-**`System.identityHashCode(this)`——被交付记录的服务端身份哈希。** 这个值随 `wm_create_activity`、`wm_new_intent`、`wm_restart_activity` 一起出现，是跨事件锁定「哪条记录」的唯一钥匙；它还会经 LaunchActivityItem 传给客户端成为 `Activity.mIdent`，出现在客户端的 `wm_on_create_called` 里（第 6 章）。事故日志中 236566844 恒指 A、130421252 恒指 B，两条十六进制身份（e19b93c、7c61204）同时出现在服务端记录打印 `ActivityRecord{e19b93c ...}` 中——十进制与十六进制同值互证【日志事实】。
+**`System.identityHashCode(this)`——被交付记录的服务端身份哈希。** 这个值随 `wm_create_activity`、`wm_new_intent`、`wm_restart_activity` 一起出现，是跨事件锁定「哪条记录」的唯一标识；它还会经 LaunchActivityItem 传给客户端成为 `Activity.mIdent`，出现在客户端的 `wm_on_create_called` 里（第 6 章）。事故日志中 236566844 恒指 A、130421252 恒指 B，两条十六进制身份（e19b93c、7c61204）同时出现在服务端记录打印 `ActivityRecord{e19b93c ...}` 中——十进制与十六进制同值互证【日志事实】。
 
-`deliverNewIntentLocked`（[ActivityRecord.java#L4991](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L4991)）决定「立即送」还是「记账等 resume」：
+`deliverNewIntentLocked`（[ActivityRecord.java#L4991](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L4991)）决定「立即送」还是「暂存等 resume」：
 
 ```java
 void deliverNewIntentLocked(int callingUid, Intent intent,
@@ -1715,7 +1719,7 @@ void deliverNewIntentLocked(int callingUid, Intent intent,
 
 ### 3.8 收尾三连：日志、startActivityLocked、resume
 
-回到 3.1 骨架的末段：
+回到 3.1 主线的末段：
 
 ```java
 final Task startedTask = mStartActivity.getTask();
@@ -1727,7 +1731,7 @@ mStartActivity.logStartActivity(EventLogTags.WM_CREATE_ACTIVITY, startedTask);
 
 - `wm_create_task` 只在**新建任务**时打，两个字段：userId 与 taskId。事故日志 106753 行 `wm_create_task: [0,2]` 即「用户 0 的任务 2」——**不是**「任务 0 的第 2 条」，字段顺序以 EventLogTags 定义为准（附录 A）。
 - `wm_create_activity` 无条件打，九字段中第 2 字段是上面那个 identityHashCode。
-- 随后 `mTargetRootTask.startActivityLocked(...)`（[Task.java#L5379](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L5379) 起）为新记录建窗口容器（`ActivityRecord` 的 WindowState、starting window 判定、app transition 准备），`moveToFront("reuseOrNewTask", ...)` 把目标根任务提到显示区顶，最后 `resumeFocusedTasksTopActivities(mTargetRootTask, mStartActivity, mOptions, mTransientLaunch)` 进入第 6 章。
+- 随后 `mTargetRootTask.startActivityLocked(...)`（[Task.java#L5379](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L5379) 起）为新记录建窗口容器（`ActivityRecord` 的 WindowState、starting window 判定、app transition 准备），`moveToFront("reuseOrNewTask", ...)` 把目标根任务提到显示区顶，最后 `resumeFocusedTasksTopActivities(mTargetRootTask, mStartActivity, mOptions, mTransientLaunch)` 进入第 6 章。
 
 ### 3.9 本章小结：两条新建、一条短路
 
@@ -1749,7 +1753,7 @@ mStartActivity.logStartActivity(EventLogTags.WM_CREATE_ACTIVITY, startedTask);
 
 ### 4.1 入口与遍历顺序
 
-[RootWindowContainer.java#L2341](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2341)
+[RootWindowContainer.java#L2341](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2341)
 
 ```java
 ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
@@ -1762,7 +1766,7 @@ ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayAr
 
 五参重载是主体：
 
-[RootWindowContainer.java#L2348](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2348)
+[RootWindowContainer.java#L2348](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2348)
 
 ```java
 @Nullable
@@ -1817,7 +1821,7 @@ ActivityRecord findTask(int activityType, String taskAffinity, Intent intent, Ac
 
 单个 TDA 内的遍历由 `process` 发起：
 
-[RootWindowContainer.java#L354](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L354)
+[RootWindowContainer.java#L354](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L354)
 
 ```java
 void process(WindowContainer parent) {
@@ -1839,7 +1843,7 @@ void process(WindowContainer parent) {
 - `cls`：目标组件。`targetActivity` 是 activity-alias 的转发目标——别名活动按真身匹配。
 - `userId`：从 `info.applicationInfo.uid` 取用户段（活动归属用户，与 2.3 节 START 日志的 `u0` 同源）。
 - `documentData`：仅文档意图（NEW_DOCUMENT）参与 data 比对。
-- `forAllLeafTasks(this)`：`FindTaskResult` 自身实现 `Predicate<Task>`，`test` 就是逐任务的闸门。遍历实现在 [Task.java#L3430](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L3430)：
+- `forAllLeafTasks(this)`：`FindTaskResult` 自身实现 `Predicate<Task>`，`test` 就是逐任务的闸门。遍历实现在 [Task.java#L3430](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L3430)：
 
 ```java
 @Override
@@ -1865,7 +1869,7 @@ boolean forAllLeafTasks(Predicate<Task> callback) {
 
 ### 4.2 test()：任务级三道闸
 
-[RootWindowContainer.java#L371](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L371)
+[RootWindowContainer.java#L371](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L371)
 
 ```java
 @Override
@@ -1899,7 +1903,7 @@ public boolean test(Task task) {
 
 三道任务级闸门，全过才进记录级匹配：
 
-1. **类型闸**：`isCompatibleActivityType(请求记录类型, 任务类型)`——4.5 节的主角。
+1. **类型闸**：`isCompatibleActivityType(请求记录类型, 任务类型)`——4.5 节的核心。
 2. **语音会话闸**：voice session 的任务永不复用（语音交互独立生命周期）。
 3. **用户闸**：任务用户 ≠ 活动归属用户则跳过。车机多用户（驾驶员/乘客分屏账号）场景这条会真实起作用。
 
@@ -1907,7 +1911,7 @@ public boolean test(Task task) {
 
 ### 4.3 matchingCandidate()：记录级闸门与两级匹配
 
-[RootWindowContainer.java#L399](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L399)
+[RootWindowContainer.java#L399](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L399)
 
 ```java
 boolean matchingCandidate(TaskFragment taskFragment) {
@@ -1937,14 +1941,14 @@ boolean matchingCandidate(TaskFragment taskFragment) {
 **记录级闸门四条**，注意主语换成了「任务里最顶上的那条非 finishing 记录」：
 
 - `r == null`：任务空（或只剩 overlay/finishing 记录）——**HOME 根任务 Task 1 在开机后长期就是这个状态，任何 findTask 都匹配不到它**（1.5 节说过它是「等着装桌面的空壳」）。
-- `r.finishing`：栈顶正在收尾的记录不算数。第 8 章的 Tasks 4/5（SystemUI 空白自杀活动）就是靠这条被排除，导致第二次启动又开新任务——**与主事故机制不同的另一条「双任务」成因**。
+- `r.finishing`：栈顶正在收尾的记录不算数。第 8 章的 Tasks 4/5（SystemUI 自行结束的空白活动）就是靠这条被排除，导致第二次启动又开新任务——**与主事故机制不同的另一条「双任务」成因**。
 - `r.mUserId != userId`：记录用户再核一遍。
 - `r.launchMode == LAUNCH_SINGLE_INSTANCE`：**栈顶是 singleInstance 记录的任务不参与 findTask**——singleInstance 有自己的 `findActivity` 专线（3.4 节），两套机制互不串门。
 - **第二道类型闸**：`isCompatibleActivityType(记录类型, 请求类型)`——注意参数顺序与任务级闸相反（这里是「任务侧在前」，`test` 里是「请求侧在前」），但函数对称性只被 ASSISTANT 分支破坏，对 HOME/STANDARD/UNDEFINED 组合两边等价。
 
 闸门全过之后是意图比对，先提取任务侧的文档信息：
 
-[RootWindowContainer.java#L421](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L421)
+[RootWindowContainer.java#L421](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L421)
 
 ```java
 final Intent taskIntent = task.intent;
@@ -1968,11 +1972,11 @@ ProtoLog.d(WM_DEBUG_TASKS, "Comparing existing cls=%s /aff=%s to new cls=%s /aff
                 ? task.realActivity.flattenToShortString() : ""));
 ```
 
-顺带一个调试陷阱：这条 ProtoLog 的**格式串与实参错位**——标签说 existing cls 在前，实参却先给 `rootAffinity`、再给**新意图**的组件，最后才是任务的 `realActivity`。开着 WM_DEBUG_TASKS 抓日志对匹配过程时，别被这行的字段顺序骗了【源码事实】。
+顺带一个调试易误读点：这条 ProtoLog 的**格式串与实参错位**——标签说 existing cls 在前，实参却先给 `rootAffinity`、再给**新意图**的组件，最后才是任务的 `realActivity`。开着 WM_DEBUG_TASKS 抓日志对匹配过程时，别被这行的字段顺序误导【源码事实】。
 
 然后是三分支裁决：
 
-[RootWindowContainer.java#L441](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L441)
+[RootWindowContainer.java#L441](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L441)
 
 ```java
 // TODO Refactor to remove duplications. Check if logic can be simplified.
@@ -2010,9 +2014,9 @@ return false;
 
 - **理想解（mIdealRecord）**：任务 `realActivity`（或 affinityIntent 的组件）与请求组件**全等**，文档 data 一致。`return true` → 短路整个遍历 → findTask 立即返回。**组件相同即终局，不再看别的任务。**
 - **弱候选（mCandidateRecord）**：组件不同但 `rootAffinity` 相同（且双方都不是文档意图、且还没有任何候选）。`return false` → **遍历继续**，注释写明「同 rootAffinity 的任务可能有多个，先存下这个，继续找更好的」。弱候选的语义是「同 affinity 任务可以装下这个活动」（比如从通知点进应用的非入口活动）。
-- 弱候选还有个隐藏的一次性：`mCandidateRecord == null` 条件使**只有第一个弱候选被记住**，后续同 affinity 任务不再顶替——先来后到按栈序。
+- 弱候选还有个隐藏的一次性：`mCandidateRecord == null` 条件使**只有第一个弱候选被记住**，后续同 affinity 任务不再替换——先来后到按栈序。
 
-`rootAffinity` 的来源在 Task.setIntent（[Task.java#L1086](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1086)）：任务第一次被赋予意图时，若 `rootAffinity` 还是 null 就取该意图的 taskAffinity——**根 affinity 一经设定不再随后续 setIntent 改变**（`mNeverRelinquishIdentity` 为 true 的任务连 intent 都不换，回收站里恢复的任务身份不漂移）。
+`rootAffinity` 的来源在 Task.setIntent（[Task.java#L1086](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1086)）：任务第一次被赋予意图时，若 `rootAffinity` 还是 null 就取该意图的 taskAffinity——**根 affinity 一经设定不再随后续 setIntent 改变**（`mNeverRelinquishIdentity` 为 true 的任务连 intent 都不换，回收站里恢复的任务身份不漂移）。
 
 ### 4.4 理想解为什么不看 launchMode
 
@@ -2022,7 +2026,7 @@ return false;
 
 两道类型闸共用同一个函数：
 
-[ConfigurationContainer.java#L711](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ConfigurationContainer.java#L711)
+[ConfigurationContainer.java#L711](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ConfigurationContainer.java#L711)
 
 ```java
 public static boolean isCompatibleActivityType(int currentType, int otherType) {
@@ -2038,7 +2042,7 @@ public static boolean isCompatibleActivityType(int currentType, int otherType) {
 }
 ```
 
-类型常量（[WindowConfiguration.java#L130](../../../../AAOS13_study/frameworks/base/core/java/android/app/WindowConfiguration.java#L130)）：UNDEFINED=0、STANDARD=1、HOME=2、RECENTS=3、ASSISTANT=4、DREAM=5。把矩阵摊开：
+类型常量（[WindowConfiguration.java#L130](../../../../../AAOS13_study/frameworks/base/core/java/android/app/WindowConfiguration.java#L130)）：UNDEFINED=0、STANDARD=1、HOME=2、RECENTS=3、ASSISTANT=4、DREAM=5。把矩阵摊开：
 
 | 请求 \ 任务 | UNDEFINED | STANDARD | HOME | RECENTS | ASSISTANT | DREAM |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2049,7 +2053,7 @@ public static boolean isCompatibleActivityType(int currentType, int otherType) {
 | **ASSISTANT** | ✗* | ✗ | ✗ | ✗ | ✓ | ✗ |
 | **DREAM** | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ |
 
-\* ASSISTANT 行首格：`currentType==otherType` 先判，UNDEFINED≠ASSISTANT，再进 ASSISTANT 独占分支返回 false——助手请求连 UNDEFINED 任务都不匹配。但反过来（请求 UNDEFINED、任务 ASSISTANT）最后一行兜底返回 true，**函数在 ASSISTANT 上是不对称的**，其余类型对称。
+\* ASSISTANT 行首格：`currentType==otherType` 先判，UNDEFINED≠ASSISTANT，再进 ASSISTANT 独占分支返回 false——助手请求连 UNDEFINED 任务都不匹配。但反过来（请求 UNDEFINED、任务 ASSISTANT）最后一行默认返回 true，**函数在 ASSISTANT 上是不对称的**，其余类型对称。
 
 矩阵的要害一眼可见：
 
@@ -2081,7 +2085,7 @@ public static boolean isCompatibleActivityType(int currentType, int otherType) {
 扫 Task 1：任务级类型闸 UNDEFINED×HOME ✓ 过；记录级 `r == null`（空任务）✗ 拒。
 结果 null → `newTask=true` → 3.6 节路径 → 新建 STANDARD 根 Task 2，A 入栈，双双补成 standard。
 
-**演算二：SystemUI goLauncher 启 B（10.750）**。场上任务：Task 1（HOME 根，空）、Task 2（STANDARD，栈顶 A，type=standard 活字段见日志 122164 行）。
+**演算二：SystemUI goLauncher 启 B（10.750）**。场上任务：Task 1（HOME 根，空）、Task 2（STANDARD，栈顶 A，type=standard 实时字段见日志 122164 行）。
 请求侧：类型 **HOME**（MAIN+CATEGORY_HOME，2.5 节三关全过）、cls=MainActivity（解析回写后）、affinity 同上。
 自顶向下：Task 2 在顶（10.750 时 A 仍是焦点），任务级类型闸 **HOME×STANDARD → false**，`Skipping task: (mismatch activity/task)`【源码事实推演出的必然路径】；Task 1：类型闸 HOME×HOME ✓、voiceSession ✓、userId ✓，记录级 `r == null` ✗ 拒。
 结果 null → `newTask=true` → `resolveActivityType` 得 HOME → TDA 命中 `mRootHomeTask`=Task 1 → `alwaysCreateRootTask(fullscreen, HOME)`=false → Task 1 下新建子 **Task 3**，B 入栈，B 与 Task 3 都是 HOME。
@@ -2109,7 +2113,7 @@ public static boolean isCompatibleActivityType(int currentType, int otherType) {
 
 ## 5. 五种 launchMode 逐一推导
 
-launchMode 是 manifest 里的静态声明（`ActivityInfo` 常量：LAUNCH_MULTIPLE=0、LAUNCH_SINGLE_TOP=1、LAUNCH_SINGLE_TASK=2、LAUNCH_SINGLE_INSTANCE=3、LAUNCH_SINGLE_INSTANCE_PER_TASK=4，[ActivityInfo.java#L76](../../../../AAOS13_study/frameworks/base/core/java/android/content/pm/ActivityInfo.java#L76)）。第 3、4 章已经把公共主干讲完——**五种模式共享同一条 `startActivityInner` 流水线，分歧只发生在四个裁决点**：
+launchMode 是 manifest 里的静态声明（`ActivityInfo` 常量：LAUNCH_MULTIPLE=0、LAUNCH_SINGLE_TOP=1、LAUNCH_SINGLE_TASK=2、LAUNCH_SINGLE_INSTANCE=3、LAUNCH_SINGLE_INSTANCE_PER_TASK=4，[ActivityInfo.java#L76](../../../../../AAOS13_study/frameworks/base/core/java/android/content/pm/ActivityInfo.java#L76)）。第 3、4 章已经把公共主干讲完——**五种模式共享同一条 `startActivityInner` 流水线，分歧只发生在四个裁决点**：
 
 | 裁决点 | 位置 | 模式差异 |
 | --- | --- | --- |
@@ -2146,11 +2150,11 @@ T1[A B]    → startActivity(B)      → T1[A B B]     ← 实例不设限
                                   同意图 → reusedActivity 非空 → 什么都不做，任务前置
 ```
 
-第三行的「什么都不做」值得展开：`complyActivityFlags` 第四分支（[ActivityStarter.java#L2501](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2501)）里，同组件 + 无 singleTop 语义 + `isSameIntentFilter` 相同 + `reusedActivity == null` 不成立时，**四个出口全不命中，`mAddingToTask` 保持 false**——不压新实例、不送 onNewIntent，本次启动退化为「把既有任务搬到前台」（`setTargetRootTaskIfNeeded` 的 moveTaskToFront，返回 `START_TASK_TO_FRONT`）。standard + NEW_TASK 重复点图标的常见体验「任务弹到前面，页面还是原样」就是这条路径。
+第三行的「什么都不做」值得展开：`complyActivityFlags` 第四分支（[ActivityStarter.java#L2501](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2501)）里，同组件 + 无 singleTop 语义 + `isSameIntentFilter` 相同 + `reusedActivity == null` 不成立时，**四个出口全不命中，`mAddingToTask` 保持 false**——不压新实例、不送 onNewIntent，本次启动退化为「把既有任务搬到前台」（`setTargetRootTaskIfNeeded` 的 moveTaskToFront，返回 `START_TASK_TO_FRONT`）。standard + NEW_TASK 重复点图标的常见体验「任务弹到前面，页面还是原样」就是这条路径。
 
 **推演 3：CLEAR_TOP 打在 standard 上**。T1[A B C]，启动 B 带 CLEAR_TOP：
 
-[Task.java#L1802](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1802)
+[Task.java#L1802](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1802)
 
 ```java
 private ActivityRecord clearTopActivities(ActivityRecord newR, int launchFlags,
@@ -2179,7 +2183,7 @@ private ActivityRecord clearTopActivities(ActivityRecord newR, int launchFlags,
 }
 ```
 
-`findActivityInHistory`（[Task.java#L1934](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1934)）按「组件全等 + 同用户 + 非 finishing」找 B，`finishActivityAbove`（[Task.java#L1828](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1828)）逐个终结 B 之上的活动（C），然后**关键分支**：B 是 LAUNCH_MULTIPLE 且没带 SINGLE_TOP → **连 B 自己也 finish**（注释：normal launch mode 不期待 onNewIntent，杀旧启新）。回到 `complyActivityFlags`，`clearTop` 返回的 B 已 finishing → 走 else：`mAddingToTask = true`，压一个全新 B：
+`findActivityInHistory`（[Task.java#L1934](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1934)）按「组件全等 + 同用户 + 非 finishing」找 B，`finishActivityAbove`（[Task.java#L1828](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1828)）逐个终结 B 之上的活动（C），然后**关键分支**：B 是 LAUNCH_MULTIPLE 且没带 SINGLE_TOP → **连 B 自己也 finish**（注释：normal launch mode 不期待 onNewIntent，杀旧启新）。回到 `complyActivityFlags`，`clearTop` 返回的 B 已 finishing → 走 else：`mAddingToTask = true`，压一个全新 B：
 
 ```text
 T1[A B C]  → startActivity(B, CLEAR_TOP)  → T1[A] + 新B → T1[A B']    ← B 重建，onCreate 重走
@@ -2205,7 +2209,7 @@ T1[A C]（C 未附着进程，冷启动中） → startActivity(C) → attachedT
 
 第二行是 singleTop 最常被误解的地方：**它不是「任务里只有一个」，是「栈顶只有一个」**。A 埋在 C 下面时，再启 A 照压新实例。第三行是 `attachedToProcess()` 条件的意义：记录存在但进程没绑上时，onNewIntent 无处可送，宁可走完整启动（最终 `realStartActivityLocked` 会把 pending newIntents 一起带过去，第 6 章）。
 
-**裁决点 ④ 的 singleTop 出口**（同组件分支，[ActivityStarter.java#L2507](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2507)）与 ③ 的区别：③ 看的是**焦点根任务**的栈顶（与目标任务无关，纯前台判定），④ 看的是 **findTask/computeTargetTask 选中的目标任务**的栈顶。带 NEW_TASK 的 singleTop 启动走 ②→④ 链，普通跳转走 ③。两条路殊途同归到 `deliverNewIntent`。
+**裁决点 ④ 的 singleTop 出口**（同组件分支，[ActivityStarter.java#L2507](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java#L2507)）与 ③ 的区别：③ 看的是**焦点根任务**的栈顶（与目标任务无关，纯前台判定），④ 看的是 **findTask/computeTargetTask 选中的目标任务**的栈顶。带 NEW_TASK 的 singleTop 启动走 ②→④ 链，普通跳转走 ③。两条路殊途同归到 `deliverNewIntent`。
 
 singleTop 与 SINGLE_TOP flag 在代码里始终并列出现（`(mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0 || LAUNCH_SINGLE_TOP == mLaunchMode`）——**flag 是「本次请求要 singleTop 行为」，launchMode 是「这个活动永远是 singleTop 行为」**，静态声明等价于每次请求都带上那个 flag。
 
@@ -2213,7 +2217,7 @@ singleTop 与 SINGLE_TOP flag 在代码里始终并列出现（`(mLaunchFlags & 
 
 **四个裁决点取值**：① 强制 NEW_TASK（3.3 节第三分支）；② **免 flag 准入**——`isLaunchModeOneOf(LAUNCH_SINGLE_INSTANCE, LAUNCH_SINGLE_TASK)` 直接进查找，走 findTask；③ 不适用；④ 清栈分支（与 CLEAR_TOP 同段）。
 
-**裁决点 ④ 的执行链**（3.7 节已引代码）：`performClearTop`（[Task.java#L1773](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1773)）→ `clearTopActivities`：找到组件匹配的记录 r，终结 r 之上所有活动；**r 自己是 SINGLE_TASK 不是 LAUNCH_MULTIPLE，不触发自杀分支** → r 存活 → `deliverNewIntent(r)`。
+**裁决点 ④ 的执行链**（3.7 节已引代码）：`performClearTop`（[Task.java#L1773](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1773)）→ `clearTopActivities`：找到组件匹配的记录 r，终结 r 之上所有活动；**r 自己是 SINGLE_TASK 不是 LAUNCH_MULTIPLE，不触发自行结束分支** → r 存活 → `deliverNewIntent(r)`。
 
 **推演**：
 
@@ -2244,7 +2248,7 @@ T3[P Q]（affinity 与 B 相同，组件不同） → startActivity(B, singleTas
 
 **四个裁决点取值**：① 强制 NEW_TASK；② **不走 findTask，走 `findActivity` 全局专线**；③ 不适用；④ 清栈分支（但任务里只有它自己，清栈是空操作）。
 
-**专线查找**（[RootWindowContainer.java#L2946](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2946)）：
+**专线查找**（[RootWindowContainer.java#L2946](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2946)）：
 
 ```java
 ActivityRecord findActivity(Intent intent, ActivityInfo info, boolean compareIntentFilters) {
@@ -2284,7 +2288,7 @@ private static boolean matchesActivity(ActivityRecord r, int userId,
 与 findTask 的三处本质区别：
 
 - **找记录不找任务**：`getActivity(p)` 全容器树扫记录，按「组件全等（或意图 filterEquals）+ 同用户 + canBeTopRunning」匹配，**没有任务类型闸、没有 affinity 概念**——singleInstance 的匹配维度只剩组件本身。
-- `compareIntentFilters` 实参是 `mStartActivity.isActivityTypeHome()`（3.4 节引文）：HOME 型的 singleInstance 按完整意图过滤匹配（桌面意图形状敏感），普通 singleInstance 按组件匹配。
+- `compareIntentFilters` 实参是 `mStartActivity.isActivityTypeHome()`（3.4 节引文）：HOME 型的 singleInstance 按完整意图过滤匹配（桌面意图类别敏感），普通 singleInstance 按组件匹配。
 - 匹配即终局：找到唯一记录，其所在任务就是复用目标；`setTargetRootTaskIfNeeded` 把该任务 moveTaskToFront。
 
 **独占性的双向保证**：
@@ -2350,7 +2354,7 @@ T3[P Q]（affinity 同 B） → 启动 B
 | 实例上限 | 无 | 每栈顶一个 | 每「findTask 可见域」一个 | 每用户全局一个 | 每任务一个 |
 | 任务里能住别人吗 | 能 | 能 | 能（同 affinity 活动可同任务） | **不能**（双向排斥） | 能（它当根，上面可压别的活动） |
 
-**车机落位**【源码事实·应用树】：雅迪 Launcher 的 MainActivity、AppListActivity、LinkActivity 全部 singleTask（AppList/Link 还各带独立 taskAffinity，com.yadea.launcher.applist / com.yadea.launcher.link——按 5.3 的弱候选规则，它们不会互相串任务）；SystemUI 的 MainActivity 无声明即 standard。AAOS 原生侧，CarLauncher 的 Launcher activity 同样是 singleTask 家族（AOSP packages/apps/Car/Launcher，不在本仓，仅注明）。**车机比手机更依赖 singleTask 的原因**：仪表盘/中控多屏、语音与方控按键随时「回桌面」，桌面必须清栈复用而不是无限堆叠——但这套依赖恰好把「类型闸管辖范围」问题放大成了雅迪事故：手机桌面上很少有第二个入口用不同意图形状启动同一个 HOME 活动，车机上 SystemUI 按键、Monkey 测试、方控信号三方并发是常态。
+**车机落位**【源码事实·应用树】：雅迪 Launcher 的 MainActivity、AppListActivity、LinkActivity 全部 singleTask（AppList/Link 还各带独立 taskAffinity，com.yadea.launcher.applist / com.yadea.launcher.link——按 5.3 的弱候选规则，它们不会互相串任务）；SystemUI 的 MainActivity 无声明即 standard。AAOS 原生侧，CarLauncher 的 Launcher activity 同样是 singleTask 家族（AOSP packages/apps/Car/Launcher，不在本仓，仅注明）。**车机比手机更依赖 singleTask 的原因**：仪表盘/中控多屏、语音与方控按键随时「回桌面」，桌面必须清栈复用而不是无限堆叠——但这套依赖恰好把「类型闸管辖范围」问题放大成了雅迪事故：手机桌面上很少有第二个入口用不同意图类别启动同一个 HOME 活动，车机上 SystemUI 按键、Monkey 测试、方控信号三方并发是常态。
 
 > **Q：既然 singleInstance 才是「全局唯一」，雅迪为什么不用它做 Launcher？**
 > A：因为 singleInstance 的双向排斥（5.4 节）会把从桌面打开的所有应用全赶到别的任务，最近任务与返回栈全乱；而且它解决不了本案问题——事故根源是 **HOME 与 STANDARD 的类型不对称**，与 launchMode 无关：就算 MainActivity 是 standard，HOME 请求（B）照样看不见 A 的 STANDARD 任务（4.7 演算二的闸门在任务类型层面，先于一切 launchMode 逻辑）。真正对症的修法在第 8 章。
@@ -2359,13 +2363,13 @@ T3[P Q]（affinity 同 B） → 启动 B
 
 ## 6. 跨进程：从 resume 裁决到客户端 onCreate 与 onNewIntent
 
-第 3 章末尾，`startActivityInner` 把接力棒交给 `resumeFocusedTasksTopActivities`。从这里开始，故事跨出「裁决」进入「执行」：服务端要先暂停旧栈顶、再决定新记录是热启动（进程活着，直接发事务）还是冷启动（先拉进程），最后把 LaunchActivityItem 事务送进应用进程，客户端在主线程上顺序执行 onCreate → onNewIntent（若有 pending）→ onResume。本章走完这条链，并把三个 500ms 级超时讲清楚——事故日志里 A 卡死三秒、B 靠超时强行上位的剧情，全靠这套机制兜底。
+第 3 章末尾，`startActivityInner` 把控制权交给 `resumeFocusedTasksTopActivities`。从这里开始，流程跨出「裁决」进入「执行」：服务端要先暂停旧栈顶、再决定新记录是热启动（进程活着，直接发事务）还是冷启动（先拉进程），最后把 LaunchActivityItem 事务送进应用进程，客户端在主线程上顺序执行 onCreate → onNewIntent（若有 pending）→ onResume。本章走完这条链，并把三个 500ms 级超时讲清楚——事故日志里 A 卡死三秒、B 靠超时强行接管前台的过程，全靠这套机制保障。
 
 **跨树口径提醒**【未核实→结构差异已核实】：本章行号与方法结构以学习树为准。雅迪实机的栈帧（日志 124968 行）显示其构建里 pause/resume 状态机位于 `Task.resumeTopActivityInnerLocked`（Task.java:5047）→ `TaskFragment.resumeTopActivity`（TaskFragment.java:1483），而学习树已把这套逻辑整合进 `TaskFragment.resumeTopActivity` 单方法（无 Inner 拆分）。**方法名与行号跨树不同，控制流语义一致**；引用雅迪栈帧时以日志为准，引用代码时以学习树为准。
 
 ### 6.1 resumeFocusedTasksTopActivities：多屏各自恢复
 
-[RootWindowContainer.java#L2424](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2424)
+[RootWindowContainer.java#L2424](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/RootWindowContainer.java#L2424)
 
 ```java
 boolean resumeFocusedTasksTopActivities(
@@ -2391,7 +2395,7 @@ boolean resumeFocusedTasksTopActivities(
 
 ### 6.2 resumeTopActivity：恢复必先暂停
 
-`resumeTopActivityUncheckedLocked` 逐层下探到目标 TaskFragment 的 `resumeTopActivity`（[TaskFragment.java#L1265](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1265)）：
+`resumeTopActivityUncheckedLocked` 逐层下探到目标 TaskFragment 的 `resumeTopActivity`（[TaskFragment.java#L1265](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1265)）：
 
 ```java
 final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
@@ -2421,7 +2425,7 @@ final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
 
 第一道闸 `allPausedActivitiesComplete()`：**全局有任何活动还在 PAUSING，本轮 resume 直接放弃**（`Skip resume: some activity pausing`）。生命周期从不越级——新活动必须等旧活动的 pause 回执。放弃不是丢失：pause 完成时 `completePause` 会再次调度 resume，这是台事件驱动的状态机，不是一次性调用。
 
-往下走，若本 TaskFragment 有正在 resumed 的旧活动，进入 pause 分支（[TaskFragment.java#L1346](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1346)）：
+往下走，若本 TaskFragment 有正在 resumed 的旧活动，进入 pause 分支（[TaskFragment.java#L1346](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1346)）：
 
 ```java
 boolean pausing = !deferPause && taskDisplayArea.pauseBackTasks(next);
@@ -2458,10 +2462,10 @@ if (pausing) {
 三个细节：
 
 - `pauseBackTasks(next)`：同显示区内被 next 完全遮挡的**后台任务**的栈顶也要暂停（多任务可见性收敛），不只是本片段的前任。
-- `startPausing`（[TaskFragment.java#L1695](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1695)）打出事故日志里那条关键打印——`startPausing: taskFrag =%s mResumedActivity=%s`，日志 122164 行正是它把 Task 2 的活字段状态定格进了事故档案（第 7 章）。它内部给旧活动发 PauseActivityItem 并调用 `schedulePauseTimeout()` 上 500ms 保险（6.7 节）。
+- `startPausing`（[TaskFragment.java#L1695](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1695)）打出事故日志里那条关键打印——`startPausing: taskFrag =%s mResumedActivity=%s`，日志 122164 行正是它把 Task 2 的实时字段状态写进了事故日志（第 7 章）。它内部给旧活动发 PauseActivityItem 并调用 `schedulePauseTimeout()` 设 500ms 超时保护（6.7 节）。
 - **进程预热**：next 的进程若还没起来，`startProcessAsync` 在 pause 等待期就抢先拉进程——冷启动的进程 fork 与旧活动 pause 并行，这是启动耗时优化的经典手法（注释原话：save the time to wait for the current activity to be paused）。
 
-pause 全部完成后再次进入 `resumeTopActivity`，走到终段（[TaskFragment.java#L1626](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1626)）：
+pause 全部完成后再次进入 `resumeTopActivity`，走到终段（[TaskFragment.java#L1626](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/TaskFragment.java#L1626)）：
 
 ```java
 } else {
@@ -2479,11 +2483,11 @@ pause 全部完成后再次进入 `resumeTopActivity`，走到终段（[TaskFrag
 }
 ```
 
-`Restarting` 不等于「重来」——**首次启动也走这条**（`hasBeenLaunched` 为 false 时只是打标）；第二次及以后才补 starting window。事故日志 124687 行 `resumeTopActivity: Restarting ActivityRecord{7c61204 ...} t3` 就是 B 在这里被推上发射台。
+`Restarting` 不等于「重来」——**首次启动也走这条**（`hasBeenLaunched` 为 false 时只是打标）；第二次及以后才补 starting window。事故日志 124687 行 `resumeTopActivity: Restarting ActivityRecord{7c61204 ...} t3` 就是 B 在这里被启动。
 
 ### 6.3 startSpecificActivity：冷热分岔口
 
-[ActivityTaskSupervisor.java#L1086](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L1086)
+[ActivityTaskSupervisor.java#L1086](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L1086)
 
 ```java
 void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
@@ -2520,11 +2524,11 @@ void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkCon
 
 **热路径**：进程记录存在且 ApplicationThread 活着 → 直接 `realStartActivityLocked`。**冷路径**：`startProcessAsync` 异步走 zygote fork；进程起来后 `attachApplication` 回调再找 pending 的活动记录补 `realStartActivityLocked`（该回调链属进程启动域，本文不展开）。`andResume=true` 表示「启动完直接推到 RESUMED」；false 的场景（如 6.2 节预热失败后的补发、可见但暂停的启动）只发 Launch 不发 Resume。
 
-对照事故：A 首启（06.789 wm_restart_activity 之前）走的是**冷路径**——Launcher 进程 13306 当时还没起来，startProcessAsync 拉进程，进程 attach 后才 realStart（客户端 onCreate 08.675，日志 114573 行，进程拉起耗时约 1.9s【日志事实】）。B 启动（11.395）走的是**热路径**——同包同进程，13306 已活着，`realStartActivityLocked` 立即执行。**A、B 共享一个进程，这个事实是第 8 章「一损俱损」剧情的物理基础。**
+对照事故：A 首启（06.789 wm_restart_activity 之前）走的是**冷路径**——Launcher 进程 13306 当时还没起来，startProcessAsync 拉进程，进程 attach 后才 realStart（客户端 onCreate 08.675，日志 114573 行，进程拉起耗时约 1.9s【日志事实】）。B 启动（11.395）走的是**热路径**——同包同进程，13306 已活着，`realStartActivityLocked` 立即执行。**A、B 共享一个进程，这个事实是第 8 章「一损俱损」现象的物理基础。**
 
 ### 6.4 realStartActivityLocked：组装跨进程事务
 
-[ActivityTaskSupervisor.java#L801](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L801)
+[ActivityTaskSupervisor.java#L801](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L801)
 
 ```java
 boolean realStartActivityLocked(ActivityRecord r, WindowProcessController proc,
@@ -2542,7 +2546,7 @@ boolean realStartActivityLocked(ActivityRecord r, WindowProcessController proc,
     ...
 ```
 
-pause 闸门在这里**再查一遍**——从 resumeTopActivity 到这里可能隔着进程启动的几百毫秒，期间状态可能变化。然后是事务组装的主体（[ActivityTaskSupervisor.java#L893](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L893) 起）：
+pause 闸门在这里**再查一遍**——从 resumeTopActivity 到这里可能隔着进程启动的几百毫秒，期间状态可能变化。然后是事务组装的主体（[ActivityTaskSupervisor.java#L893](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L893) 起）：
 
 ```java
 List<ResultInfo> results = null;
@@ -2594,15 +2598,15 @@ mService.getLifecycleManager().scheduleTransaction(clientTransaction);
 四个要点：
 
 1. **`wm_restart_activity` 事件在此打出**，第二个字段又是 `System.identityHashCode(r)`——事故里用它区分 A（236566844）与 B（130421252）的每一次真启动（日志 107845、124951 行）。
-2. **pending newIntents 只在 `andResume` 时随 Launch 事务带过去**。3.7 节 `deliverNewIntentLocked` 存下的「账」（活动没起来时 newIntents 暂存），在这里结算；`andResume=false` 时继续欠着——注释给了理由：马上要 pause 的活动没必要现在送意图。
+2. **pending newIntents 只在 `andResume` 时随 Launch 事务带过去**。3.7 节 `deliverNewIntentLocked` 暂存的 newIntents（活动没起来时先存下），在这里随 Launch 事务送出；`andResume=false` 时继续暂存——注释给了理由：马上要 pause 的活动没必要现在送意图。
 3. **ClientTransaction = callbacks + 目标状态**：LaunchActivityItem 是 callback（干活），ResumeActivityItem/PauseActivityItem 是 lifecycle state request（声明终态）。客户端事务引擎执行完 callbacks 后，把活动状态机推进到声明的终态——**一次 IPC 携带「创建 + 恢复到顶」两步**，这是 A10 以来 ClientTransaction 机制替代旧式 scheduleLaunchActivity/scheduleResumeActivity 分散调用的核心收益。
-4. `LaunchActivityItem.obtain` 的第二个参数 `System.identityHashCode(r)` 就是 **ident**：服务端记录的对象哈希随事务过江，成为客户端 `Activity.mIdent`（6.5 节）——服务端事件日志与客户端事件日志靠它对上号。
+4. `LaunchActivityItem.obtain` 的第二个参数 `System.identityHashCode(r)` 就是 **ident**：服务端记录的对象哈希随事务跨进程传递，成为客户端 `Activity.mIdent`（6.5 节）——服务端事件日志与客户端事件日志靠它对上号。
 
-失败兜底（[ActivityTaskSupervisor.java#L991](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L991)）：RemoteException 第一次 → `launchFailed=true`、detach、重抛让上层重拉进程；**第二次 → `Second failure launching ..., giving up`，进程按 `2nd-crash` 处理，记录 finish**——启动失败不给第三次机会。
+失败回退（[ActivityTaskSupervisor.java#L991](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L991)）：RemoteException 第一次 → `launchFailed=true`、detach、重抛让上层重拉进程；**第二次 → `Second failure launching ..., giving up`，进程按 `2nd-crash` 处理，记录 finish**——启动失败不给第三次机会。
 
 ### 6.5 客户端执行：LaunchActivityItem → onCreate
 
-事务到达应用进程后由 ActivityThread 的事务引擎在**主线程**顺序执行。LaunchActivityItem 的 execute（[LaunchActivityItem.java#L100](../../../../AAOS13_study/frameworks/base/core/java/android/app/servertransaction/LaunchActivityItem.java#L100)）：
+事务到达应用进程后由 ActivityThread 的事务引擎在**主线程**顺序执行。LaunchActivityItem 的 execute（[LaunchActivityItem.java#L100](../../../../../AAOS13_study/frameworks/base/core/java/android/app/servertransaction/LaunchActivityItem.java#L100)）：
 
 ```java
 @Override
@@ -2619,7 +2623,7 @@ public void execute(ClientTransactionHandler client, IBinder token,
 }
 ```
 
-`mIdent`、`mPendingNewIntents` 原样装进客户端的 `ActivityClientRecord`（进程内的活动档案，与服务端 ActivityRecord 一一对应，token 为键）。`handleLaunchActivity` → `performLaunchActivity`（[ActivityThread.java#L3933](../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L3933)）：
+`mIdent`、`mPendingNewIntents` 原样装进客户端的 `ActivityClientRecord`（进程内的活动记录，与服务端 ActivityRecord 一一对应，token 为键）。`handleLaunchActivity` → `performLaunchActivity`（[ActivityThread.java#L3933](../../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L3933)）：
 
 ```java
 private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
@@ -2667,10 +2671,10 @@ private Activity performLaunchActivity(ActivityClientRecord r, Intent customInte
             ...
 ```
 
-- `newActivity`：ClassLoader 反射实例化——**Activity 对象诞生的一行**。
+- `newActivity`：ClassLoader 反射实例化——**Activity 对象创建的一行**。
 - `makeApplicationInner`：Application 未建则此刻建（`Application.onCreate` 先于一切 `Activity.onCreate` 的保证点）；已建则复用。**B 启动时 Launcher 进程和 Application 都已在（A 建的），这一步是纯复用**——双实例并存时两个 Activity 共享同一个 Application 单例，`onCreate` 不会再走第二次。
-- `activity.attach(..., r.token, r.ident, ...)`：token 与 **ident** 注入 Activity 本体（[Activity.java#L8893](../../../../AAOS13_study/frameworks/base/core/java/android/app/Activity.java#L8893)，`mIdent = ident`）。
-- `callActivityOnCreate` → `performCreate`（[Activity.java#L8977](../../../../AAOS13_study/frameworks/base/core/java/android/app/Activity.java#L8977)）：
+- `activity.attach(..., r.token, r.ident, ...)`：token 与 **ident** 注入 Activity 本体（[Activity.java#L8893](../../../../../AAOS13_study/frameworks/base/core/java/android/app/Activity.java#L8893)，`mIdent = ident`）。
+- `callActivityOnCreate` → `performCreate`（[Activity.java#L8977](../../../../../AAOS13_study/frameworks/base/core/java/android/app/Activity.java#L8977)）：
 
 ```java
 final void performCreate(Bundle icicle, PersistableBundle persistentState) {
@@ -2685,11 +2689,11 @@ final void performCreate(Bundle icicle, PersistableBundle persistentState) {
     ...
 ```
 
-**`wm_on_create_called` 的第一个字段就是 mIdent**——身份链闭环：服务端 `System.identityHashCode(ActivityRecord)` → LaunchActivityItem.mIdent → Activity.mIdent → 客户端事件日志。事故日志 114573 行 `wm_on_create_called: [236566844,...]`（A）与 128585 行 `[130421252,...]`（B）由此可以直接对号入座，不需要任何猜测【日志事实 + 源码事实互证】。顺带：`236566844 = 0xE19B93C`、`130421252 = 0x7C61204`，正是服务端记录打印 `ActivityRecord{e19b93c ...}`、`ActivityRecord{7c61204 ...}` 的十六进制哈希——十进制/十六进制同值互证，两条日志线拧成一股。
+**`wm_on_create_called` 的第一个字段就是 mIdent**——身份链闭环：服务端 `System.identityHashCode(ActivityRecord)` → LaunchActivityItem.mIdent → Activity.mIdent → 客户端事件日志。事故日志 114573 行 `wm_on_create_called: [236566844,...]`（A）与 128585 行 `[130421252,...]`（B）由此可以直接对号入座，不需要任何猜测【日志事实 + 源码事实互证】。顺带：`236566844 = 0xE19B93C`、`130421252 = 0x7C61204`，正是服务端记录打印 `ActivityRecord{e19b93c ...}`、`ActivityRecord{7c61204 ...}` 的十六进制哈希——十进制/十六进制同值互证，两条日志线由此对应。
 
 ### 6.6 onNewIntent 的两条送达路径与顺序保证
 
-**路径一：pending 随 Launch/Resume 结算**（冷启动或延迟交付场景）。resume 事务在客户端落到 `handleResumeActivity`（ActivityThread.java:5346），其内转调 `performResumeActivity`（[ActivityThread.java#L5266](../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L5266)）：
+**路径一：pending 随 Launch/Resume 事务送出**（冷启动或延迟交付场景）。resume 事务在客户端落到 `handleResumeActivity`（ActivityThread.java:5346），其内转调 `performResumeActivity`（[ActivityThread.java#L5266](../../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L5266)）：
 
 ```java
 try {
@@ -2708,9 +2712,9 @@ try {
     ...
 ```
 
-**顺序是硬的：pendingIntents 在 performResume 之前**——应用侧感知为「先 onNewIntent 后 onResume」，onResume 里读到的意图状态一定是最新的。`deliverNewIntents`（[ActivityThread.java#L4250](../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L4250)）逐个 `callActivityOnNewIntent`。
+**顺序是硬的：pendingIntents 在 performResume 之前**——应用侧感知为「先 onNewIntent 后 onResume」，onResume 里读到的意图状态一定是最新的。`deliverNewIntents`（[ActivityThread.java#L4250](../../../../../AAOS13_study/frameworks/base/core/java/android/app/ActivityThread.java#L4250)）逐个 `callActivityOnNewIntent`。
 
-**路径二：NewIntentItem 即时投递**（活动已在 RESUMED/PAUSED 且进程附着，3.7 节 `scheduleNewIntent` 分支）。客户端 [NewIntentItem.java#L62](../../../../AAOS13_study/frameworks/base/core/java/android/app/servertransaction/NewIntentItem.java#L62)：
+**路径二：NewIntentItem 即时投递**（活动已在 RESUMED/PAUSED 且进程附着，3.7 节 `scheduleNewIntent` 分支）。客户端 [NewIntentItem.java#L62](../../../../../AAOS13_study/frameworks/base/core/java/android/app/servertransaction/NewIntentItem.java#L62)：
 
 ```java
 @Override
@@ -2726,9 +2730,9 @@ public void execute(ClientTransactionHandler client, ActivityClientRecord r,
 
 ### 6.7 三个 500ms：服务端不被慢客户端拖死
 
-服务端状态机的推进依赖客户端回执（pause 完成、top-resumed 释放），但客户端可能卡死。三道保险：
+服务端状态机的推进依赖客户端回执（pause 完成、top-resumed 释放），但客户端可能卡死。三道超时保护：
 
-**PAUSE_TIMEOUT = 500ms**（[ActivityRecord.java#L429](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L429)）：
+**PAUSE_TIMEOUT = 500ms**（[ActivityRecord.java#L429](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L429)）：
 
 ```java
 // How long we wait until giving up on the last activity to pause.  This
@@ -2737,7 +2741,7 @@ public void execute(ClientTransactionHandler client, ActivityClientRecord r,
 private static final int PAUSE_TIMEOUT = 500;
 ```
 
-`startPausing` 发出 PauseActivityItem 后 `schedulePauseTimeout()`（[ActivityRecord.java#L6543](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L6543)）挂表；超时进 `mPauseTimeoutRunnable`（[ActivityRecord.java#L960](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L960)）：
+`startPausing` 发出 PauseActivityItem 后 `schedulePauseTimeout()`（[ActivityRecord.java#L6543](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L6543)）挂表；超时进 `mPauseTimeoutRunnable`（[ActivityRecord.java#L960](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L960)）：
 
 ```java
 private final Runnable mPauseTimeoutRunnable = new Runnable() {
@@ -2757,9 +2761,9 @@ private final Runnable mPauseTimeoutRunnable = new Runnable() {
 };
 ```
 
-`Activity pause timeout for ...` + `logAppTooSlow`（打出 ANR 风格的完整进程状态转储）+ **`activityPaused(true)` 强行替客户端签收 pause**——服务端状态机继续走，客户端欠的账之后自己还（迟到的 activityPaused 回执幂等处理）。事故日志 124681 行（11.298）`Activity pause timeout for ActivityRecord{e19b93c ... t2}` 就是这条：A 的进程主线程卡住没回 pause，500ms 后服务端替它签收，B 才得以在 11.299 进入 Restarting（124687 行）【日志事实与源码逐字对应】。
+`Activity pause timeout for ...` + `logAppTooSlow`（打出 ANR 风格的完整进程状态转储）+ **`activityPaused(true)` 强行替客户端签收 pause**——服务端状态机继续走，客户端积压的事务之后自行补处理（迟到的 activityPaused 回执幂等处理）。事故日志 124681 行（11.298）`Activity pause timeout for ActivityRecord{e19b93c ... t2}` 就是这条：A 的进程主线程卡住没回 pause，500ms 后服务端替它签收，B 才得以在 11.299 进入 Restarting（124687 行）【日志事实与源码逐字对应】。
 
-**TOP_RESUMED_STATE_LOSS_TIMEOUT = 500ms**（[ActivityTaskSupervisor.java#L187](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L187)）：multi-resume 环境里「谁是全局栈顶」是独占资源，旧栈顶要回执「我已释放 top-resumed 状态」；超时进 `TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG`（[ActivityTaskSupervisor.java#L2638](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L2638)）：
+**TOP_RESUMED_STATE_LOSS_TIMEOUT = 500ms**（[ActivityTaskSupervisor.java#L187](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L187)）：multi-resume 环境里「谁是全局栈顶」是独占资源，旧栈顶要回执「我已释放 top-resumed 状态」；超时进 `TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG`（[ActivityTaskSupervisor.java#L2638](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L2638)）：
 
 ```java
 case TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG: {
@@ -2773,15 +2777,15 @@ case TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG: {
 } break;
 ```
 
-同样套路：告警 + 替客户端签收。事故日志 124614 行（11.283）先于 pause timeout 15ms 打出 `Activity top resumed state loss timeout for ActivityRecord{e19b93c ... t2}`——A 连 top-resumed 释放都没回执，主线程卡死实锤【日志事实】。
+同样模式：告警 + 替客户端签收。事故日志 124614 行（11.283）先于 pause timeout 15ms 打出 `Activity top resumed state loss timeout for ActivityRecord{e19b93c ... t2}`——A 连 top-resumed 释放都没回执，主线程卡死实锤【日志事实】。
 
-**LAUNCH_TIMEOUT = 10s×HW_TIMEOUT_MULTIPLIER**（[ActivityTaskSupervisor.java#L184](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L184)）：启动整体超时，超了走 ANR 流程。事故里 B 从事务下发（11.395）到客户端 onCreate（14.167）耗时 2.77s，没碰到这道 10s 线，所以没有 ANR，只有两条 500ms 告警和一份 logAppTooSlow 转储。
+**LAUNCH_TIMEOUT = 10s×HW_TIMEOUT_MULTIPLIER**（[ActivityTaskSupervisor.java#L184](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityTaskSupervisor.java#L184)）：启动整体超时，超了走 ANR 流程。事故里 B 从事务下发（11.395）到客户端 onCreate（14.167）耗时 2.77s，没碰到这道 10s 线，所以没有 ANR，只有两条 500ms 告警和一份 logAppTooSlow 转储。
 
-三道保险的共同哲学：**服务端状态机永远前进，客户端回执只是加速器不是许可**——慢客户端得到的是告警与代签，不是全局停摆。代价是状态短暂撕裂：11.298–14.105 之间，服务端认为 A 已 paused、B 已 restart，而客户端 A 还自认 resumed——直到主线程解卡，把积压的事务与回调按序清偿（14.105 A top-lost/paused → 14.167 B create → 14.185 B top-gained → 14.188 A stop，日志 128467–128668 行，全部同 pid 13306【日志事实】）。这段「服务端超前、客户端追账」的窗口，就是第 8 章时间线上最诡异的 2.8 秒。
+三道超时保护的共同原则：**服务端状态机永远前进，客户端回执只是加速因素不是许可**——慢客户端得到的是告警与代签，不是全局停滞。代价是状态短暂不一致：11.298–14.105 之间，服务端认为 A 已 paused、B 已 restart，而客户端 A 还自认 resumed——直到主线程恢复，把积压的事务与回调按序处理（14.105 A top-lost/paused → 14.167 B create → 14.185 B top-gained → 14.188 A stop，日志 128467–128668 行，全部同 pid 13306【日志事实】）。这段「服务端超前、客户端补处理」的窗口，就是第 8 章时间线上最异常的 2.8 秒。
 
-### 6.8 completeResumeLocked：账本核销
+### 6.8 completeResumeLocked：清空 pending 队列
 
-B 的 ResumeActivityItem 执行完、客户端回执 activityResumed 后，服务端 `completeResumeLocked`（[ActivityRecord.java#L6456](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L6456)）：
+B 的 ResumeActivityItem 执行完、客户端回执 activityResumed 后，服务端 `completeResumeLocked`（[ActivityRecord.java#L6456](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java#L6456)）：
 
 ```java
 void completeResumeLocked() {
@@ -2802,24 +2806,24 @@ void completeResumeLocked() {
     ...
 ```
 
-`results`/`newIntents` 两个 pending 账本**无条件核销**（置 null）——不管之前送没送出去，resume 完成即视为结清；最后一个 newIntent 留档到 `mLastNewIntent`（dumpsys 可见）。HOME 记录额外触发 `updateHomeProcess`：把桌面进程登记为 home 进程（oom_adj 待遇、`mHomeProcess` 语义），B 是 HOME 类型所以走这行，A 不走——**同一进程因两条记录类型不同，被登记了两次身份**，这是双实例并存在进程管理层面的余波。
+`results`/`newIntents` 两个 pending 队列**无条件清空**（置 null）——不管之前送没送出去，resume 完成即视为已处理；最后一个 newIntent 保存到 `mLastNewIntent`（dumpsys 可见）。HOME 记录额外触发 `updateHomeProcess`：把桌面进程登记为 home 进程（oom_adj 待遇、`mHomeProcess` 语义），B 是 HOME 类型所以走这行，A 不走——**同一进程因两条记录类型不同，被登记了两次身份**，这是双实例并存在进程管理层面的后续影响。
 
 ### 6.9 本章小结
 
-- 链路：resumeFocusedTasksTopActivities → resumeTopActivity（pause 闸 → startPausing → Restarting）→ startSpecificActivity（冷热分岔）→ realStartActivityLocked（ClientTransaction：LaunchActivityItem + Resume/PauseActivityItem，ident 过江）→ 客户端 performLaunchActivity（newActivity → attach(mIdent) → onCreate → wm_on_create_called）→ performResumeActivity（pendingIntents 先于 performResume）。
-- onNewIntent 两条路：pending 随 Launch 结算（andResume 时），或 NewIntentItem 即时投递。
+- 链路：resumeFocusedTasksTopActivities → resumeTopActivity（pause 闸 → startPausing → Restarting）→ startSpecificActivity（冷热分岔）→ realStartActivityLocked（ClientTransaction：LaunchActivityItem + Resume/PauseActivityItem，ident 跨进程传递）→ 客户端 performLaunchActivity（newActivity → attach(mIdent) → onCreate → wm_on_create_called）→ performResumeActivity（pendingIntents 先于 performResume）。
+- onNewIntent 两条路：pending 随 Launch 事务送出（andResume 时），或 NewIntentItem 即时投递。
 - 三个超时（pause 500ms、top-resumed-loss 500ms、launch 10s）保证服务端状态机独立于客户端推进；事故里 A 卡死三秒的窗口全靠它们撑过去。
-- ident 是跨进程、跨日志域追踪同一条记录的钥匙：服务端十六进制、事件日志十进制、客户端 mIdent，同值三面。
+- ident 是跨进程、跨日志域追踪同一条记录的标识：服务端十六进制、事件日志十进制、客户端 mIdent，同值三面。
 
 ---
 
-## 7. Task 日志怎么读：stringName 缓存与活字段
+## 7. Task 日志怎么读：stringName 缓存与实时字段
 
 第 8 章要逐行读事故日志，而日志里密度最高的证据就是 `Task{...}` 打印。这类打印**一半是陈年缓存、一半是实时状态**，不分清就会把「type=undefined」当成现行事实——交接文档里最初的误判正源于此。先把两棵树的 toString 实现摆开对照。
 
 ### 7.1 学习树：整体缓存，只在 setIntent 时作废
 
-[Task.java#L4001](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L4001)
+[Task.java#L4001](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L4001)
 
 ```java
 @Override
@@ -2846,12 +2850,12 @@ public String toString() {
 }
 ```
 
-- **第一次被打印时整串定格**，之后永远返回缓存。
-- 全树唯一的作废点是 `setIntent`（[Task.java#L1094](../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1094)，`stringName = null`）——任务换意图（如 CLEAR_TASK 复用、别名切换）时重建。
+- **第一次被打印时整串固定**，之后永远返回缓存。
+- 全树唯一的作废点是 `setIntent`（[Task.java#L1094](../../../../../AAOS13_study/frameworks/base/services/core/java/com/android/server/wm/Task.java#L1094)，`stringName = null`）——任务换意图（如 CLEAR_TASK 复用、别名切换）时重建。
 - **`setActivityType` 不作废缓存**（WindowConfiguration.setActivityType 只改 `mActivityType` 字段，Task 层没有钩子）：任务类型从 UNDEFINED 变成 STANDARD/HOME 之后，**缓存里的 `type=` 保持旧值**。
 - 学习树的短格式到 `}` 为止：没有 U=、rootTaskId=、visible=、sz= 这些字段——**拿学习树格式知识去读雅迪日志会缺半边信息**，反之亦然。
 
-### 7.2 雅迪树：缓存前缀 + 活字段后缀
+### 7.2 雅迪树：缓存前缀 + 实时后缀
 
 雅迪实机的 toString（yadi 树 Task.java:3725，路径 /home/liang/Project/Reachauto/YaDi/yadi_android/frameworks/base/services/core/java/com/android/server/wm/Task.java）：
 
@@ -2893,15 +2897,15 @@ public String toString() {
 
 | 段 | 内容 | 时效 |
 | --- | --- | --- |
-| 缓存前缀（stringName） | `Task{对象哈希 #taskId type=活动类型 A=affinity`（或 I=/aI=） | **首次打印时定格**，仅 setIntent 作废（yadi 树 Task.java:1020） |
-| 活后缀 | `U=用户 rootTaskId=根任务id（仅当自己不是根） visible= visibleRequested= mode= translucent= sz=直接子节点数}` | **每次打印实时计算** |
+| 缓存前缀（stringName） | `Task{对象哈希 #taskId type=活动类型 A=affinity`（或 I=/aI=） | **首次打印时固定**，仅 setIntent 作废（yadi 树 Task.java:1020） |
+| 实时后缀 | `U=用户 rootTaskId=根任务id（仅当自己不是根） visible= visibleRequested= mode= translucent= sz=直接子节点数}` | **每次打印实时计算** |
 
 由此得到四条铁律，第 8 章逐条要用：
 
-1. **`type=` 与 `A=` 可能是陈旧的**；`U=`、`rootTaskId=`、`visible=`、`sz=` 永远新鲜。
+1. **`type=` 与 `A=` 可能是陈旧的**；`U=`、`rootTaskId=`、`visible=`、`sz=` 永远实时。
 2. **没有 `rootTaskId=` 字段 = 自己就是根任务**（`rootTask != this` 才打印该字段）。
 3. `sz=` 是**直接子节点数**：根任务下挂子任务时 sz=子任务数；叶任务 sz=活动数。
-4. 对象哈希（`Task{b0651be` 的 b0651be）是 `System.identityHashCode` 十六进制——**跨打印锁定同一个 Task 对象**的钥匙，与 taskId 独立（taskId 会复用给新对象，哈希不会）。
+4. 对象哈希（`Task{b0651be` 的 b0651be）是 `System.identityHashCode` 十六进制——**跨打印锁定同一个 Task 对象**的标识，与 taskId 独立（taskId 会复用给新对象，哈希不会）。
 
 ### 7.3 一条自相矛盾的日志：wm_task_created [3,-1] 与 rootTaskId=1
 
@@ -2916,24 +2920,24 @@ public String toString() {
 EventLogTags.writeWmTaskCreated(mTaskId, isRootTask() ? INVALID_TASK_ID : getRootTaskId());
 ```
 
-构造时刻任务**还没 attach 到父容器**（Builder.build 里 attach 发生在构造之后，yadi 树 Task.java:6670-6678），`isRootTask()` 为 true（没有父就是根）→ 第二字段恒为 **-1**。所以雅迪树上**每一个** `wm_task_created` 都是 `[N,-1]`，它只可靠地告诉你「任务 N 出生了」，**不携带父子关系**；父子关系要看活后缀的 `rootTaskId=`。对照 1.5 节：Task 1 出生时 `[1,-1]`（102865 行）是真根，语义碰巧一致；Task 3 的 `[3,-1]` 则是构造时序的产物【源码事实·雅迪树，与日志互证】。
+构造时刻任务**还没 attach 到父容器**（Builder.build 里 attach 发生在构造之后，yadi 树 Task.java:6670-6678），`isRootTask()` 为 true（没有父就是根）→ 第二字段恒为 **-1**。所以雅迪树上**每一个** `wm_task_created` 都是 `[N,-1]`，它只可靠地告诉你「任务 N 创建了」，**不携带父子关系**；父子关系要看实时后缀的 `rootTaskId=`。对照 1.5 节：Task 1 创建时 `[1,-1]`（102865 行）是真根，语义碰巧一致；Task 3 的 `[3,-1]` 则是构造时序的产物【源码事实·雅迪树，与日志互证】。
 
-### 7.4 type=undefined 的活化石：Task 3 的陈旧前缀
+### 7.4 type=undefined 的陈旧缓存：Task 3 的陈旧前缀
 
-再看 141787 行本身。此刻是 19.055，B（HOME 记录）已在 Task 3 里住了 8 秒多——按 2.7 节，`onDescendantActivityAdded` 在 B 入栈瞬间（10.784）就把 Task 3 的类型设成了 HOME。**为什么打印还是 `type=undefined`？**
+再看 141787 行本身。此刻是 19.055，B（HOME 记录）已在 Task 3 里存在了 8 秒多——按 2.7 节，`onDescendantActivityAdded` 在 B 入栈瞬间（10.784）就把 Task 3 的类型设成了 HOME。**为什么打印还是 `type=undefined`？**
 
 时序还原【源码事实推演】：
 
 1. 10.761 Task 3 构造，type=UNDEFINED，affinity 未设。
 2. Builder.setIntent / setIntent 装配意图：affinity=`1000:com.yadea.launcher`，同时 `stringName = null`（作废，yadi 树 Task.java:1020）。
-3. attach 到 Task 1 之下、moveToFront 等操作触发**第一次 toString**：缓存前缀定格为 `Task{73dd4b3 #3 type=undefined A=1000:com.yadea.launcher`——此刻 B 还没 addChild，类型还是 UNDEFINED。
+3. attach 到 Task 1 之下、moveToFront 等操作触发**第一次 toString**：缓存前缀固定为 `Task{73dd4b3 #3 type=undefined A=1000:com.yadea.launcher`——此刻 B 还没 addChild，类型还是 UNDEFINED。
 4. 10.784 B addChild → `onDescendantActivityAdded` → `setActivityType(HOME)`——**不作废 stringName**（7.1 节第三条）。
-5. 此后每一次打印：陈旧前缀（type=undefined）+ 活后缀（rootTaskId=1、sz=1）。141787、151003、177539、197060 行的四份「undefined 化石」全部如此。
+5. 此后每一次打印：陈旧前缀（type=undefined）+ 实时后缀（rootTaskId=1、sz=1）。141787、151003、177539、197060 行的四份「undefined 陈旧前缀」全部如此。
 
-对照组：Task 2 在 122164 行（10.796）打印 `Task{b0651be #2 type=standard A=1000:com.yadea.launcher U=0 visible=true visibleRequested=true mode=fullscreen translucent=false sz=1}`——**type=standard 是新鲜的**，因为 Task 2 的首次 toString 发生在 A 入栈（06.361，类型补成 standard）之后。同一份日志里，一个任务打印真类型、另一个打印出生类型，差别只在**首次被打印的时刻**【源码事实 + 日志事实互证】。
+对照组：Task 2 在 122164 行（10.796）打印 `Task{b0651be #2 type=standard A=1000:com.yadea.launcher U=0 visible=true visibleRequested=true mode=fullscreen translucent=false sz=1}`——**type=standard 是实时的**，因为 Task 2 的首次 toString 发生在 A 入栈（06.361，类型补成 standard）之后。同一份日志里，一个任务打印真类型、另一个打印创建类型，差别只在**首次被打印的时刻**【源码事实 + 日志事实互证】。
 
 > **Q：怎么从日志判断一行 `type=` 是新是旧？**
-> A：单行判不了，要交叉验证：(a) 找该任务更早的打印，若 type= 从未变过且任务里明显住过活动，多半是化石；(b) 用事件日志锚定入栈时刻（wm_create_activity 的 TaskId 字段）与首次 Task 打印时刻的先后；(c) 终极手段 `dumpsys activity activities`——dump 路径不走 toString 缓存，类型字段实时。事故分析里我们对 Task 3 用的就是 (a)+(b)。
+> A：单行判不了，要交叉验证：(a) 找该任务更早的打印，若 type= 从未变过且任务里明显容纳过活动，多半是陈旧前缀；(b) 用事件日志定位入栈时刻（wm_create_activity 的 TaskId 字段）与首次 Task 打印时刻的先后；(c) 终极手段 `dumpsys activity activities`——dump 路径不走 toString 缓存，类型字段实时。事故分析里我们对 Task 3 用的就是 (a)+(b)。
 
 ### 7.5 ActivityRecord 打印与 ident 对照
 
@@ -2954,13 +2958,13 @@ EventLogTags.writeWmTaskCreated(mTaskId, isRootTask() ? INVALID_TASK_ID : getRoo
 wm_new_intent: [0,130421252,3,com.yadea.launcher/.function.main.view.MainActivity,MAIN,NULL,NULL,270532608]
 ```
 
-依次是：User=0、Token=130421252（**B**）、TaskId=3、组件、Action=MAIN、MIME=NULL、URI=NULL、Flags=270532608。270532608 十进制 = **0x10200000** = NEW_TASK|RESET_TASK_IF_NEEDED——**Monkey 的意图 flag 出现在了 B 的交付事件里**：这一行同时证明「请求来自 Monkey 形状（flag 是 Monkey 的）」与「收件人是 B（Token/TaskId 是 B 的）」，是 4.7 演算三的直接物证。
+依次是：User=0、Token=130421252（**B**）、TaskId=3、组件、Action=MAIN、MIME=NULL、URI=NULL、Flags=270532608。270532608 十进制 = **0x10200000** = NEW_TASK|RESET_TASK_IF_NEEDED——**Monkey 的意图 flag 出现在了 B 的交付事件里**：这一行同时证明「请求来自 Monkey 类别（flag 是 Monkey 的）」与「收件人是 B（Token/TaskId 是 B 的）」，是 4.7 演算三的直接物证。
 
 ```text
 wm_create_activity: [0,130421252,3,com.yadea.launcher/.function.main.view.MainActivity,MAIN,NULL,NULL,268435456]
 ```
 
-268435456 = **0x10000000** = 仅 NEW_TASK——SystemUI `goLauncher` 的 flag 形状（Kotlin 源码 `addFlags(FLAG_ACTIVITY_NEW_TASK)`，1.7 节）。**同一组件的两条创建事件，flag 字段直接暴露了两个不同发起方的意图形状**，无需依赖 START 行。
+268435456 = **0x10000000** = 仅 NEW_TASK——SystemUI `goLauncher` 的 flag 组合（Kotlin 源码 `addFlags(FLAG_ACTIVITY_NEW_TASK)`，1.7 节）。**同一组件的两条创建事件，flag 字段直接暴露了两个不同发起方的意图类别**，无需依赖 START 行。
 
 ---
 
@@ -2968,11 +2972,11 @@ wm_create_activity: [0,130421252,3,com.yadea.launcher/.function.main.view.MainAc
 
 材料齐了，现在把 2026-11-03 凌晨那份 logcat（/home/liang/Downloads/log/logcat_2026_11_03_05_43_01_557-103.txt）从头到尾走一遍。所有行号、时间戳、字段值均直接摘自该文件【日志事实】；每一步的机制解释回指前文章节【源码事实/推演】；无法从材料确认的单独标注【未核实】。
 
-### 8.0 事故画像
+### 8.0 事故概览
 
 **现象**：车机运行中 Launcher 出现两个 MainActivity 实例并存（任务 2 与任务 3 各一个，同一进程 13306），桌面行为异常（Monkey 的点击意图被送进了 SystemUI 拉起的实例）。
 
-**一句话根因**：同一 activityType 敏感匹配器（第 4 章）对「HOME 形状请求」与「LAUNCHER 形状请求」的可见性不对称——**HOME 请求看不见 STANDARD 任务，UNDEFINED 请求看得见一切**。SystemUI 的 HOME 意图（B）与 Monkey 的 LAUNCHER 意图（A）指向同一个 singleTask 活动，却在匹配器眼里属于两个世界。
+**一句话根因**：同一 activityType 敏感匹配器（第 4 章）对「HOME 类别请求」与「LAUNCHER 类别请求」的可见性不对称——**HOME 请求看不见 STANDARD 任务，UNDEFINED 请求看得见一切**。SystemUI 的 HOME 意图（B）与 Monkey 的 LAUNCHER 意图（A）指向同一个 singleTask 活动，却在匹配器眼里属于互不相见的两类。
 
 ### 8.1 时间线总表
 
@@ -2982,23 +2986,23 @@ wm_create_activity: [0,130421252,3,com.yadea.launcher/.function.main.view.MainAc
 | 05:43:53.323 | 92984 | init 向 zygote（pid 418）发 signal 9 | 8.2 |
 | 05:43:53.636 | 93149/93150 | zygote 收到/转发信号 | 8.2 |
 | 05:43:53.659 | 92019 | SurfaceFlinger（pid 671）SIGABRT | 8.2 |
-| 05:44:03.755 | 102865 | 新 server（pid 12877）：wm_task_created [1,-1]，HOME 根任务 Task 1 出生 | 1.5 |
+| 05:44:03.755 | 102865 | 新 server（pid 12877）：wm_task_created [1,-1]，HOME 根任务 Task 1 创建 | 1.5 |
 | 05:44:06.310 | 106587 | START A：MAIN+LAUNCHER，flg=0x10200000，uid 0 pid 13116（Monkey） | 8.4 |
-| 05:44:06.331 | 106655 | wm_task_created [2,-1]：STANDARD 根任务 Task 2 出生 | 3.6 |
+| 05:44:06.331 | 106655 | wm_task_created [2,-1]：STANDARD 根任务 Task 2 创建 | 3.6 |
 | 05:44:06.361 | 106753/4 | wm_create_task [0,2]；wm_create_activity A（Token 236566844，flg 270532608） | 3.8 |
 | 05:44:06.789 | 107845 | wm_restart_activity A（冷启动，进程拉起中） | 6.4 |
-| 05:44:08.675-08.712 | 114573-114654 | A 客户端 create/start/resume/topResumedGained（pid 13306 出生） | 6.5 |
+| 05:44:08.675-08.712 | 114573-114654 | A 客户端 create/start/resume/topResumedGained（pid 13306 创建） | 6.5 |
 | 05:44:09.305 | 116823 | Monkey 第 2 次 START（同 A 意图） | 8.5 |
 | 05:44:09.324 | 116896 | wm_new_intent → A（Token 236566844，Task 2） | 4.7 |
 | 05:44:09.369-09.378 | 117070-117137 | A 客户端 top-lost/paused/resumed（onNewIntent 周期） | 6.6 |
 | 05:44:10.746 | 122035 | DigitalKeyManager：handleWakeUpSignal wakeType=0x2 | 1.7 |
 | 05:44:10.747 | 122037 | goLauncher:::# 第 1 次 | 1.7 |
 | 05:44:10.750 | 122044 | START B：MAIN+HOME，flg=0x10000000，uid 1000 pid 13232 | 8.6 |
-| 05:44:10.761 | 122064 | wm_task_created [3,-1]：Task 3 出生于 Task 1 之下 | 3.6/7.3 |
+| 05:44:10.761 | 122064 | wm_task_created [3,-1]：Task 3 创建于 Task 1 之下 | 3.6/7.3 |
 | 05:44:10.784 | 122131/2 | wm_create_task [0,3]；wm_create_activity B（Token 130421252，flg 268435456） | 3.8 |
-| 05:44:10.796 | 122164 | startPausing 打印：Task 2 type=standard（活字段，无 rootTaskId → 根） | 7.4 |
+| 05:44:10.796 | 122164 | startPausing 打印：Task 2 type=standard（实时字段，无 rootTaskId → 根） | 7.4 |
 | 05:44:10.801 | 122182/3 | wakeType 第 2 次 + goLauncher 第 2 次 | 8.6 |
-| 05:44:10.817 | 122238 | START（HOME 形状第 2 发） | 8.6 |
+| 05:44:10.817 | 122238 | START（HOME 类别第 2 发） | 8.6 |
 | 05:44:10.823 | 122251 | wm_new_intent → B | 4.3 |
 | 05:44:10.833 | 122298/9 | PlatformNotifierImpl goLauncher 第 3 次 | 8.6 |
 | 05:44:10.834 | 122304 | START（第 3 发） | 8.6 |
@@ -3026,15 +3030,15 @@ wm_create_activity: [0,130421252,3,com.yadea.launcher/.function.main.view.MainAc
 
 - init 为什么杀 zygote（看门狗？主动重启策略？上游崩溃连锁？）——日志片段内无直接答案。
 - zygote 被杀（53.323）**先于** SF 崩溃（53.659）336ms；交接材料中另有一次 SF buffer 失败与 zygote SIGKILL 仅差 18ms 的记录。**时序上不能断言「SF 崩溃导致 zygote 死亡」**，反向（zygote 死导致 SF 失去缓冲供应而 abort）同样说得通。本文只把「双双重启」当作既定前提，不裁决第一因。
-- 旧 server 时代的 Task 2（83001 行，`Task{af7f4b9 #2 type=undefined ... rootTaskId=1 sz=1}`）说明：**正常启动的拓扑里，Launcher 任务本来就是 HOME 根任务 Task 1 的子任务**（rootTaskId=1）——这正是 systemReady 走 AOSP HOME 链（1.1 节）的产物：HOME 意图 → HOME 类型 → 子任务挂 Task 1。事故后 A 所在的 Task 2 是**平级 STANDARD 根任务**，拓扑形态已经变了。旧打印里 type=undefined 同样是 7.4 节的化石现象（首次打印早于类型补写），不代表正常态任务真无类型。
+- 旧 server 时代的 Task 2（83001 行，`Task{af7f4b9 #2 type=undefined ... rootTaskId=1 sz=1}`）说明：**正常启动的拓扑里，Launcher 任务本来就是 HOME 根任务 Task 1 的子任务**（rootTaskId=1）——这正是 systemReady 走 AOSP HOME 链（1.1 节）的产物：HOME 意图 → HOME 类型 → 子任务挂 Task 1。事故后 A 所在的 Task 2 是**平级 STANDARD 根任务**，拓扑形态已经变了。旧打印里 type=undefined 同样是 7.4 节的陈旧前缀现象（首次打印早于类型补写），不代表正常态任务真无类型。
 
-### 8.3 新 server 起步：Task 1 出生，但没有系统 HOME 启动（03.755）
+### 8.3 新 server 起步：Task 1 创建，但没有系统 HOME 启动（03.755）
 
 102865 行（05:44:03.755，线程 12877）：`wm_task_created: [1,-1]`——WMS 初始化 `RWC.setWindowManager` 建出 HOME 根任务 Task 1（1.5 节）。**此后直到 10.750，日志里没有任何 HOME 启动**：没有 systemReady 的 `START u0 {act=MAIN cat=[HOME] ...}`，没有 wm_create_activity。
 
-原因在雅迪树的 systemReady（1.1 节已引，yadi 树 ActivityManagerService.java:8335-8343）：AOSP 的 `mAtmInternal.startHomeOnAllDisplays` 调用被**注释禁用**，注释原话「Don't call onUserStarting here. UserController will call onUserStarting when start user0」——HOME 启动被改道 UserController 的用户启动链。**而本次只有 system_server 重启、没有用户切换/重启，UserController 链路不触发**【推演，与日志中 HOME 启动缺位互证】。于是出现一个 6 秒的窗口（03.755–10.750）：**Task 1 空着，桌面上没有任何 HOME 活动**，第一个 HOME 请求要等外部发起方。这个窗口是事故的温床：若 AOSP 链路在场，B 会在 Monkey 之前就以 HOME 类型入住 Task 1，后续 Monkey 的 UNDEFINED 请求会理想匹配到它（演算三逻辑），A 根本不会以 STANDARD 根任务形态出生。
+原因在雅迪树的 systemReady（1.1 节已引，yadi 树 ActivityManagerService.java:8335-8343）：AOSP 的 `mAtmInternal.startHomeOnAllDisplays` 调用被**注释禁用**，注释原话「Don't call onUserStarting here. UserController will call onUserStarting when start user0」——HOME 启动被转入 UserController 的用户启动链。**而本次只有 system_server 重启、没有用户切换/重启，UserController 链路不触发**【推演，与日志中 HOME 启动缺位互证】。于是出现一个 6 秒的窗口（03.755–10.750）：**Task 1 空着，桌面上没有任何 HOME 活动**，第一个 HOME 请求要等外部发起方。这个窗口是事故的诱因：若 AOSP 链路在场，B 会在 Monkey 之前就以 HOME 类型入栈 Task 1，后续 Monkey 的 UNDEFINED 请求会理想匹配到它（演算三逻辑），A 根本不会以 STANDARD 根任务形态创建。
 
-### 8.4 Monkey 启动 A：一条 STANDARD 根任务的诞生（06.310–08.712）
+### 8.4 Monkey 启动 A：一条 STANDARD 根任务的创建（06.310–08.712）
 
 106587 行：
 
@@ -3042,17 +3046,17 @@ wm_create_activity: [0,130421252,3,com.yadea.launcher/.function.main.view.MainAc
 START u0 {act=MAIN cat=[LAUNCHER] flg=0x10200000 cmp=com.yadea.launcher/.function.main.view.MainActivity} from uid 0, pid 13116
 ```
 
-发起方 uid 0（root）pid 13116——Monkey【日志事实；Monkey 进程身份为推演，依据 uid 0 + LAUNCHER 类别 + 重复启动模式】。意图形状 MAIN+LAUNCHER：`isHomeIntent` 第二关不过（2.5 节）→ A 的记录类型 **UNDEFINED**（核心结论一）。
+发起方 uid 0（root）pid 13116——Monkey【日志事实；Monkey 进程身份为推演，依据 uid 0 + LAUNCHER 类别 + 重复启动模式】。意图类别 MAIN+LAUNCHER：`isHomeIntent` 第二关不过（2.5 节）→ A 的记录类型 **UNDEFINED**（核心结论一）。
 
-裁决链（4.7 演算一）：findTask 无匹配（Task 1 空）→ `newTask=true` → `resolveActivityType` UNDEFINED→STANDARD 兜底（3.6.1）→ `alwaysCreateRootTask(fullscreen, STANDARD)`=true（3.6.2）→ **新建 STANDARD 根 Task 2** → `canReuseAsLeafTask` 通过 → `reuseAsLeafTask` 根转正叶（3.6.3）→ A addChild → `onDescendantActivityAdded`：A 补成 STANDARD，Task 2 类型=standard（2.7 节）。
+裁决链（4.7 演算一）：findTask 无匹配（Task 1 空）→ `newTask=true` → `resolveActivityType` UNDEFINED→STANDARD 回退（3.6.1）→ `alwaysCreateRootTask(fullscreen, STANDARD)`=true（3.6.2）→ **新建 STANDARD 根 Task 2** → `canReuseAsLeafTask` 通过 → `reuseAsLeafTask` 根转正叶（3.6.3）→ A addChild → `onDescendantActivityAdded`：A 补成 STANDARD，Task 2 类型=standard（2.7 节）。
 
-日志锚点逐一落位：106655 `wm_task_created [2,-1]`（构造即事件，7.3 节）；106753 `wm_create_task [0,2]`（用户 0 任务 2，3.8 节）；106754 `wm_create_activity [0,236566844,2,...,270532608]`（A 的 Token 首次亮相）；107845 `wm_restart_activity`（06.789，冷启动——Launcher 进程此前不存在，startProcessAsync 拉进程，6.3 节）；114573–114654（08.675–08.712）客户端四连：`wm_on_create_called [236566844,...]`、on_start、on_resume、top_resumed_gained，pid 13306——**进程 13306 出生，A 上车**。从 START 到 onCreate 约 2.37s，其中进程拉起占大头【日志事实】。
+日志对应点逐一确认：106655 `wm_task_created [2,-1]`（构造即事件，7.3 节）；106753 `wm_create_task [0,2]`（用户 0 任务 2，3.8 节）；106754 `wm_create_activity [0,236566844,2,...,270532608]`（A 的 Token 首次出现）；107845 `wm_restart_activity`（06.789，冷启动——Launcher 进程此前不存在，startProcessAsync 拉进程，6.3 节）；114573–114654（08.675–08.712）客户端四连：`wm_on_create_called [236566844,...]`、on_start、on_resume、top_resumed_gained，pid 13306——**进程 13306 创建，A 入栈**。从 START 到 onCreate 约 2.37s，其中进程拉起占大头【日志事实】。
 
 ### 8.5 Monkey 第 2 次：规矩的复用（09.305–09.378）
 
-116823 行同形状 START；116896 行 `wm_new_intent [0,236566844,2,...]`——findTask 理想解命中 Task 2 的 A（UNDEFINED×STANDARD 兼容，cls 全等，4.6 节流水线）→ `complyActivityFlags` singleTask 清栈分支（A 之上无活动，空转）→ `deliverNewIntent`（3.7 节）。客户端 117070–117137：top-lost → paused → resumed，onNewIntent 周期。**这一轮一切正常**——同形状请求的世界没有类型裂缝。
+116823 行同类别 START；116896 行 `wm_new_intent [0,236566844,2,...]`——findTask 理想解命中 Task 2 的 A（UNDEFINED×STANDARD 兼容，cls 全等，4.6 节流水线）→ `complyActivityFlags` singleTask 清栈分支（A 之上无活动，空转）→ `deliverNewIntent`（3.7 节）。客户端 117070–117137：top-lost → paused → resumed，onNewIntent 周期。**这一轮一切正常**——同类别请求的世界没有类型隔阂。
 
-### 8.6 唤醒信号与 B 的诞生：裂缝张开（10.746–10.837）
+### 8.6 唤醒信号与 B 的创建：类型隔阂出现（10.746–10.837）
 
 122035 行 `handleWakeUpSignal: wakeType=0x2`（DigitalKeyManager.kt:241，WAKE_UP_SHOW_LAUNCHER=0x02 → hideKeyguardIfShowing → goLauncher()，1.7 节）；122037 `goLauncher:::#`；122038 ContextImpl 警告附带调用栈（ActivityStarter.goLauncher:91 ← DigitalKeyManager.goLauncher:541 ← handleWakeUpSignal:271）——**发起方身份三连证**【日志事实】。
 
@@ -3062,15 +3066,15 @@ START u0 {act=MAIN cat=[LAUNCHER] flg=0x10200000 cmp=com.yadea.launcher/.functio
 START u0 {act=MAIN cat=[HOME] flg=0x10000000 cmp=com.yadea.launcher/.function.main.view.MainActivity} from uid 1000, pid 13232
 ```
 
-HOME 形状、uid 1000（SystemUI）、隐式意图（cmp= 是解析回写，2.2 节）。裁决链（4.7 演算二）：B 的记录类型 **HOME**（2.5 节三关全过）→ findTask：Task 2 任务级类型闸 **HOME×STANDARD=false** 直接跳过，Task 1 空任务记录级闸拒 → **null** → newTask → `resolveActivityType`=HOME → TDA 命中 `mRootHomeTask`=Task 1 → `alwaysCreateRootTask(fullscreen, HOME)`=false → Task 1 下**新建子 Task 3**（122064/122131/122132 行）→ B addChild，B 与 Task 3 均 HOME。
+HOME 类别、uid 1000（SystemUI）、隐式意图（cmp= 是解析回写，2.2 节）。裁决链（4.7 演算二）：B 的记录类型 **HOME**（2.5 节三关全过）→ findTask：Task 2 任务级类型闸 **HOME×STANDARD=false** 直接跳过，Task 1 空任务记录级闸拒 → **null** → newTask → `resolveActivityType`=HOME → TDA 命中 `mRootHomeTask`=Task 1 → `alwaysCreateRootTask(fullscreen, HOME)`=false → Task 1 下**新建子 Task 3**（122064/122131/122132 行）→ B addChild，B 与 Task 3 均 HOME。
 
-122164 行 startPausing 打印 Task 2 `type=standard`（新鲜缓存，7.4 节对照组）——A 被暂停，B 上位中。
+122164 行 startPausing 打印 Task 2 `type=standard`（实时缓存，7.4 节对照组）——A 被暂停，B 接管前台中。
 
-接着 91ms 内两发重复 HOME 请求：122182/122238/122251（wake 第 2 次 → goLauncher → wm_new_intent **→ B**）与 122298/122304/122309（PlatformNotifierImpl 第 3 次 → wm_new_intent **→ B**）。此时 findTask 的 HOME 请求**能**看见 Task 3（HOME×HOME 兼容、cls 全等、理想解）——**重复 HOME 请求规矩地复用了 B**。发起方三处（DigitalKeyManager 两次、PlatformNotifier 一次）各自为政地「确保桌面在前台」，91ms 三发【日志事实；三方为何并发触发为未核实】。裂缝不在这里——这里一切符合设计；裂缝在下一节。
+接着 91ms 内两发重复 HOME 请求：122182/122238/122251（wake 第 2 次 → goLauncher → wm_new_intent **→ B**）与 122298/122304/122309（PlatformNotifierImpl 第 3 次 → wm_new_intent **→ B**）。此时 findTask 的 HOME 请求**能**看见 Task 3（HOME×HOME 兼容、cls 全等、理想解）——**重复 HOME 请求正常复用了 B**。发起方三处（DigitalKeyManager 两次、PlatformNotifier 一次）各自独立地「确保桌面在前台」，91ms 三发【日志事实；三方为何并发触发为未核实】。类型隔阂不在这里——这里一切符合设计；类型隔阂在下一节。
 
-### 8.7 Monkey 第 3 次：意图送错门 + A 卡死（11.193–11.415）
+### 8.7 Monkey 第 3 次：意图投递错配 + A 卡死（11.193–11.415）
 
-123748 行 Monkey 第 3 次 START（uid 0 pid 13116，LAUNCHER 形状，flag 0x10200000）。此刻任务树：Task 3（HOME，B，随 Task 1 在顶）压着 Task 2（STANDARD，A，PAUSING 中）。
+123748 行 Monkey 第 3 次 START（uid 0 pid 13116，LAUNCHER 类别，flag 0x10200000）。此刻任务树：Task 3（HOME，B，随 Task 1 在顶）压着 Task 2（STANDARD，A，PAUSING 中）。
 
 裁决链（4.7 演算三，全文最关键的一次匹配）：新记录类型 **UNDEFINED** → findTask 自顶向下：Task 3 任务级闸 UNDEFINED×HOME ✓ → 记录级闸（B 非 finishing、同用户、非 singleInstance、HOME×UNDEFINED ✓）→ cls 全等 → **理想解 = B，短路，Task 2 根本没被扫到** → `complyActivityFlags` singleTask 清栈分支 → `deliverNewIntent(B)`。
 
@@ -3078,19 +3082,19 @@ HOME 形状、uid 1000（SystemUI）、隐式意图（cmp= 是解析回写，2.2
 
 同一时刻，A 的进程 13306 主线程已经卡死（123081 行 10.968 `Window freeze timeout expired` 是先兆——转场冻结窗口等不到重绘【日志事实；卡死的具体原因未核实，logAppTooSlow 转储在 124968 行附近，含进程线程状态可供深挖】）：
 
-- 11.283（124614）：`Activity top resumed state loss timeout for ActivityRecord{e19b93c ... t2}`——A 连 top-resumed 释放都不回执（6.7 节第一道保险，从 ~10.78 起算 500ms）。
-- 11.298（124681）：`Activity pause timeout for ActivityRecord{e19b93c ... t2}`——第二道保险触发，`activityPaused(true)` 代签。
+- 11.283（124614）：`Activity top resumed state loss timeout for ActivityRecord{e19b93c ... t2}`——A 连 top-resumed 释放都不回执（6.7 节第一道超时保护，从 ~10.78 起算 500ms）。
+- 11.298（124681）：`Activity pause timeout for ActivityRecord{e19b93c ... t2}`——第二道超时保护触发，`activityPaused(true)` 代签。
 - 11.299（124687）：`resumeTopActivity: Restarting ActivityRecord{7c61204 ...} t3`——pause 闸放行，B 进入发射程序（6.2 节）。
 - 11.395（124951）：`wm_restart_activity [0,130421252,3,...]`——热路径（13306 活着，6.3 节），LaunchActivityItem+ResumeActivityItem 事务发往 13306。
 - 11.415（124968）：logAppTooSlow 转储打出雅迪实机栈帧 `Task.resumeTopActivityInnerLocked:5047 → TaskFragment.resumeTopActivity:1483 → startSpecificActivity:1043 → realStartActivityLocked:976 → minimalResumeActivityLocked:4795`——**实机构建的方法布局与学习树不同、控制流语义一致**（第 6 章开头跨树口径的实物证据）。
 
 事务发出去了，但 13306 的主线程还在卡着——B 的 LaunchActivityItem 排在积压队列里等。
 
-### 8.8 客户端清账：双实例并存实锤（14.105–14.188）
+### 8.8 客户端积压处理：双实例并存实锤（14.105–14.188）
 
-主线程解卡后 83ms 内按序清偿（全部 pid 13306【日志事实】）：
+主线程恢复后 83ms 内按序处理（全部 pid 13306【日志事实】）：
 
-- 14.105/14.110（128467/128482）：A 客户端 `wm_on_top_resumed_lost_called`、`wm_on_paused_called`——迟到 3.3 秒的回执，服务端早已代签（6.7 节「状态撕裂窗口」闭合）。
+- 14.105/14.110（128467/128482）：A 客户端 `wm_on_top_resumed_lost_called`、`wm_on_paused_called`——迟到 3.3 秒的回执，服务端早已代签（6.7 节「状态不一致窗口」闭合）。
 - 14.167–14.185（128585/128592/128643/128655）：B 客户端 `wm_on_create_called [130421252,...]` → on_start → on_resume → top_resumed_gained——**第二个 MainActivity 实例在同一个进程里走完 onCreate**（6.5 节：Application 复用，`makeApplicationInner` 不再新建）。
 - 14.188（128668）：A `wm_on_stop_called`。
 
@@ -3104,50 +3108,50 @@ HOME 形状、uid 1000（SystemUI）、隐式意图（cmp= 是解析回写，2.2
 
 - 141764/5：`wm_create_activity [0,63378520,4,...]`；141840 restart；142011（19.173）`wm_finish_activity ... app-request`——**应用自己请求 finish**；142071 客户端 create；142177 `wm_destroy_activity ... finish-imm:idle`；142309 客户端 destroy。Task 5 同型（151115/151162/151264/151283）。
 
-SystemUI 的 MainActivity 是 standard（应用源码 SystemUI AndroidManifest.xml:218-222，无 launchMode 声明【源码事实·应用树】）的**空白自杀活动**：create 后约 70ms 自行 finish（用途按行为推测是触发某个前台流程的跳板，具体业务逻辑未核实）。第二次启动时 findTask 的记录级闸 `r.finishing` 拒掉收尾中的候选（4.3 节）→ 又开新任务。**这是「finishing 任务不可复用」的正常行为，与主事故的类型不对称无关**——把它并进根因会污染结论，交接文档特意单列，本文维持。
+SystemUI 的 MainActivity 是 standard（应用源码 SystemUI AndroidManifest.xml:218-222，无 launchMode 声明【源码事实·应用树】）的**自行结束的空白活动**：create 后约 70ms 自行 finish（用途按行为推测是触发某个前台流程的跳板，具体业务逻辑未核实）。第二次启动时 findTask 的记录级闸 `r.finishing` 拒掉收尾中的候选（4.3 节）→ 又开新任务。**这是「finishing 任务不可复用」的正常行为，与主事故的类型不对称无关**——把它并进根因会污染结论，交接文档特意单列，本文维持。
 
 ### 8.10 根因链与反事实推演
 
 **五环因果链**（每环独立成立，缺一环事故形态即变）：
 
-1. **温床**：雅迪禁用 systemReady HOME 链 + 仅 server 重启不触发 UserController 链 → 6 秒 HOME 真空期（8.3）。
-2. **抢跑**：真空期内 Monkey 以 LAUNCHER 形状启动桌面 → A 以 STANDARD 根任务形态出生，偏离正常拓扑（正常态是 Task 1 的 HOME 子任务，8.2 对照）（8.4）。
-3. **裂缝**：SystemUI 以 HOME 形状启动同一活动 → findTask 类型闸 HOME×STANDARD=false → 看不见 A → B 在 Task 1 下另立门户（8.6）。
-4. **错位**：Monkey 再启动（UNDEFINED 形状）→ 泛匹配 + z 序优先 → 理想解命中 B → 意图送错门（8.7）。
-5. **固化**：A 进程主线程卡死 → 三道超时代签 → B 上位、A 带伤存活（onStop 不销毁）→ 双实例长期并存（8.7/8.8）。
+1. **诱因**：雅迪禁用 systemReady HOME 链 + 仅 server 重启不触发 UserController 链 → 6 秒 HOME 真空期（8.3）。
+2. **提前启动**：真空期内 Monkey 以 LAUNCHER 类别启动桌面 → A 以 STANDARD 根任务形态创建，偏离正常拓扑（正常态是 Task 1 的 HOME 子任务，8.2 对照）（8.4）。
+3. **类型隔阂**：SystemUI 以 HOME 类别启动同一活动 → findTask 类型闸 HOME×STANDARD=false → 看不见 A → B 在 Task 1 下另建任务（8.6）。
+4. **投递错配**：Monkey 再启动（UNDEFINED 类别）→ 泛匹配 + z 序优先 → 理想解命中 B → 意图投递错配（8.7）。
+5. **固化**：A 进程主线程卡死 → 三道超时代签 → B 接管前台、A 卡死但仍存活（onStop 不销毁）→ 双实例长期并存（8.7/8.8）。
 
 **反事实推演**（每问只改一个变量，其余同事故现场；结论均为源码推演）：
 
-- **若 Monkey 也用 HOME 意图**（`am start -a android.intent.action.MAIN -c android.intent.category.HOME`）：A 出生即 HOME 类型、入住 Task 1 子任务；B 请求 HOME×HOME 兼容 → 理想解命中 A → wm_new_intent 给 A。**无双实例。**
-- **若 SystemUI goLauncher 改用 LAUNCHER 类别**（与 Monkey 同形状）：B 的记录类型 UNDEFINED → findTask 看得见 Task 2（UNDEFINED×STANDARD ✓，cls 全等）→ 理想解 A → wm_new_intent 给 A。**无双实例**（但 HOME 语义丢失，不推荐，见 8.11）。
-- **若 systemReady HOME 链未被注释**：开机即有 HOME 实例入住 Task 1；server 重启后是否重建取决于重启路径（本例重启原因未核实），即便重建也在 Monkey 之前 → Monkey 的 UNDEFINED 请求理想匹配 HOME 任务 → 单实例。**温床消失。**
-- **若 MainActivity 是 standard 而非 singleTask**：第 3 环不变（类型闸先于一切 launchMode 逻辑，4.5/5.6 节）——**照样双实例**，且第 4 环更糟：standard 无清栈分支，重复启动会无限压新实例。**换 launchMode 治不了这个病。**
-- **若 A 进程不卡死**：双实例拓扑依旧（第 3 环已定案），但 A 能正常 pause/stop，B 正常上位；A 仍收不到后续意图（演算三的 z 序逻辑不变）。卡死只影响第 5 环的烈度，不影响事故成立。
+- **若 Monkey 也用 HOME 意图**（`am start -a android.intent.action.MAIN -c android.intent.category.HOME`）：A 创建即 HOME 类型、入栈 Task 1 子任务；B 请求 HOME×HOME 兼容 → 理想解命中 A → wm_new_intent 给 A。**无双实例。**
+- **若 SystemUI goLauncher 改用 LAUNCHER 类别**（与 Monkey 同类别）：B 的记录类型 UNDEFINED → findTask 看得见 Task 2（UNDEFINED×STANDARD ✓，cls 全等）→ 理想解 A → wm_new_intent 给 A。**无双实例**（但 HOME 语义丢失，不推荐，见 8.11）。
+- **若 systemReady HOME 链未被注释**：开机即有 HOME 实例入栈 Task 1；server 重启后是否重建取决于重启路径（本例重启原因未核实），即便重建也在 Monkey 之前 → Monkey 的 UNDEFINED 请求理想匹配 HOME 任务 → 单实例。**诱因消失。**
+- **若 MainActivity 是 standard 而非 singleTask**：第 3 环不变（类型闸先于一切 launchMode 逻辑，4.5/5.6 节）——**照样双实例**，且第 4 环更糟：standard 无清栈分支，重复启动会无限压新实例。**换 launchMode 解决不了这个问题。**
+- **若 A 进程不卡死**：双实例拓扑依旧（第 3 环已定案），但 A 能正常 pause/stop，B 正常接管前台；A 仍收不到后续意图（演算三的 z 序逻辑不变）。卡死只影响第 5 环的严重程度，不影响事故成立。
 
 ### 8.11 修复选项与验证清单
 
 按侵入度从小到大：
 
-1. **应用侧自防御（推荐首选）**：MainActivity.onCreate 加单实例守卫——`if (!isTaskRoot()) { finish(); return; }` 的变体不够（B 是 Task 3 的根），应改为**检测自身 activityType/任务类型或既有实例**：例如 onCreate 里通过 ActivityManager 查同组件任务数，发现更老的同类任务则 finish 自己并移交意图。优点：不动框架、不依赖发起方自律；缺点：治标，第 4 环的意图错位仍会短暂发生。
-2. **发起方统一意图形状（治本方向之一）**：约定所有「回桌面」入口（SystemUI goLauncher、PlatformNotifier、语音、方控）统一用 HOME 形状（现状已如此），并**约束测试与三方工具**：Monkey 的 LAUNCHER 形状是本次的抢跑者——量产环境无 Monkey，但任何以 LAUNCHER 类别启动桌面的调试脚本/三方 App 都会复现第 2 环。可在 Launcher 内对「非 HOME 形状且任务类型非 HOME」的启动请求做归一（收到后主动 finish 并转发 HOME 意图）。
+1. **应用侧自防御（推荐首选）**：MainActivity.onCreate 加单实例守卫——`if (!isTaskRoot()) { finish(); return; }` 的变体不够（B 是 Task 3 的根），应改为**检测自身 activityType/任务类型或既有实例**：例如 onCreate 里通过 ActivityManager 查同组件任务数，发现更老的同类任务则 finish 自己并移交意图。优点：不动框架、不依赖发起方自律；缺点：治标，第 4 环的意图投递错配仍会短暂发生。
+2. **发起方统一意图类别（治本方向之一）**：约定所有「回桌面」入口（SystemUI goLauncher、PlatformNotifier、语音、方控）统一用 HOME 类别（现状已如此），并**约束测试与三方工具**：Monkey 的 LAUNCHER 类别是本次的提前启动者——量产环境无 Monkey，但任何以 LAUNCHER 类别启动桌面的调试脚本/三方 App 都会复现第 2 环。可在 Launcher 内对「非 HOME 类别且任务类型非 HOME」的启动请求做归一（收到后主动 finish 并转发 HOME 意图）。
 3. **框架侧恢复系统 HOME 链（治本方向之二）**：评估恢复 systemReady/UserController 在 server 重启场景的 HOME 启动（雅迪注释掉它必有原因——多用户时序，需与 UserController 团队核对【未核实】），消除 HOME 真空期。改动面大，须回归多用户/多屏用例。
 4. **不推荐**：改 MainActivity 的 launchMode（8.10 反事实四已证无效）；给 goLauncher 加 component（componentSpecified 在单次启动路径恒 false，2.6 节，加了也不改变类型认定）。
 
 **验证清单**（修复后按序打点）：
 
-- 复现路径：`kill $(pidof zygote)`（或等价的 server 重启手段）→ 静待 6s → 以 LAUNCHER 形状启动桌面 → 以 HOME 形状启动桌面。
+- 复现路径：`kill $(pidof zygote)`（或等价的 server 重启手段）→ 静待 6s → 以 LAUNCHER 类别启动桌面 → 以 HOME 类别启动桌面。
 - 观测点一：`wm_create_task` 事件数——修复后第二轮 HOME 请求**不应**产生新任务 id。
 - 观测点二：`wm_new_intent` 的 Token 字段——HOME 请求应命中第一个实例的 Token（对照 wm_create_activity 的 Token）。
 - 观测点三：`dumpsys activity activities`——同组件任务数恒为 1，且类型为 home（dump 不走 toString 缓存，7.4 节）。
 - 观测点四：客户端 `wm_on_create_called` 同 ident 只出现一次。
 
-### 8.12 事实分级总账
+### 8.12 事实分级汇总
 
 **【日志事实】**（行号见 8.1 总表）：zygote/SF/system_server 重启时序；Task 1/2/3/4/5 的创建事件与打印；A/B 的 Token 恒定与十进制-十六进制互证；三发 goLauncher 的调用栈；Monkey 第 3 次意图落在 B（123770）；两条 500ms 超时与 Restarting/wm_restart_activity 时序；客户端 14.105–14.188 的同 pid 事件序列（并存实锤）；Tasks 4/5 的 app-request 自 finish；雅迪实机栈帧（124968）。
 
-**【源码事实】**（学习树行号为准，雅迪树/应用树单独注明）：HOME 类型认定三关与 isHomeIntent 形状判据；componentSpecified 在单次启动路径恒 false；STANDARD 延迟定型（onDescendantActivityAdded 注释原文）；isCompatibleActivityType 矩阵与 findTask 双级类型闸；alwaysCreateRootTask/reuseAsLeafTask 的根叶结构；三道超时与代签机制；ident 跨进程链；两棵树 toString 缓存策略差异；雅迪 systemReady HOME 链注释禁用；应用 manifest 的 launchMode 与 intent-filter 声明。
+**【源码事实】**（学习树行号为准，雅迪树/应用树单独注明）：HOME 类型认定三关与 isHomeIntent 类别判据；componentSpecified 在单次启动路径恒 false；STANDARD 延迟定型（onDescendantActivityAdded 注释原文）；isCompatibleActivityType 矩阵与 findTask 双级类型闸；alwaysCreateRootTask/reuseAsLeafTask 的根叶结构；三道超时与代签机制；ident 跨进程链；两棵树 toString 缓存策略差异；雅迪 systemReady HOME 链注释禁用；应用 manifest 的 launchMode 与 intent-filter 声明。
 
-**【推演】**（源码事实代入日志时序的必然结论）：演算一/二/三的全部分叉走向；Task 3 type=undefined 化石的成因时序；HOME 真空期的成因（注释 + 重启路径不触发 UserController）；五环因果链。
+**【推演】**（源码事实代入日志时序的必然结论）：演算一/二/三的全部分叉走向；Task 3 type=undefined 陈旧前缀的成因时序；HOME 真空期的成因（注释 + 重启路径不触发 UserController）；五环因果链。
 
 **【未核实】**：init 杀 zygote 的第一因；zygote 之死与 SF 崩溃的因果方向；**雅迪源码树（HEAD 8302534c）与事故构建 476 的对应关系**——本文所有「雅迪树」引用以当前检出为准，若构建 476 后有过 wm 相关提交，个别行号可能漂移（机制层结论经日志实物交叉验证，风险集中在行号而非逻辑）；13306 主线程卡死 3.3s 的具体原因（logAppTooSlow 转储可深挖）；三处发起方 91ms 内并发的业务动机；SystemUI 空白 MainActivity 的业务用途。
 
@@ -3191,9 +3195,9 @@ SystemUI 的 MainActivity 是 standard（应用源码 SystemUI AndroidManifest.x
 
 ## 附录 B：常量与词汇表
 
-**activityType**（[WindowConfiguration.java#L130](../../../../AAOS13_study/frameworks/base/core/java/android/app/WindowConfiguration.java#L130)）：UNDEFINED=0、STANDARD=1、HOME=2、RECENTS=3、ASSISTANT=4、DREAM=5。
+**activityType**（[WindowConfiguration.java#L130](../../../../../AAOS13_study/frameworks/base/core/java/android/app/WindowConfiguration.java#L130)）：UNDEFINED=0、STANDARD=1、HOME=2、RECENTS=3、ASSISTANT=4、DREAM=5。
 
-**launchMode**（[ActivityInfo.java#L76](../../../../AAOS13_study/frameworks/base/core/java/android/content/pm/ActivityInfo.java#L76)）：LAUNCH_MULTIPLE=0（standard）、LAUNCH_SINGLE_TOP=1、LAUNCH_SINGLE_TASK=2、LAUNCH_SINGLE_INSTANCE=3、LAUNCH_SINGLE_INSTANCE_PER_TASK=4。
+**launchMode**（[ActivityInfo.java#L76](../../../../../AAOS13_study/frameworks/base/core/java/android/content/pm/ActivityInfo.java#L76)）：LAUNCH_MULTIPLE=0（standard）、LAUNCH_SINGLE_TOP=1、LAUNCH_SINGLE_TASK=2、LAUNCH_SINGLE_INSTANCE=3、LAUNCH_SINGLE_INSTANCE_PER_TASK=4。
 
 **本文涉及的 Intent flag**：NEW_TASK=0x10000000、SINGLE_TOP=0x20000000、CLEAR_TOP=0x04000000、RESET_TASK_IF_NEEDED=0x00200000、MULTIPLE_TASK=0x08000000、NEW_DOCUMENT=0x00080000、LAUNCH_ADJACENT=0x00001000、TASK_ON_HOME=0x00004000、BROUGHT_TO_FRONT=0x00400000。事故中的 0x10200000 = NEW_TASK|RESET_TASK_IF_NEEDED（Monkey/图标点击的标准组合）；0x10000000 = 仅 NEW_TASK（goLauncher）。
 
@@ -3209,9 +3213,9 @@ SystemUI 的 MainActivity 是 standard（应用源码 SystemUI AndroidManifest.x
 | 类型闸 | findTask 任务级与记录级的 isCompatibleActivityType 检查；HOME×STANDARD 互斥、UNDEFINED 泛兼容 | 4.2/4.5 节 |
 | 延迟定型 | STANDARD 类型不在 ActivityRecord 构造时设置，拖到入栈（onDescendantActivityAdded）才补写 | 2.7 节 |
 | 根转正叶 | alwaysCreateRootTask 新建的根任务经 canReuseAsLeafTask/reuseAsLeafTask 直接充当叶任务 | 3.6.3 节 |
-| ident | System.identityHashCode(ActivityRecord)，随 LaunchActivityItem 过江成为客户端 Activity.mIdent，服务端十六进制打印与事件日志十进制同值 | 6.4/6.5 节 |
+| ident | System.identityHashCode(ActivityRecord)，随 LaunchActivityItem 跨进程传递成为客户端 Activity.mIdent，服务端十六进制打印与事件日志十进制同值 | 6.4/6.5 节 |
 | 代签 | 客户端超时不回执时，服务端以 activityPaused(true)/handleTopResumedStateReleased(true) 强行推进状态机 | 6.7 节 |
-| 化石打印 | Task.toString 缓存前缀中的过期字段（典型：type=undefined），活后缀字段永远新鲜 | 7.2/7.4 节 |
+| 陈旧前缀打印 | Task.toString 缓存前缀中的过期字段（典型：type=undefined），实时后缀字段永远实时 | 7.2/7.4 节 |
 | HOME 真空期 | server 重启后 Task 1 已建而 HOME 活动未启动的窗口期（雅迪树 systemReady 链被禁用所致） | 8.3 节 |
 
 （全文完）

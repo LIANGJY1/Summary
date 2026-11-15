@@ -1,6 +1,6 @@
 # GPU 合成与显示管线
 
-> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）为语境，把"GPU 生产 buffer → BufferQueue/Gralloc/fence 交接 → SurfaceFlinger FrontEnd 与事务队列合成 → HDR 与色彩输出 → 帧节奏控制与 FrameTimeline 归因"串成一条可逐段定位的显示管线。Android 13 语境的全链路基础与 VSync 调度见 docs/others/framework/Android13渲染架构全链路硬核解析.md 与 docs/others/framework/Android显示系统/Vsync流程.md，本篇不与其重复出题。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。机制按 AAOS13（Android 13）本地源码核对并逐题标注，不在本地树的组件按源材料（Android 17 锚点）转写并标注版本差异。主线：以 Android 17（API 37）为语境，把"GPU 生产 buffer → BufferQueue/Gralloc/fence 交接 → SurfaceFlinger FrontEnd 与事务队列合成 → HDR 与色彩输出 → 帧节奏控制与 FrameTimeline 归因"串成一条可逐段定位的显示管线。Android 13 语境的全链路基础与 VSync 调度见 docs/others/framework/Android显示系统/Android13渲染架构全链路硬核解析.md 与 docs/others/framework/Android显示系统/Vsync流程.md，本篇不与其重复出题。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [done] 设置窗口顶部透明时，为什么看到桌面不代表设置窗口的 buffer 包含桌面像素？**
 

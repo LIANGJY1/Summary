@@ -634,80 +634,22 @@ CPU 编号更没有跨设备语义：CPU 7 可能是最高 capacity 的核心，
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q28 -->
 
-**Q40: [learning] android_input_events 与 android.input.inputevent 的三张原始视图是什么关系？为什么不能桥接？**
-
-两条独立链路。
-
-`android_input_events`（标准库 `android.input` 派生，工具侧行为按材料口径）由 ATrace 与 FrameTimeline 派生：`sendMessage`/`receiveMessage` 建立四段消息节点，`UnwantedInteractionBlocker::notifyMotion` 提供事件 ID 与读取时间，`deliverInputEvent` 与 `Choreographer#doFrame` 建立帧关联——常规 user 量产构建即可采集，前提是配置包含 `input`/`view`/`gfx` 类别、目标应用与 FrameTimeline 数据源。
-
-`android_motion_events`、`android_key_events`、`android_input_event_dispatch` 来自 `android.input.inputevent` 调试数据源，配置协议限定只能在 `userdebug`/`eng` 构建启用，记录 InputDispatcher 处理的原始事件字段与窗口分发决策。
-
-两者不能当作同一张表拆分后的结果：原始视图的 `event_id` 是数值型，生命周期表的 `input_event_id` 来自 ATrace 名称（通常是 `0x` 前缀的十六进制文本），标准库没有公开稳定的桥接视图，`CAST` 后等值连接可能把格式差异或 ID 碰撞误当成同一事件。原始视图查询时还要注意：同一事件会投递给前台窗口、监视窗口等多个目标，`android_input_event_dispatch` 出现多行不是重复数据。坐标、按键码等敏感字段受脱敏等级影响可能为 NULL，查询必须允许缺失。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q29 -->
 
-**Q41: [learning] android_input_events 的四段延迟和 end_to_end_latency_dur 分别怎么定义？怎么解读分段异常？**
-
-四段往返延迟基于同一事件的四个消息节点（工具侧标准库定义，材料口径）：
-
-1. `dispatch_latency_dur`：应用收到 − Dispatcher 发出。
-2. `handling_latency_dur`：应用发 `FINISHED` − 应用收到。
-3. `ack_latency_dur`：系统收到确认 − 应用发出。
-4. `total_latency_dur`：系统收到确认 − Dispatcher 发出。
-
-`end_to_end_latency_dur` 从 InputReader 读取延伸到关联帧呈现，即 `present_time - read_time`；无帧关联时为 NULL。
-
-解读边界：输入通道基于 socket，`ack_latency_dur` 不是 Binder 往返耗时，归因 Binder 拥塞会带偏方向。`handling_latency_dur` 覆盖输入批处理与框架分发开销，不等同于某个业务回调的执行时间。分析前先做覆盖率检查（`COUNT(*)`、各字段 `IS NOT NULL` 的数量、`is_speculative_frame = 1` 的数量），`with_frame` 明显少于总行数时要核对 FrameTimeline 与场景完整性——覆盖率不同的两组分位数不可比。找慢样本按 `total_latency_dur` 排序后分段定位：`dispatch_ms` 高查 Dispatcher 与目标线程的调度状态，`handling_ms` 高展开应用接收线程，`ack_ms` 高查确认回传路径。单段偏高只是排查入口，不独立证明根因。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q30 -->
 
-**Q42: [learning] 标准库把输入事件关联到帧的规则是什么？哪些情况会给出“不可信”的帧关联？**
-
-关联按应用线程和帧顺序进行（工具侧 `android.input` 标准库，材料按 Android 17 核对）：
-
-1. 在同一应用线程上查找与 `deliverInputEvent` 区间相交的 `Choreographer#doFrame`，相交即精确关联。
-2. 没有交集时选择该线程上紧随其后的帧，标记 `is_speculative_frame = 1`。
-3. 映射到 SurfaceFlinger 时选择不早于关联应用帧的首个未丢弃帧。
-
-由此产生的限制：推测关联只说明时间最接近，不能证明该输入触发了该帧。被丢弃的应用帧会让 `frame_id` 指向后续未丢弃帧。一帧可以合并多个 MOVE 事件，输入行与帧不是一一关系。字段边界：标准库内部对象 `_input_read_time` 只匹配 motion 事件的 `notifyMotion` slice，按键事件可以有完整往返延迟却没有 `read_time`、`event_time` 与呈现延迟。`event_time` 是 InputReader 的 ATrace 输出携带的事件时间，比 `dispatch_ts` 更靠近设备事件，但不能描述成触摸控制器中断时间。把输入结果连接 `android_frames` 时应同时用 `frame_id` 与 `upid` 条件，避免不同进程复用 Vsync ID 造成误连。帧持续时间长不等于输入处理慢，还要展开 `doFrame`、RenderThread 与调度上下文。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q31 -->
 
-**Q43: [learning] InputDispatcher 的 iq、oq、wq 队列计数器在 trace 里长什么样？怎么把采样点变成区间？**
-
-AAOS13 的 `InputDispatcher.cpp` 用 ATrace 计数器记录三类队列（本地源码逐字核对）：
-
-1. `iq`：尚未处理的全局入站队列。
-2. `oq:<窗口名>`：该连接上等待写入应用输入通道的出站队列。
-3. `wq:<窗口名>`：已写给应用、仍等待 `FINISHED` 确认的等待队列。
-名称用固定 40 字节栈缓冲拼接（`char counterName[40]`），过长的通道名会被截断。旧文档中 "InputDispatcher inbound queue" 之类的名称不是源码写法，查询用 `GLOB 'oq:*'`、`GLOB 'wq:*'` 前缀匹配并 JOIN `process_counter_track` 限定 `system_server`。
-
-counter 只在值变化时记录采样点、没有 `dur`，一个值持续到同轨道的下一次采样。要按“非零持续区间”分析时用窗口函数补时长：
-
-```sql
-SELECT track_id, ts, value,
-  COALESCE(LEAD(ts) OVER (PARTITION BY track_id ORDER BY ts), trace_end()) - ts AS dur_ns
-FROM counter ...;
-```
-
-`LEAD()` 按同一 `track_id` 取下一采样时刻，末条用 `trace_end()` 兜底。解读：瞬间非零是正常流转。持续的 `iq` 表示入站未消费完，持续 `oq` 表示连接上有待写入事件，持续 `wq` 表示还有事件在等确认——队列堆积能缩小范围，但不能单独证明是主线程、socket 写入还是 `system_server` 调度的根因。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q32 -->
 
-**Q44: [learning] 分析输入 ANR 时，为什么 android_input_events 里可能没有卡住的那个事件？正确的证据组合是什么？**
-
-`android_input_events` 的一行要求四个消息节点（发出、接收、FINISHED、确认）都匹配成功。触发 ANR 的事件往往停在等待队列里没有 `finish_ack`，因此不会出现在结果里——“表里没有”不等于“输入没发生”。
-
-正确的证据组合有三份：
-
-1. **ANR 时间锚点：**查 `android.anrs` 标准库的 `android_anrs` 表，读取 `system_server` 的 ErrorId、subject、计时器与 `anr_type`（工具侧材料口径），不要在 slice 表里按名称搜 "ANR"。`anr_dur_ms` 优先来自平台计时器；`default_anr_dur_ms` 只是 AOSP/Pixel 的参考默认值，OEM 可以改写，超时窗内用 `COALESCE(anr_dur_ms, default_anr_dur_ms)`。
-2. **输入队列：**查同一窗口内 `wq:`/`oq:`/`iq` 的非零持续区间，确认堆积发生在哪类队列、是否持续到 ANR 附近。
-3. **目标线程：**查目标主线程在超时窗内的运行、可运行、睡眠状态与长 slice。
-已完成的往返延迟只用于观察超时前是否已经退化，不能替代未完成投递的现场（ANR 检测与超时契约本身见引言链接的 ANR 专题文档）。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q35 -->
 
-**Q45: [learning] android_jank_cuj 为什么看不到第三方 App 的 CUJ？系统 CUJ 指标的输入和第三方路径分别是什么？**
+**Q40: [learning] android_jank_cuj 为什么看不到第三方 App 的 CUJ？系统 CUJ 指标的输入和第三方路径分别是什么？**
 
 因为标准库对输入有明确过滤：CUJ 必须是 `process_track` 上持续时间大于零、名称匹配 `J<*>` 的 slice，且进程名匹配 `com.android.*` 或 `com.google.android*`（工具侧 `android.cujs.base` 的源码行为）——第三方 App 写出同名标记也不会进表。本地 AAOS13 源码可佐证系统侧的产生机制：`InteractionJankMonitor` 用 `J<%s>` 格式写 CUJ 标记，`FrameTracker` 结束时经 `Trace.traceCounter` 写出 `J<CUJ>#totalFrames`、`#missedFrames` 等计数器。
 
@@ -723,7 +665,7 @@ FROM counter ...;
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q30 -->
 
-**Q46: [learning] 统计 FrameTimeline 的 jank 时，为什么应该用 jank_tag 而不是自己解析 jank_type 字符串？Android 13 与 17 的分类有什么差别？**
+**Q41: [learning] 统计 FrameTimeline 的 jank 时，为什么应该用 jank_tag 而不是自己解析 jank_type 字符串？Android 13 与 17 的分类有什么差别？**
 
 `jank_type` 是 bitmask 转换出的字符串，一帧可以同时带多个原因，用字符串包含关系自行分组容易把多原因帧漏算或重算。v57.2 提供 `jank_tag` 预计算分类（`Self Jank`、`Other Jank`、`Buffer Stuffing`、`SurfaceFlinger Stuffing`、`Dropped Frame`、`Non-perceivable Jank` 等），统计优先用它，并保存原始类型与工具版本，避免把不同 Perfetto 版本生成的字段混进同一基线（表与字段按材料核对的 v57.2 转写）。分类要与 `present_type`、`on_time_finish` 联合判读：`on_time_finish = 0` 只表示工作超出 ready deadline，不能当全部 jank 的过滤条件。Buffer Stuffing 常见 `on_time_finish = 1` 与 `Late Present` 并存。Android 17 的非卡顿集合（材料口径）：Buffer Stuffing、SurfaceFlinger Stuffing、Non Animating 与三个 display 状态位都位于 non-jank bitmask，不增加 severity score，却描述高延迟或显示状态变化，报告应单独统计，不能全部并入 `No Jank`，也不能全部算进应用 jank rate。
 
@@ -738,7 +680,7 @@ FROM counter ...;
 
 <!-- 来源：01-user-experience/01-rendering-and-responsiveness.md · Q8 -->
 
-**Q47: [learning] FrameTimeline 单帧归因应按什么顺序取证？**
+**Q42: [learning] FrameTimeline 单帧归因应按什么顺序取证？**
 
 从用户可见帧向上游追溯，避免把恰好重叠的 Binder、GC 或长 slice 写成根因：
 
@@ -752,7 +694,7 @@ FROM counter ...;
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q14 -->
 
-**Q48: [learning] Perfetto 的线程状态（Running/R/R+/S/D 等）从哪里来？各状态能确认什么？**
+**Q43: [learning] Perfetto 的线程状态（Running/R/R+/S/D 等）从哪里来？各状态能确认什么？**
 
 Linux 的 `TASK_RUNNING` 定义为 0，同时覆盖“正在 CPU 上执行”与“具备运行条件”两种情况，只看内核状态值区分不了 Running 与 Runnable。Perfetto 用调度事件重建时间线：`sched_switch` 把下一个线程记为 `Running`、按 `prev_state` 为被切出的线程打开后续状态区间，`sched_waking` 关闭原阻塞区间、打开 `R` 并尽量记录 `waker_utid` 与 `irq_context`。`R+` 表示这次切出带有抢占标志（内核 tracepoint 在抢占时置位并在文本输出追加 `+`），但不含抢占者身份。
 
@@ -768,7 +710,7 @@ Linux 的 `TASK_RUNNING` 定义为 0，同时覆盖“正在 CPU 上执行”与
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q15 -->
 
-**Q49: [learning] 线程处于 D 状态能直接判为磁盘 I/O 慢吗？io_wait 和 blocked_function 什么时候才有值？**
+**Q44: [learning] 线程处于 D 状态能直接判为磁盘 I/O 慢吗？io_wait 和 blocked_function 什么时候才有值？**
 
 不能。`TASK_UNINTERRUPTIBLE` 只说明等待条件不会被普通信号打断，来源覆盖块 I/O、swap、内存回收、页迁移、驱动等待和内核同步路径。磁盘 I/O 只是常见来源之一。没有进一步证据时应写“Uninterruptible Sleep，原因未由本次 trace 识别”。
 
@@ -779,7 +721,7 @@ Linux 的 `TASK_RUNNING` 定义为 0，同时覆盖“正在 CPU 上执行”与
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q17 -->
 
-**Q50: [learning] 线程 Running 区间很长说明什么？中断处理的时间会算到谁的头上？**
+**Q45: [learning] 线程 Running 区间很长说明什么？中断处理的时间会算到谁的头上？**
 
 Running 只表示线程占据了某个 CPU 的任务时间线，可能在用户态执行，也可能在系统调用或异常处理的内核态执行。HardIRQ 会暂停当前任务但不一定发生 `sched_switch`，中断返回路径上执行的 SoftIRQ 同样不切换任务——这些时间都计入外层线程的 Running 区间。把整段 Running 都算成应用函数时间会系统性高估应用开销。
 
@@ -793,7 +735,7 @@ Running 只表示线程占据了某个 CPU 的任务时间线，可能在用户�
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q18 -->
 
-**Q51: [learning] Runnable 区间变长就是调度器选错了吗？怎么量化“被唤醒到开始运行”的延迟？**
+**Q46: [learning] Runnable 区间变长就是调度器选错了吗？怎么量化“被唤醒到开始运行”的延迟？**
 
 不是。Runnable（`R`/`R+`）只证明线程具备运行条件却未上 CPU，候选原因要按约束来源排查：
 
@@ -806,7 +748,7 @@ Running 只表示线程占据了某个 CPU 的任务时间线，可能在用户�
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q19 -->
 
-**Q52: [learning] 主线程关键区间内长时间 Sleeping 怎么追？"Woken by" 是业务源头吗？**
+**Q47: [learning] 主线程关键区间内长时间 Sleeping 怎么追？"Woken by" 是业务源头吗？**
 
 `S` 是可中断睡眠，常见于 Looper 的 `epoll_wait()`、futex/条件变量、同步 Binder 等回复和定时器。空闲线程长期 Sleeping 是健康的；需要分析的是业务 slice 或帧窗口内的长 `S`。按因果路径追查：
 
@@ -824,7 +766,7 @@ Trace Processor 对已在 Running/Runnable 的线程收到重复唤醒时记为 
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q20 -->
 
-**Q53: [learning] 为什么要把线程状态裁进业务区间统计？ANR 判定和 D 状态是什么关系？**
+**Q48: [learning] 为什么要把线程状态裁进业务区间统计？ANR 判定和 D 状态是什么关系？**
 
 整条线程生命周期的状态占比会被 Looper 的正常睡眠主导，对一次掉帧或一次启动没有解释力。可靠的统计是把状态裁进边界明确的业务区间——由应用写入的自定义 trace 标记（如 `cold_start`）或 FrameTimeline 帧窗口。
 
@@ -839,7 +781,7 @@ Trace Processor 对已在 Running/Runnable 的线程收到重复唤醒时记为 
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q33 -->
 
-**Q54: [learning] Binder 客户端调用耗时长，怎么区分是服务端执行慢还是客户端在等调度？**
+**Q49: [learning] Binder 客户端调用耗时长，怎么区分是服务端执行慢还是客户端在等调度？**
 
 用 `android.binder` 标准库的两张表拆解（工具侧材料口径）。`android_binder_txns` 配对客户端事务与服务端 reply。同步与 oneway 必须按 `is_sync` 分组——异步事务没有同步等待关系，`client_dur` 语义不同，两组数不能合成一个延迟分布。`android_sync_binder_thread_state_by_txn` 已对同步事务两端区间分别做 `SPAN_JOIN`，按 `thread_state_type` 区分：`binder_txn` 是客户端区间，`binder_reply` 是服务端区间。
 
@@ -851,7 +793,7 @@ Trace Processor 对已在 Running/Runnable 的线程收到重复唤醒时记为 
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q36 -->
 
-**Q55: [learning] 分析一帧“慢”，怎么把 doFrame、FrameTimeline、锁与调度证据拼起来？哪些时间不能相加？**
+**Q50: [learning] 分析一帧“慢”，怎么把 doFrame、FrameTimeline、锁与调度证据拼起来？哪些时间不能相加？**
 
 先定位对象再用区间求交。用 `android.frames.timeline` 的 `android_frames` 取得帧窗口、`doFrame` slice 与 UI/RenderThread 的 `utid`，`android_frames_overrun` 给出 deadline 超额（正值为超期，负值为余量）。`actual_frame_timeline_count`、`draw_frame_count` 等完整性列异常说明时间线关联失败，自动化统计要保留这些列。
 
@@ -865,7 +807,7 @@ Trace Processor 对已在 Running/Runnable 的线程收到重复唤醒时记为 
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q4 -->
 
-**Q56: [learning] 火焰图里一个调度函数 cumulative 很宽而 self 很窄，说明什么？火焰图宽度能当执行时长读吗？**
+**Q51: [learning] 火焰图里一个调度函数 cumulative 很宽而 self 很窄，说明什么？火焰图宽度能当执行时长读吗？**
 
 不能当执行时长。火焰图横向宽度是当前所选指标的聚合值：周期性 `linux.perf` 样本常见是样本数，pprof 可能是 CPU 纳秒或分配字节，Collapsed Stack 是行尾计数。单次持续时间需要 `slice.dur`、方法跟踪或其他区间证据。两个值的含义：
 
@@ -878,7 +820,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q6 -->
 
-**Q57: [learning] Agent 辅助分析 trace 时，为什么 scratchpad 必须把“已验证事实”和“假设”分开存放？**
+**Q52: [learning] Agent 辅助分析 trace 时，为什么 scratchpad 必须把“已验证事实”和“假设”分开存放？**
 
 因为可复查性要求每条结论都能由保存的命令重新执行，而口头判断（“主线程卡在 Binder”“GPU 阻塞”）无法重放。scratchpad 是调查过程中的工作记录，文件名为 trace 文件名追加 `_analysis.md`。trace 目录只读或由外部系统管理时放入获准的工作目录，并记录 trace 散列值与权限受控存储中的文件标识。三张表各有硬约束：
 
@@ -890,7 +832,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q8 -->
 
-**Q58: [learning] 长 slice 的 dur 等于 CPU 执行时间吗？怎样用 thread_state 把可疑长 slice 的调查方向定下来？**
+**Q53: [learning] 长 slice 的 dur 等于 CPU 执行时间吗？怎样用 thread_state 把可疑长 slice 的调查方向定下来？**
 
 不等。`dur` 是 wall time（经过时间），可能覆盖 CPU 执行，也可能覆盖调度等待、Binder、锁、futex 或 I/O。判断顺序五步：
 
@@ -904,7 +846,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q9 -->
 
-**Q59: [learning] Agent 的开放性 trace 调查按哪六类方向组织？什么时候应该停止归因？**
+**Q54: [learning] Agent 的开放性 trace 调查按哪六类方向组织？什么时候应该停止归因？**
 
 六类方向按触发条件选入，避免无边界的全量扫描（每类都是“先查什么、再查什么、常见误判是什么”）：
 
@@ -933,7 +875,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q13 -->
 
-**Q60: [learning] 冷启动时关键线程长时间低频 Running，能直接得出“governor 调频响应慢”吗？**
+**Q55: [learning] 冷启动时关键线程长时间低频 Running，能直接得出“governor 调频响应慢”吗？**
 
 不能，低频 Running 只支持“调频响应晚于该段工作”这一假设，归因前要逐项排除替代解释：
 
@@ -947,7 +889,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q14 -->
 
-**Q61: [learning] 连续渲染负载与后台批处理，频率分析的关注点有什么不同？**
+**Q56: [learning] 连续渲染负载与后台批处理，频率分析的关注点有什么不同？**
 
 渲染负载按帧切窗、盯相位关系：滑动、动画和游戏的帧循环有重复节奏，应分别观察 UI 线程、RenderThread、GPU 提交线程与 SurfaceFlinger。频率升降总是落后于负载相位可能带来周期性波动，但线程迁往不同 capacity CPU、Runnable 排队或 GPU fence 等待也会产生相似现象。频率高不保证帧按期完成，频率低也不必然异常——帧内工作量少时低频正是能效目标。判断依据是相同设备、相同温度、相同 workload 下的帧时序与频率变化对照。
 
@@ -957,7 +899,7 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q16 -->
 
-**Q62: [learning] 怎样从 FrameTimeline 选出 Buffer Stuffing 候选帧？为什么 on_time_finish=1 也可能出现 Buffer Stuffing？**
+**Q57: [learning] 怎样从 FrameTimeline 选出 Buffer Stuffing 候选帧？为什么 on_time_finish=1 也可能出现 Buffer Stuffing？**
 
 `actual_frame_timeline_slice` 是 Trace Processor 的内置表（无需 INCLUDE 标准库，按材料核对的 v57.2 口径），按 `jank_type` 筛选并保留身份字段：
 
@@ -984,7 +926,7 @@ ORDER BY afts.ts;
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q17 -->
 
-**Q63: [learning] QueuedBuffer、BufferTX 与 BufferQueueCore::mQueue.size() 三种“积压”信号有什么区别？**
+**Q58: [learning] QueuedBuffer、BufferTX 与 BufferQueueCore::mQueue.size() 三种“积压”信号有什么区别？**
 
 三者分属三层，不能当同一个队列长度读：
 
@@ -996,7 +938,7 @@ ORDER BY afts.ts;
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q18 -->
 
-**Q64: [learning] 判断 BufferQueue 背压为什么必须成组取证？哪四类等待容易被混为一谈？**
+**Q59: [learning] 判断 BufferQueue 背压为什么必须成组取证？哪四类等待容易被混为一谈？**
 
 背压是“下游消费不及使 Producer 拿不到 slot”的因果结论，单一信号只证明积压存在、不证明因果方向。需要同一 layer 上的成组证据在同一时间线吻合——FrameTimeline 的 Buffer Stuffing 分类、BLAST 计数器高位、Producer 等待 slice，以及可解释的 acquire、latch、present、release 时序。四类容易混淆的等待：
 
@@ -1009,7 +951,7 @@ ORDER BY afts.ts;
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q19 -->
 
-**Q65: [learning] 多 Surface 页面分析 BufferQueue 阻塞时，为什么必须先理清队列拓扑？thread_state 怎样裁切才可信？**
+**Q60: [learning] 多 Surface 页面分析 BufferQueue 阻塞时，为什么必须先理清队列拓扑？thread_state 怎样裁切才可信？**
 
 因为不同出图路径的 Producer、Consumer 与队列互不相同，跨队列拼接事件会把“同时发生”写成“因果”。按路径区分：
 
@@ -1023,7 +965,7 @@ SQL 侧的核对方法：把 Producer 等待 slice（`dequeueBuffer`、`waitForB
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q29 -->
 
-**Q66: [learning] API 33 的 Choreographer.postVsyncCallback 与 FrameData 怎么用？Android 13 上要注意什么？**
+**Q61: [learning] API 33 的 Choreographer.postVsyncCallback 与 FrameData 怎么用？Android 13 上要注意什么？**
 
 API 33 即 Android 13（按 AAOS13 源码核对），提供 `postVsyncCallback(VsyncCallback)` 一次性回调：下一帧执行后即移除，连续观测要再次注册并控制日志与分配成本。回调在 `Choreographer` 绑定的 Looper 线程执行。公开方法：`FrameData.getFrameTimeNanos()`、`getFrameTimelines()`（按时间排序的候选数组）与 `getPreferredFrameTimeline()`（平台选中项）。`FrameTimeline.getVsyncId()`（与 HWUI、SF trace 关联的 VSYNC id）、`getExpectedPresentationTimeNanos()` 与 `getDeadlineNanos()`，后两者使用 `System.nanoTime()` 时基（本地核对 javadoc 与实现）。
 

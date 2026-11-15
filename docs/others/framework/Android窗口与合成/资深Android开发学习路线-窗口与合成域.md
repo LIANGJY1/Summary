@@ -29,7 +29,7 @@
 ## 2. 教材盘点（全在本仓）
 
 - **核心**（均与本文件同目录）：Android13窗口透明与合成全链路解剖.md（机制主教材，§1~§9）；技术报告与交接文档逐句源码审计.md（方法论教材，学"如何审计"）。
-- **配套精读**（已有存量文档，按阶段指定）：docs/md/一帧的生命周期.md、docs/md/一次触摸的旅程.md、docs/md/WMS窗口管理.md、docs/md/Surface与BufferQueue.md、docs/md/Android动画.md、docs/md/Activity启动.md、docs/md/分屏多窗口SplitScreen.md、docs/md/SystemUI.md、docs/md/lmkd与进程组.md、docs/md/启动全流程/（00~09）、docs/md/Binder*（4 篇）、docs/md/Handler.md。
+- **配套精读**（已有存量文档，按阶段指定）：docs/md/archive/一帧的生命周期.md、docs/md/archive/一次触摸的旅程.md、docs/md/WMS窗口管理.md、docs/md/archive/Surface与BufferQueue.md、docs/md/Android动画.md、docs/md/Activity启动.md、docs/md/分屏多窗口SplitScreen.md、docs/md/SystemUI.md、docs/md/lmkd与进程组.md、docs/md/启动全流程/（00~09）、docs/md/Binder*（4 篇）、docs/md/Handler.md。（注：一帧的生命周期、一次触摸的旅程、Surface与BufferQueue 三篇已于 2026-11-14 归档至 AAOS13_study/docs/md/archive/，内容并入《AppList 性能全链路解剖》系列，权威参考：Summary/docs/others/framework/Android性能/AppList性能分析/全链路解剖/，对应篇：一次触摸的旅程→00、06~08；一帧的生命周期→09~12；Surface与BufferQueue→11）
 - **源码树**：本仓即 A13 全源码带中文批注。批注是导览，**结论以原始代码为准**（批注战役本身经过两轮审计修正，这个事实本身就值得体会）。
 - **工具**：scripts/check_doc_paths.py（你写文档时的路径校验脚本）；adb 命令手册见文章一 §8。
 
@@ -47,7 +47,7 @@
 ### 阶段 1：应用侧——窗口与绘制（2~3 周）
 
 - **目标**：吃透文章一 §1（声明层）、§3（几何层）、§4（绘制层）：主题属性两条通道、relayout 往返、frame/DecorView/buffer 同源、insets→padding、DecorView 结构与 statusBarColor 真身。
-- **材料**：文章一 §1/§3/§4；docs/md/一帧的生命周期.md（渲染主链，与 §3 互证）；docs/md/一次触摸的旅程.md（ViewRootImpl 的另一半职责）。
+- **材料**：文章一 §1/§3/§4；docs/md/archive/一帧的生命周期.md（渲染主链，与 §3 互证）；docs/md/archive/一次触摸的旅程.md（ViewRootImpl 的另一半职责）。
 - **源码精读清单**（每个都从文章引文处向上下扩展读）：PhoneWindow.generateLayout 全函数、DecorView 的 updateColorViews/updateColorViewInt/drawableChanged、ViewRootImpl 的 setView/performTraversals/relayoutWindow、WindowLayout.computeFrames 全文、View.fitSystemWindowsInt/applyInsets。
 - **动手**：E1（四组合主题矩阵 demo：建 4 个 Activity 分别配 translucent×background 四组合，观察声明不透明且内容留有透明区域时的窗口、图层和最终画面）、E4（fitsSystemWindows 开关对比 + uiautomator dump 量 bounds）、E5（找到 statusBarBackground 色块 View）。
 - **产出**：一页纸"从 setContentView 到第一帧显示到屏幕"链路图；闪卡 Q1~Q11。
@@ -65,7 +65,7 @@
 ### 阶段 3：图形栈——SurfaceFlinger 与合成（3~4 周）
 
 - **目标**：吃透 §5（合成层）：一帧生命周期、进入合成列表的三个过滤条件、blendMode、黑色像素推导、hide 传导、composition cache；顺带 §7.1 的 buffer 数量与容量计算。
-- **材料**：文章一 §5/§7.1；docs/md/Surface与BufferQueue.md（BufferQueue/BLAST 全景）。
+- **材料**：文章一 §5/§7.1；docs/md/archive/Surface与BufferQueue.md（BufferQueue/BLAST 全景）。
 - **源码精读清单**：Output.cpp 的 ensureOutputLayerIfVisible 全函数、composeSurfaces、generateClientCompositionRequests；Layer.cpp 的 prepareBasicGeometryCompositionState/prepareClearClientComposition/isHiddenByPolicy；BufferLayer.isVisible/isOpaque；SkiaGLRenderEngine.drawLayersInternal（清零、快照模糊、kSrcOver、drawRect 四站）；BLASTBufferQueue.cpp 的构造与 update；SurfaceComposerClient.Transaction 的 hide/setOpaque。
 - **动手**：E6（核对 frame、buffer 尺寸及其例外）、E7（hide 后层仍在 --list、销毁后才消失的时机问题，亲手验证一遍）、E12（blur 强制 client composition 的 perfetto 对照）。
 - **产出**：一页纸"一帧的合成流水线"图；透明区域最终颜色的条件分析；闪卡 Q23~Q27。
@@ -161,7 +161,7 @@
 - **Shell Transitions 深潜**：打开 persist.wm.debug.shell_transit，对照 Transition.java/WMShell Transitions.java/DefaultTransitionHandler 重走阶段 2 的全部实验，总结两套转场体系的差异成文。
 - **A14/A15 差异追踪**：用本仓 A14 移植台账（knowledge-base/android/A14学习批注移植台账.md）对照两篇文章逐节标出演进（ActivityInfoBase 拆分、Transition 全面接管等）。
 - **HWC/vendor 侧**：阶段 3 止步于 validateDisplay 边界；有条件时读设备 vendor composer HAL，补上"平面上限"这块 AOSP 不可见的拼图。
-- **横向联通**：本域与输入（一次触摸的旅程.md：窗口可见性如何影响触摸分发）、音频（焦点与生命周期的联动）、电源（doze 下动画缩放）各有一条接缝，每条接缝写一篇短文即是一次毕业级练习。
+- **横向联通**：本域与输入（docs/md/archive/一次触摸的旅程.md：窗口可见性如何影响触摸分发）、音频（焦点与生命周期的联动）、电源（doze 下动画缩放）各有一条接缝，每条接缝写一篇短文即是一次毕业级练习。
 
 ## 8. 时间表总览
 

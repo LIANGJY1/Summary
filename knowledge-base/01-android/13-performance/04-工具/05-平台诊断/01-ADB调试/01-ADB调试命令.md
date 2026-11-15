@@ -104,24 +104,7 @@ Android 13 的 `--list` 用于查找层名称，`--latency` 用于查看指定�
 
 `cmd thermalservice override-status` 只覆盖 `ThermalManagerService` 向 Framework 暴露的状态等级，不会关闭 Thermal HAL、内核 cpufreq、GPU 降频或厂商 thermal engine——它适合测试应用的 thermal callback，不能用来伪造“未降频”的测量环境。短路径（启动、短滑动）关心冷机状态。游戏、直播等持续负载要测热稳定态，预热数据单独保存、不混入稳态统计，稳态区间由预先定义的滑动窗口条件判定而不是看曲线后现选。
 
-**Q10: [learning] adb shell input 命令族有哪些成员？各适合什么验证？**
-
-Android 13 的 `InputShellCommand` 提供这些常用子命令：
-
-1. `tap x y`：在坐标处注入一次点击。
-2. `swipe x1 y1 x2 y2 [duration(ms)]`：从起点滑到终点，可选时长单位为毫秒。缺省为 300 ms。
-3. `draganddrop x1 y1 x2 y2 [duration(ms)]`：先长按起点，再拖到终点。可选参数控制移动阶段时长。
-4. `motionevent DOWN|MOVE|UP|CANCEL x y`：注入单个运动事件，脚本可用多次调用拼成事件序列。
-5. `keyevent [--longpress] <keycode|keyname>`：注入按键。`--longpress` 让命令构造长按事件。
-6. `text "string"`：把可映射字符转换成虚拟键盘的 `KeyEvent` 序列注入，不调用 IME 的 `InputConnection`。字符是否能映射取决于虚拟键盘字符映射表。
-7. `press` 和 `roll`：分别注入轨迹球按键和轨迹球相对位移。
-8. `keycombination [-t duration(ms)] <keycode1> <keycode2> ...`：按给定顺序注入组合键。可选 `-t` 指定组合键持续时间，省略时采用命令实现的默认时长。
-
-这些命令以 shell 身份通过系统输入注入接口发送事件。权限、窗口策略和设备构建类型仍会限制可注入范围。Android 13 中，`swipe` 默认时长是 300 ms，命令在线性插值的坐标点间注入 `MOVE`，不复现真实手指的加减速与采样抖动。验证 fling 速度时应显式提供时长和足够密集的坐标点。`draganddrop` 在开始移动前等待长按超时。需要控制每个坐标点时使用 `motionevent` 序列，快速验证路径时使用 `swipe`。
-
-按验证目标选择命令：点击与一般滑动用 `tap`/`swipe`。按键分发和长按用 `keyevent`。复现指定的运动事件轨迹用 `motionevent`。`text` 验证的是键盘字符映射与按键事件处理，不等价于测试 IME 的拼音组合、文本提交或删除行为。这类场景应通过真实 IME 或直接测试编辑器的 `InputConnection`。输入注入绕过真实硬件，注入成功而真机失败说明还需检查设备上报、驱动与 InputReader 路径。
-
-**Q11: [learning] 如何确认 system_ext 的 OverlayFS 后端与 verity 状态，并恢复推送的 APK？**
+**Q10: [learning] 如何确认 system_ext 的 OverlayFS 后端与 verity 状态，并恢复推送的 APK？**
 
 先只读采集目标进程看到的挂载、upper 所在文件系统和设备映射，再判断校验状态。确认设备允许且已备份调试修改后，才执行恢复。`dm-0`、`orange` 或 `/mnt/scratch` 单独出现都不能证明完整的后端链路或 verity 状态。
 
