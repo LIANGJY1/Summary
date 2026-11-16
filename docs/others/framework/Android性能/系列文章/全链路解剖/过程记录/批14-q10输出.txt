@@ -1,0 +1,19 @@
+"rel_ts","dur","state","cpu","blocked_function"
+6800227149,848846,"R","[NULL]","[NULL]"
+6801075995,177731,"Running",3,"[NULL]"
+6801253726,461962,"R+","[NULL]","[NULL]"
+6801715688,120884,"Running",3,"[NULL]"
+6801836572,3716500,"D","[NULL]","write_pmsg$6fb35a9abf14f1ffebba6021202469c1"
+6805553072,1602116,"R","[NULL]","[NULL]"
+
+"marker"
+"---sched slices of tid 1489 in 6,801,836,572-6,805,553,072 (D window)---"
+
+"rel_ts","dur"
+
+"marker"
+"---sched slices of tid 1489 just before D---"
+
+"rel_ts","dur","cpu"
+6801075995,177731,3
+6801715688,120884,3

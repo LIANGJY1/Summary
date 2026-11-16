@@ -1,0 +1,506 @@
+--- /home/liang/Project/AAOS13/frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp	2026-03-19 10:55:54.080698737 +0800
++++ /home/liang/Project/MyProject/AAOS13_study/frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp	2026-11-14 01:53:49.436976822 +0800
+@@ -459,6 +459,9 @@
+ }
+ 
+ // Returns true if the given window can accept pointer events at the given display location.
++// 【核心流程】触摸命中判据（三道全部通过才算"此点归此窗"）：同屏且可见（NOT_VISIBLE 排除）、
++//   可触摸（NOT_TOUCHABLE 排除；触笔拦截窗例外）、touchableRegionContainsPoint 点在可触区内。
++//   区域是 WMS 在窗口列表推送前算好的矩形/区域集合，分发侧只做点测。
+ bool windowAcceptsTouchAt(const WindowInfo& windowInfo, int32_t displayId, int32_t x, int32_t y,
+                           bool isStylus) {
+     const auto inputConfig = windowInfo.inputConfig;
+@@ -528,6 +531,11 @@
+ } // namespace
+ 
+ // --- InputDispatcher ---
++// 输入分发的中枢，单线程独占（分发线程跑 dispatchOnce 主循环），全部状态由 mLock 保护。
++// 事件走三级队列：mInboundQueue（Reader 经 notifyX 入队）→ 逐窗口分发写 socket，
++// 先进连接的 outboundQueue，序列化成功挪 waitQueue，应用 ack 后出队——
++// waitQueue 积压超时即 ANR（processAnrsLocked）。
++// 全链路总论与各站编号锚在 EventHub::getEvents 的【核心流程】；分发主循环见 dispatchOnce。
+ 
+ InputDispatcher::InputDispatcher(const sp<InputDispatcherPolicyInterface>& policy)
+       : InputDispatcher(policy, STALE_EVENT_TIMEOUT) {}
+@@ -555,9 +563,14 @@
+         mStaleEventTimeout(staleEventTimeout),
+         mLatencyAggregator(),
+         mLatencyTracker(&mLatencyAggregator) {
++    // 【调用关系】InputManagerService 初始化流程第 7 步：创建 InputDispatcher 自己的 Looper。
++    //   对应流程图 3.2.1.2.1.1.1：new Looper()。
++    //   这个 Looper 与 dispatchOnce 主循环配套：mLooper->wake() 打断 pollOnce 睡眠，
++    //   各输入通道的 fd（应用回 ack）也注册在它上面（见 createInputChannel）。
+     mLooper = new Looper(false);
+     mReporter = createInputReporter();
+ 
++    // 窗口信息订阅：窗口增删/焦点属性变化由 WMS→SF 侧推送，回调 setInputWindows 更新分发依据。
+     mWindowInfoListener = new DispatcherWindowListener(*this);
+     SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowInfoListener);
+ 
+@@ -585,6 +598,9 @@
+     if (mThread) {
+         return ALREADY_EXISTS;
+     }
++    // 【调用关系】InputManagerService 启动流程第 6 步：启动 InputDispatcher 线程。
++    //   对应流程图 4.1.1.2.1.1：创建并启动 InputDispatcher native 线程。
++    //   线程内循环执行 dispatchOnce() 不断分发输入事件，退出时以 mLooper->wake() 打断睡眠。
+     mThread = std::make_unique<InputThread>(
+             "InputDispatcher", [this]() { dispatchOnce(); }, [this]() { mLooper->wake(); });
+     return OK;
+@@ -599,6 +615,12 @@
+     return OK;
+ }
+ 
++// 【核心流程】分发线程主循环，每圈三件事后睡眠（全链路总论见 EventHub::getEvents 处 5）：
++//   1.无挂起命令时 dispatchOnceInnerLocked 取一事件分发（可能再产生新命令）；
++//   2.runCommandsLockedInterruptable 清空命令队列（命令会临时放锁回调 policy），
++//     跑过命令就把下次唤醒提前到"立即"；
++//   3.processAnrsLocked 检查 ANR 到期（无焦点窗口超时/连接 waitQueue 超时）。
++//   三者都无事时按"最近唤醒期限"睡进 mLooper->pollOnce，等 notifyX 入队 wake 或 fd 可读。
+ void InputDispatcher::dispatchOnce() {
+     nsecs_t nextWakeupTime = LONG_LONG_MAX;
+     { // acquire lock
+@@ -715,6 +737,14 @@
+     return DEFAULT_INPUT_DISPATCHING_TIMEOUT;
+ }
+ 
++// 【核心流程】单事件分发：从 mPendingEvent（上轮未完成的）或 mInboundQueue 队首取事件，
++//   按类型分流（KEY/MOTION 才真正找窗口，FOCUS/DRAG 等直发），再按 DropReason 决定投递或丢弃。
++// 【状态管理】事件生命周期：入队 → 取出置 mPendingEvent → dispatchKey/MotionLocked 分发尝试，
++//   未完成（如等 policy 拦截结果、等焦点窗口）则留待下轮，完成即释放。
++//
++// 【为什么】key repeat 由 Dispatcher 合成而不是内核？内核重复已被 EventHub 侧关闭，
++//   见 EventHub::Device::configureFd；在用户态合成才能与 policy 联动（灭屏即取消、
++//   长按策略可拦截），超时节奏由 mConfig.keyRepeatTimeout/Delay 控制。
+ void InputDispatcher::dispatchOnceInnerLocked(nsecs_t* nextWakeupTime) {
+     nsecs_t currentTime = now();
+ 
+@@ -743,6 +773,7 @@
+ 
+     // Ready to start a new event.
+     // If we don't already have a pending event, go grab one.
++    // 取数优先级：mPendingEvent（上轮 PENDING 留下的）→ key repeat 合成 → mInboundQueue 队首。
+     if (!mPendingEvent) {
+         if (mInboundQueue.empty()) {
+             if (isAppSwitchDue) {
+@@ -795,6 +826,9 @@
+         mNextUnblockedEvent = nullptr;
+     }
+ 
++    // 丢弃原因判定链（按优先级短路）：policy 不放行、分发被禁、app switch 赶期、
++    //   事件陈旧（超过 STALE_EVENT_TIMEOUT=10s×倍率）、有更高优先级事件在等（BLOCKED）。
++    //   只有 NOT_DROPPED 的事件才会真正走目标解析与投递（dispatchEventLocked）。
+     switch (mPendingEvent->type) {
+         case EventEntry::Type::CONFIGURATION_CHANGED: {
+             const ConfigurationChangedEntry& typedEntry =
+@@ -866,6 +900,12 @@
+         }
+ 
+         case EventEntry::Type::MOTION: {
++            // 【关键细节】MOTION 的丢弃判定在目标解析之前做完：app switch 赶期 → STALE
++            //   （now − eventTime ≥ mStaleEventTimeout，默认 10s×倍率）→ BLOCKED
++            //   （mNextUnblockedEvent 非空，即队列里已有应优先放行的 DOWN）。三者都不成立才进入
++            //   dispatchMotionLocked 做目标裁决；判据与队列时刻可用 trace 的 iq 计数
++            //   （traceInboundQueueLengthLocked，ATRACE_INT("iq")）与 dispatchMotionLocked
++            //   slice 对读（批06）。
+             std::shared_ptr<MotionEntry> motionEntry =
+                     std::static_pointer_cast<MotionEntry>(mPendingEvent);
+             if (dropReason == DropReason::NOT_DROPPED && isAppSwitchDue) {
+@@ -918,6 +958,9 @@
+  * Return true if the events preceding this incoming motion event should be dropped
+  * Return false otherwise (the default behaviour)
+  */
++// 【核心流程】入队时预判"前面积压该不该让路"（结果记 mNextUnblockedEvent，由 BLOCKED 丢批执行）：
++//   触摸 DOWN 落点命中了与等待中应用不同的窗口，或落点处存在响应中的 spy 窗口，即返回 true 让
++//   旧事件整批让路；另有指针 DOWN 到来时提前终止按键对旧事件的等待（mKeyIsWaitingForEventsTimeout）。
+ bool InputDispatcher::shouldPruneInboundQueueLocked(const MotionEntry& motionEntry) {
+     const bool isPointerDownEvent = motionEntry.action == AMOTION_EVENT_ACTION_DOWN &&
+             isFromSource(motionEntry.source, AINPUT_SOURCE_CLASS_POINTER);
+@@ -975,6 +1018,12 @@
+     return false;
+ }
+ 
++// 【核心流程】notifyX（Reader 线程调用）与分发线程的唯一交汇点：新事件挂到 mInboundQueue 尾部。
++//   返回 needWake=true（队原本为空/app switch 到期）时，调用方负责 mLooper->wake() 叫醒分发线程。
++// 【性能考虑】入队时顺带做两件"削队"优化。其一：app switch 键（HOME 等）抬起后开 0.5s 窗口，
++//   到期即抢占丢弃队中积压，保证 HOME 响应不被卡顿应用拖死（详见 isAppSwitchDue 分支）。
++//   其二：触摸 DOWN 落到了别的应用或响应中的 spy 窗口时，前面的积压事件整批让路，
++//   由 shouldPruneInboundQueueLocked 置 mNextUnblockedEvent，后续按 BLOCKED 丢弃。
+ bool InputDispatcher::enqueueInboundEventLocked(std::unique_ptr<EventEntry> newEntry) {
+     bool needWake = mInboundQueue.empty();
+     mInboundQueue.push_back(std::move(newEntry));
+@@ -1058,6 +1107,9 @@
+     }
+ }
+ 
++// 【核心流程】按坐标找触摸目标窗：从前往后（Z 序，windowHandles 由 setInputWindows 推送）遍历，
++//   第一个过 windowAcceptsTouchAt 的非 spy 窗口即命中；同时按 addOutsideTargets 给声明
++//   WATCH_OUTSIDE_TOUCH 的更上层窗挂 OUTSIDE 目标（后续按 FLAG_DISPATCH_AS_OUTSIDE 送副本）。
+ sp<WindowInfoHandle> InputDispatcher::findTouchedWindowAtLocked(int32_t displayId, int32_t x,
+                                                                 int32_t y, TouchState* touchState,
+                                                                 bool isStylus,
+@@ -1087,6 +1139,9 @@
+     return nullptr;
+ }
+ 
++// 【核心流程】收集落点处的 spy 窗口（InputConfig::SPY，无缓冲纯观察窗，如 [Gesture Monitor] 通道）：
++//   同样从前往后扫，遇到第一个命中的非 spy 窗口就停——spy 只收集到被触摸窗"之上"为止。
++//   调用方（findTouchedWindowTargetsLocked）把主目标插到这份列表最前，构成 targets 的前段顺序。
+ std::vector<sp<WindowInfoHandle>> InputDispatcher::findTouchedSpyWindowsAtLocked(
+         int32_t displayId, int32_t x, int32_t y, bool isStylus) const {
+     // Traverse windows from front to back and gather the touched spy windows.
+@@ -1107,6 +1162,9 @@
+     return spyWindows;
+ }
+ 
++// 【核心流程】丢弃的收尾不只是释放条目：按键丢一至多影响一笔，但指针手势断了中间帧会让应用
++//   状态悬空，所以按事件类向所有连接广播合成 CANCEL（CANCEL_POINTER_EVENTS/CANCEL_NON_POINTER）。
++//   丢弃原因串（reason）随 CancelationOptions 一路带给应用。
+ void InputDispatcher::dropInboundEventLocked(const EventEntry& entry, DropReason dropReason) {
+     const char* reason;
+     switch (dropReason) {
+@@ -1469,6 +1527,13 @@
+     return inputTargets;
+ }
+ 
++// 【核心流程】按键分发的四道关卡（全链路总论处 5 的核心）：
++//   1.key repeat 状态维护：登记 DOWN、到时合成 repeat（见 dispatchOnceInnerLocked【为什么】），
++//     连续两个同键 DOWN 判为驱动自重复，改计数并停用自合成。
++//   2.policy 拦截：interceptKeyBeforeDispatching（系统导航/长按 Home 等）经 mCommandQueue 延后执行，
++//     结果 TRY_AGAIN_LATER 时挂起等唤醒、SKIP 时转 POLICY 丢弃。
++//   3.找目标：findFocusedWindowTargetsLocked 解析焦点窗口（PENDING 则整事件留待下轮）。
++//   4.叠加全局 monitor 通道后 dispatchEventLocked 逐目标投递。
+ bool InputDispatcher::dispatchKeyLocked(nsecs_t currentTime, std::shared_ptr<KeyEntry> entry,
+                                         DropReason* dropReason, nsecs_t* nextWakeupTime) {
+     // Preprocessing.
+@@ -1631,6 +1696,8 @@
+     return true;
+ }
+ 
++// 触摸/非触摸分流 + 投递收口：pointer 类（触摸屏/鼠标）走 findTouchedWindowTargetsLocked 状态机，
++//   轨迹球等非 pointer 类走焦点窗口；注入失败时给各 monitor 发合成 CANCEL。
+ bool InputDispatcher::dispatchMotionLocked(nsecs_t currentTime, std::shared_ptr<MotionEntry> entry,
+                                            DropReason* dropReason, nsecs_t* nextWakeupTime) {
+     ATRACE_CALL();
+@@ -1683,6 +1750,10 @@
+         return true;
+     }
+ 
++    // 【关键细节】target 列表的最后一段在这里补齐：全局 monitor 通道（mGlobalMonitorsByDisplay，
++    //   经 createInputMonitor 注册，如 PointerEventDispatcher N）不做落点命中，本显示的全部
++    //   指针事件都追加一份。因此派发顺序恒为"窗口目标（主窗+spy）在前，全局 monitor 在后"，
++    //   trace 里三通道 prepare 的时间顺序即此 vector 的遍历顺序（批06）。
+     // Add monitor channels from event's or focused display.
+     addGlobalMonitoringTargetsLocked(inputTargets, getTargetDisplayId(*entry));
+ 
+@@ -1750,6 +1821,8 @@
+     }
+ }
+ 
++// 目标 → 连接的扇出点：逐个 InputTarget 找到对应 Connection，进入 prepareDispatchCycle。
++//   一个事件可同时投给多个目标（焦点窗口 + spy 窗口 + monitor 通道），各自独立排队互不阻塞。
+ void InputDispatcher::dispatchEventLocked(nsecs_t currentTime,
+                                           std::shared_ptr<EventEntry> eventEntry,
+                                           const std::vector<InputTarget>& inputTargets) {
+@@ -1866,6 +1939,13 @@
+     return false;
+ }
+ 
++// 【核心流程】焦点窗口解析（按键类事件的目标裁决），三种结果：
++//   - SUCCEEDED：有焦点窗口 → addWindowTargetLocked（FOREGROUND | DISPATCH_AS_IS）。
++//   - PENDING：有焦点应用但还没窗口（应用启动中）→ 挂起事件并起 ANR 计时，
++//     即 mNoFocusedWindowTimeoutTime（默认 5s×倍率），到期走 processNoFocusedWindowAnrLocked。
++//   - FAILED：既无窗口也无应用/窗口暂停等 → 事件丢弃。
++// 【关键细节】按键必须在"之前所有事件被各连接处理完"后再发（shouldWaitToSendKeyLocked）——
++//   先前的触摸可能弹出弹窗改变焦点，按键要跟到新窗口，这是按键对触摸的隐式顺序约束。
+ InputEventInjectionResult InputDispatcher::findFocusedWindowTargetsLocked(
+         nsecs_t currentTime, const EventEntry& entry, std::vector<InputTarget>& inputTargets,
+         nsecs_t* nextWakeupTime) {
+@@ -1987,6 +2067,12 @@
+     return responsiveMonitors;
+ }
+ 
++// 【核心流程】触摸目标解析（全链路最复杂的状态机，约 500 行）：
++//   1.以 mTouchStatesByDisplay[displayId] 为底本拷入 tempTouchState，按 action 演进；
++//   2.DOWN 开新手势（findTouchedWindowAtLocked 按坐标命中窗口），MOVE/UP 沿用既有窗口；
++//   3.多指分属不同窗口时置 split，投递侧按 pointerIds 拆分（见 prepareDispatchCycleLocked）；
++//   4.hover、slippery（出界滑入邻窗）、spy 窗口、遮挡校验（computeTouchOcclusionInfo）同在此裁决；
++//   5.裁决结论写回 mTouchStatesByDisplay。
+ InputEventInjectionResult InputDispatcher::findTouchedWindowTargetsLocked(
+         nsecs_t currentTime, const MotionEntry& entry, std::vector<InputTarget>& inputTargets,
+         nsecs_t* nextWakeupTime, bool* outConflictingPointerActions) {
+@@ -2412,6 +2498,9 @@
+         }
+     }
+ 
++    // 【核心流程】裁决通过后按 tempTouchState.windows 的登记顺序转成 InputTarget 列表：
++    //   主目标窗（含 FLAG_FOREGROUND）在最前，spy 窗、OUTSIDE 副本、壁纸按 TouchedWindow 追加序
++    //   随后；全局 monitor 由 dispatchMotionLocked 在此之后再追加（见该函数尾段批06 批注）。
+     // Success!  Output targets.
+     injectionResult = InputEventInjectionResult::SUCCEEDED;
+ 
+@@ -2635,6 +2724,9 @@
+     it->addPointers(pointerIds, windowInfo->transform);
+ }
+ 
++// 【核心流程】全局 monitor 追加（每个显示器一张表）：逐个查连接且只保留 responsive 的
++//   （selectResponsiveMonitorsLocked），flags 一律 DISPATCH_AS_IS、指针变换用显示默认变换。
++//   monitor 通道不参与落点命中也不阻塞窗口分发——publish 失败只停它自己的连接（见批07）。
+ void InputDispatcher::addGlobalMonitoringTargetsLocked(std::vector<InputTarget>& inputTargets,
+                                                        int32_t displayId) {
+     auto monitorsIt = mGlobalMonitorsByDisplay.find(displayId);
+@@ -2891,6 +2983,8 @@
+     postCommandLocked(std::move(command));
+ }
+ 
++// 单连接投递准备：连接不健康（BROKEN/ZOMBIE）直接跳过；FLAG_SPLIT 时按目标 pointerIds 拆分，
++//   多指事件被拆成子事件（splitMotionEvent），保证分属两个窗口的触摸各自只看到自己的手指。
+ void InputDispatcher::prepareDispatchCycleLocked(nsecs_t currentTime,
+                                                  const sp<Connection>& connection,
+                                                  std::shared_ptr<EventEntry> eventEntry,
+@@ -2953,6 +3047,10 @@
+     enqueueDispatchEntriesLocked(currentTime, connection, eventEntry, inputTarget);
+ }
+ 
++// 按六种 dispatch 模式依次尝试入队（hover 进出/outside/原样/slippery 进出，见各 FLAG_*），
++//   同一事件可能派生出多个 DispatchEntry（如 hover 退出 + outside 副本）。
++// 【关键细节】outboundQueue 原本非空说明上一个分发周期未完成（等待应用 ack），
++//   此时只排队不启动；队列从空变非空才 startDispatchCycleLocked 开始写 socket。
+ void InputDispatcher::enqueueDispatchEntriesLocked(nsecs_t currentTime,
+                                                    const sp<Connection>& connection,
+                                                    std::shared_ptr<EventEntry> eventEntry,
+@@ -2986,6 +3084,12 @@
+     }
+ }
+ 
++// 单模式入队：inputTarget.flags 不含本模式直接 return（六模式循环里五次空转的出处）；
++//   命中才建 DispatchEntry。MOTION 在此改写 resolvedAction：OUTSIDE/HOVER_EXIT/HOVER_ENTER/
++//   SLIPPERY_EXIT(=CANCEL)/SLIPPERY_ENTER(=DOWN) 五种模式把 action 换掉并生成新事件 id
++//   （代码侧伴随 "Transmute MotionEvent" 记录），仅 AS_IS 保留原 action 与原 id。
++//   trackKey/trackMotion 做连接级一致性校验（失序/重复即跳过）；前台目标计数 +1；
++//   最后 push 进 outboundQueue 并采样 oq 计数轨（traceOutboundQueueLength）。
+ void InputDispatcher::enqueueDispatchEntryLocked(const sp<Connection>& connection,
+                                                  std::shared_ptr<EventEntry> eventEntry,
+                                                  const InputTarget& inputTarget,
+@@ -3218,6 +3322,12 @@
+     postCommandLocked(std::move(command));
+ }
+ 
++// 【核心流程】把 DispatchEntry 真正写进 socket 的循环（全链路总论处 5 → 6 的过桥）：
++//   publishKey/MotionEvent（InputTransport 序列化）成功 → 从 outboundQueue 挪到 waitQueue，
++//   并把"超时时刻+通道 token"登记进 mAnrTracker（应用不回 ack 的 ANR 计时起点）。
++// 【关键细节】socket 写满返回 WOULD_BLOCK 是预期内的背压：waitQueue 非空说明应用还没消费完，
++//   本循环就地停下，等应用回 ack 后由 doDispatchCycleFinishedCommand（经 handleReceiveCallback）
++//   重启周期；若 waitQueue 为空还写满则说明通道已坏，abortBrokenDispatchCycleLocked 拆连接。
+ void InputDispatcher::startDispatchCycleLocked(nsecs_t currentTime,
+                                                const sp<Connection>& connection) {
+     if (ATRACE_ENABLED()) {
+@@ -3259,6 +3369,9 @@
+             case EventEntry::Type::MOTION: {
+                 const MotionEntry& motionEntry = static_cast<const MotionEntry&>(eventEntry);
+ 
++                // 发布前的坐标加工（本树仅两处）：全局缩放因子 globalScaleFactor 只缩 X/Y，
++                //   不缩窗口变换（缩放原样发回应用，应用取相对坐标时再用）；FLAG_ZERO_COORDS
++                //   （OUTSIDE 副本防坐标泄露）把全部坐标清零后发出。
+                 PointerCoords scaledCoords[MAX_POINTERS];
+                 const PointerCoords* usingCoords = motionEntry.pointerCoords;
+ 
+@@ -3387,6 +3500,12 @@
+             return;
+         }
+ 
++        // 发布成功后 outboundQueue → waitQueue 迁移；此处即"ANR 计时登记点"：
++        //   timeoutTime = currentTime + getDispatchingTimeoutLocked（monitor 用
++        //   mMonitorDispatchingTimeout，窗口用 WMS 下发的 dispatchingTimeout，兜底
++        //   DEFAULT_INPUT_DISPATCHING_TIMEOUT=5000ms×HwTimeoutMultiplier），
++        //   mAnrTracker.insert 登记超时时刻+通道 token（processAnrsLocked 每圈取最小值定时）。
++        //   只有 responsive 连接才登记——失响应连接不再为它唤醒分发线程。
+         // Re-enqueue the event on the wait queue.
+         connection->outboundQueue.erase(std::remove(connection->outboundQueue.begin(),
+                                                     connection->outboundQueue.end(),
+@@ -3441,6 +3560,8 @@
+     return sign(verifiedEvent);
+ }
+ 
++// 应用回 ack（handled=true/false）后的收尾入口：不就地清 waitQueue，而是封装成 command 投进 mCommandQueue，
++//   保证 waitQueue 的改动都在分发线程串行执行（回调本身在 Looper 线程）。
+ void InputDispatcher::finishDispatchCycleLocked(nsecs_t currentTime,
+                                                 const sp<Connection>& connection, uint32_t seq,
+                                                 bool handled, nsecs_t consumeTime) {
+@@ -3461,6 +3582,9 @@
+     postCommandLocked(std::move(command));
+ }
+ 
++// 通道不可恢复时的拆链路径（两个触发点：写满且 waitQueue 为空=计数失衡；发布返回非
++//   WOULD_BLOCK 的其他错误）：清空 outbound/wait 两队列（逐条采样 oq/wq 计数轨），
++//   NORMAL → BROKEN，再经命令回调 policy->notifyInputChannelBroken。
+ void InputDispatcher::abortBrokenDispatchCycleLocked(nsecs_t currentTime,
+                                                      const sp<Connection>& connection,
+                                                      bool notify) {
+@@ -3509,6 +3633,12 @@
+     delete dispatchEntry;
+ }
+ 
++// 【核心流程】输入通道 socket 可读的 Looper 回调（分发线程）：循环读应用的回执消息——
++//   Finished（带 seq/handled/consumeTime）→ finishDispatchCycleLocked 走命令收尾；
++//   Timeline（应用上报的 graphics 时间线）→ mLatencyTracker 做端到端时延统计。
++//   读到 DEAD_OBJECT（应用进程死亡/关闭通道）→ removeInputChannelLocked 拆连接。
++// 【线程模型】持 mLock 执行；循环读到 WOULD_BLOCK（暂无更多回执）返回 1 保留监听，
++//   通道异常返回 0 注销本回调。
+ int InputDispatcher::handleReceiveCallback(int events, sp<IBinder> connectionToken) {
+     std::scoped_lock _l(mLock);
+     sp<Connection> connection = getConnectionLocked(connectionToken);
+@@ -3647,6 +3777,9 @@
+     target.inputChannel = connection->inputChannel;
+     target.flags = InputTarget::FLAG_DISPATCH_AS_IS;
+ 
++    // 合成 CANCEL 的发布与正常事件同路：逐条走 enqueueDispatchEntryLocked（AS_IS 模式）+
++    //   startDispatchCycleLocked——也就是说 ANR、丢弃、复位产出的 CANCEL 与普通事件共用
++    //   六模式循环与双队列，不另设快速通道。
+     for (size_t i = 0; i < cancelationEvents.size(); i++) {
+         std::unique_ptr<EventEntry> cancelationEventEntry = std::move(cancelationEvents[i]);
+         switch (cancelationEventEntry->type) {
+@@ -3901,6 +4034,11 @@
+     }
+ }
+ 
++// 【核心流程】按键入站（Reader 线程，全链路总论处 5 的落点）：打包 KeyEntry 入 mInboundQueue。
++//   入队前先在锁外回调 policy->interceptKeyBeforeQueueing（Java 侧IMS，可改 policyFlags，
++//   如熄屏时把 POLICY_FLAG_PASS_TO_USER 摘掉让事件直接被 POLICY 原因丢弃）。
++// 【安全考虑】来自 Reader 的事件在此打上 POLICY_FLAG_TRUSTED，后续队列校验见到非 trusted 即 FATAL；
++//   注入 API injectInputEvent 的事件按来源区分，不受信任者另路处理。
+ void InputDispatcher::notifyKey(const NotifyKeyArgs* args) {
+     if (DEBUG_INBOUND_EVENT_DETAILS) {
+         ALOGD("notifyKey - eventTime=%" PRId64 ", deviceId=%d, source=0x%x, displayId=%" PRId32
+@@ -3979,6 +4117,13 @@
+     return mInputFilterEnabled;
+ }
+ 
++// 【核心流程】触摸入站（Reader 线程，全链路总论处 5 的落点）：校验 → 锁外 policy → 锁外 filter → 入队。
++//   与 notifyKey 对称的两道锁外预处理：interceptMotionBeforeQueueing（交互态在 JNI 层只补
++//   POLICY_FLAG_INTERACTIVE|PASS_TO_USER 两个标志，非交互才回调 Java 侧）与 filterInputEvent。
++//   filter 装了（mInputFilterEnabled）时 MotionEvent 副本转交 IInputFilter 后本函数直接 return——
++//   这次调用不入 mInboundQueue，事件由过滤器侧经 injectInputEvent（保留原事件 id）异步送回，
++//   这是"notifyMotion slice 早、入队晚"两时刻分离的代码根源；未装 filter 则回收副本放行入队。
++//   派发目标见 findTouchedWindowTargetsLocked。
+ void InputDispatcher::notifyMotion(const NotifyMotionArgs* args) {
+     if (DEBUG_INBOUND_EVENT_DETAILS) {
+         ALOGD("notifyMotion - id=%" PRIx32 " eventTime=%" PRId64 ", deviceId=%d, source=0x%x, "
+@@ -4332,6 +4477,10 @@
+     injectionState->refCount += 1;
+     injectedEntries.back()->injectionState = injectionState;
+ 
++    // 【关键细节】注入事件与 Reader 事件在此汇合进同一条 mInboundQueue：MotionEntry 用
++    //   motionEvent.getId() 原样保留事件 id（经 InputFilter 消费后回注的条目与原 notifyMotion
++    //   的 id 相同），policyFlags 已含 POLICY_FLAG_FILTERED（device id 保留、跳过 policy 二次拦截，
++    //   见本函数头部 resolvedDeviceId 分支）。注入方线程持锁入队并负责 needWake 唤醒分发线程。
+     bool needWake = false;
+     while (!injectedEntries.empty()) {
+         needWake |= enqueueInboundEventLocked(std::move(injectedEntries.front()));
+@@ -4659,6 +4808,9 @@
+ 
+ void InputDispatcher::setInputWindows(
+         const std::unordered_map<int32_t, std::vector<sp<WindowInfoHandle>>>& handlesPerDisplay) {
++    // 【调用关系】WMS 窗口变化的推送落点（经 WindowInfosListener 回调）：换装每显示的窗口列表，
++    //   并 wake 分发线程——焦点重算（可能发 FOCUS 事件、给失焦窗口发 CANCEL）随之进行，
++    //   分发目标的一切依据都来自这份由 WMS 维护的窗口快照。
+     // TODO(b/198444055): Remove setInputWindows from InputDispatcher.
+     { // acquire lock
+         std::scoped_lock _l(mLock);
+@@ -5179,6 +5331,12 @@
+     return transferTouchFocus(fromToken, destChannelToken);
+ }
+ 
++// 全量复位（两个触发点：分发被禁用 setInputDispatchMode :4928、filter 启停
++//   setInputFilterEnabled :4962——均为 Binder 调用线程持 mLock 执行）：向所有连接广播
++//   合成 CANCEL（追加进各连接 outbound 队列后照常发布）后清 key repeat、释放 mPendingEvent、
++//   清空 mInboundQueue、清无焦点挂起计时，并把 mAnrTracker/触摸状态/hover/替换键清零。
++//   注意 mAnrTracker.clear() 把全部超时登记一次性抹掉——仍在各连接 waitQueue 里的条目
++//   不再计时，只能靠应用自己 ack（出队时 erase 对空表是空操作）。
+ void InputDispatcher::resetAndDropEverythingLocked(const char* reason) {
+     if (DEBUG_FOCUS) {
+         ALOGD("Resetting and dropping all events (%s).", reason);
+@@ -5461,6 +5619,10 @@
+     std::function<int(int events)> mCallback;
+ };
+ 
++// 【核心流程】为窗口新建输入通道（WMS 经 IMS 调用，全链路总论处 5→6 的通道来源）：
++//   socketpair 生成双端；server 端包成 Connection 登记 mConnectionsByToken，
++//   并把 server fd 注册进 mLooper（可读即 handleReceiveCallback 收 ack）；
++//   client 端经 Binder 送回应用进程，应用侧注册见批次 4 的 ViewRootImpl/InputEventReceiver。
+ Result<std::unique_ptr<InputChannel>> InputDispatcher::createInputChannel(const std::string& name) {
+     if (DEBUG_CHANNEL_CREATION) {
+         ALOGD("channel '%s' ~ createInputChannel", name.c_str());
+@@ -5497,6 +5659,11 @@
+     return clientChannel;
+ }
+ 
++// 【核心流程】monitor 通道的注册口（IMS.monitorInput→JNI→此处）：与 createInputChannel 一样
++//   socketpair 双端，差别在 server 端不挂窗口、只进 mGlobalMonitorsByDisplay[displayId]
++//   （Monitor{channel, pid}），fd 同样注册进 mLooper 收回执。每一帧指针事件经
++//   addGlobalMonitoringTargetsLocked 复制一份给它；[Gesture Monitor] 类 spy 窗不在此注册，
++//   它走窗口列表（setInputWindows）按落点命中，见 IMS.createSpyWindowGestureMonitor。
+ Result<std::unique_ptr<InputChannel>> InputDispatcher::createInputMonitor(int32_t displayId,
+                                                                           const std::string& name,
+                                                                           int32_t pid) {
+@@ -5721,6 +5888,14 @@
+     mConnectionsByToken.erase(connection->inputChannel->getConnectionToken());
+ }
+ 
++// 分发周期收尾的实际执行（分发线程，命令队列中运行）：waitQueue 出队 + 清 AnrTracker 计时，
++//   响应性恢复检测，最后 startDispatchCycleLocked 启动该连接的下一个周期——
++//   "写 socket → 等 ack → 收尾 → 再写" 的每连接串行节奏由此闭合。
++// 【为什么】afterKeyEventLockedInterruptable 可要求重投（restartEvent）：
++//   按键未被应用处理时查 fallback 键映射，命中就把同一条 KeyEntry 就地改写成 fallback 键
++//   （keyCode 换目标键、flags 加 AKEY_EVENT_FLAG_FALLBACK，:6123-6138）并推回 outboundQueue
++//   队首再走一遍；afterMotionEventLockedInterruptable 恒返回 false（:6151-6155），
++//   触摸事件没有重投路径。
+ void InputDispatcher::doDispatchCycleFinishedCommand(nsecs_t finishTime,
+                                                      const sp<Connection>& connection, uint32_t seq,
+                                                      bool handled, nsecs_t consumeTime) {
+@@ -5809,6 +5984,15 @@
+     postCommandLocked(std::move(command));
+ }
+ 
++// 连接级 ANR 判定落地（processAnrsLocked 到期后调用；responsive=false 已在 :698 先行置位）：
++//   waitQueue 已清空说明应用追上了，取消 ANR；否则以最老条目计算等待时长并上报。
++//   失响应的后果是"不再作为新事件的目标"（触摸命中 hasResponsiveConnectionLocked 与
++//   monitor 选取 selectResponsiveMonitorsLocked 都跳过它），已发出的 waitQueue 条目不撤回。
++//   上报经命令队列放锁回调 policy：notifyWindowUnresponsive（JNI :840-859 CallVoidMethod）
++//   → IMS.java:2957 → InputManagerCallback.java:103 → AnrController（应用错误弹窗）。
++//   随后 cancelEventsForAnrLocked 合成 CANCEL 事件——注意是追加入队（enqueueDispatchEntryLocked，
++//   :3680）后照常 startDispatchCycleLocked 发布，不清空 outbound/wait 队列（:1783 注释明言
++//   不在此断连，焦点事件还会继续堆积）。
+ void InputDispatcher::onAnrLocked(const sp<Connection>& connection) {
+     if (connection == nullptr) {
+         LOG_ALWAYS_FATAL("Caller must check for nullness");
+@@ -5933,6 +6117,9 @@
+  * Check whether the connection of interest is a monitor or a window, and add the corresponding
+  * command entry to the command queue.
+  */
++// ANR 上报的命令组装：monitor 通道与窗口通道取 pid 的来源不同（monitor 查注册表
++//   findMonitorPidByTokenLocked，窗口取 WindowInfo.ownerPid）；pid 交给 policy 后由
++//   notifyWindowUnresponsive 决定弹窗/杀进程等处置。恢复时对称走 processConnectionResponsiveLocked。
+ void InputDispatcher::processConnectionUnresponsiveLocked(const Connection& connection,
+                                                           std::string reason) {
+     const sp<IBinder>& connectionToken = connection.inputChannel->getConnectionToken();
+@@ -6154,12 +6341,19 @@
+     return false;
+ }
+ 
++// 【数据流】入队/出队/清队三处都会调本函数，往 atrace 写整型计数轨 "iq"＝mInboundQueue 深度。
++//   trace 侧判据：两次采样之间队列未发生任何操作，深度保持上次采样值；本样本 34.738ms 空档
++//   内 iq 恒 0（6,771,783,765 采 0 → 6,830,307,188 采 1），证明事件此间不在 mInboundQueue（批06）。
+ void InputDispatcher::traceInboundQueueLengthLocked() {
+     if (ATRACE_ENABLED()) {
+         ATRACE_INT("iq", mInboundQueue.size());
+     }
+ }
+ 
++// 出站两条计数轨（与 iq 对应）：ATRACE_INT("oq:<窗口名>", outboundQueue.size()) 与
++//   ATRACE_INT("wq:<窗口名>", waitQueue.size())。采样点五处——入 oq（:3132）、oq→wq 迁移
++//   （:3394/:3400）、拆链清队（:3474/:3476）、回执出队（:5774，restartEvent 时 oq 回填 :5777）。
++//   计数轨名按连接划分，三通道各自独立可读；名字经 char[40] 缓冲截断。
+ void InputDispatcher::traceOutboundQueueLength(const Connection& connection) {
+     if (ATRACE_ENABLED()) {
+         char counterName[40];

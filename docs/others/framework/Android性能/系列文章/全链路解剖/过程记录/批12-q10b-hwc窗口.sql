@@ -1,0 +1,1 @@
+SELECT s.ts - 6073694444196 AS rel_ts, s.dur, t.tid, s.name FROM slice s JOIN thread_track tt ON s.track_id = tt.id JOIN thread t USING (utid) WHERE t.upid = 49 AND s.ts - 6073694444196 BETWEEN 6850000000 AND 6880000000 ORDER BY s.ts LIMIT 40;

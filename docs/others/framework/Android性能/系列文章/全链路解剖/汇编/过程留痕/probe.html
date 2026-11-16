@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>探针</title>
+<style>
+@page { size: A4; margin: 20mm 18mm 22mm 18mm;
+  @bottom-center { content: "第 " counter(page) " 页"; font-family: "Noto Sans CJK SC"; font-size: 8.5pt; color: #666; }
+  @top-left { content: string(doctitle); font-family: "Noto Sans CJK SC"; font-size: 8pt; color: #888; }
+}
+body { font-family: "Noto Serif CJK SC","Noto Sans Symbols","Noto Sans Symbols2","FreeSerif",serif; font-size: 10.5pt; line-height: 1.75; color: #1a1a1a; }
+h1 { font-family: "Noto Sans CJK SC","Noto Sans Symbols2","FreeSerif",sans-serif; font-size: 20pt; string-set: doctitle content(); break-before: page; }
+h2 { font-family: "Noto Sans CJK SC",sans-serif; font-size: 14pt; break-after: avoid; }
+code, pre { font-family: "Noto Sans Mono","Noto Sans CJK SC","Noto Sans Symbols2","FreeMono",monospace; }
+pre { background: #f6f8fa; border-left: 3px solid #d0d7de; padding: 8pt; font-size: 8.3pt; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+table { border-collapse: collapse; width: 100%; font-size: 9pt; font-family: "Noto Sans CJK SC",sans-serif; }
+th, td { border: 0.5pt solid #d0d7de; padding: 4pt 6pt; vertical-align: top; }
+th { background: #f0f3f6; }
+blockquote { border-left: 3px solid #c9d1d9; background: #f6f8fa; margin: 8pt 0; padding: 6pt 10pt; color: #444; }
+.toc a { text-decoration: none; color: inherit; }
+.toc a::after { content: target-counter(attr(href), page); float: right; }
+</style></head><body>
+<h1 id="top">探针 · 全链路解剖汇编</h1>
+<nav class="toc"><p><a href="#s1">第一节 机制走读</a></p><p><a href="#s2">第二节 四态审计</a></p></nav>
+<h2 id="s1">第一节 机制走读</h2>
+<p>InputDispatcher::notifyMotion 于 <code>00:00:06.795839</code> 产生 slice，prepareDispatchCycleLocked 起点差 34.738 ms——已证。中文排版测试：事件经监听器链转交过滤器，主线程回注原事件 ID。</p>
+<pre>// 中文注释：入队点 enqueueInboundEventLocked
+void InputDispatcher::notifyMotion(const NotifyMotionArgs&amp; args) {
+    ATRACE_CALL();  // 这是一条故意很长的代码行，用来验证 pre-wrap 在 A4 页宽内的折行行为，确保不会溢出右边界。
+    mInboundQueue.push_back(entry);
+}</pre>
+<blockquote>引文基准：kernel 精树 5.15.41；Android 精树。三态：已证/未证/盲区。</blockquote>
+<h2 id="s2">第二节 四态审计</h2>
+<table><thead><tr><th>#</th><th>断言</th><th>判定</th><th>证据</th><th>出处</th><th>备注</th><th>归属篇</th></tr></thead>
+<tbody><tr><td>1</td><td>帧率恒等式</td><td>❌</td><td>复算 58.3%</td><td>批16-q3</td><td>证伪</td><td>16</td></tr>
+<tr><td>2</td><td>垂直准时</td><td>🟡</td><td>部分支持</td><td>批16-q4</td><td>待补采</td><td>16</td></tr>
+<tr><td>3</td><td>时戳同源</td><td>✅</td><td>单点吻合</td><td>契约 :70</td><td>已证</td><td>03</td></tr>
+<tr><td>4</td><td>等待条件</td><td>⬜</td><td>无 syscall</td><td>会话 :106</td><td>盲区</td><td>14</td></tr></tbody></table>
+<p>符号行内复验：✅ 🟡 ❌ ⬜ 结束。</p>
+</body></html>

@@ -1,0 +1,7 @@
+"rel_ts","event","cpu","emitter_tid","emitter_comm","wakee_pid","target_cpu"
+6805690149,"sched_waking",2,756,"system_server",1136,2
+
+"marker"
+"---window2 boundary---"
+
+"rel_ts","event","cpu","emitter_tid","emitter_comm","wakee_pid","target_cpu"

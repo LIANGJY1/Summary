@@ -1,0 +1,173 @@
+/* AppList 性能全链路解剖 · 18 篇汇编书籍样式（WeasyPrint 70） */
+
+/* ---------- 分页与页眉页脚 ---------- */
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm 18mm;
+}
+@page body {
+  @top-left {
+    content: string(article-title);
+    font-family: "Noto Sans CJK SC", sans-serif;
+    font-size: 8pt; color: #888;
+  }
+  @top-right {
+    content: "AppList 性能全链路解剖";
+    font-family: "Noto Sans CJK SC", sans-serif;
+    font-size: 8pt; color: #aaa;
+  }
+  @bottom-center {
+    content: "第 " counter(page) " 页";
+    font-family: "Noto Sans CJK SC", sans-serif;
+    font-size: 8.5pt; color: #666;
+  }
+}
+@page cover {
+  margin: 0;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+@page toc {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+/* ---------- 基础排版 ---------- */
+html { background: #ffffff; }
+body {
+  font-family: "Noto Serif CJK SC", "Noto Sans Symbols", "Noto Sans Symbols2", "FreeSerif", serif;
+  font-size: 10.5pt; line-height: 1.75; color: #1a1a1a;
+  margin: 0;
+}
+p { margin: 6pt 0; text-align: justify; overflow-wrap: break-word; }
+strong { font-weight: 700; }
+a { color: inherit; text-decoration: none; }
+.extref { color: #555; }
+hr { border: none; border-top: 0.5pt solid #d0d7de; margin: 12pt 0; }
+
+/* ---------- 标题 ---------- */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Noto Sans CJK SC", "Noto Sans Symbols", "Noto Sans Symbols2", "FreeSerif", sans-serif;
+  color: #111; break-after: avoid; break-inside: avoid;
+}
+.article h1 {
+  font-size: 19pt; font-weight: 700; line-height: 1.4;
+  margin: 0 0 16pt 0; padding-bottom: 8pt;
+  border-bottom: 0.75pt solid #999;
+  string-set: article-title content();
+  break-before: page;
+}
+h2 {
+  font-size: 13.5pt; font-weight: 700;
+  margin: 18pt 0 8pt 0; padding-bottom: 3pt;
+  border-bottom: 0.5pt solid #d0d7de;
+}
+h3 { font-size: 11.5pt; font-weight: 700; margin: 14pt 0 6pt 0; }
+h4 { font-size: 10.5pt; font-weight: 700; margin: 12pt 0 5pt 0; }
+h5, h6 { font-size: 10.5pt; font-weight: 700; margin: 10pt 0 4pt 0; }
+
+/* ---------- 列表 ---------- */
+ul, ol { margin: 6pt 0; padding-left: 2em; }
+li { margin: 2.5pt 0; text-align: justify; overflow-wrap: anywhere; }
+li > ul, li > ol { margin: 2pt 0; }
+
+/* ---------- 代码 ---------- */
+code, pre, kbd {
+  font-family: "Noto Sans Mono", "Noto Sans CJK SC", "Noto Sans Symbols2", "FreeMono", monospace;
+}
+code {
+  font-size: 8.8pt; background: #f0f3f6;
+  padding: 0.5pt 3pt; border-radius: 2pt;
+  overflow-wrap: break-word;
+}
+pre {
+  background: #f6f8fa; border-left: 3pt solid #d0d7de;
+  padding: 8pt 10pt; margin: 8pt 0;
+  font-size: 8.3pt; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+pre code { background: none; padding: 0; font-size: inherit; border-radius: 0; }
+
+/* ---------- 表格 ---------- */
+table {
+  border-collapse: collapse; width: 100%; table-layout: fixed;
+  font-family: "Noto Sans CJK SC", "Noto Sans Symbols", "Noto Sans Symbols2", "FreeSerif", sans-serif;
+  font-size: 9pt; line-height: 1.55; margin: 8pt 0;
+}
+th, td {
+  border: 0.5pt solid #d0d7de; padding: 3.5pt 5pt;
+  vertical-align: top; text-align: left; overflow-wrap: break-word;
+}
+th { background: #f0f3f6; font-weight: 700; }
+td code, th code { word-break: break-all; }
+td, th { overflow-wrap: anywhere; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+
+/* ---------- 引用块 ---------- */
+blockquote {
+  border-left: 3pt solid #c9d1d9; background: #f6f8fa;
+  margin: 8pt 0; padding: 6pt 12pt; color: #444;
+}
+blockquote p { margin: 3pt 0; }
+
+/* ---------- 封面 ---------- */
+.cover { page: cover; break-after: page; padding: 26mm 24mm; }
+.cover-kicker {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 11pt; letter-spacing: 2pt; color: #666;
+  margin: 0 0 18pt 0;
+}
+.cover-title {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 32pt; font-weight: 900; line-height: 1.3;
+  color: #111; margin: 0 0 12pt 0; border: none; padding: 0;
+  break-before: auto; string-set: none;
+}
+.cover-subtitle {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 13pt; color: #444; margin: 0 0 24pt 0; line-height: 1.6;
+}
+.cover-rule { border: none; border-top: 1.5pt solid #111; width: 38%; margin: 0 0 24pt 0; }
+.cover-summary {
+  font-size: 10.5pt; line-height: 1.9; color: #333;
+  max-width: 92%; margin: 0 0 30pt 0; text-align: justify;
+}
+.cover-meta {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 9pt; color: #777; line-height: 1.9; margin: 0;
+}
+.cover-foot {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 9pt; color: #999; margin-top: 40pt;
+}
+
+/* ---------- 目录 ---------- */
+.book-toc { page: toc; }
+.book-toc h1 {
+  font-size: 19pt; margin: 0 0 16pt 0; padding-bottom: 8pt;
+  border-bottom: 0.75pt solid #999; break-before: auto; string-set: none;
+}
+.toc-l1 {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 10.5pt; font-weight: 700;
+  margin: 9pt 0 3pt 0; break-after: avoid;
+}
+.toc-l2 {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-size: 9pt; color: #444;
+  margin: 1.5pt 0 1.5pt 1.6em;
+}
+.book-toc a { display: block; overflow: hidden; }
+.book-toc a::after {
+  content: target-counter(attr(href), page);
+  float: right; color: #666; font-weight: 400;
+}
+
+/* ---------- 正文篇 ---------- */
+.article { page: body; }
+
+/* ---------- 孤行寡行 ---------- */
+p, li { orphans: 3; widows: 3; }

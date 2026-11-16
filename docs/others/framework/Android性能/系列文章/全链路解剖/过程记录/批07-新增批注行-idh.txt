@@ -1,0 +1,28 @@
+--- /home/liang/Project/AAOS13/frameworks/native/services/inputflinger/dispatcher/InputDispatcher.h	2026-03-19 10:55:54.080698737 +0800
++++ /home/liang/Project/MyProject/AAOS13_study/frameworks/native/services/inputflinger/dispatcher/InputDispatcher.h	2026-11-14 01:53:58.336991287 +0800
+@@ -62,6 +62,13 @@
+ 
+ class Connection;
+ 
++// 输入链路第 3 站（全链路总论见 EventHub::getEvents）：分发器把加工好的事件投递给目标窗口。
++// - 跨线程交汇：Reader 线程经 notifyX() 入队，本线程在 dispatchOnce() 里消费。四段队列串联全程：
++//   1.mInboundQueue 待分发 → 2.mPendingEvent 分发中 → 3.Connection 出/待确认双队列，
++//   即已写 socket 等应用 ack → 4.mCommandQueue 延后执行的回调。
++// - 目标窗口来自 WMS 持续推送（经 SurfaceFlinger 转推；setInputWindows 为遗留接口），
++//   焦点由 FocusResolver 裁决；应用不回 ack 经 AnrTracker 计时触发 ANR（默认 5s）。
++// - 窗口/应用句柄与策略回调（interceptKeyBeforeQueueing 等）都来自 policy 对象（Java 侧 IMS）。
+ /* Dispatches events to input targets.  Some functions of the input dispatcher, such as
+  * identifying input targets, are controlled by a separate policy object.
+  *
+@@ -525,6 +532,11 @@
+     // If a connection is not responsive, then the entries should not be added to the AnrTracker.
+     // Once a connection becomes unresponsive, its entries are removed from AnrTracker to
+     // prevent unneeded wakeups.
++    // 连接级 ANR 计时的总账（multiset<pair<timeoutTime, token>>）。同步点四处：
++    //   发布成功登记 insert（startDispatchCycleLocked）、回执出队注销 erase
++    //   （doDispatchCycleFinishedCommand）、连接移除按 token 全删 eraseToken
++    //   （removeConnectionLocked/processAnrsLocked）、全量复位 clear
++    //   （resetAndDropEverythingLocked）。
+     AnrTracker mAnrTracker GUARDED_BY(mLock);
+ 
+     // Contains the last window which received a hover event.

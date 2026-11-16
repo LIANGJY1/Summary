@@ -1,0 +1,42 @@
+frameworks/base/core/java/android/view/Choreographer.java: >     //   "Skipped N frames! The application may be doing too much work on its main thread."
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //     class MyReceiver extends InputEventReceiver {
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //       @Override public void onInputEvent(InputEvent e) {
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //         handle(e);
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //         finishInputEvent(e, true);
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //       }
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //     }
+frameworks/base/core/java/android/view/InputEventReceiver.java: > //     MyReceiver r = new MyReceiver(channel, looper);
+frameworks/base/core/java/android/view/ViewRootImpl.java: >                 //   nativePreIme → viewPreIme → ime → earlyPostIme → nativePostIme → viewPostIme → synthetic。
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //                  Java Framework
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //+------------------------------------------------+
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //InputManagerService
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        | mNative
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        v
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //NativeInputManagerService (interface)
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        v
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //NativeInputManagerService.NativeImpl
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        | JNI
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        v
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //+------------------------------------------------+
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //                 C++
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //+------------------------------------------------+
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //NativeInputManager
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        +---- InputReader
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        |
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //        +---- InputDispatcher
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   registerLidSwitchCallbackInternal/unregister、start/systemRunning、
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   reloadKeyboardLayouts/reloadDeviceAliases/setDisplayViewportsInternal、
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   getKeyCodeForKeyLocation）、transferTouch/monitorInput/createSpyWindowGestureMonitor/
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   removeSpyWindowGestureMonitor/monitorGestureInput、createInputChannel/removeInputChannel、
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   disableInputDevice/getInputDeviceIds/getInputDevices）、
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   registerInputDevicesChangedListener/onInputDevicesChangedListenerDied/
+frameworks/base/services/core/java/com/android/server/input/InputManagerService.java: > //   onTabletModeChangedListenerDied/deliverTabletModeChanged）、
+frameworks/native/libs/gui/SurfaceComposerClient.cpp: > // composerServiceDied）。
+frameworks/native/services/inputflinger/dispatcher/InputDispatcher.cpp: >         //   DEFAULT_INPUT_DISPATCHING_TIMEOUT=5000ms×HwTimeoutMultiplier），
+frameworks/native/services/inputflinger/dispatcher/InputDispatcher.h: >     //   （resetAndDropEverythingLocked）。

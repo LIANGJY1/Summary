@@ -1,0 +1,29 @@
+== 批08-rvscroll.sql 输出 ==
+"rel_ts","dur","name","tid","utid"
+6830952534,11846,"processInputEventForCompatibility",1909,74
+6831006342,1734538,"deliverInputEvent src=0x1002 eventTimeNano=6080481854000 id=0x3b3b7f02",1909,74
+6831024957,7654,"EarlyPostImeInputStage id=0x3b3b7f02",1909,74
+6831043726,3885,"NativePostImeInputStage id=0x3b3b7f02",1909,74
+6831057418,1578231,"ViewPostImeInputStage id=0x3b3b7f02",1909,74
+6831161226,238231,"RV Scroll",1909,74
+6831246265,88384,"Choreographer#scheduleVsyncLocked",1909,74
+6842036457,24885,"Choreographer#onVsync 155812",1909,74
+6842074918,564193,"Choreographer#doFrame 155812",1909,74
+6842085803,546654,"traversal",1909,74
+6842147649,480116,"draw",1909,74
+6842162226,99577,"Record View#draw()",1909,74
+6842268957,353769,"postAndWait",1909,74
+6842678226,48231,"RV Prefetch",1909,74
+6843936111,12231,"processInputEventForCompatibility",1909,74
+6843984995,2810962,"deliverInputEvent src=0x1002 eventTimeNano=6080484696000 id=0x2ff164c",1909,74
+6844000957,8615,"EarlyPostImeInputStage id=0x2ff164c",1909,74
+6844021418,4000,"NativePostImeInputStage id=0x2ff164c",1909,74
+6844052111,1450807,"ViewPostImeInputStage id=0x2ff164c",1909,74
+6844142380,6615,"RV Scroll",1909,74
+6844207034,82269,"Choreographer#scheduleVsyncLocked",1909,74
+
+== 批08-threadstate.sql 输出 ==
+"rel_ts","dur","state","io_wait","waker_utid"
+6830764842,33923,"R","[NULL]",210
+6830798765,1984307,"Running","[NULL]","[NULL]"
+6832783072,9106616,"S","[NULL]","[NULL]"

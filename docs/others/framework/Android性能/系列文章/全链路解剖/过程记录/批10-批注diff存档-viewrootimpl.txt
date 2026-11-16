@@ -1,0 +1,105 @@
+diff --git a/frameworks/base/core/java/android/view/ViewRootImpl.java b/frameworks/base/core/java/android/view/ViewRootImpl.java
+index b0de68e01..06eaa3d91 100644
+--- a/frameworks/base/core/java/android/view/ViewRootImpl.java
++++ b/frameworks/base/core/java/android/view/ViewRootImpl.java
+@@ -2531,6 +2531,12 @@ public final class ViewRootImpl implements ViewParent,
+     //
+     // 【为什么】屏障必须先插、回调后投：若反过来，投递后到 vsync 之间到达的普通同步消息，
+     // 就可能插队执行，遍历被推迟、帧对齐失效——"屏障挡消息、异步过屏障"是 Handler 组合拳。
++    // 【合并机制】去重是两级的：这里 mTraversalScheduled 拦掉本窗口内的第二次调用；
++    // Choreographer 侧 mFrameScheduled（scheduleFrameLocked）拦掉重复的 vsync 请求——
++    // 同一帧窗口内多次 invalidate/requestLayout 各自调 scheduleTraversals，只有首次真正
++    // 请求 vsync，后续全部只入回调队列或被拦，最终合并为一次 doFrame 一次 performTraversals。
++    // 本 trace 配对：RV Scroll 内 invalidate 触发本次调用，经 postCallback 转
++    // scheduleFrameLocked 再到 scheduleVsyncLocked（trace slice 6,831,246,265，批08/09 配对）。
+     void scheduleTraversals() {
+         if (!mTraversalScheduled) {
+             mTraversalScheduled = true;
+@@ -3075,6 +3081,10 @@ public final class ViewRootImpl implements ViewParent,
+     // 【状态管理】方法内十几个布尔（mFirst/mFullRedrawNeeded/mLayoutRequested/windowShouldResize…）
+     // 就是三遍的"是否要做"裁决表：每个变更来源只翻自己那一位，末段按位跳过对应遍历——
+     // "为什么 invalidate 不触发测量、requestLayout 全量重走"的答案全在这张表里。
++    // 【trace 配对】本方法无独立打点，全程被 doFrame 的 "traversal" 子 slice
++    //   （doCallbacks 的 traceBegin）覆盖：invalidate 驱动的滚动帧 mLayoutRequested=false、
++    //   didLayout=false，measure/layout 两段跳过，只剩 performDraw——本样本 trace 实测
++    //   508 帧全部有 traversal 子 slice 且其内有 draw，全程无 measure/layout 子 slice。
+     private void performTraversals() {
+         mLastPerformTraversalsSkipDrawReason = null;
+ 
+@@ -4428,6 +4438,8 @@ public final class ViewRootImpl implements ViewParent,
+         if (mView == null) {
+             return;
+         }
++        //【数据流】"measure" slice 产生点：仅本次遍历实际走到测量时出现；invalidate 驱动的
++        //   滚动帧 layoutRequested=false 不进测量段，trace 中无该子 slice。
+         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "measure");
+         try {
+             mView.measure(childWidthMeasureSpec, childHeightMeasureSpec);
+@@ -4515,6 +4527,8 @@ public final class ViewRootImpl implements ViewParent,
+                     host.getMeasuredWidth() + ", " + host.getMeasuredHeight() + ")");
+         }
+ 
++        //【数据流】"layout" slice 产生点；调用条件 didLayout = layoutRequested 且窗口未停
++        //   （performTraversals 内判定）——invalidate 驱动的滚动帧不进入。
+         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "layout");
+         try {
+             host.layout(0, 0, host.getMeasuredWidth(), host.getMeasuredHeight());
+@@ -4925,6 +4939,9 @@ public final class ViewRootImpl implements ViewParent,
+         mFullRedrawNeeded = false;
+ 
+         mIsDrawing = true;
++        //【数据流】"draw" slice 产生点：本样本 trace 508 帧的 traversal 子 slice 内全部有 draw
++        //   （批09 补查）；硬件路径进入 ThreadedRenderer 录制（其下 "Record View#draw()"/
++        //   "postAndWait" 子 slice 的机制归批10）。
+         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
+ 
+         addFrameCommitCallbackIfNeeded();
+@@ -4991,6 +5008,10 @@ public final class ViewRootImpl implements ViewParent,
+ 
+                 sch.dispatchSurfaceRedrawNeededAsync(mSurfaceHolder, callbacks);
+             } else if (!usingAsyncReport) {
++                //【执行时机】mReportNextDraw 且无异步回执时的 RT 栅栏：fence()（HardwareRenderer
++                //   → RenderProxy::fence，runSync 空任务）返回即 RT 已执行完队列内全部此前任务，
++                //   包括本帧 drawFrame 的同步段——普通帧不等这里（提前放行已让 UI 线程先回），
++                //   只有"要求本次绘制结果立即可见"的路径（如窗口首次绘制报告）才付出这个等待。
+                 if (mAttachInfo.mThreadedRenderer != null) {
+                     mAttachInfo.mThreadedRenderer.fence();
+                 }
+@@ -5311,6 +5332,7 @@ public final class ViewRootImpl implements ViewParent,
+     // 锁失败置标志换新面。
+     private boolean drawSoftware(Surface surface, AttachInfo attachInfo, int xoff, int yoff,
+             boolean scalingRequired, Rect dirty, Rect surfaceInsets) {
++
+         // 【核心流程】软件绘制路径：lockCanvas 从 surface 取位图 Canvas 后视图树整体绘制，
+         //   unlock 直接提交回 surface。脏区外的旧像素保留，只重画脏区。
+         //   与硬件路径的本质区别：没有 RenderNode 录制与 RenderThread 异步渲染，
+@@ -9982,6 +10004,9 @@ public final class ViewRootImpl implements ViewParent,
+             Trace.traceCounter(Trace.TRACE_TAG_INPUT, mPendingInputEventQueueLengthCounterName,
+                     mPendingInputEventCount);
+ 
++            // 【数据流】进流水线前先回填线程级 FrameInfo 的输入事件字段
++            //   （InputEventAssigner 记下本事件时刻），供当帧及后续帧的
++            //   端到端延迟统计与 Choreographer 回调读数。
+             mViewFrameInfo.setInputEvent(mInputEventAssigner.processEvent(q.mEvent));
+ 
+             deliverInputEvent(q);
+@@ -9996,7 +10021,8 @@ public final class ViewRootImpl implements ViewParent,
+     }
+ 
+     // 【核心流程】选流水线起点后开闸：待合成事件（FLAG_UNHANDLED，见 shouldSendToSynthesizer）直接送末段；
+-    //   skipIme（如窗口不支持输入法交互）从 mFirstPostImeInputStage 进，否则从链头进。
++    //   skipIme（带 FLAG_DELIVER_POST_IME、指针源或旋钮源的事件，见
++    //   QueuedInputEvent.shouldSkipIme）从 mFirstPostImeInputStage 进，否则从链头进。
+     //   按键先过 UnhandledKeyManager 预检（模拟按键/快捷键兜底）再进流水线。
+     private void deliverInputEvent(QueuedInputEvent q) {
+         Trace.asyncTraceBegin(Trace.TRACE_TAG_VIEW, "deliverInputEvent",
+@@ -10035,6 +10061,9 @@ public final class ViewRootImpl implements ViewParent,
+             }
+ 
+             if (stage != null) {
++                // 【执行时机】进流水线前先消化挂起的窗口焦点变化：焦点态变更
++                //   若未落地，各段（尤其丢弃裁决的 mHasWindowFocus 判定）会按
++                //   旧焦点态误丢事件。
+                 handleWindowFocusChanged();
+                 stage.deliver(q);
+             } else {

@@ -1,0 +1,4 @@
+"rel_ts","event","cpu","prev_comm","prev_pid","prev_state","next_comm","next_pid"
+6812717803,"sched_switch",2,"PowerManagerSer",1379,1,"system_server",756
+6812790111,"sched_switch",2,"system_server",756,0,"UsbFfs-worker",26884
+6812884265,"sched_switch",2,"UsbFfs-worker",26884,256,"surfaceflinger",661

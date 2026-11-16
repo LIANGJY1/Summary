@@ -1,0 +1,151 @@
+批07 查询原始输出汇总（2026-11-14，trace=20261113-151358-vertical-1912967/trace.perfetto，
+trace_processor_shell-2434129a3af4dc9e；rel_ts = ts − trace_bounds.start_ts，start_ts=6,073,694,444,196 ns）
+SQL：批07-q1-oqwq_tracks.sql / q2-oqwq_samples.sql / q3-drain_slices.sql / q4_dispatcher_states.sql /
+     q5_publish_slices.sql / q6_finish_slices.sql / q6b_narrow.sql / q6c_ss_all.sql
+
+================================================================ Q1（oq/wq 计数轨存在性）
+"id","name","samples"
+17,"iq",1790
+20,"oq:1b4998d com.yadea.launcher/com.yadea",1790
+24,"oq:PointerEventDispatcher2 (server)",1790
+22,"oq:[Gesture Monitor] CustomGesture-touc",1790
+21,"wq:1b4998d com.yadea.launcher/com.yadea",1790
+25,"wq:PointerEventDispatcher2 (server)",1790
+23,"wq:[Gesture Monitor] CustomGesture-touc",1789
+
+================================================================ Q2（oq/wq 采样值，rel 6,820,000,000–6,860,000,000）
+"rel_ts","name","val"
+6830672995,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6830794765,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6830811995,"wq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6830902649,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6830992726,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6831001572,"wq:[Gesture Monitor] CustomGesture-touc",1.000000
+6831091649,"oq:PointerEventDispatcher2 (server)",1.000000
+6831178726,"oq:PointerEventDispatcher2 (server)",0.000000
+6831186995,"wq:PointerEventDispatcher2 (server)",1.000000
+6831311957,"wq:[Gesture Monitor] CustomGesture-touc",0.000000
+6838299572,"wq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6843379688,"wq:PointerEventDispatcher2 (server)",0.000000
+6843696418,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6843818380,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6843829726,"wq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6843921726,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6844011226,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6844020842,"wq:[Gesture Monitor] CustomGesture-touc",1.000000
+6844114303,"oq:PointerEventDispatcher2 (server)",1.000000
+6844201265,"oq:PointerEventDispatcher2 (server)",0.000000
+6844209303,"wq:PointerEventDispatcher2 (server)",1.000000
+6844339803,"wq:[Gesture Monitor] CustomGesture-touc",0.000000
+6853720688,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6853830495,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6853842149,"wq:1b4998d com.yadea.launcher/com.yadea",2.000000
+6853969495,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6854070572,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6854081265,"wq:[Gesture Monitor] CustomGesture-touc",1.000000
+6854176495,"oq:PointerEventDispatcher2 (server)",1.000000
+6854259265,"oq:PointerEventDispatcher2 (server)",0.000000
+6854268842,"wq:PointerEventDispatcher2 (server)",2.000000
+6854428649,"wq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6854487726,"wq:PointerEventDispatcher2 (server)",1.000000
+6854675880,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6854758957,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6854767995,"wq:1b4998d com.yadea.launcher/com.yadea",2.000000
+6854859303,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6854941957,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6854951265,"wq:[Gesture Monitor] CustomGesture-touc",2.000000
+6855040495,"oq:PointerEventDispatcher2 (server)",1.000000
+6855105880,"oq:PointerEventDispatcher2 (server)",0.000000
+6855116688,"wq:PointerEventDispatcher2 (server)",2.000000
+6855603072,"wq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6855668765,"wq:[Gesture Monitor] CustomGesture-touc",1.000000
+6855692149,"wq:[Gesture Monitor] CustomGesture-touc",0.000000
+6856077303,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6856179380,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6856188880,"wq:1b4998d com.yadea.launcher/com.yadea",2.000000
+6856277342,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6856363188,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6856371649,"wq:[Gesture Monitor] CustomGesture-touc",1.000000
+6856457495,"oq:PointerEventDispatcher2 (server)",1.000000
+6856527649,"oq:PointerEventDispatcher2 (server)",0.000000
+6856535226,"wq:PointerEventDispatcher2 (server)",3.000000
+6856747765,"oq:1b4998d com.yadea.launcher/com.yadea",1.000000
+6856811611,"oq:1b4998d com.yadea.launcher/com.yadea",0.000000
+6856819342,"wq:1b4998d com.yadea.launcher/com.yadea",3.000000
+6856904534,"oq:[Gesture Monitor] CustomGesture-touc",1.000000
+6856966111,"oq:[Gesture Monitor] CustomGesture-touc",0.000000
+6856973918,"wq:[Gesture Monitor] CustomGesture-touc",2.000000
+6857058803,"oq:PointerEventDispatcher2 (server)",1.000000
+6857119765,"oq:PointerEventDispatcher2 (server)",0.000000
+6857127072,"wq:PointerEventDispatcher2 (server)",4.000000
+6857824188,"wq:1b4998d com.yadea.launcher/com.yadea",2.000000
+
+================================================================ Q3（堆积排空段 prepare 三元组，tid 1488）
+"rel_ts","dur","name","depth"
+6843564188,5692,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2ff164c)",2
+6843840072,5654,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2ff164c)",2
+6844031303,5577,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2ff164c)",2
+6853621534,6846,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2f3ae6d0)",2
+6853853072,32539,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2f3ae6d0)",2
+6854095111,5577,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2f3ae6d0)",2
+6854590111,5961,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x1a730a6a)",2
+6854780188,5692,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x1a730a6a)",2
+6854960726,5462,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x1a730a6a)",2
+6855990495,6000,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x221627f3)",2
+6856197495,5500,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x221627f3)",2
+6856380765,5461,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x221627f3)",2
+6856667380,5769,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x32c99b34)",2
+6856827265,5577,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x32c99b34)",2
+6856982226,5423,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x32c99b34)",2
+
+================================================================ Q4（分发线程 tid 1488 thread_state，rel 6,831,000,000–6,844,500,000）
+"rel_ts","dur","state","waker_tid","waker"
+6831375265,615769,"S","-","-"
+6831991034,6164154,"R",756,"system_server"
+6838155188,194230,"Running","-","-"
+6838349418,4906116,"R","-","-"
+6843255534,1147923,"Running","-","-"
+6844403457,9023346,"R","-","-"
+
+================================================================ Q5（分发窗口全 slice，tid 1488，rel 6,830,540,000–6,831,330,000；节选头尾）
+"rel_ts","dur","depth","name"
+6830543842,649230,1,"dispatchEventLocked"
+6830576688,5846,2,"prepareDispatchCycleLocked(inputChannel=1b4998d …AppListActivity (server), id=0x3b3b7f02)"
+6830592265,5769,2,"enqueueDispatchEntriesLocked(inputChannel=1b4998d …AppListActivity (server), id=0x3b3b7f02)"
+6830607418,5539,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_HOVER_EXIT)"
+6830620957,5269,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_OUTSIDE)"
+6830634880,5231,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_HOVER_ENTER)"
+6830647534,5308,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_IS)"
+6830680957,5461,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_SLIPPERY_EXIT)"
+6830693918,5347,2,"enqueueDispatchEntry(…dispatchMode=DISPATCH_AS_SLIPPERY_ENTER)"
+6830707457,5269,2,"startDispatchCycleLocked(inputChannel=1b4998d …AppListActivity (server))"
+6830822342,5615,2,"prepareDispatchCycleLocked([Gesture Monitor] …, id=0x3b3b7f02)"
+6830835226,5616,2,"enqueueDispatchEntriesLocked([Gesture Monitor] …, id=0x3b3b7f02)"
+6830848265,5384,2,"enqueueDispatchEntry(HOVER_EXIT) / 6830860726,5346(OUTSIDE) / 6830873149,5193(HOVER_ENTER) / 6830885149,5193(AS_IS) / 6830910380,5385(SLIPPERY_EXIT) / 6830924534,5808(SLIPPERY_ENTER)"
+6830937342,5538,2,"startDispatchCycleLocked([Gesture Monitor] …)"
+6831012842,5461,2,"prepareDispatchCycleLocked(PointerEventDispatcher2 (server), id=0x3b3b7f02)"
+6831025495,5423,2,"enqueueDispatchEntriesLocked(PointerEventDispatcher2 …, id=0x3b3b7f02)"
+6831038457..6831115265,2,"enqueueDispatchEntry 六模式（HOVER_EXIT/OUTSIDE/HOVER_ENTER/AS_IS/SLIPPERY_EXIT/SLIPPERY_ENTER）"
+6831128611,5500,2,"startDispatchCycleLocked(PointerEventDispatcher2 (server))"
+6831220072,8308,0,"pokeUserActivity"
+6831234226,5654,0,"pokeUserActivity"
+6831322226,5731,0,"startDispatchCycleLocked([Gesture Monitor] CustomGesture-touch (server))"
+（注：窗口内无任何 publishMotionEvent/publishKeyEvent slice——InputTransport.cpp 未定义 ATRACE_TAG，
+ 默认 ATRACE_TAG_NEVER，其 ATRACE_NAME 全部失效；见正文 §3.1）
+
+================================================================ Q6（回执处理窗口 tid 1488 全 slice，rel 6,832,000,000–6,844,000,000；节选）
+"rel_ts","dur","depth","name"
+6843283726,7039,0,"startDispatchCycleLocked(inputChannel=1b4998d …AppListActivity (server))"
+6843394111,5615,0,"startDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server))"
+6843428149,795116,0,"dispatchMotionLocked"
+6843437649,81616,1,"findTouchedWindowTargetsLocked"
+6843536495,679500,1,"dispatchEventLocked"
+6843564188,5692,2,"prepareDispatchCycleLocked(…AppListActivity (server), id=0x2ff164c)"
+（6843840072 起 Gesture Monitor 三元组，余同 Q3）
+注：rel 6,832,000,000–6,843,283,726 之间 tid 1488 零 slice。
+
+================================================================ Q6b（窄窗 rel 6,838,000,000–6,838,600,000，tid 1488）
+（零行——wq:AppList 1→0 采样点 6,838,299,572 处无任何 slice）
+
+================================================================ Q6c（system_server 全部线程，rel 6,838,100,000–6,838,500,000）
+（零行——该窗口内 system_server 无任何线程 slice）

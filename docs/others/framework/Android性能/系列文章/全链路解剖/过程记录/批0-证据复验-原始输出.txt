@@ -1,0 +1,154 @@
+"tag","start_ts","end_ts"
+"bounds",6073694444196,6088573105878
+
+"tag","rel_ts","dur","state"
+"launcher_S_gt40ms",6779836842,50928000,"S"
+
+"tag","rel_ts","dur","name"
+
+"tag","rel_ts","dur","name","tid"
+"input_slices_window",6700138649,2539,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2214070a)",1488
+"input_slices_window",6700234534,2346,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2214070a)",1488
+"input_slices_window",6700336342,2538,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2214070a)",1488
+"input_slices_window",6700481380,2577,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2d8bfdda)",1488
+"input_slices_window",6700553765,2500,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2d8bfdda)",1488
+"input_slices_window",6700630457,2500,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2d8bfdda)",1488
+"input_slices_window",6709992534,2356385,"deliverInputEvent src=0x1002 eventTimeNano=6080388613000 id=0x2214070a",1909
+"input_slices_window",6714672919,6423,"notifyMotion(id=0x3086db6e)",1489
+"input_slices_window",6714702034,5808,"notifyMotion(id=0x3086db6e)",1489
+"input_slices_window",6714717995,5539,"notifyMotion(id=0x3086db6e)",1489
+"input_slices_window",6719185726,7423,"notifyMotion(id=0x2e444ec7)",1489
+"input_slices_window",6719218149,5539,"notifyMotion(id=0x2e444ec7)",1489
+"input_slices_window",6719234649,5193,"notifyMotion(id=0x2e444ec7)",1489
+"input_slices_window",6722553034,2577,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3086db6e)",1488
+"input_slices_window",6722895765,1463307,"deliverInputEvent src=0x1002 eventTimeNano=6080395377000 id=0x3086db6e",1909
+"input_slices_window",6724439534,2577,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3086db6e)",1488
+"input_slices_window",6724551034,2423,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3086db6e)",1488
+"input_slices_window",6729474457,6000,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2e444ec7)",1488
+"input_slices_window",6731022803,5692,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2e444ec7)",1488
+"input_slices_window",6731715957,1647423,"deliverInputEvent src=0x1002 eventTimeNano=6080411973000 id=0x2e444ec7",1909
+"input_slices_window",6736327188,5807,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2e444ec7)",1488
+"input_slices_window",6737637919,7230,"notifyMotion(id=0x35a1eacc)",1489
+"input_slices_window",6737678072,5654,"notifyMotion(id=0x35a1eacc)",1489
+"input_slices_window",6737693842,5577,"notifyMotion(id=0x35a1eacc)",1489
+"input_slices_window",6739729226,2885,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x35a1eacc)",1488
+"input_slices_window",6740027957,2725885,"deliverInputEvent src=0x1002 eventTimeNano=6080428582000 id=0x35a1eacc",1909
+"input_slices_window",6743082072,2885,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x35a1eacc)",1488
+"input_slices_window",6743192265,2423,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x35a1eacc)",1488
+"input_slices_window",6762611265,6538,"notifyMotion(id=0x107fbc97)",1489
+"input_slices_window",6762646419,5769,"notifyMotion(id=0x107fbc97)",1489
+"input_slices_window",6765341534,7500,"notifyMotion(id=0x107fbc97)",1489
+"input_slices_window",6772020419,6038,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x107fbc97)",1488
+"input_slices_window",6772368495,5654,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x107fbc97)",1488
+"input_slices_window",6772598842,5846,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x107fbc97)",1488
+"input_slices_window",6772756188,3386692,"deliverInputEvent src=0x1002 eventTimeNano=6080444617000 id=0x107fbc97",1909
+"input_slices_window",6795838649,6577,"notifyMotion(id=0x3b3b7f02)",1489
+"input_slices_window",6796067688,6577,"notifyMotion(id=0x2ff164c)",1489
+"input_slices_window",6796093957,5692,"notifyMotion(id=0x3b3b7f02)",1489
+"input_slices_window",6796110226,5231,"notifyMotion(id=0x3b3b7f02)",1489
+"input_slices_window",6796274572,5731,"notifyMotion(id=0x2ff164c)",1489
+"input_slices_window",6796287726,5346,"notifyMotion(id=0x2ff164c)",1489
+"input_slices_window",6807827342,8423,"notifyMotion(id=0x2f3ae6d0)",1489
+"input_slices_window",6807898803,6385,"notifyMotion(id=0x2f3ae6d0)",1489
+"input_slices_window",6807918995,5500,"notifyMotion(id=0x2f3ae6d0)",1489
+"input_slices_window",6822937688,9500,"notifyMotion(id=0x1a730a6a)",1489
+"input_slices_window",6823021534,7000,"notifyMotion(id=0x1a730a6a)",1489
+"input_slices_window",6823042495,5193,"notifyMotion(id=0x1a730a6a)",1489
+"input_slices_window",6830576688,5846,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3b3b7f02)",1488
+"input_slices_window",6830592265,5769,"enqueueDispatchEntriesLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3b3b7f02)",1488
+"input_slices_window",6830822342,5615,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3b3b7f02)",1488
+"input_slices_window",6830835226,5616,"enqueueDispatchEntriesLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3b3b7f02)",1488
+"input_slices_window",6831006342,1734538,"deliverInputEvent src=0x1002 eventTimeNano=6080481854000 id=0x3b3b7f02",1909
+"input_slices_window",6831012842,5461,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3b3b7f02)",1488
+"input_slices_window",6831024957,7654,"EarlyPostImeInputStage id=0x3b3b7f02",1909
+"input_slices_window",6831025495,5423,"enqueueDispatchEntriesLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3b3b7f02)",1488
+"input_slices_window",6831043726,3885,"NativePostImeInputStage id=0x3b3b7f02",1909
+"input_slices_window",6831057418,1578231,"ViewPostImeInputStage id=0x3b3b7f02",1909
+"input_slices_window",6833634649,7116,"notifyMotion(id=0x221627f3)",1489
+"input_slices_window",6833665842,5961,"notifyMotion(id=0x221627f3)",1489
+"input_slices_window",6833681380,5346,"notifyMotion(id=0x221627f3)",1489
+"input_slices_window",6843564188,5692,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2ff164c)",1488
+"input_slices_window",6843840072,5654,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2ff164c)",1488
+"input_slices_window",6843984995,2810962,"deliverInputEvent src=0x1002 eventTimeNano=6080484696000 id=0x2ff164c",1909
+"input_slices_window",6844031303,5577,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2ff164c)",1488
+"input_slices_window",6853472880,8885,"notifyMotion(id=0x32c99b34)",1489
+"input_slices_window",6853507995,5731,"notifyMotion(id=0x32c99b34)",1489
+"input_slices_window",6853523611,7307,"notifyMotion(id=0x32c99b34)",1489
+"input_slices_window",6853621534,6846,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x2f3ae6d0)",1488
+"input_slices_window",6853853072,32539,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x2f3ae6d0)",1488
+"input_slices_window",6854074495,1395962,"deliverInputEvent src=0x1002 eventTimeNano=6080494654000 id=0x2f3ae6d0",1909
+"input_slices_window",6854095111,5577,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x2f3ae6d0)",1488
+"input_slices_window",6854590111,5961,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x1a730a6a)",1488
+"input_slices_window",6854780188,5692,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x1a730a6a)",1488
+"input_slices_window",6854960726,5462,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x1a730a6a)",1488
+"input_slices_window",6855545649,2167385,"deliverInputEvent src=0x1002 eventTimeNano=6080511242000 id=0x1a730a6a",1909
+"input_slices_window",6855990495,6000,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x221627f3)",1488
+"input_slices_window",6856197495,5500,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x221627f3)",1488
+"input_slices_window",6856380765,5461,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x221627f3)",1488
+"input_slices_window",6856667380,5769,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x32c99b34)",1488
+"input_slices_window",6856827265,5577,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x32c99b34)",1488
+"input_slices_window",6856982226,5423,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x32c99b34)",1488
+"input_slices_window",6857810842,7512115,"deliverInputEvent src=0x1002 eventTimeNano=6080542969000 id=0x221627f3",1909
+"input_slices_window",6877076188,7346,"notifyMotion(id=0x3dcaeae1)",1489
+"input_slices_window",6877108418,7577,"notifyMotion(id=0x3dcaeae1)",1489
+"input_slices_window",6877125495,5347,"notifyMotion(id=0x3dcaeae1)",1489
+"input_slices_window",6878814880,6192,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3dcaeae1)",1488
+"input_slices_window",6879066495,5616,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3dcaeae1)",1488
+"input_slices_window",6879262803,1701577,"deliverInputEvent src=0x1002 eventTimeNano=6080559993000 id=0x3dcaeae1",1909
+"input_slices_window",6879263611,5577,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3dcaeae1)",1488
+"input_slices_window",6893767495,3231,"notifyMotion(id=0x3f92b1ee)",1489
+"input_slices_window",6893783842,3192,"notifyMotion(id=0x3f92b1ee)",1489
+"input_slices_window",6893793418,2731,"notifyMotion(id=0x3f92b1ee)",1489
+"input_slices_window",6894795572,5923,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3f92b1ee)",1488
+"input_slices_window",6898863572,5808,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3f92b1ee)",1488
+"input_slices_window",6898940765,3884,"notifyMotion(id=0x2b5539ee)",1489
+"input_slices_window",6898962572,7885,"notifyMotion(id=0x2b5539ee)",1489
+"input_slices_window",6898976880,2808,"notifyMotion(id=0x2b5539ee)",1489
+"input_slices_window",6899090957,5500,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3f92b1ee)",1488
+"input_slices_window",6899758149,2296039,"deliverInputEvent src=0x1002 eventTimeNano=6080586650000 id=0x3f92b1ee",1909
+
+"tag","rel_ts","dur","state","blocked_function"
+"reader_1489_states",6787426919,7951192,"R","[NULL]"
+"reader_1489_states",6795378111,996346,"Running","[NULL]"
+"reader_1489_states",6796374457,3852692,"S","[NULL]"
+"reader_1489_states",6800227149,848846,"R","[NULL]"
+"reader_1489_states",6801075995,177731,"Running","[NULL]"
+"reader_1489_states",6801253726,461962,"R+","[NULL]"
+"reader_1489_states",6801715688,120884,"Running","[NULL]"
+"reader_1489_states",6801836572,3716500,"D","write_pmsg$6fb35a9abf14f1ffebba6021202469c1"
+"reader_1489_states",6805553072,1602116,"R","[NULL]"
+"reader_1489_states",6807155188,283692,"Running","[NULL]"
+"reader_1489_states",6807438880,59115,"R+","[NULL]"
+"reader_1489_states",6807497995,27423,"Running","[NULL]"
+"reader_1489_states",6807525418,131308,"R+","[NULL]"
+"reader_1489_states",6807656726,525808,"Running","[NULL]"
+"reader_1489_states",6808182534,8639231,"S","[NULL]"
+"reader_1489_states",6816821765,1482730,"R","[NULL]"
+"reader_1489_states",6818304495,140231,"Running","[NULL]"
+"reader_1489_states",6818444726,128731,"R","[NULL]"
+"reader_1489_states",6818573457,77692,"Running","[NULL]"
+"reader_1489_states",6818651149,91231,"R","[NULL]"
+"reader_1489_states",6818742380,87654,"Running","[NULL]"
+"reader_1489_states",6818830034,3587615,"R+","[NULL]"
+
+"tag","rel_ts","dur","state","blocked_function"
+"dispatcher_1488_states",6771663611,1423654,"Running","[NULL]"
+"dispatcher_1488_states",6773087265,77346,"S","[NULL]"
+"dispatcher_1488_states",6773164611,2213461,"R","[NULL]"
+"dispatcher_1488_states",6775378072,598385,"Running","[NULL]"
+"dispatcher_1488_states",6775976457,146808,"S","[NULL]"
+"dispatcher_1488_states",6776123265,2388346,"R","[NULL]"
+"dispatcher_1488_states",6778511611,194000,"Running","[NULL]"
+"dispatcher_1488_states",6778705611,870731,"S","[NULL]"
+"dispatcher_1488_states",6779576342,34077,"R","[NULL]"
+"dispatcher_1488_states",6779610419,164615,"Running","[NULL]"
+"dispatcher_1488_states",6779775034,18808,"S","[NULL]"
+"dispatcher_1488_states",6779793842,25384,"R","[NULL]"
+"dispatcher_1488_states",6779819226,65923,"Running","[NULL]"
+"dispatcher_1488_states",6779885149,50445654,"S","[NULL]"
+"dispatcher_1488_states",6830330803,35308,"R","[NULL]"
+"dispatcher_1488_states",6830366111,1009154,"Running","[NULL]"
+"dispatcher_1488_states",6831375265,615769,"S","[NULL]"
+"dispatcher_1488_states",6831991034,6164154,"R","[NULL]"
+"dispatcher_1488_states",6838155188,194230,"Running","[NULL]"
+"dispatcher_1488_states",6838349418,4906116,"R","[NULL]"

@@ -1,0 +1,123 @@
+Trace loaded: 66.97 MB in 0.80s (83.7 MB/s)
+"rel_ts","dur","tid","thread_name","slice_name","depth"
+6759164226,2041154,1909,".yadea.launcher","Choreographer#doFrame 155795",0
+6759180342,2013384,1909,".yadea.launcher","traversal",1
+6759307919,1878461,1909,".yadea.launcher","draw",2
+6759326803,769808,1909,".yadea.launcher","Record View#draw()",3
+6760107111,1071461,1909,".yadea.launcher","postAndWait",3
+6761224880,76962,2079,"RenderThread","dequeueBuffer",1
+6761229303,38039,2079,"RenderThread","dequeueBuffer",2
+6762780149,579000,2079,"RenderThread","queueBuffer",3
+6762813534,462154,2079,"RenderThread","queueBuffer",4
+6762942842,313038,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:1)",5
+6762962303,23385,2079,"RenderThread","acquireBuffer",6
+6762990611,252538,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:1)frame=394",6
+6776444919,1185500,1909,".yadea.launcher","Choreographer#doFrame 155803",0
+6776469649,1150500,1909,".yadea.launcher","traversal",1
+6776634726,979808,1909,".yadea.launcher","draw",2
+6776671649,525154,1909,".yadea.launcher","Record View#draw()",3
+6777207919,399653,1909,".yadea.launcher","postAndWait",3
+6777667957,65846,2079,"RenderThread","dequeueBuffer",1
+6777671303,32923,2079,"RenderThread","dequeueBuffer",2
+6778900111,659846,2079,"RenderThread","queueBuffer",3
+6778917765,559730,2079,"RenderThread","queueBuffer",4
+6779024572,427962,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:2)",5
+6779034342,13192,2079,"RenderThread","acquireBuffer",6
+6779051649,396654,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:2)frame=395",6
+6842074918,564193,1909,".yadea.launcher","Choreographer#doFrame 155812",0
+6842085803,546654,1909,".yadea.launcher","traversal",1
+6842147649,480116,1909,".yadea.launcher","draw",2
+6842162226,99577,1909,".yadea.launcher","Record View#draw()",3
+6842268957,353769,1909,".yadea.launcher","postAndWait",3
+6842618303,87192,2079,"RenderThread","dequeueBuffer",1
+6842624918,40731,2079,"RenderThread","dequeueBuffer",2
+6844165188,1116077,2079,"RenderThread","queueBuffer",3
+6844199188,699884,2079,"RenderThread","queueBuffer",4
+6844347803,509539,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:1)",5
+6844366418,29270,2079,"RenderThread","acquireBuffer",6
+6844405072,442000,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:1)frame=396",6
+6865862842,8363692,1909,".yadea.launcher","Choreographer#doFrame 155820",0
+6865907226,8309231,1909,".yadea.launcher","traversal",1
+6866128072,8081654,1909,".yadea.launcher","draw",2
+6866172226,4402116,1909,".yadea.launcher","Record View#draw()",3
+6870584726,3615923,1909,".yadea.launcher","postAndWait",3
+6872408226,158077,2079,"RenderThread","dequeueBuffer",1
+6872412803,80000,2079,"RenderThread","dequeueBuffer",2
+6876580995,470077,2079,"RenderThread","queueBuffer",3
+6876600918,393500,2079,"RenderThread","queueBuffer",4
+6876682303,292000,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:2)",5
+6876692842,14807,2079,"RenderThread","acquireBuffer",6
+6876711765,258461,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:2)frame=397",6
+6892728765,2721884,1909,".yadea.launcher","Choreographer#doFrame 155827",0
+6892751534,2687731,1909,".yadea.launcher","traversal",1
+6892904572,2527616,1909,".yadea.launcher","draw",2
+6892975495,241539,1909,".yadea.launcher","Record View#draw()",3
+6893230149,2191731,1909,".yadea.launcher","postAndWait",3
+6893774303,70192,2079,"RenderThread","dequeueBuffer",1
+6893777918,34654,2079,"RenderThread","dequeueBuffer",2
+6898269226,671731,2079,"RenderThread","queueBuffer",3
+6898335034,534346,2079,"RenderThread","queueBuffer",4
+6898488072,363346,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:2)",5
+6898497995,16385,2079,"RenderThread","acquireBuffer",6
+6898518534,328461,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:2)frame=398",6
+6958733265,1558000,1909,".yadea.launcher","Choreographer#doFrame 155835",0
+6958757611,1523923,1909,".yadea.launcher","traversal",1
+6958822918,1452616Query executed in 0 ms
+,1909,".yadea.launcher","draw",2
+6958836688,111038,1909,".yadea.launcher","Record View#draw()",3
+6958956149,1313462,1909,".yadea.launcher","postAndWait",3
+6959338572,74269,2079,"RenderThread","dequeueBuffer",1
+6959342380,30615,2079,"RenderThread","dequeueBuffer",2
+6961912572,503846,2079,"RenderThread","queueBuffer",3
+6961933380,383231,2079,"RenderThread","queueBuffer",4
+6962011457,283077,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:1)",5
+6962022111,15807,2079,"RenderThread","acquireBuffer",6
+6962042072,248269,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:1)frame=399",6
+6975420149,1588231,1909,".yadea.launcher","Choreographer#doFrame 155844",0
+6975431649,1566846,1909,".yadea.launcher","traversal",1
+6975554572,1437577,1909,".yadea.launcher","draw",2
+6975568880,677846,1909,".yadea.launcher","Record View#draw()",3
+6976255303,729269,1909,".yadea.launcher","postAndWait",3
+6977042341,55462,2079,"RenderThread","dequeueBuffer",1
+6977046726,27000,2079,"RenderThread","dequeueBuffer",2
+6978409418,423231,2079,"RenderThread","queueBuffer",3
+6978426534,345807,2079,"RenderThread","queueBuffer",4
+6978500380,251461,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:2)",5
+6978510072,13923,2079,"RenderThread","acquireBuffer",6
+6978528072,219962,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:2)frame=400",6
+7042091264,1773424,1909,".yadea.launcher","Choreographer#doFrame 155851",0
+7042102534,1751730,1909,".yadea.launcher","traversal",1
+7042189303,1657846,1909,".yadea.launcher","draw",2
+7042204226,98808,1909,".yadea.launcher","Record View#draw()",3
+7042310418,1529654,1909,".yadea.launcher","postAndWait",3
+7042666841,73847,2079,"RenderThread","dequeueBuffer",1
+7042670572,32462,2079,"RenderThread","dequeueBuffer",2
+7044378611,498884,2079,"RenderThread","queueBuffer",3
+7044396034,392884,2079,"RenderThread","queueBuffer",4
+7044469649,296423,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:1)",5
+7044480688,13653,2079,"RenderThread","acquireBuffer",6
+7044499111,263461,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:1)frame=401",6
+7078098495,6577846,1909,".yadea.launcher","Choreographer#doFrame 155859",0
+7078109995,6548616,1909,".yadea.launcher","traversal",1
+7078275188,6373076,1909,".yadea.launcher","draw",2
+7078301303,170500,1909,".yadea.launcher","Record View#draw()",3
+7078486034,6147077,1909,".yadea.launcher","postAndWait",3
+7079058380,97154,2079,"RenderThread","dequeueBuffer",1
+7079062688,42576,2079,"RenderThread","dequeueBuffer",2
+7083466149,829039,2079,"RenderThread","queueBuffer",3
+7083504418,684616,2079,"RenderThread","queueBuffer",4
+7083616649,541539,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:1)",5
+7083633495,18923,2079,"RenderThread","acquireBuffer",6
+7083662611,490000,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:1)frame=402",6
+7093259303,8064077,1909,".yadea.launcher","Choreographer#doFrame 155868",0
+7093277803,8035577,1909,".yadea.launcher","traversal",1
+7093439072,7867808,1909,".yadea.launcher","draw",2
+7093455072,1754808,1909,".yadea.launcher","Record View#draw()",3
+7095219380,6079038,1909,".yadea.launcher","postAndWait",3
+7096264534,62807,2079,"RenderThread","dequeueBuffer",1
+7096268611,31846,2079,"RenderThread","dequeueBuffer",2
+7100667072,414769,2079,"RenderThread","queueBuffer",3
+7100688918,340693,2079,"RenderThread","queueBuffer",4
+7100761264,250770,2079,"RenderThread","onFrameAvailable - VRI[AppListActivity]#8(f:0,a:2)",5
+7100771995,14577,2079,"RenderThread","acquireBuffer",6
+7100790534,217961,2079,"RenderThread","acquireNextBufferLocked - VRI[AppListActivity]#8(f:0,a:2)frame=403",6

@@ -1,0 +1,8 @@
+"rel_ts","event","cpu","tid","comm","pid","target_cpu","prio"
+6787426919,"sched_waking",4,26591,"kworker/4:1",1489,3,112
+6796227034,"sched_waking",3,1489,"InputReader",756,2,118
+
+"marker"
+"---waking around main thread R2 start 6,812,790,111---"
+
+"rel_ts","event","cpu","tid","comm","pid","target_cpu"

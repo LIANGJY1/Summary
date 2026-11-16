@@ -1,0 +1,42 @@
+========================================================
+  PDF Quality Assurance Report
+========================================================
+
+ℹ️  Info:
+   File: AppList性能全链路解剖-汇编.pdf
+   Size: 4566.3 KB
+   Page size: 210mm × 297mm (583 pages)
+   Total text colors: 15 (chromatic: 0)
+   Fonts used: BDBMVJ+Noto-Sans-CJK-SC-Oblique, BYMOGM+Noto-Serif-CJK-SC-Bold, DFCEGX+Noto-Sans-CJK-SC-Bold, DZLENL+Noto-Color-Emoji, EQUNYJ+Noto-Sans-CJK-SC-Heavy, FOLJZL+FreeSerif, JBCECK+Noto-Sans-Mono-Oblique, KPBOQL+Noto-Sans-CJK-SC-Bold-Oblique, LWGGBP+Noto-Serif-CJK-SC, OMBSUE+Noto-Serif-CJK-SC-Oblique, PXIPUI+Noto-Sans-Mono, TSPJMR+Noto-Sans-CJK-SC, UCHPBF+Noto-Color-Emoji-Bold, YJWMYI+Noto-Sans-Mono-Bold
+
+✅ Passed (9):
+   Title metadata present ✓
+   Author metadata present ✓
+   Creator metadata present ✓
+   Page size consistent ✓
+   No blank pages ✓
+   All fonts are embedded ✓
+   Content fill ratio adequate on all pages ✓
+   Cover page (p1) content extends to page edges (full-bleed) ✓
+   Table centering check complete ✓
+
+⚠️  Warnings (15):
+   [Punctuation rules] Page 10 - Forbidden line-start punctuation '…': ...……批07（分发）
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 24 - Forbidden line-start punctuation '）': ...）、TP_printk "pid=%d iowait=%d
+   [Punctuation rules] Page 29 - Forbidden line-start punctuation '—': ...——分布有 21.2% 的 <10 ms 间隔和 17.5%
+   [Punctuation rules] Page 33 - Forbidden line-start punctuation '，': ...，即 guest 写入、host 读取，guest→host
+   [Punctuation rules] Page 70 - Forbidden line-start punctuation '—': ...——"暂存到真正触摸数据到来时再冲刷"。这个暂存是 #4 术
+   [Punctuation rules] Page 90 - Forbidden line-start punctuation '—': ...——全部由此表挂到字符设备上；该表在 evdev_conne
+   [Punctuation rules] Page 98 - Forbidden line-start punctuation '—': ...——tail 回退到 head-2 （:229 ），该槽位改
+   [Punctuation rules] Page 113 - Forbidden line-start punctuation '）': ...）
+   [Punctuation rules] ...128 more violations
+   [Content overflow] Pages [450] may have content exceeding page boundaries
+   [Margin symmetry] Page 313 left/right margins differ by 51pt (L 51pt, R 0pt)
+   [Margin symmetry] Page 450 left/right margins differ by 54pt (L 51pt, R -3pt)
+   [Table centering] Page 450: Table not centered (L 51pt, R -43pt)
+
+--------------------------------------------------------
+⚠️  WARN — 15 warning(s), optimization recommended
+--------------------------------------------------------

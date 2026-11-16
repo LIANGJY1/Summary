@@ -1,0 +1,67 @@
+461a462,464
+> // 【核心流程】触摸命中判据（三道全部通过才算"此点归此窗"）：同屏且可见（NOT_VISIBLE 排除）、
+> //   可触摸（NOT_TOUCHABLE 排除；触笔拦截窗例外）、touchableRegionContainsPoint 点在可触区内。
+> //   区域是 WMS 在窗口列表推送前算好的矩形/区域集合，分发侧只做点测。
+899a903,908
+>             // 【关键细节】MOTION 的丢弃判定在目标解析之前做完：app switch 赶期 → STALE
+>             //   （now − eventTime ≥ mStaleEventTimeout，默认 10s×倍率）→ BLOCKED
+>             //   （mNextUnblockedEvent 非空，即队列里已有应优先放行的 DOWN）。三者都不成立才进入
+>             //   dispatchMotionLocked 做目标裁决；判据与队列时刻可用 trace 的 iq 计数
+>             //   （traceInboundQueueLengthLocked，ATRACE_INT("iq")）与 dispatchMotionLocked
+>             //   slice 对读（批06）。
+951a961,963
+> // 【核心流程】入队时预判"前面积压该不该让路"（结果记 mNextUnblockedEvent，由 BLOCKED 丢批执行）：
+> //   触摸 DOWN 落点命中了与等待中应用不同的窗口，或落点处存在响应中的 spy 窗口，即返回 true 让
+> //   旧事件整批让路；另有指针 DOWN 到来时提前终止按键对旧事件的等待（mKeyIsWaitingForEventsTimeout）。
+1097a1110,1112
+> // 【核心流程】按坐标找触摸目标窗：从前往后（Z 序，windowHandles 由 setInputWindows 推送）遍历，
+> //   第一个过 windowAcceptsTouchAt 的非 spy 窗口即命中；同时按 addOutsideTargets 给声明
+> //   WATCH_OUTSIDE_TOUCH 的更上层窗挂 OUTSIDE 目标（后续按 FLAG_DISPATCH_AS_OUTSIDE 送副本）。
+1126a1142,1144
+> // 【核心流程】收集落点处的 spy 窗口（InputConfig::SPY，无缓冲纯观察窗，如 [Gesture Monitor] 通道）：
+> //   同样从前往后扫，遇到第一个命中的非 spy 窗口就停——spy 只收集到被触摸窗"之上"为止。
+> //   调用方（findTouchedWindowTargetsLocked）把主目标插到这份列表最前，构成 targets 的前段顺序。
+1146a1165,1167
+> // 【核心流程】丢弃的收尾不只是释放条目：按键丢一至多影响一笔，但指针手势断了中间帧会让应用
+> //   状态悬空，所以按事件类向所有连接广播合成 CANCEL（CANCEL_POINTER_EVENTS/CANCEL_NON_POINTER）。
+> //   丢弃原因串（reason）随 CancelationOptions 一路带给应用。
+1731a1753,1756
+>     // 【关键细节】target 列表的最后一段在这里补齐：全局 monitor 通道（mGlobalMonitorsByDisplay，
+>     //   经 createInputMonitor 注册，如 PointerEventDispatcher N）不做落点命中，本显示的全部
+>     //   指针事件都追加一份。因此派发顺序恒为"窗口目标（主窗+spy）在前，全局 monitor 在后"，
+>     //   trace 里三通道 prepare 的时间顺序即此 vector 的遍历顺序（批06）。
+2475a2501,2503
+>     // 【核心流程】裁决通过后按 tempTouchState.windows 的登记顺序转成 InputTarget 列表：
+>     //   主目标窗（含 FLAG_FOREGROUND）在最前，spy 窗、OUTSIDE 副本、壁纸按 TouchedWindow 追加序
+>     //   随后；全局 monitor 由 dispatchMotionLocked 在此之后再追加（见该函数尾段批06 批注）。
+2698a2727,2729
+> // 【核心流程】全局 monitor 追加（每个显示器一张表）：逐个查连接且只保留 responsive 的
+> //   （selectResponsiveMonitorsLocked），flags 一律 DISPATCH_AS_IS、指针变换用显示默认变换。
+> //   monitor 通道不参与落点命中也不阻塞窗口分发——publish 失败只停它自己的连接（见批07）。
+4068,4070c4099,4105
+< // 【核心流程】触摸入站：触摸"派给谁"要等坐标命中状态机，入队时决定不了。
+< //   入队只做一致性校验与锁外 policy 预处理（唤醒/照明等窗口级），比 notifyKey 少一道入队前拦截，
+< //   这是两条流程的本质差异；派发目标见 findTouchedWindowTargetsLocked。
+---
+> // 【核心流程】触摸入站（Reader 线程，全链路总论处 5 的落点）：校验 → 锁外 policy → 锁外 filter → 入队。
+> //   与 notifyKey 对称的两道锁外预处理：interceptMotionBeforeQueueing（交互态在 JNI 层只补
+> //   POLICY_FLAG_INTERACTIVE|PASS_TO_USER 两个标志，非交互才回调 Java 侧）与 filterInputEvent。
+> //   filter 装了（mInputFilterEnabled）时 MotionEvent 副本转交 IInputFilter 后本函数直接 return——
+> //   这次调用不入 mInboundQueue，事件由过滤器侧经 injectInputEvent（保留原事件 id）异步送回，
+> //   这是"notifyMotion slice 早、入队晚"两时刻分离的代码根源；未装 filter 则回收副本放行入队。
+> //   派发目标见 findTouchedWindowTargetsLocked。
+4423a4459,4462
+>     // 【关键细节】注入事件与 Reader 事件在此汇合进同一条 mInboundQueue：MotionEntry 用
+>     //   motionEvent.getId() 原样保留事件 id（经 InputFilter 消费后回注的条目与原 notifyMotion
+>     //   的 id 相同），policyFlags 已含 POLICY_FLAG_FILTERED（device id 保留、跳过 policy 二次拦截，
+>     //   见本函数头部 resolvedDeviceId 分支）。注入方线程持锁入队并负责 needWake 唤醒分发线程。
+5595a5635,5639
+> // 【核心流程】monitor 通道的注册口（IMS.monitorInput→JNI→此处）：与 createInputChannel 一样
+> //   socketpair 双端，差别在 server 端不挂窗口、只进 mGlobalMonitorsByDisplay[displayId]
+> //   （Monitor{channel, pid}），fd 同样注册进 mLooper 收回执。每一帧指针事件经
+> //   addGlobalMonitoringTargetsLocked 复制一份给它；[Gesture Monitor] 类 spy 窗不在此注册，
+> //   它走窗口列表（setInputWindows）按落点命中，见 IMS.createSpyWindowGestureMonitor。
+6262a6307,6309
+> // 【数据流】入队/出队/清队三处都会调本函数，往 atrace 写整型计数轨 "iq"＝mInboundQueue 深度。
+> //   trace 侧判据：两次采样之间队列未发生任何操作，深度保持上次采样值；本样本 34.738ms 空档
+> //   内 iq 恒 0（6,771,783,765 采 0 → 6,830,307,188 采 1），证明事件此间不在 mInboundQueue（批06）。

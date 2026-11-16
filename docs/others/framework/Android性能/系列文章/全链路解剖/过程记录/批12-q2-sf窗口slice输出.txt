@@ -1,0 +1,1728 @@
+Trace loaded: 66.97 MB in 0.61s (110.5 MB/s)
+"rel_ts","dur","tid","thread_name","slice_name","depth"
+6707505880,149423,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6707542957,57077,741,"HwBinder:661_1","VSR: adding sample",1
+6707606419,43115,741,"HwBinder:661_1","setVsyncEnabled",1
+6707704995,249270,661,"surfaceflinger","setVsyncEnabled",0
+6710313072,9154,661,"surfaceflinger","disableExpensiveRendering",0
+6710372765,32692,1841,"binder:661_5","requestNextVsync",0
+6710522572,5077,749,"app","app alarm in 14371us; VSYNC in 46719us",0
+6711074995,6770,751,"RegionSampling","captureSample",0
+6713254265,134230,1841,"binder:661_5","setTransactionState",0
+6713351534,30308,1841,"binder:661_5","scheduleFrame",1
+6724916726,6846,748,"TimerDispatch","TimerIteration #1391",0
+6724951111,15192,748,"TimerDispatch","cancel timer",0
+6724973649,61731,748,"TimerDispatch","vsyncCallback",0
+6724987726,13039,748,"TimerDispatch","generateTokenForPredictions",1
+6725091495,874347,661,"surfaceflinger","commit 155785 vsyncIn 15.43ms",0
+6725096419,6961,748,"TimerDispatch","app alarm in 16429us; VSYNC in 48777us",0
+6725100149,26423,661,"surfaceflinger","previousFramePending",1
+6725139803,12846,749,"app","generateTokenForPredictions",0
+6725159342,6384,749,"app","generateTokenForPredictions",0
+6725172111,7846,749,"app","generateTokenForPredictions",0
+6725186265,6461,749,"app","generateTokenForPredictions",0
+6725199072,5616,749,"app","generateTokenForPredictions",0
+6725209726,5693,749,"app","generateTokenForPredictions",0
+6725212457,7154,661,"surfaceflinger","setSfWakeUp",1
+6725222726,5923,749,"app","generateTokenForPredictions",0
+6725231688,64538,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155778",1
+6725265495,24962,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6725272842,12038,661,"surfaceflinger","wait",3
+6725358803,103039,661,"surfaceflinger","setBuffer",1
+6725441572,9077,661,"surfaceflinger","createSurfaceFrameForToken",2
+6725513688,25538,661,"surfaceflinger","commitTransactions",1
+6725525149,7885,661,"surfaceflinger","doCommitTransactions",2
+6725544457,211115,661,"surfaceflinger","latchBuffers",1
+6725646572,8270,661,"surfaceflinger","doTransaction",2
+6725703034,46038,661,"surfaceflinger","latchBuffer",2
+6725717419,5615,661,"surfaceflinger","addSurfaceFrame",3
+6725785188,24461,661,"surfaceflinger","updateLayerGeometry",1
+6725816188,105654,661,"surfaceflinger","chooseRefreshRateForContent",1
+6725928034,7154,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6725951534,5846,661,"surfaceflinger","updateInputFlinger",1
+6725973034,15835000,661,"surfaceflinger","composite 155785",0
+6726153034,14899423,661,"surfaceflinger","present",1
+6726160034,10038,661,"surfaceflinger","preComposition",2
+6726175842,16000,661,"surfaceflinger","prepare",2
+6726181611,5346,661,"surfaceflinger","rebuildLayerStacks",3
+6726197342,14884,661,"surfaceflinger","prepare",2
+6726202342,4961,661,"surfaceflinger","rebuildLayerStacks",3
+6726217303,14808,661,"surfaceflinger","prepare",2
+6726222342,4923,661,"surfaceflinger","rebuildLayerStacks",3
+6726237034,14731,661,"surfaceflinger","prepare",2
+6726241995,4962,661,"surfaceflinger","rebuildLayerStacks",3
+6726367803,7979923,661,"surfaceflinger","present",2
+6726378419,9461,661,"surfaceflinger","updateCompositionState",3
+6726393803,45308,661,"surfaceflinger","writeCompositionState",3
+6726460957,3584692,661,"surfaceflinger","prepareFrameAsync",3
+6726504649,105077,661,"surfaceflinger","dequeueBuffer",4
+6726513226,85500,661,"surfaceflinger","dequeueBuffer",5
+6726521034,32192,661,"surfaceflinger","dequeueBuffer",6
+6726530688,650192,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6726535149,8500,661,"surfaceflinger","FramebufferSurface: 0",7
+6726540534,634308,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6726550111,602538,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6726576919,5384,661,"surfaceflinger","HWC release fence 1464 has signaled",6
+6726616188,3404731,661,"surfaceflinger","composeSurfaces",4
+6726771649,49770,661,"surfaceflinger","prepareClientComposition",5
+6726837572,20808,661,"surfaceflinger","prepareClientComposition",5
+6726874995,20616,661,"surfaceflinger","prepareClientComposition",5
+6726913188,17538,661,"surfaceflinger","prepareClientComposition",5
+6726947534,17385,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6727137957,30808,661,"surfaceflinger","drawLayers",5
+6727200072,2784654,685,"RenderEngine","REThreaded::drawLayers",0
+6727212419,2744269,685,"RenderEngine","SkiaGL::drawLayers",1
+6727264265,5961,685,"RenderEngine","eglCreateSyncKHR",2
+6727336765,5884,685,"RenderEngine","eglWaitSyncKHR",2
+6727357842,5153,685,"RenderEngine","eglDestroySyncKHR",2
+6727379842,6000,685,"RenderEngine","getOrCreateSurface",2
+6727392188,14269,685,"RenderEngine","tryCapture",2
+6727497342,335038,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6727507842,221769,685,"RenderEngine","DrawImage",3
+6727522072,5270,685,"RenderEngine","eglCreateSyncKHR",4
+6727540265,5538,685,"RenderEngine","eglWaitSyncKHR",4
+6727576534,5423,685,"RenderEngine","eglDestroySyncKHR",4
+6727595265,120807,685,"RenderEngine","makeImage",4
+6727679419,27461,685,"RenderEngine","Texture release(72561)",5
+6727764611,106769,1841,"binder:661_5","setTransactionState",0
+6727828265,36230,1841,"binder:661_5","scheduleFrame",1
+6727840572,388270,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6727880226,89423,685,"RenderEngine","BlurRegion",3
+6727978803,29577,685,"RenderEngine","drawBlurRegion",3
+6728017034,186500,685,"RenderEngine","DrawImage",3
+6728034419,5538,685,"RenderEngine","eglCreateSyncKHR",4
+6728055188,5461,685,"RenderEngine","eglWaitSyncKHR",4
+6728110688,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6728131880,63654,685,"RenderEngine","makeImage",4
+6728181995,6616,685,"RenderEngine","Texture release(72531)",5
+6728235649,166346,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6728241726,141500,685,"RenderEngine","DrawImage",3
+6728255380,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6728273457,5308,685,"RenderEngine","eglWaitSyncKHR",4
+6728317803,5577,685,"RenderEngine","eglDestroySyncKHR",4
+6728336380,40000,685,"RenderEngine","makeImage",4
+6728363342,6577,685,"RenderEngine","Texture release(72568)",5
+6728408380,163462,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6728417226,133269,685,"RenderEngine","DrawImage",3
+6728430303,5231,685,"RenderEngine","eglCreateSyncKHR",4
+6728448226,5308,685,"RenderEngine","eglWaitSyncKHR",4
+6728490457,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6728508534,35269,685,"RenderEngine","makeImage",4
+6728531034,6423,685,"RenderEngine","Texture release(72569)",5
+6728579034,5269,685,"RenderEngine","endCapture",2
+6728589495,1084616,685,"RenderEngine","flush surface",2
+6728652572,29154,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728659957,16500,685,"RenderEngine","FillRectOp",4
+6728687034,16269,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728692265,5961,685,"RenderEngine","FillRectOp",4
+6728708534,15808,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728713688,5692,685,"RenderEngine","FillRectOp",4
+6728729457,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728734534,5615,685,"RenderEngine","FillRectOp",4
+6728750342,15461,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728755495,5385,685,"RenderEngine","FillRectOp",4
+6728770842,47038,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6728775880,5654,685,"RenderEngine","FillRectOp",4
+6728786688,5384,685,"RenderEngine","FillRectOp",4
+6728797149,5346,685,"RenderEngine","FillRectOp",4
+6728807534,5346,685,"RenderEngine","FillRectOp",4
+6728876842,224192,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6728939495,153424,685,"RenderEngine","FillRectOp",4
+6729107342,102538,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6729122188,80692,685,"RenderEngine","FillRectOp",4
+6729215765,50038,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6729226419,32615,685,"RenderEngine","FillRectOp",4
+6729271803,45654,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6729280495,30424,685,"RenderEngine","FillRectOp",4
+6729323265,55192,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6729331688,38000,685,"RenderEngine","FillRectOp",4
+6729385649,236154,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6729398072,58885,685,"RenderEngine","FillRectOp",4
+6729464072,43193,685,"RenderEngine","FillRectOp",4
+6729513957,28038,685,"RenderEngine","FillRectOp",4
+6729548495,66308,685,"RenderEngine","FillRectOp",4
+6729680495,228116,685,"RenderEngine","flush",2
+6729692380,5769,685,"RenderEngine","eglCreateSyncKHR",3
+6729707611,134346,685,"RenderEngine","st_context_flush",3
+6729713726,121962,685,"RenderEngine","st_flush",4
+6729850188,5307,685,"RenderEngine","st_flush",3
+6729863149,5231,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6729888919,5500,685,"RenderEngine","eglDestroySyncKHR",3
+6729914572,8423,685,"RenderEngine","Submit(sync=false)",2
+6730033303,5616,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6730053265,296461,661,"surfaceflinger","finishFrame",3
+6730070880,205539,661,"surfaceflinger","queueBuffer",4
+6730087188,5384,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6730098880,106692,661,"surfaceflinger","queueBuffer",5
+6730107995,5424,661,"surfaceflinger","FramebufferSurface: 0",6
+6730138995,7385,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6730154919,16884,661,"surfaceflinger","waitForever",6
+6730237226,33539,661,"surfaceflinger","Trace GPU completion fence 1463",5
+6730285688,35923,661,"surfaceflinger","acquireBuffer",4
+6730294188,12538,661,"surfaceflinger","FramebufferSurface: 0",5
+6730301688,3204423,27726,"GPU completion","waiting for GPU completion 1463",0
+6730310188,3187538,27726,"GPU completion","waitForever",1
+6730357380,3983077,661,"surfaceflinger","postFramebuffer",3
+6730372342,3625461,661,"surfaceflinger","presentAndGetReleaseFences",4
+6730385226,6654,661,"surfaceflinger","wait for earliest present time",5
+6730398342,3574000,661,"surfaceflinger","HwcPresentDisplay",5
+6734028957,11923,661,"surfaceflinger","wait",4
+6734046226,10462,661,"surfaceflinger","wait",4
+6734064072,32423,661,"surfaceflinger","merge",4
+6734106534,52846,661,"surfaceflinger","releaseBuffer",4
+6734113995,5385,661,"surfaceflinger","FramebufferSurface: 1",5
+6734169072,20270,661,"surfaceflinger","merge",4
+6734227380,15500,661,"surfaceflinger","merge",4
+6734255303,17423,661,"surfaceflinger","merge",4
+6734297226,16885,661,"surfaceflinger","merge",4
+6734354534,803000,661,"surfaceflinger","present",2
+6734368265,8577,661,"surfaceflinger","updateCompositionState",3
+6734382534,36500,661,"surfaceflinger","writeCompositionState",3
+6734436226,353846,661,"surfaceflinger","prepareFrame",3
+6734442111,336308,661,"surfaceflinger","chooseCompositionStrategy",4
+6734448611,324231,661,"surfaceflinger","getDeviceCompositionChanges",5
+6734457957,298538,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6734797880,58385,661,"surfaceflinger","finishFrame",3
+6734809765,18730,661,"surfaceflinger","composeSurfaces",4
+6734841072,7039,661,"surfaceflinger","acquireBuffer",4
+6734861765,290154,661,"surfaceflinger","postFramebuffer",3
+6734868803,265423,661,"surfaceflinger","presentAndGetReleaseFences",4
+6734876303,9308,661,"surfaceflinger","wait for earliest present time",5
+6734891765,224654,661,"surfaceflinger","HwcPresentDisplay",5
+6735164034,761385,661,"surfaceflinger","present",2
+6735175072,8116,661,"surfaceflinger","updateCompositionState",3
+6735189188,29654,661,"surfaceflinger","writeCompositionState",3
+6735233726,320308,661,"surfaceflinger","prepareFrame",3
+6735239572,299808,661,"surfaceflinger","chooseCompositionStrategy",4
+6735245803,287500,661,"surfaceflinger","getDeviceCompositionChanges",5
+6735252649,257193,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6735560649,54000,661,"surfaceflinger","finishFrame",3
+6735570842,17230,661,"surfaceflinger","composeSurfaces",4
+6735599726,7462,661,"surfaceflinger","acquireBuffer",4
+6735620342,299384,661,"surfaceflinger","postFramebuffer",3
+6735627765,276269,661,"surfaceflinger","presentAndGetReleaseFences",4
+6735634303,6731,661,"surfaceflinger","wait for earliest present time",5
+6735646880,240039,661,"surfaceflinger","HwcPresentDisplay",5
+6735932495,5114577,661,"surfaceflinger","present",2
+6735953419,16884,661,"surfaceflinger","updateCompositionState",3
+6735977380,12308,661,"surfaceflinger","writeCompositionState",3
+6736008880,16269,661,"surfaceflinger","prepareFrame",3
+6736014342,5038,661,"surfaceflinger","chooseCompositionStrategy",4
+6736031265,4918961,661,"surfaceflinger","finishFrame",3
+6736039957,405808,661,"surfaceflinger","dequeueBuffer",4
+6736048919,386538,661,"surfaceflinger","dequeueBuffer",5
+6736420842,6384,661,"surfaceflinger","HWC release fence 1465 has signaled",6
+6736451880,3518462,661,"surfaceflinger","composeSurfaces",4
+6736599688,69884,661,"surfaceflinger","prepareClientComposition",5
+6736687534,27654,661,"surfaceflinger","prepareClientComposition",5
+6736728419,28230,661,"surfaceflinger","prepareClientComposition",5
+6736776611,21923,661,"surfaceflinger","prepareClientComposition",5
+6736814534,14461,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6736996726,30808,661,"surfaceflinger","drawLayers",5
+6737059649,2853577,685,"RenderEngine","REThreaded::drawLayers",0
+6737068842,2837346,685,"RenderEngine","SkiaGL::drawLayers",1
+6737077572,6000,685,"RenderEngine","getOrCreateSurface",2
+6737089265,18692,685,"RenderEngine","tryCapture",2
+6737184188,294654,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6737193303,228154,685,"RenderEngine","DrawImage",3
+6737226226,6077,685,"RenderEngine","eglCreateSyncKHR",4
+6737266265,5500,685,"RenderEngine","eglWaitSyncKHR",4
+6737285572,5116,685,"RenderEngine","eglDestroySyncKHR",4
+6737310265,98269,685,"RenderEngine","makeImage",4
+6737393303,7423,685,"RenderEngine","Texture release(72570)",5
+6737486188,520577,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6737523419,141307,685,"RenderEngine","BlurRegion",3
+6737673380,33039,685,"RenderEngine","drawBlurRegion",3
+6737714765,257115,685,"RenderEngine","DrawImage",3
+6737734842,6000,685,"RenderEngine","eglCreateSyncKHR",4
+6737766457,5346,685,"RenderEngine","eglWaitSyncKHR",4
+6737843111,6154,685,"RenderEngine","eglDestroySyncKHR",4
+6737864572,97462,685,"RenderEngine","makeImage",4
+6737946688,7269,685,"RenderEngine","Texture release(72576)",5
+6738013303,207654,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6738021380,177885,685,"RenderEngine","DrawImage",3
+6738037649,5193,685,"RenderEngine","eglCreateSyncKHR",4
+6738057842,5307,685,"RenderEngine","eglWaitSyncKHR",4
+6738116419,5615,685,"RenderEngine","eglDestroySyncKHR",4
+6738135457,55962,685,"RenderEngine","makeImage",4
+6738178034,6269,685,"RenderEngine","Texture release(72577)",5
+6738227495,198500,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6738236688,160115,685,"RenderEngine","DrawImage",3
+6738251649,5462,685,"RenderEngine","eglCreateSyncKHR",4
+6738270495,5347,685,"RenderEngine","eglWaitSyncKHR",4
+6738315534,5731,685,"RenderEngine","eglDestroySyncKHR",4
+6738335072,54270,685,"RenderEngine","makeImage",4
+6738374572,7308,685,"RenderEngine","Texture release(72578)",5
+6738432919,5307,685,"RenderEngine","endCapture",2
+6738443495,1141462,685,"RenderEngine","flush surface",2
+6738509534,29654,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738517072,16731,685,"RenderEngine","FillRectOp",4
+6738544957,17000,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738550303,6731,685,"RenderEngine","FillRectOp",4
+6738567419,16038,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738572880,5731,685,"RenderEngine","FillRectOp",4
+6738588649,15462,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738593919,5307,685,"RenderEngine","FillRectOp",4
+6738609380,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738614534,5654,685,"RenderEngine","FillRectOp",4
+6738631995,48270,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6738637957,5654,685,"RenderEngine","FillRectOp",4
+6738648842,5384,685,"RenderEngine","FillRectOp",4
+6738659342,5346,685,"RenderEngine","FillRectOp",4
+6738669803,5462,685,"RenderEngine","FillRectOp",4
+6738744688,246115,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6738810380,171731,685,"RenderEngine","FillRectOp",4
+6738998072,115693,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6739013457,92885,685,"RenderEngine","FillRectOp",4
+6739120995,52693,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6739131803,35346,685,"RenderEngine","FillRectOp",4
+6739179957,66923,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6739188303,31616,685,"RenderEngine","FillRectOp",4
+6739253611,45038,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6739262419,28846,685,"RenderEngine","FillRectOp",4
+6739304726,216654,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6739317265,75961,685,"RenderEngine","FillRectOp",4
+6739400034,49269,685,"RenderEngine","FillRectOp",4
+6739456342,27346,685,"RenderEngine","FillRectOp",4
+6739490457,24423,685,"RenderEngine","FillRectOp",4
+6739591303,260731,685,"RenderEngine","flush",2
+6739606149,5731,685,"RenderEngine","eglCreateSyncKHR",3
+6739623919,158384,685,"RenderEngine","st_context_flush",3
+6739630072,146154,685,"RenderEngine","st_flush",4
+6739791188,5577,685,"RenderEngine","st_flush",3
+6739805419,5076,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6739831765,5230,685,"RenderEngine","eglDestroySyncKHR",3
+6739857842,8500,685,"RenderEngine","Submit(sync=false)",2
+6739994419,941269,661,"surfaceflinger","queueBuffer",4
+6740017957,5692,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6740887111,41192,661,"surfaceflinger","Trace GPU completion fence 1464",5
+6740961842,2978577,27726,"GPU completion","waiting for GPU completion 1464",0
+6740969188,72192,661,"surfaceflinger","postFramebuffer",3
+6740972303,2960039,27726,"GPU completion","waitForever",1
+6740983880,5539,661,"surfaceflinger","merge",4
+6741000380,5077,661,"surfaceflinger","merge",4
+6741017226,5154,661,"surfaceflinger","merge",4
+6741029265,4923,661,"surfaceflinger","merge",4
+6741072226,478385,661,"surfaceflinger","postComposition",1
+6741092380,97077,661,"surfaceflinger","setSfPresent",2
+6741315072,15231,661,"surfaceflinger","wait",2
+6741336380,7346,661,"surfaceflinger","wait",2
+6741349188,7307,661,"surfaceflinger","wait",2
+6741361957,4885,661,"surfaceflinger","wait",2
+6741375765,42115,661,"surfaceflinger","merge",2
+6741504457,17308,661,"surfaceflinger","setVsyncEnabled",2
+6741645419,8307,748,"TimerDispatch","TimerIteration #1392",0
+6741666495,121039,661,"surfaceflinger","setDuration",1
+6741689188,5384,748,"TimerDispatch","app alarm in 16522us; VSYNC in 48870us",0
+6741738726,101308,748,"TimerDispatch","vsyncCallback",0
+6741815572,15116,748,"TimerDispatch","generateTokenForPredictions",1
+6741836265,281730,661,"surfaceflinger","setVsyncEnabled",0
+6741968611,5384,749,"app","sf alarm in 16246us; VSYNC in 31920us",0
+6742143342,903884,661,"surfaceflinger","commit 155793 vsyncIn 15.04ms",0
+6742149688,12192,661,"surfaceflinger","previousFramePending",1
+6742225803,7039,661,"surfaceflinger","setSfWakeUp",1
+6742243688,54038,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155787",1
+6742265842,26461,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6742271880,14731,661,"surfaceflinger","wait",3
+6742363880,113192,661,"surfaceflinger","setBuffer",1
+6742456880,8115,661,"surfaceflinger","createSurfaceFrameForToken",2
+6742511265,25192,661,"surfaceflinger","commitTransactions",1
+6742521572,8308,661,"surfaceflinger","doCommitTransactions",2
+6742542188,257807,661,"surfaceflinger","latchBuffers",1
+6742638265,8500,661,"surfaceflinger","doTransaction",2
+6742706342,87038,661,"surfaceflinger","latchBuffer",2
+6742756919,6769,661,"surfaceflinger","addSurfaceFrame",3
+6742837957,24731,661,"surfaceflinger","updateLayerGeometry",1
+6742869765,133884,661,"surfaceflinger","chooseRefreshRateForContent",1
+6743009765,7577,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6743033149,5885,661,"surfaceflinger","updateInputFlinger",1
+6743055034,17801077,661,"surfaceflinger","composite 155793",0
+6743330226,16795808,661,"surfaceflinger","present",1
+6743338419,14692,661,"surfaceflinger","preComposition",2
+6743359649,16462,661,"surfaceflinger","prepare",2
+6743365765,5461,661,"surfaceflinger","rebuildLayerStacks",3
+6743381342,15307,661,"surfaceflinger","prepare",2
+6743386649,4923,661,"surfaceflinger","rebuildLayerStacks",3
+6743401611,15384,661,"surfaceflinger","prepare",2
+6743406688,5461,661,"surfaceflinger","rebuildLayerStacks",3
+6743422226,14693,661,"surfaceflinger","prepare",2
+6743427188,4846,661,"surfaceflinger","rebuildLayerStacks",3
+6743579649,7476231,661,"surfaceflinger","present",2
+6743592726,10231,661,"surfaceflinger","updateCompositionState",3
+6743608995,45808,661,"surfaceflinger","writeCompositionState",3
+6743678072,3920385,661,"surfaceflinger","prepareFrameAsync",3
+6743727842,116577,661,"surfaceflinger","dequeueBuffer",4
+6743737611,96500,661,"surfaceflinger","dequeueBuffer",5
+6743746495,36462,661,"surfaceflinger","dequeueBuffer",6
+6743751380,673808,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6743761803,657769,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6743765265,5654,661,"surfaceflinger","FramebufferSurface: 3",7
+6743773880,625731,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6743810957,5538,661,"surfaceflinger","HWC release fence 1466 has signaled",6
+6743850688,3721269,661,"surfaceflinger","composeSurfaces",4
+6744054995,45154,661,"surfaceflinger","prepareClientComposition",5
+6744116688,20846,661,"surfaceflinger","prepareClientComposition",5
+6744150611,20846,661,"surfaceflinger","prepareClientComposition",5
+6744187726,16500,661,"surfaceflinger","prepareClientComposition",5
+6744222880,14962,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6744404880,33423,661,"surfaceflinger","drawLayers",5
+6744476495,3043154,685,"RenderEngine","REThreaded::drawLayers",0
+6744485842,3005615,685,"RenderEngine","SkiaGL::drawLayers",1
+6744516534,6423,685,"RenderEngine","eglCreateSyncKHR",2
+6744554111,5346,685,"RenderEngine","eglWaitSyncKHR",2
+6744573572,5308,685,"RenderEngine","eglDestroySyncKHR",2
+6744595842,5730,685,"RenderEngine","getOrCreateSurface",2
+6744607919,13884,685,"RenderEngine","tryCapture",2
+6744721495,306808,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6744732649,222039,685,"RenderEngine","DrawImage",3
+6744747265,5346,685,"RenderEngine","eglCreateSyncKHR",4
+6744766957,5500,685,"RenderEngine","eglWaitSyncKHR",4
+6744812803,5462,685,"RenderEngine","eglDestroySyncKHR",4
+6744831649,108193,685,"RenderEngine","makeImage",4
+6744923842,7423,685,"RenderEngine","Texture release(72579)",5
+6745035342,468846,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6745091765,114154,685,"RenderEngine","BlurRegion",3
+6745215534,33308,685,"RenderEngine","drawBlurRegion",3
+6745258688,212615,685,"RenderEngine","DrawImage",3
+6745279149,5693,685,"RenderEngine","eglCreateSyncKHR",4
+6745305342,5384,685,"RenderEngine","eglWaitSyncKHR",4
+6745371034,5885,685,"RenderEngine","eglDestroySyncKHR",4
+6745391111,70846,685,"RenderEngine","makeImage",4
+6745447726,7193,685,"RenderEngine","Texture release(72549)",5
+6745511226,230577,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6745517803,202500,685,"RenderEngine","DrawImage",3
+6745532380,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6745551111,39961,685,"RenderEngine","eglWaitSyncKHR",4
+6745636188,5846,685,"RenderEngine","eglDestroySyncKHR",4
+6745657419,55384,685,"RenderEngine","makeImage",4
+6745698649,7039,685,"RenderEngine","Texture release(72586)",5
+6745748188,187115,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6745760265,149461,685,"RenderEngine","DrawImage",3
+6745775765,5154,685,"RenderEngine","eglCreateSyncKHR",4
+6745793842,5423,685,"RenderEngine","eglWaitSyncKHR",4
+6745839688,6000,685,"RenderEngine","eglDestroySyncKHR",4
+6745858072,44154,685,"RenderEngine","makeImage",4
+6745884842,6653,685,"RenderEngine","Texture release(72587)",5
+6745942572,5423,685,"RenderEngine","endCapture",2
+6745953495,1200885,685,"RenderEngine","flush surface",2
+6746055688,37192,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746063380,24346,685,"RenderEngine","FillRectOp",4
+6746098342,17961,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746103880,7539,685,"RenderEngine","FillRectOp",4
+6746121649,16616,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746127380,6000,685,"RenderEngine","FillRectOp",4
+6746143611,16846,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746149111,6308,685,"RenderEngine","FillRectOp",4
+6746165534,16231,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746171149,5731,685,"RenderEngine","FillRectOp",4
+6746186803,47808,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6746192265,6154,685,"RenderEngine","FillRectOp",4
+6746203495,5385,685,"RenderEngine","FillRectOp",4
+6746213957,5385,685,"RenderEngine","FillRectOp",4
+6746224380,5385,685,"RenderEngine","FillRectOp",4
+6746321149,263808,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746403919,172153,685,"RenderEngine","FillRectOp",4
+6746591380,108308,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746607034,85654,685,"RenderEngine","FillRectOp",4
+6746705995,52616,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746716765,35307,685,"RenderEngine","FillRectOp",4
+6746764572,48885,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746773419,33576,685,"RenderEngine","FillRectOp",4
+6746820611,42346,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746829226,27308,685,"RenderEngine","FillRectOp",4
+6746868803,223423,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6746877957,50654,685,"RenderEngine","FillRectOp",4
+6746935419,58846,685,"RenderEngine","FillRectOp",4
+6747001380,47923,685,"RenderEngine","FillRectOp",4
+6747056995,28962,685,"RenderEngine","FillRectOp",4
+6747160919,276461,685,"RenderEngine","flush",2
+6747175842,5538,685,"RenderEngine","eglCreateSyncKHR",3
+6747192149,171346,685,"RenderEngine","st_context_flush",3
+6747199034,158308,685,"RenderEngine","st_flush",4
+6747372880,5308,685,"RenderEngine","st_flush",3
+6747387034,5346,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6747415995,5770,685,"RenderEngine","eglDestroySyncKHR",3
+6747443265,9769,685,"RenderEngine","Submit(sync=false)",2
+6747585457,6038,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6747606534,350000,661,"surfaceflinger","finishFrame",3
+6747625265,253692,661,"surfaceflinger","queueBuffer",4
+6747645688,5269,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6747657495,134847,661,"surfaceflinger","queueBuffer",5
+6747664957,4962,661,"surfaceflinger","FramebufferSurface: 3",6
+6747717995,8616,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6747736419,21038,661,"surfaceflinger","waitForever",6
+6747838034,35038,661,"surfaceflinger","Trace GPU completion fence 1465",5
+6747888765,35115,661,"surfaceflinger","acquireBuffer",4
+6747898303,8154,661,"surfaceflinger","FramebufferSurface: 3",5
+6747910842,2316692,27726,"GPU completion","waiting for GPU completion 1465",0
+6747920726,2298077,27726,"GPU completion","waitForever",1
+6747963572,3085270,661,"surfaceflinger","postFramebuffer",3
+6747974688,2694384,661,"surfaceflinger","presentAndGetReleaseFences",4
+6747983226,6116,661,"surfaceflinger","wait for earliest present time",5
+6747995303,2647154,661,"surfaceflinger","HwcPresentDisplay",5
+6750697649,43346,661,"surfaceflinger","wait",4
+6750747919,11384,661,"surfaceflinger","wait",4
+6750767034,36231,661,"surfaceflinger","merge",4
+6750813842,25461,661,"surfaceflinger","releaseBuffer",4
+6750822611,5038,661,"surfaceflinger","FramebufferSurface: 0",5
+6750848803,22962,661,"surfaceflinger","merge",4
+6750928649,20385,661,"surfaceflinger","merge",4
+6750961957,18385,661,"surfaceflinger","merge",4
+6751005572,16577,661,"surfaceflinger","merge",4
+6751062995,1000193,661,"surfaceflinger","present",2
+6751077303,8846,661,"surfaceflinger","updateCompositionState",3
+6751091765,37192,661,"surfaceflinger","writeCompositionState",3
+6751148765,412500,661,"surfaceflinger","prepareFrame",3
+6751154995,393616,661,"surfaceflinger","chooseCompositionStrategy",4
+6751162880,380231,661,"surfaceflinger","getDeviceCompositionChanges",5
+6751175303,352039,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6751568265,93077,661,"surfaceflinger","finishFrame",3
+6751579611,52346,661,"surfaceflinger","composeSurfaces",4
+6751595995,78770,684,"surfaceflinger","addEntry",0
+6751645226,7731,661,"surfaceflinger","acquireBuffer",4
+6751667303,389923,661,"surfaceflinger","postFramebuffer",3
+6751678303,358462,661,"surfaceflinger","presentAndGetReleaseFences",4
+6751685419,6192,661,"surfaceflinger","wait for earliest present time",5
+6751697957,318923,661,"surfaceflinger","HwcPresentDisplay",5
+6752071034,976500,661,"surfaceflinger","present",2
+6752087765,11461,661,"surfaceflinger","updateCompositionState",3
+6752105265,49846,661,"surfaceflinger","writeCompositionState",3
+6752182226,364423,661,"surfaceflinger","prepareFrame",3
+6752188072,346000,661,"surfaceflinger","chooseCompositionStrategy",4
+6752195611,333192,661,"surfaceflinger","getDeviceCompositionChanges",5
+6752205957,294462,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6752553880,68462,661,"surfaceflinger","finishFrame",3
+6752570880,21885,661,"surfaceflinger","composeSurfaces",4
+6752605995,8424,661,"surfaceflinger","acquireBuffer",4
+6752628457,413308,661,"surfaceflinger","postFramebuffer",3
+6752637495,365347,661,"surfaceflinger","presentAndGetReleaseFences",4
+6752645726,6308,661,"surfaceflinger","wait for earliest present time",5
+6752658419,308230,661,"surfaceflinger","HwcPresentDisplay",5
+6753056572,7063885,661,"surfaceflinger","present",2
+6753083842,15384,661,"surfaceflinger","updateCompositionState",3
+6753105688,12423,661,"surfaceflinger","writeCompositionState",3
+6753154149,18039,661,"surfaceflinger","prepareFrame",3
+6753159880,5385,661,"surfaceflinger","chooseCompositionStrategy",4
+6753178919,6839038,661,"surfaceflinger","finishFrame",3
+6753189149,688193,661,"surfaceflinger","dequeueBuffer",4
+6753205534,660615,661,"surfaceflinger","dequeueBuffer",5
+6753846034,7808,661,"surfaceflinger","HWC release fence 1467 has signaled",6
+6753883842,5097961,661,"surfaceflinger","composeSurfaces",4
+6754082265,117384,661,"surfaceflinger","prepareClientComposition",5
+6754228072,41462,661,"surfaceflinger","prepareClientComposition",5
+6754287611,36423,661,"surfaceflinger","prepareClientComposition",5
+6754349649,32539,661,"surfaceflinger","prepareClientComposition",5
+6754406649,25270,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6754641495,35770,661,"surfaceflinger","drawLayers",5
+6754721380,4127039,685,"RenderEngine","REThreaded::drawLayers",0
+6754737726,4100154,685,"RenderEngine","SkiaGL::drawLayers",1
+6754753957,6808,685,"RenderEngine","getOrCreateSurface",2
+6754768034,43077,685,"RenderEngine","tryCapture",2
+6755018072,549000,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6755033380,425923,685,"RenderEngine","DrawImage",3
+6755112649,7923,685,"RenderEngine","eglCreateSyncKHR",4
+6755204611,5808,685,"RenderEngine","eglWaitSyncKHR",4
+6755226880,5231,685,"RenderEngine","eglDestroySyncKHR",4
+6755262342,174384,685,"RenderEngine","makeImage",4
+6755417072,9308,685,"RenderEngine","Texture release(72588)",5
+6755575380,535923,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6755639880,114923,685,"RenderEngine","BlurRegion",3
+6755766919,41307,685,"RenderEngine","drawBlurRegion",3
+6755817380,261269,685,"RenderEngine","DrawImage",3
+6755841072,5347,685,"RenderEngine","eglCreateSyncKHR",4
+6755869380,5423,685,"RenderEngine","eglWaitSyncKHR",4
+6755914919,48653,1841,"binder:661_5","requestNextVsync",0
+6755955149,6039,685,"RenderEngine","eglDestroySyncKHR",4
+6755976265,93846,685,"RenderEngine","makeImage",4
+6756054495,6693,685,"RenderEngine","Texture release(72594)",5
+6756118534,264769,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6756126342,215115,685,"RenderEngine","DrawImage",3
+6756141611,5308,685,"RenderEngine","eglCreateSyncKHR",4
+6756161572,5500,685,"RenderEngine","eglWaitSyncKHR",4
+6756238534,5923,685,"RenderEngine","eglDestroySyncKHR",4
+6756260842,69769,685,"RenderEngine","makeImage",4
+6756315380,8000,685,"RenderEngine","Texture release(72595)",5
+6756389765,210115,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6756398995,177539,685,"RenderEngine","DrawImage",3
+6756413880,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6756432995,5808,685,"RenderEngine","eglWaitSyncKHR",4
+6756479688,5461,685,"RenderEngine","eglDestroySyncKHR",4
+6756497842,71730,685,"RenderEngine","makeImage",4
+6756555842,6730,685,"RenderEngine","Texture release(72596)",5
+6756606495,5500,685,"RenderEngine","endCapture",2
+6756617149,1737385,685,"RenderEngine","flush surface",2
+6756693034,42385,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756701726,28462,685,"RenderEngine","FillRectOp",4
+6756741149,17000,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756746572,6616,685,"RenderEngine","FillRectOp",4
+6756763688,18231,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756769342,5884,685,"RenderEngine","FillRectOp",4
+6756787380,15885,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756792611,5654,685,"RenderEngine","FillRectOp",4
+6756808342,16615,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756813957,6115,685,"RenderEngine","FillRectOp",4
+6756829995,48231,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6756835265,5884,685,"RenderEngine","FillRectOp",4
+6756846226,5539,685,"RenderEngine","FillRectOp",4
+6756856880,5385,685,"RenderEngine","FillRectOp",4
+6756867688,5615,685,"RenderEngine","FillRectOp",4
+6756970572,403885,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757091919,271192,685,"RenderEngine","FillRectOp",4
+6757382842,231923,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757410034,139154,685,"RenderEngine","FillRectOp",4
+6757625072,79616,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757642611,55384,685,"RenderEngine","FillRectOp",4
+6757711342,92192,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757720649,74923,685,"RenderEngine","FillRectOp",4
+6757755688,62307,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6757799995,10231,741,"HwBinder:661_1","VSR: adding sample",1
+6757814419,52769,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757823726,36539,685,"RenderEngine","FillRectOp",4
+6757875995,371270,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6757894572,120308,685,"RenderEngine","FillRectOp",4
+6758027188,120192,685,"RenderEngine","FillRectOp",4
+6758154111,42461,685,"RenderEngine","FillRectOp",4
+6758204072,36654,685,"RenderEngine","FillRectOp",4
+6758333726,7231,748,"TimerDispatch","TimerIteration #1393",0
+6758361034,375692,685,"RenderEngine","flush",2
+6758382226,5269,685,"RenderEngine","eglCreateSyncKHR",3
+6758382995,23962,748,"TimerDispatch","cancel timer",0
+6758405342,247577,685,"RenderEngine","st_context_flush",3
+6758412572,233885,685,"RenderEngine","st_flush",4
+6758414649,61923,748,"TimerDispatch","vsyncCallback",0
+6758434688,29807,748,"TimerDispatch","generateTokenForPredictions",1
+6758552149,5270,748,"TimerDispatch","app alarm in 16329us; VSYNC in 48677us",0
+6758618226,11539,749,"app","generateTokenForPredictions",0
+6758635303,10885,749,"app","generateTokenForPredictions",0
+6758651457,6923,749,"app","generateTokenForPredictions",0
+6758663495,5616,749,"app","generateTokenForPredictions",0
+6758664957,5308,685,"RenderEngine","st_flush",3
+6758674765,5461,749,"app","generateTokenForPredictions",0
+6758681919,5076,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6758685534,6577,749,"app","generateTokenForPredictions",0
+6758697072,6193,749,"app","generateTokenForPredictions",0
+6758713188,5154,685,"RenderEngine","eglDestroySyncKHR",3
+6758742765,14230,685,"RenderEngine","Submit(sync=false)",2
+6759003688,998577,661,"surfaceflinger","queueBuffer",4
+6759026342,5461,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6759955188,39269,661,"surfaceflinger","Trace GPU completion fence 1466",5
+6760026880,87692,661,"surfaceflinger","postFramebuffer",3
+6760044265,10500,661,"surfaceflinger","merge",4
+6760049534,4476269,27726,"GPU completion","waiting for GPU completion 1466",0
+6760057726,4459769,27726,"GPU completion","waitForever",1
+6760068342,5192,661,"surfaceflinger","merge",4
+6760088995,5270,661,"surfaceflinger","merge",4
+6760101995,5154,661,"surfaceflinger","merge",4
+6760149649,600154,661,"surfaceflinger","postComposition",1
+6760175995,137654,661,"surfaceflinger","setSfPresent",2
+6760467111,21731,661,"surfaceflinger","wait",2
+6760494457,7885,661,"surfaceflinger","wait",2
+6760507919,7884,661,"surfaceflinger","wait",2
+6760520880,5654,661,"surfaceflinger","wait",2
+6760535188,47077,661,"surfaceflinger","merge",2
+6760803188,15500,661,"surfaceflinger","setDuration",1
+6760921419,458730,661,"surfaceflinger","commit 155794 vsyncIn 12.98ms",0
+6760933149,24385,661,"surfaceflinger","previousFramePending",1
+6761039534,10731,661,"surfaceflinger","setSfWakeUp",1
+6761056726,123731,661,"surfaceflinger","latchBuffers",1
+6761190188,5615,661,"surfaceflinger","updateLayerGeometry",1
+6761202495,129270,661,"surfaceflinger","chooseRefreshRateForContent",1
+6761338303,7923,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6761364572,7039,661,"surfaceflinger","updateInputFlinger",1
+6763497188,130884,1841,"binder:661_5","setTransactionState",0
+6763592034,29154,1841,"binder:661_5","scheduleFrame",1
+6773277419,10884,682,"binder:661_1","requestNextVsync",0
+6774221534,79538,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6774278188,16538,741,"HwBinder:661_1","VSR: adding sample",1
+6774926072,7500,748,"TimerDispatch","TimerIteration #1394",0
+6774975611,19961,748,"TimerDispatch","cancel timer",0
+6775004342,102153,748,"TimerDispatch","vsyncCallback",0
+6775019649,22462,748,"TimerDispatch","generateTokenForPredictions",1
+6775173726,1555769,661,"surfaceflinger","commit 155802 vsyncIn 15.37ms",0
+6775179842,7230,748,"TimerDispatch","app alarm in 16375us; VSYNC in 48723us",0
+6775183265,29538,661,"surfaceflinger","previousFramePending",1
+6775299919,11500,749,"app","generateTokenForPredictions",0
+6775316919,10807,749,"app","generateTokenForPredictions",0
+6775333303,7577,749,"app","generateTokenForPredictions",0
+6775336572,8193,661,"surfaceflinger","setSfWakeUp",1
+6775347688,5884,749,"app","generateTokenForPredictions",0
+6775356572,81539,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155795",1
+6775359995,7962,749,"app","generateTokenForPredictions",0
+6775374572,7116,749,"app","generateTokenForPredictions",0
+6775386726,6154,749,"app","generateTokenForPredictions",0
+6775400572,31270,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6775407534,18077,661,"surfaceflinger","wait",3
+6775540957,171308,661,"surfaceflinger","setBuffer",1
+6775687457,9462,661,"surfaceflinger","createSurfaceFrameForToken",2
+6775809419,42538,661,"surfaceflinger","commitTransactions",1
+6775827457,16154,661,"surfaceflinger","doCommitTransactions",2
+6775847149,108693,684,"surfaceflinger","addEntry",0
+6775858457,347385,661,"surfaceflinger","latchBuffers",1
+6775996495,13347,661,"surfaceflinger","doTransaction",2
+6776105457,89846,661,"surfaceflinger","latchBuffer",2
+6776133765,7654,661,"surfaceflinger","addSurfaceFrame",3
+6776260072,53616,661,"surfaceflinger","updateLayerGeometry",1
+6776323072,322308,661,"surfaceflinger","chooseRefreshRateForContent",1
+6776653534,13538,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6776698457,9154,661,"surfaceflinger","updateInputFlinger",1
+6776740842,15235077,661,"surfaceflinger","composite 155802",0
+6777097072,14259923,661,"surfaceflinger","present",1
+6777104995,18424,661,"surfaceflinger","preComposition",2
+6777135265,17654,661,"surfaceflinger","prepare",2
+6777141726,6269,661,"surfaceflinger","rebuildLayerStacks",3
+6777158188,15192,661,"surfaceflinger","prepare",2
+6777163419,5038,661,"surfaceflinger","rebuildLayerStacks",3
+6777178380,15115,661,"surfaceflinger","prepare",2
+6777183534,5115,661,"surfaceflinger","rebuildLayerStacks",3
+6777198765,15577,661,"surfaceflinger","prepare",2
+6777204149,5154,661,"surfaceflinger","rebuildLayerStacks",3
+6777368611,6710961,661,"surfaceflinger","present",2
+6777381303,9077,661,"surfaceflinger","updateCompositionState",3
+6777396226,64808,661,"surfaceflinger","writeCompositionState",3
+6777489611,3655692,661,"surfaceflinger","prepareFrameAsync",3
+6777548957,171846,661,"surfaceflinger","dequeueBuffer",4
+6777597957,111192,661,"surfaceflinger","dequeueBuffer",5
+6777607611,40154,661,"surfaceflinger","dequeueBuffer",6
+6777615649,708308,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6777628149,7731,661,"surfaceflinger","FramebufferSurface: 2",7
+6777632149,686116,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6777642919,654307,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6777680919,5461,661,"surfaceflinger","HWC release fence 1468 has signaled",6
+6777727880,3389846,661,"surfaceflinger","composeSurfaces",4
+6777892842,64461,661,"surfaceflinger","prepareClientComposition",5
+6777975495,24731,661,"surfaceflinger","prepareClientComposition",5
+6778015534,24077,661,"surfaceflinger","prepareClientComposition",5
+6778057803,19385,661,"surfaceflinger","prepareClientComposition",5
+6778095919,13923,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6778272034,32615,661,"surfaceflinger","drawLayers",5
+6778329534,2729731,685,"RenderEngine","REThreaded::drawLayers",0
+6778339457,2692308,685,"RenderEngine","SkiaGL::drawLayers",1
+6778371111,5884,685,"RenderEngine","eglCreateSyncKHR",2
+6778401111,5461,685,"RenderEngine","eglWaitSyncKHR",2
+6778420419,5115,685,"RenderEngine","eglDestroySyncKHR",2
+6778442072,6270,685,"RenderEngine","getOrCreateSurface",2
+6778454495,13770,685,"RenderEngine","tryCapture",2
+6778548726,272154,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6778558572,204731,685,"RenderEngine","DrawImage",3
+6778572342,5307,685,"RenderEngine","eglCreateSyncKHR",4
+6778591034,5231,685,"RenderEngine","eglWaitSyncKHR",4
+6778633688,5577,685,"RenderEngine","eglDestroySyncKHR",4
+6778652649,97846,685,"RenderEngine","makeImage",4
+6778734226,7654,685,"RenderEngine","Texture release(72597)",5
+6778827688,415115,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6778864919,103807,685,"RenderEngine","BlurRegion",3
+6778990611,43961,685,"RenderEngine","drawBlurRegion",3
+6779042572,174923,685,"RenderEngine","DrawImage",3
+6779059188,5346,685,"RenderEngine","eglCreateSyncKHR",4
+6779079957,5692,685,"RenderEngine","eglWaitSyncKHR",4
+6779132457,5500,685,"RenderEngine","eglDestroySyncKHR",4
+6779151342,57461,685,"RenderEngine","makeImage",4
+6779194803,6654,685,"RenderEngine","Texture release(72567)",5
+6779249688,173692,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6779255765,148307,685,"RenderEngine","DrawImage",3
+6779269457,5231,685,"RenderEngine","eglCreateSyncKHR",4
+6779287919,5384,685,"RenderEngine","eglWaitSyncKHR",4
+6779307072,56385,682,"binder:661_1","setTransactionState",0
+6779334419,5692,685,"RenderEngine","eglDestroySyncKHR",4
+6779342419,18461,682,"binder:661_1","scheduleFrame",1
+6779352919,43461,685,"RenderEngine","makeImage",4
+6779383303,6346,685,"RenderEngine","Texture release(72604)",5
+6779429765,172384,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6779438226,141616,685,"RenderEngine","DrawImage",3
+6779451611,5154,685,"RenderEngine","eglCreateSyncKHR",4
+6779469303,5423,685,"RenderEngine","eglWaitSyncKHR",4
+6779516842,5538,685,"RenderEngine","eglDestroySyncKHR",4
+6779535111,37346,685,"RenderEngine","makeImage",4
+6779559303,6846,685,"RenderEngine","Texture release(72605)",5
+6779609534,5269,685,"RenderEngine","endCapture",2
+6779620149,1074846,685,"RenderEngine","flush surface",2
+6779691534,32077,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779699072,19347,685,"RenderEngine","FillRectOp",4
+6779728957,17346,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779734265,7115,685,"RenderEngine","FillRectOp",4
+6779752034,15885,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779757342,5730,685,"RenderEngine","FillRectOp",4
+6779772957,16077,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779778303,5616,685,"RenderEngine","FillRectOp",4
+6779794072,15770,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779799265,5538,685,"RenderEngine","FillRectOp",4
+6779814842,47769,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6779820188,5692,685,"RenderEngine","FillRectOp",4
+6779830957,5385,685,"RenderEngine","FillRectOp",4
+6779841419,5346,685,"RenderEngine","FillRectOp",4
+6779852149,5616,685,"RenderEngine","FillRectOp",4
+6779925149,255308,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6779998149,174077,685,"RenderEngine","FillRectOp",4
+6780187111,103346,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6780202380,81346,685,"RenderEngine","FillRectOp",4
+6780296649,51616,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6780307419,34230,685,"RenderEngine","FillRectOp",4
+6780354495,46116,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6780362572,31500,685,"RenderEngine","FillRectOp",4
+6780406726,40577,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6780415226,25693,685,"RenderEngine","FillRectOp",4
+6780452995,181424,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6780462495,44654,685,"RenderEngine","FillRectOp",4
+6780513995,48770,685,"RenderEngine","FillRectOp",4
+6780570188,27577,685,"RenderEngine","FillRectOp",4
+6780604149,23770,685,"RenderEngine","FillRectOp",4
+6780701495,276116,685,"RenderEngine","flush",2
+6780715688,5538,685,"RenderEngine","eglCreateSyncKHR",3
+6780732995,176424,685,"RenderEngine","st_context_flush",3
+6780739265,164269,685,"RenderEngine","st_flush",4
+6780917611,5231,685,"RenderEngine","st_flush",3
+6780931226,5231,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6780957765,5192,685,"RenderEngine","eglDestroySyncKHR",3
+6780983380,12000,685,"RenderEngine","Submit(sync=false)",2
+6781132226,6000,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6781152995,331116,661,"surfaceflinger","finishFrame",3
+6781170688,227269,661,"surfaceflinger","queueBuffer",4
+6781189649,5500,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6781202380,115885,661,"surfaceflinger","queueBuffer",5
+6781210265,5077,661,"surfaceflinger","FramebufferSurface: 2",6
+6781243265,8000,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6781259880,21731,661,"surfaceflinger","waitForever",6
+6781355380,36077,661,"surfaceflinger","Trace GPU completion fence 1467",5
+6781408957,40038,661,"surfaceflinger","acquireBuffer",4
+6781419995,11577,661,"surfaceflinger","FramebufferSurface: 2",5
+6781426765,1915346,27726,"GPU completion","waiting for GPU completion 1467",0
+6781434457,1900038,27726,"GPU completion","waitForever",1
+6781491380,2580462,661,"surfaceflinger","postFramebuffer",3
+6781501726,2224000,661,"surfaceflinger","presentAndGetReleaseFences",4
+6781509265,5654,661,"surfaceflinger","wait for earliest present time",5
+6781520957,2181885,661,"surfaceflinger","HwcPresentDisplay",5
+6783753342,11538,661,"surfaceflinger","wait",4
+6783770188,10807,661,"surfaceflinger","wait",4
+6783788842,31000,661,"surfaceflinger","merge",4
+6783830149,22885,661,"surfaceflinger","releaseBuffer",4
+6783837803,5077,661,"surfaceflinger","FramebufferSurface: 3",5
+6783861765,21307,661,"surfaceflinger","merge",4
+6783919380,16269,661,"surfaceflinger","merge",4
+6783948034,51461,661,"surfaceflinger","merge",4
+6784029149,15770,661,"surfaceflinger","merge",4
+6784086803,801308,661,"surfaceflinger","present",2
+6784100457,8846,661,"surfaceflinger","updateCompositionState",3
+6784114957,37154,661,"surfaceflinger","writeCompositionState",3
+6784170572,360270,661,"surfaceflinger","prepareFrame",3
+6784176572,343962,661,"surfaceflinger","chooseCompositionStrategy",4
+6784183649,331154,661,"surfaceflinger","getDeviceCompositionChanges",5
+6784195303,302423,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6784537649,58308,661,"surfaceflinger","finishFrame",3
+6784550649,18500,661,"surfaceflinger","composeSurfaces",4
+6784581495,6808,661,"surfaceflinger","acquireBuffer",4
+6784601880,280346,661,"surfaceflinger","postFramebuffer",3
+6784610380,254039,661,"surfaceflinger","presentAndGetReleaseFences",4
+6784618188,7461,661,"surfaceflinger","wait for earliest present time",5
+6784631457,215692,661,"surfaceflinger","HwcPresentDisplay",5
+6784894957,768808,661,"surfaceflinger","present",2
+6784907034,8923,661,"surfaceflinger","updateCompositionState",3
+6784921380,35962,661,"surfaceflinger","writeCompositionState",3
+6784990995,285924,661,"surfaceflinger","prepareFrame",3
+6784998919,265192,661,"surfaceflinger","chooseCompositionStrategy",4
+6785007419,251269,661,"surfaceflinger","getDeviceCompositionChanges",5
+6785018726,223885,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6785283572,55154,661,"surfaceflinger","finishFrame",3
+6785294726,17731,661,"surfaceflinger","composeSurfaces",4
+6785323688,6884,661,"surfaceflinger","acquireBuffer",4
+6785344380,313385,661,"surfaceflinger","postFramebuffer",3
+6785352342,288615,661,"surfaceflinger","presentAndGetReleaseFences",4
+6785360226,6693,661,"surfaceflinger","wait for earliest present time",5
+6785372534,251961,661,"surfaceflinger","HwcPresentDisplay",5
+6785670842,5680730,661,"surfaceflinger","present",2
+6785686072,11193,661,"surfaceflinger","updateCompositionState",3
+6785702880,8000,661,"surfaceflinger","writeCompositionState",3
+6785731149,16923,661,"surfaceflinger","prepareFrame",3
+6785736842,5000,661,"surfaceflinger","chooseCompositionStrategy",4
+6785754534,5466192,661,"surfaceflinger","finishFrame",3
+6785764880,543769,661,"surfaceflinger","dequeueBuffer",4
+6785775649,521116,661,"surfaceflinger","dequeueBuffer",5
+6786280534,6769,661,"surfaceflinger","HWC release fence 1469 has signaled",6
+6786316072,3555577,661,"surfaceflinger","composeSurfaces",4
+6786492380,74077,661,"surfaceflinger","prepareClientComposition",5
+6786585188,29846,661,"surfaceflinger","prepareClientComposition",5
+6786628303,30808,661,"surfaceflinger","prepareClientComposition",5
+6786681342,25000,661,"surfaceflinger","prepareClientComposition",5
+6786727303,15423,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6786909726,39154,661,"surfaceflinger","drawLayers",5
+6786995265,2807307,685,"RenderEngine","REThreaded::drawLayers",0
+6787018611,2777154,685,"RenderEngine","SkiaGL::drawLayers",1
+6787029919,6076,685,"RenderEngine","getOrCreateSurface",2
+6787042188,18577,685,"RenderEngine","tryCapture",2
+6787162572,325116,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6787172803,246769,685,"RenderEngine","DrawImage",3
+6787212419,6038,685,"RenderEngine","eglCreateSyncKHR",4
+6787252380,5500,685,"RenderEngine","eglWaitSyncKHR",4
+6787272226,5269,685,"RenderEngine","eglDestroySyncKHR",4
+6787297880,109885,685,"RenderEngine","makeImage",4
+6787392457,7231,685,"RenderEngine","Texture release(72606)",5
+6787494726,394154,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6787530611,84615,685,"RenderEngine","BlurRegion",3
+6787623842,28307,685,"RenderEngine","drawBlurRegion",3
+6787660726,198769,685,"RenderEngine","DrawImage",3
+6787680649,5270,685,"RenderEngine","eglCreateSyncKHR",4
+6787704303,5308,685,"RenderEngine","eglWaitSyncKHR",4
+6787759880,5539,685,"RenderEngine","eglDestroySyncKHR",4
+6787779572,68577,685,"RenderEngine","makeImage",4
+6787833034,6654,685,"RenderEngine","Texture release(72612)",5
+6787895495,201424,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6787901611,173808,685,"RenderEngine","DrawImage",3
+6787915649,5270,685,"RenderEngine","eglCreateSyncKHR",4
+6787935303,5616,685,"RenderEngine","eglWaitSyncKHR",4
+6787998380,9539,685,"RenderEngine","eglDestroySyncKHR",4
+6788021726,45731,685,"RenderEngine","makeImage",4
+6788053534,6769,685,"RenderEngine","Texture release(72613)",5
+6788103649,202231,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6788113072,167308,685,"RenderEngine","DrawImage",3
+6788130572,5539,685,"RenderEngine","eglCreateSyncKHR",4
+6788150688,5807,685,"RenderEngine","eglWaitSyncKHR",4
+6788213457,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6788232534,40154,685,"RenderEngine","makeImage",4
+6788258919,6807,685,"RenderEngine","Texture release(72614)",5
+6788314072,5385,685,"RenderEngine","endCapture",2
+6788324726,1082462,685,"RenderEngine","flush surface",2
+6788396072,30039,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788403265,17692,685,"RenderEngine","FillRectOp",4
+6788431495,16347,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788436995,5962,685,"RenderEngine","FillRectOp",4
+6788452957,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788458303,5500,685,"RenderEngine","FillRectOp",4
+6788473726,15731,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788478995,5577,685,"RenderEngine","FillRectOp",4
+6788494611,15731,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788499842,5577,685,"RenderEngine","FillRectOp",4
+6788515572,47539,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6788520842,6077,685,"RenderEngine","FillRectOp",4
+6788531957,5500,685,"RenderEngine","FillRectOp",4
+6788542495,5385,685,"RenderEngine","FillRectOp",4
+6788552919,5307,685,"RenderEngine","FillRectOp",4
+6788631495,241308,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6788696226,167846,685,"RenderEngine","FillRectOp",4
+6788879880,106500,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6788893495,86000,685,"RenderEngine","FillRectOp",4
+6788992649,56654,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6789003419,39192,685,"RenderEngine","FillRectOp",4
+6789055919,46884,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6789064765,31654,685,"RenderEngine","FillRectOp",4
+6789109303,40462,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6789117611,25769,685,"RenderEngine","FillRectOp",4
+6789155495,188270,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6789164995,45616,685,"RenderEngine","FillRectOp",4
+6789217342,52384,685,"RenderEngine","FillRectOp",4
+6789276457,29269,685,"RenderEngine","FillRectOp",4
+6789312149,25193,685,"RenderEngine","FillRectOp",4
+6789413534,328500,685,"RenderEngine","flush",2
+6789428457,6000,685,"RenderEngine","eglCreateSyncKHR",3
+6789445572,222231,685,"RenderEngine","st_context_flush",3
+6789452072,209116,685,"RenderEngine","st_flush",4
+6789677457,5731,685,"RenderEngine","st_flush",3
+6789692342,5269,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6789720649,5193,685,"RenderEngine","eglDestroySyncKHR",3
+6789748111,9961,685,"RenderEngine","Submit(sync=false)",2
+6789894534,1296769,661,"surfaceflinger","queueBuffer",4
+6789911880,5423,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6791117380,63308,661,"surfaceflinger","Trace GPU completion fence 1468",5
+6791230303,4364808,27726,"GPU completion","waiting for GPU completion 1468",0
+6791238226,107808,661,"surfaceflinger","postFramebuffer",3
+6791242995,4344231,27726,"GPU completion","waitForever",1
+6791267495,5231,661,"surfaceflinger","merge",4
+6791291342,5000,661,"surfaceflinger","merge",4
+6791318495,5116,661,"surfaceflinger","merge",4
+6791333188,4884,661,"surfaceflinger","merge",4
+6791383995,528270,661,"surfaceflinger","postComposition",1
+6791410649,124346,661,"surfaceflinger","setSfPresent",2
+6791592188,7615,748,"TimerDispatch","TimerIteration #1395",0
+6791628419,17038,748,"TimerDispatch","cancel timer",0
+6791653842,52653,748,"TimerDispatch","vsyncCallback",0
+6791667726,22769,748,"TimerDispatch","generateTokenForPredictions",1
+6791671688,15038,661,"surfaceflinger","wait",2
+6791694188,7423,661,"surfaceflinger","wait",2
+6791709457,7269,661,"surfaceflinger","wait",2
+6791723226,4846,661,"surfaceflinger","wait",2
+6791735919,38653,661,"surfaceflinger","merge",2
+6791777919,5307,748,"TimerDispatch","app alarm in 16448us; VSYNC in 48795us",0
+6791832072,16423,749,"app","cancel timer",0
+6791944572,11193,661,"surfaceflinger","setDuration",1
+6792019957,1147577,661,"surfaceflinger","commit 155810 vsyncIn 15.20ms",0
+6792026380,22462,661,"surfaceflinger","previousFramePending",1
+6792101919,46500,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6792131919,8653,741,"HwBinder:661_1","VSR: adding sample",1
+6792145034,8500,661,"surfaceflinger","setSfWakeUp",1
+6792163457,62731,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155803",1
+6792196803,24308,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6792203649,11231,661,"surfaceflinger","wait",3
+6792305265,119923,661,"surfaceflinger","setBuffer",1
+6792404034,8577,661,"surfaceflinger","createSurfaceFrameForToken",2
+6792570649,31077,661,"surfaceflinger","commitTransactions",1
+6792584688,9615,661,"surfaceflinger","doCommitTransactions",2
+6792607688,272923,661,"surfaceflinger","latchBuffers",1
+6792712226,9462,661,"surfaceflinger","doTransaction",2
+6792805688,67000,661,"surfaceflinger","latchBuffer",2
+6792828880,6808,661,"surfaceflinger","addSurfaceFrame",3
+6792909457,30923,661,"surfaceflinger","updateLayerGeometry",1
+6792948957,168269,661,"surfaceflinger","chooseRefreshRateForContent",1
+6793123842,9384,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6793152649,6270,661,"surfaceflinger","updateInputFlinger",1
+6793175380,21449962,661,"surfaceflinger","composite 155810",0
+6793501842,20214615,661,"surfaceflinger","present",1
+6793510034,16192,661,"surfaceflinger","preComposition",2
+6793532688,17346,661,"surfaceflinger","prepare",2
+6793539495,5654,661,"surfaceflinger","rebuildLayerStacks",3
+6793555226,101923,661,"surfaceflinger","prepare",2
+6793645880,5885,661,"surfaceflinger","rebuildLayerStacks",3
+6793678957,15462,661,"surfaceflinger","prepare",2
+6793684611,4923,661,"surfaceflinger","rebuildLayerStacks",3
+6793699649,15077,661,"surfaceflinger","prepare",2
+6793704880,4885,661,"surfaceflinger","rebuildLayerStacks",3
+6793886303,8215385,661,"surfaceflinger","present",2
+6793909726,20423,661,"surfaceflinger","updateCompositionState",3
+6793937419,116115,661,"surfaceflinger","writeCompositionState",3
+6794085726,3917846,661,"surfaceflinger","prepareFrameAsync",3
+6794181880,153885,661,"surfaceflinger","dequeueBuffer",4
+6794195649,126154,661,"surfaceflinger","dequeueBuffer",5
+6794205919,916192,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6794212342,42730,661,"surfaceflinger","dequeueBuffer",6
+6794219072,897231,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6794229842,855077,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6794235688,5500,661,"surfaceflinger","FramebufferSurface: 1",7
+6794260995,2194847,684,"surfaceflinger","addEntry",0
+6794292149,6154,661,"surfaceflinger","HWC release fence 1470 has signaled",6
+6794343149,3634731,661,"surfaceflinger","composeSurfaces",4
+6794498342,50000,661,"surfaceflinger","prepareClientComposition",5
+6794566803,24769,661,"surfaceflinger","prepareClientComposition",5
+6794608034,22231,661,"surfaceflinger","prepareClientComposition",5
+6794648842,19384,661,"surfaceflinger","prepareClientComposition",5
+6794691495,23039,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6794868880,35192,661,"surfaceflinger","drawLayers",5
+6794954995,2978000,685,"RenderEngine","REThreaded::drawLayers",0
+6794966149,2937539,685,"RenderEngine","SkiaGL::drawLayers",1
+6795021419,8076,685,"RenderEngine","eglCreateSyncKHR",2
+6795089995,5462,685,"RenderEngine","eglWaitSyncKHR",2
+6795115380,5231,685,"RenderEngine","eglDestroySyncKHR",2
+6795143572,6423,685,"RenderEngine","getOrCreateSurface",2
+6795157803,21923,685,"RenderEngine","tryCapture",2
+6795309111,304884,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6795318688,223269,685,"RenderEngine","DrawImage",3
+6795332419,5423,685,"RenderEngine","eglCreateSyncKHR",4
+6795351957,5308,685,"RenderEngine","eglWaitSyncKHR",4
+6795397880,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6795416726,112654,685,"RenderEngine","makeImage",4
+6795513457,7846,685,"RenderEngine","Texture release(72615)",5
+6795621803,372154,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6795656919,85076,685,"RenderEngine","BlurRegion",3
+6795750572,30962,685,"RenderEngine","drawBlurRegion",3
+6795790342,179577,685,"RenderEngine","DrawImage",3
+6795806303,5462,685,"RenderEngine","eglCreateSyncKHR",4
+6795827265,5307,685,"RenderEngine","eglWaitSyncKHR",4
+6795883572,5693,685,"RenderEngine","eglDestroySyncKHR",4
+6795902880,58962,685,"RenderEngine","makeImage",4
+6795947457,7269,685,"RenderEngine","Texture release(72585)",5
+6796004034,178577,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6796011072,152154,685,"RenderEngine","DrawImage",3
+6796025803,5423,685,"RenderEngine","eglCreateSyncKHR",4
+6796044649,6462,685,"RenderEngine","eglWaitSyncKHR",4
+6796093149,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6796111534,44154,685,"RenderEngine","makeImage",4
+6796142611,6731,685,"RenderEngine","Texture release(72622)",5
+6796189380,173462,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6796200572,140423,685,"RenderEngine","DrawImage",3
+6796215034,5231,685,"RenderEngine","eglCreateSyncKHR",4
+6796233457,5308,685,"RenderEngine","eglWaitSyncKHR",4
+6796280188,5807,685,"RenderEngine","eglDestroySyncKHR",4
+6796298495,35770,685,"RenderEngine","makeImage",4
+6796321303,6385,685,"RenderEngine","Texture release(72623)",5
+6796369495,5462,685,"RenderEngine","endCapture",2
+6796380880,1151385,685,"RenderEngine","flush surface",2
+6796450803,33654,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796462149,17231,685,"RenderEngine","FillRectOp",4
+6796489842,16653,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796495149,6231,685,"RenderEngine","FillRectOp",4
+6796511765,15884,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796516995,5770,685,"RenderEngine","FillRectOp",4
+6796532726,15423,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796537880,5346,685,"RenderEngine","FillRectOp",4
+6796553188,15923,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796558380,5769,685,"RenderEngine","FillRectOp",4
+6796574188,47807,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6796579534,5923,685,"RenderEngine","FillRectOp",4
+6796590534,5385,685,"RenderEngine","FillRectOp",4
+6796601111,5615,685,"RenderEngine","FillRectOp",4
+6796611765,5384,685,"RenderEngine","FillRectOp",4
+6796686803,238308,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6796754111,162923,685,"RenderEngine","FillRectOp",4
+6796932342,158192,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6796947034,136500,685,"RenderEngine","FillRectOp",4
+6797096688,62654,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6797107726,43654,685,"RenderEngine","FillRectOp",4
+6797165611,58423,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6797175688,41461,685,"RenderEngine","FillRectOp",4
+6797230342,48346,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6797241765,30346,685,"RenderEngine","FillRectOp",4
+6797284765,188000,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6797297419,50384,685,"RenderEngine","FillRectOp",4
+6797354534,46808,685,"RenderEngine","FillRectOp",4
+6797408380,27846,685,"RenderEngine","FillRectOp",4
+6797442726,23693,685,"RenderEngine","FillRectOp",4
+6797538572,315039,685,"RenderEngine","flush",2
+6797553919,49192,685,"RenderEngine","eglCreateSyncKHR",3
+6797613919,171038,685,"RenderEngine","st_context_flush",3
+6797620188,158731,685,"RenderEngine","st_flush",4
+6797795188,6192,685,"RenderEngine","st_flush",3
+6797809534,5154,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6797834419,5461,685,"RenderEngine","eglDestroySyncKHR",3
+6797859534,9538,685,"RenderEngine","Submit(sync=false)",2
+6797990765,6038,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6798011303,366500,661,"surfaceflinger","finishFrame",3
+6798033457,272192,661,"surfaceflinger","queueBuffer",4
+6798093034,6346,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6798106380,114923,661,"surfaceflinger","queueBuffer",5
+6798115111,5038,661,"surfaceflinger","FramebufferSurface: 1",6
+6798151688,7961,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6798168765,17654,661,"surfaceflinger","waitForever",6
+6798261495,38039,661,"surfaceflinger","Trace GPU completion fence 1469",5
+6798315188,31692,661,"surfaceflinger","acquireBuffer",4
+6798325226,5154,661,"surfaceflinger","FramebufferSurface: 1",5
+6798334188,2984730,27726,"GPU completion","waiting for GPU completion 1469",0
+6798343842,2966807,27726,"GPU completion","waitForever",1
+6798384342,3709884,661,"surfaceflinger","postFramebuffer",3
+6798394688,3379884,661,"surfaceflinger","presentAndGetReleaseFences",4
+6798402611,6154,661,"surfaceflinger","wait for earliest present time",5
+6798414957,3334692,661,"surfaceflinger","HwcPresentDisplay",5
+6801804380,12731,661,"surfaceflinger","wait",4
+6801822457,10654,661,"surfaceflinger","wait",4
+6801841995,32308,661,"surfaceflinger","merge",4
+6801885803,22423,661,"surfaceflinger","releaseBuffer",4
+6801893457,5077,661,"surfaceflinger","FramebufferSurface: 2",5
+6801916842,18730,661,"surfaceflinger","merge",4
+6801973380,16769,661,"surfaceflinger","merge",4
+6802003572,17731,661,"surfaceflinger","merge",4
+6802050534,17346,661,"surfaceflinger","merge",4
+6802108995,954500,661,"surfaceflinger","present",2
+6802122265,9538,661,"surfaceflinger","updateCompositionState",3
+6802137688,36730,661,"surfaceflinger","writeCompositionState",3
+6802194765,432307,661,"surfaceflinger","prepareFrame",3
+6802200957,410423,661,"surfaceflinger","chooseCompositionStrategy",4
+6802207534,395077,661,"surfaceflinger","getDeviceCompositionChanges",5
+6802217611,357654,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6802634226,58308,661,"surfaceflinger","finishFrame",3
+6802646303,18192,661,"surfaceflinger","composeSurfaces",4
+6802677149,7269,661,"surfaceflinger","acquireBuffer",4
+6802698149,359462,661,"surfaceflinger","postFramebuffer",3
+6802706842,331576,661,"surfaceflinger","presentAndGetReleaseFences",4
+6802714380,6154,661,"surfaceflinger","wait for earliest present time",5
+6802726880,291269,661,"surfaceflinger","HwcPresentDisplay",5
+6803070534,838884,661,"surfaceflinger","present",2
+6803085149,10500,661,"surfaceflinger","updateCompositionState",3
+6803102265,44846,661,"surfaceflinger","writeCompositionState",3
+6803165842,355538,661,"surfaceflinger","prepareFrame",3
+6803171572,335577,661,"surfaceflinger","chooseCompositionStrategy",4
+6803177726,323923,661,"surfaceflinger","getDeviceCompositionChanges",5
+6803184957,296269,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6803529303,70615,661,"surfaceflinger","finishFrame",3
+6803547611,21115,661,"surfaceflinger","composeSurfaces",4
+6803583034,7769,661,"surfaceflinger","acquireBuffer",4
+6803605765,297807,661,"surfaceflinger","postFramebuffer",3
+6803614111,269192,661,"surfaceflinger","presentAndGetReleaseFences",4
+6803621572,6231,661,"surfaceflinger","wait for earliest present time",5
+6803633880,228538,661,"surfaceflinger","HwcPresentDisplay",5
+6803916188,9792807,661,"surfaceflinger","present",2
+6803938111,10884,661,"surfaceflinger","updateCompositionState",3
+6803955611,9269,661,"surfaceflinger","writeCompositionState",3
+6803990995,16885,661,"surfaceflinger","prepareFrame",3
+6803996957,5038,661,"surfaceflinger","chooseCompositionStrategy",4
+6804014611,9496038,661,"surfaceflinger","finishFrame",3
+6804024111,2600577,661,"surfaceflinger","dequeueBuffer",4
+6804037726,2556654,661,"surfaceflinger","dequeueBuffer",5
+6806576842,7615,661,"surfaceflinger","HWC release fence 1471 has signaled",6
+6806633765,3961192,661,"surfaceflinger","composeSurfaces",4
+6806811649,75385,661,"surfaceflinger","prepareClientComposition",5
+6806905572,28616,661,"surfaceflinger","prepareClientComposition",5
+6806948688,28846,661,"surfaceflinger","prepareClientComposition",5
+6807000072,22039,661,"surfaceflinger","prepareClientComposition",5
+6807042688,16692,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6807211034,30231,661,"surfaceflinger","drawLayers",5
+6807283611,3199692,685,"RenderEngine","REThreaded::drawLayers",0
+6807294265,3182653,685,"RenderEngine","SkiaGL::drawLayers",1
+6807303034,6577,685,"RenderEngine","getOrCreateSurface",2
+6807316726,14962,685,"RenderEngine","tryCapture",2
+6807413303,336885,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6807423265,226077,685,"RenderEngine","DrawImage",3
+6807459149,6000,685,"RenderEngine","eglCreateSyncKHR",4
+6807496765,5384,685,"RenderEngine","eglWaitSyncKHR",4
+6807516265,5269,685,"RenderEngine","eglDestroySyncKHR",4
+6807539342,97500,685,"RenderEngine","makeImage",4
+6807621303,7731,685,"RenderEngine","Texture release(72624)",5
+6807756957,527192,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6807806495,139539,685,"RenderEngine","BlurRegion",3
+6807962726,39962,685,"RenderEngine","drawBlurRegion",3
+6808011303,245731,685,"RenderEngine","DrawImage",3
+6808037265,6115,685,"RenderEngine","eglCreateSyncKHR",4
+6808063918,5885,685,"RenderEngine","eglWaitSyncKHR",4
+6808147303,7269,685,"RenderEngine","eglDestroySyncKHR",4
+6808169957,75692,685,"RenderEngine","makeImage",4
+6808231726,6846,685,"RenderEngine","Texture release(72630)",5
+6808290957,247000,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6808297072,202577,685,"RenderEngine","DrawImage",3
+6808310418,5577,685,"RenderEngine","eglCreateSyncKHR",4
+6808329534,5269,685,"RenderEngine","eglWaitSyncKHR",4
+6808398072,6616,685,"RenderEngine","eglDestroySyncKHR",4
+6808419534,71154,685,"RenderEngine","makeImage",4
+6808475111,8307,685,"RenderEngine","Texture release(72631)",5
+6808547226,193116,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6808560149,157039,685,"RenderEngine","DrawImage",3
+6808588149,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6808609342,5461,685,"RenderEngine","eglWaitSyncKHR",4
+6808654265,5769,685,"RenderEngine","eglDestroySyncKHR",4
+6808672611,37654,685,"RenderEngine","makeImage",4
+6808696880,6731,685,"RenderEngine","Texture release(72632)",5
+6808747188,5192,685,"RenderEngine","endCapture",2
+6808757572,1337962,685,"RenderEngine","flush surface",2
+6808834534,32884,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808842226,20077,685,"RenderEngine","FillRectOp",4
+6808872688,18230,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808878457,7577,685,"RenderEngine","FillRectOp",4
+6808896034,16115,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808901380,5808,685,"RenderEngine","FillRectOp",4
+6808917303,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808922611,5461,685,"RenderEngine","FillRectOp",4
+6808938265,16230,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808943649,5962,685,"RenderEngine","FillRectOp",4
+6808959534,48269,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6808965072,5923,685,"RenderEngine","FillRectOp",4
+6808976149,5500,685,"RenderEngine","FillRectOp",4
+6808986688,5461,685,"RenderEngine","FillRectOp",4
+6808997149,5769,685,"RenderEngine","FillRectOp",4
+6809075457,278385,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809151880,193769,685,"RenderEngine","FillRectOp",4
+6809359995,134039,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809374418,112808,685,"RenderEngine","FillRectOp",4
+6809500265,53038,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809511303,35500,685,"RenderEngine","FillRectOp",4
+6809655457,89385,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809677649,60385,685,"RenderEngine","FillRectOp",4
+6809750880,41846,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809759572,26423,685,"RenderEngine","FillRectOp",4
+6809798572,196846,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6809810418,47193,685,"RenderEngine","FillRectOp",4
+6809864380,53077,685,"RenderEngine","FillRectOp",4
+6809925457,28654,685,"RenderEngine","FillRectOp",4
+6809960649,28500,685,"RenderEngine","FillRectOp",4
+6810102765,316653,685,"RenderEngine","flush",2
+6810119418,5616,685,"RenderEngine","eglCreateSyncKHR",3
+6810135111,212461,685,"RenderEngine","st_context_flush",3
+6810142342,197653,685,"RenderEngine","st_flush",4
+6810357149,5693,685,"RenderEngine","st_flush",3
+6810371765,5346,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6810398957,5538,685,"RenderEngine","eglDestroySyncKHR",3
+6810427303,11346,685,"RenderEngine","Submit(sync=false)",2
+6810630149,2849808,661,"surfaceflinger","queueBuffer",4
+6810667149,5923,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6810905765,91461,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6810972418,18847,741,"HwBinder:661_1","VSR: adding sample",1
+6813410149,58077,661,"surfaceflinger","Trace GPU completion fence 1470",5
+6813522880,179077,661,"surfaceflinger","postFramebuffer",3
+6813542534,3706692,27726,"GPU completion","waiting for GPU completion 1470",0
+6813547995,84847,661,"surfaceflinger","merge",4
+6813553072,3686885,27726,"GPU completion","waitForever",1
+6813647188,5230,661,"surfaceflinger","merge",4
+6813667495,7808,661,"surfaceflinger","merge",4
+6813686880,4962,661,"surfaceflinger","merge",4
+6813757111,780654,661,"surfaceflinger","postComposition",1
+6813829688,180577,661,"surfaceflinger","setSfPresent",2
+6814195880,17808,661,"surfaceflinger","wait",2
+6814220803,7500,661,"surfaceflinger","wait",2
+6814234342,7192,661,"surfaceflinger","wait",2
+6814248457,4885,661,"surfaceflinger","wait",2
+6814265995,77539,661,"surfaceflinger","merge",2
+6814581534,11731,661,"surfaceflinger","setDuration",1
+6815125342,11076,751,"RegionSampling","captureSample",0
+6830637265,46077,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6830668265,9461,741,"HwBinder:661_1","VSR: adding sample",1
+6832935457,5133077,1841,"binder:661_5","requestNextVsync",0
+6838169111,5423,749,"app","app alarm in 3417us; VSYNC in 35765us",0
+6840834149,146731,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6840869880,55808,741,"HwBinder:661_1","VSR: adding sample",1
+6840932072,42885,741,"HwBinder:661_1","setVsyncEnabled",1
+6841041995,237231,661,"surfaceflinger","setVsyncEnabled",0
+6841630188,7000,748,"TimerDispatch","TimerIteration #1396",0
+6841658380,16000,748,"TimerDispatch","cancel timer",0
+6841734072,5231,748,"TimerDispatch","app alarm in 16453us; VSYNC in 48801us",0
+6841775842,14192,749,"app","generateTokenForPredictions",0
+6841795534,10000,749,"app","generateTokenForPredictions",0
+6841810726,6231,749,"app","generateTokenForPredictions",0
+6841822034,5808,749,"app","generateTokenForPredictions",0
+6841832880,5462,749,"app","generateTokenForPredictions",0
+6841843457,5808,749,"app","generateTokenForPredictions",0
+6841854380,5692,749,"app","generateTokenForPredictions",0
+6844505072,15346,1486,"binder:661_4","requestNextVsync",0
+6845032265,146038,1841,"binder:661_5","setTransactionState",0
+6845136418,34885,1841,"binder:661_5","scheduleFrame",1
+6858250188,7615,748,"TimerDispatch","TimerIteration #1397",0
+6858294265,16307,748,"TimerDispatch","cancel timer",0
+6858318380,67000,748,"TimerDispatch","vsyncCallback",0
+6858333765,13769,748,"TimerDispatch","generateTokenForPredictions",1
+6858449188,10846,748,"TimerDispatch","app alarm in 16406us; VSYNC in 48754us",0
+6858454957,999461,661,"surfaceflinger","commit 155818 vsyncIn 15.41ms",0
+6858463688,27500,661,"surfaceflinger","previousFramePending",1
+6858507342,13000,749,"app","generateTokenForPredictions",0
+6858527034,8000,749,"app","generateTokenForPredictions",0
+6858541418,7039,749,"app","generateTokenForPredictions",0
+6858555534,6269,749,"app","generateTokenForPredictions",0
+6858568034,5615,749,"app","generateTokenForPredictions",0
+6858578880,6038,749,"app","generateTokenForPredictions",0
+6858589880,7192,661,"surfaceflinger","setSfWakeUp",1
+6858592957,7077,749,"app","generateTokenForPredictions",0
+6858607572,67193,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155812",1
+6858642842,26000,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6858650265,12961,661,"surfaceflinger","wait",3
+6858771188,149884,661,"surfaceflinger","setBuffer",1
+6858899572,8308,661,"surfaceflinger","createSurfaceFrameForToken",2
+6858977765,24692,661,"surfaceflinger","commitTransactions",1
+6858988303,8115,661,"surfaceflinger","doCommitTransactions",2
+6859008226,186231,661,"surfaceflinger","latchBuffers",1
+6859077726,8116,661,"surfaceflinger","doTransaction",2
+6859132649,54769,661,"surfaceflinger","latchBuffer",2
+6859150611,6000,661,"surfaceflinger","addSurfaceFrame",3
+6859225765,24230,661,"surfaceflinger","updateLayerGeometry",1
+6859257611,105923,661,"surfaceflinger","chooseRefreshRateForContent",1
+6859369572,7231,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6859436457,8231,661,"surfaceflinger","updateInputFlinger",1
+6859462380,16924500,661,"surfaceflinger","composite 155818",0
+6859673688,15991769,661,"surfaceflinger","present",1
+6859680611,11307,661,"surfaceflinger","preComposition",2
+6859697842,16307,661,"surfaceflinger","prepare",2
+6859703726,5500,661,"surfaceflinger","rebuildLayerStacks",3
+6859719226,14923,661,"surfaceflinger","prepare",2
+6859724188,5115,661,"surfaceflinger","rebuildLayerStacks",3
+6859739111,15423,661,"surfaceflinger","prepare",2
+6859744111,5538,661,"surfaceflinger","rebuildLayerStacks",3
+6859759457,14769,661,"surfaceflinger","prepare",2
+6859764418,5000,661,"surfaceflinger","rebuildLayerStacks",3
+6859898688,8910961,661,"surfaceflinger","present",2
+6859909688,8538,661,"surfaceflinger","updateCompositionState",3
+6859924495,49308,661,"surfaceflinger","writeCompositionState",3
+6859995611,3750961,661,"surfaceflinger","prepareFrameAsync",3
+6860041149,126693,661,"surfaceflinger","dequeueBuffer",4
+6860050726,107154,661,"surfaceflinger","dequeueBuffer",5
+6860059034,36077,661,"surfaceflinger","dequeueBuffer",6
+6860069149,756731,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6860074649,8731,661,"surfaceflinger","FramebufferSurface: 0",7
+6860079226,740192,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6860088188,707730,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6860126918,5308,661,"surfaceflinger","HWC release fence 1472 has signaled",6
+6860174072,3545885,661,"surfaceflinger","composeSurfaces",4
+6860316995,43577,661,"surfaceflinger","prepareClientComposition",5
+6860375457,21423,661,"surfaceflinger","prepareClientComposition",5
+6860409957,20885,661,"surfaceflinger","prepareClientComposition",5
+6860447957,16500,661,"surfaceflinger","prepareClientComposition",5
+6860482495,16039,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6860672457,28923,661,"surfaceflinger","drawLayers",5
+6860765611,2902115,685,"RenderEngine","REThreaded::drawLayers",0
+6860774418,2864693,685,"RenderEngine","SkiaGL::drawLayers",1
+6860807534,6038,685,"RenderEngine","eglCreateSyncKHR",2
+6860843880,5500,685,"RenderEngine","eglWaitSyncKHR",2
+6860864111,5231,685,"RenderEngine","eglDestroySyncKHR",2
+6860887034,5808,685,"RenderEngine","getOrCreateSurface",2
+6860898918,16885,685,"RenderEngine","tryCapture",2
+6861004495,298693,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6861014957,220461,685,"RenderEngine","DrawImage",3
+6861029303,5231,685,"RenderEngine","eglCreateSyncKHR",4
+6861048918,5424,685,"RenderEngine","eglWaitSyncKHR",4
+6861093726,6692,685,"RenderEngine","eglDestroySyncKHR",4
+6861114072,107270,685,"RenderEngine","makeImage",4
+6861205457,7269,685,"RenderEngine","Texture release(72633)",5
+6861310111,457615,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6861378418,100654,685,"RenderEngine","BlurRegion",3
+6861487457,27885,685,"RenderEngine","drawBlurRegion",3
+6861523880,218231,685,"RenderEngine","DrawImage",3
+6861540149,5500,685,"RenderEngine","eglCreateSyncKHR",4
+6861592995,6000,685,"RenderEngine","eglWaitSyncKHR",4
+6861657303,5885,685,"RenderEngine","eglDestroySyncKHR",4
+6861676880,57346,685,"RenderEngine","makeImage",4
+6861719918,6808,685,"RenderEngine","Texture release(72603)",5
+6861774765,172230,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6861781726,146385,685,"RenderEngine","DrawImage",3
+6861794572,5654,685,"RenderEngine","eglCreateSyncKHR",4
+6861813111,5423,685,"RenderEngine","eglWaitSyncKHR",4
+6861859072,5462,685,"RenderEngine","eglDestroySyncKHR",4
+6861877226,43846,685,"RenderEngine","makeImage",4
+6861907880,6577,685,"RenderEngine","Texture release(72640)",5
+6861953572,170616,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6861962803,138692,685,"RenderEngine","DrawImage",3
+6861976226,5462,685,"RenderEngine","eglCreateSyncKHR",4
+6861994803,5462,685,"RenderEngine","eglWaitSyncKHR",4
+6862039303,5615,685,"RenderEngine","eglDestroySyncKHR",4
+6862057303,37654,685,"RenderEngine","makeImage",4
+6862081995,6808,685,"RenderEngine","Texture release(72641)",5
+6862130765,5461,685,"RenderEngine","endCapture",2
+6862141803,1155923,685,"RenderEngine","flush surface",2
+6862210342,32269,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862217803,19500,685,"RenderEngine","FillRectOp",4
+6862248803,16923,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862253995,6654,685,"RenderEngine","FillRectOp",4
+6862270880,15500,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862275995,5423,685,"RenderEngine","FillRectOp",4
+6862291688,15269,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862296842,5269,685,"RenderEngine","FillRectOp",4
+6862312149,15693,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862317226,5692,685,"RenderEngine","FillRectOp",4
+6862332880,48769,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6862337957,6423,685,"RenderEngine","FillRectOp",4
+6862349534,5423,685,"RenderEngine","FillRectOp",4
+6862360149,5577,685,"RenderEngine","FillRectOp",4
+6862370803,5962,685,"RenderEngine","FillRectOp",4
+6862452918,254770,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6862519880,178923,685,"RenderEngine","FillRectOp",4
+6862714034,112461,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6862729649,89769,685,"RenderEngine","FillRectOp",4
+6862832918,55385,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6862845765,35961,685,"RenderEngine","FillRectOp",4
+6862894803,46423,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6862903342,31346,685,"RenderEngine","FillRectOp",4
+6862947457,41538,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6862955534,27000,685,"RenderEngine","FillRectOp",4
+6862994918,233577,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6863005188,50730,685,"RenderEngine","FillRectOp",4
+6863063995,83423,685,"RenderEngine","FillRectOp",4
+6863157765,33346,685,"RenderEngine","FillRectOp",4
+6863197842,24307,685,"RenderEngine","FillRectOp",4
+6863304457,264038,685,"RenderEngine","flush",2
+6863320149,5423,685,"RenderEngine","eglCreateSyncKHR",3
+6863337649,160962,685,"RenderEngine","st_context_flush",3
+6863344149,148039,685,"RenderEngine","st_flush",4
+6863508303,5539,685,"RenderEngine","st_flush",3
+6863523495,5385,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6863548765,5192,685,"RenderEngine","eglDestroySyncKHR",3
+6863574418,8924,685,"RenderEngine","Submit(sync=false)",2
+6863724726,266039,684,"surfaceflinger","addEntry",0
+6863732611,5692,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6863755226,328539,661,"surfaceflinger","finishFrame",3
+6863772918,235962,661,"surfaceflinger","queueBuffer",4
+6863793842,5192,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6863806226,119769,661,"surfaceflinger","queueBuffer",5
+6863814611,4923,661,"surfaceflinger","FramebufferSurface: 0",6
+6863848457,7769,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6863866842,22192,661,"surfaceflinger","waitForever",6
+6863967842,34961,661,"surfaceflinger","Trace GPU completion fence 1471",5
+6864018265,33615,661,"surfaceflinger","acquireBuffer",4
+6864027072,9462,661,"surfaceflinger","FramebufferSurface: 0",5
+6864031765,3956730,27726,"GPU completion","waiting for GPU completion 1471",0
+6864039572,3939577,27726,"GPU completion","waitForever",1
+6864090649,4711923,661,"surfaceflinger","postFramebuffer",3
+6864101226,4400539,661,"surfaceflinger","presentAndGetReleaseFences",4
+6864109149,5462,661,"surfaceflinger","wait for earliest present time",5
+6864121072,4355885,661,"surfaceflinger","HwcPresentDisplay",5
+6868532226,13116,661,"surfaceflinger","wait",4
+6868550572,10962,661,"surfaceflinger","wait",4
+6868569611,28846,661,"surfaceflinger","merge",4
+6868608380,22538,661,"surfaceflinger","releaseBuffer",4
+6868615918,5231,661,"surfaceflinger","FramebufferSurface: 1",5
+6868639995,17270,661,"surfaceflinger","merge",4
+6868692226,15231,661,"surfaceflinger","merge",4
+6868720342,15230,661,"surfaceflinger","merge",4
+6868760611,16577,661,"surfaceflinger","merge",4
+6868816303,871346,661,"surfaceflinger","present",2
+6868829880,9269,661,"surfaceflinger","updateCompositionState",3
+6868845034,34961,661,"surfaceflinger","writeCompositionState",3
+6868897418,368962,661,"surfaceflinger","prepareFrame",3
+6868903149,349385,661,"surfaceflinger","chooseCompositionStrategy",4
+6868909688,337154,661,"surfaceflinger","getDeviceCompositionChanges",5
+6868920072,308039,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6869273880,59154,661,"surfaceflinger","finishFrame",3
+6869286034,17961,661,"surfaceflinger","composeSurfaces",4
+6869317380,7538,661,"surfaceflinger","acquireBuffer",4
+6869338726,342539,661,"surfaceflinger","postFramebuffer",3
+6869345957,314961,661,"surfaceflinger","presentAndGetReleaseFences",4
+6869353765,6807,661,"surfaceflinger","wait for earliest present time",5
+6869366842,273230,661,"surfaceflinger","HwcPresentDisplay",5
+6869695111,779384,661,"surfaceflinger","present",2
+6869709649,9231,661,"surfaceflinger","updateCompositionState",3
+6869724457,39538,661,"surfaceflinger","writeCompositionState",3
+6869782957,315961,661,"surfaceflinger","prepareFrame",3
+6869788457,294654,661,"surfaceflinger","chooseCompositionStrategy",4
+6869794726,283039,661,"surfaceflinger","getDeviceCompositionChanges",5
+6869802649,256077,661,"surfaceflinger","HwcPresentOrValidateDisplay",6
+6870106842,61692,661,"surfaceflinger","finishFrame",3
+6870118111,18654,661,"surfaceflinger","composeSurfaces",4
+6870153072,7423,661,"surfaceflinger","acquireBuffer",4
+6870174188,293884,661,"surfaceflinger","postFramebuffer",3
+6870182380,264615,661,"surfaceflinger","presentAndGetReleaseFences",4
+6870189803,6731,661,"surfaceflinger","wait for earliest present time",5
+6870202226,228385,661,"surfaceflinger","HwcPresentDisplay",5
+6870481534,5177923,661,"surfaceflinger","present",2
+6870498111,10269,661,"surfaceflinger","updateCompositionState",3
+6870514418,8077,661,"surfaceflinger","writeCompositionState",3
+6870546380,17192,661,"surfaceflinger","prepareFrame",3
+6870552188,5077,661,"surfaceflinger","chooseCompositionStrategy",4
+6870569995,4992385,661,"surfaceflinger","finishFrame",3
+6870580034,431346,661,"surfaceflinger","dequeueBuffer",4
+6870589726,401039,661,"surfaceflinger","dequeueBuffer",5
+6870973418,6885,661,"surfaceflinger","HWC release fence 1473 has signaled",6
+6871021226,3454385,661,"surfaceflinger","composeSurfaces",4
+6871224303,66000,661,"surfaceflinger","prepareClientComposition",5
+6871309495,32000,661,"surfaceflinger","prepareClientComposition",5
+6871356726,30846,661,"surfaceflinger","prepareClientComposition",5
+6871407649,24577,661,"surfaceflinger","prepareClientComposition",5
+6871450572,15077,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6871667803,32923,661,"surfaceflinger","drawLayers",5
+6871736572,2657077,685,"RenderEngine","REThreaded::drawLayers",0
+6871745957,2640961,685,"RenderEngine","SkiaGL::drawLayers",1
+6871754649,5885,685,"RenderEngine","getOrCreateSurface",2
+6871766726,16500,685,"RenderEngine","tryCapture",2
+6871868726,343077,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6871878726,264616,685,"RenderEngine","DrawImage",3
+6871914842,5923,685,"RenderEngine","eglCreateSyncKHR",4
+6871951034,5808,685,"RenderEngine","eglWaitSyncKHR",4
+6871976265,5038,685,"RenderEngine","eglDestroySyncKHR",4
+6872010111,121115,685,"RenderEngine","makeImage",4
+6872115611,7154,685,"RenderEngine","Texture release(72642)",5
+6872218765,349384,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6872253880,83692,685,"RenderEngine","BlurRegion",3
+6872346611,27000,685,"RenderEngine","drawBlurRegion",3
+6872381957,161577,685,"RenderEngine","DrawImage",3
+6872398034,5615,685,"RenderEngine","eglCreateSyncKHR",4
+6872420149,5539,685,"RenderEngine","eglWaitSyncKHR",4
+6872471918,5654,685,"RenderEngine","eglDestroySyncKHR",4
+6872490649,45308,685,"RenderEngine","makeImage",4
+6872522226,6923,685,"RenderEngine","Texture release(72648)",5
+6872574803,171923,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6872580880,146577,685,"RenderEngine","DrawImage",3
+6872594572,5231,685,"RenderEngine","eglCreateSyncKHR",4
+6872612765,5461,685,"RenderEngine","eglWaitSyncKHR",4
+6872660995,5731,685,"RenderEngine","eglDestroySyncKHR",4
+6872679918,40962,685,"RenderEngine","makeImage",4
+6872707995,6385,685,"RenderEngine","Texture release(72649)",5
+6872753188,164500,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6872760534,135077,685,"RenderEngine","DrawImage",3
+6872774765,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6872792688,5269,685,"RenderEngine","eglWaitSyncKHR",4
+6872835342,5538,685,"RenderEngine","eglDestroySyncKHR",4
+6872853342,35423,685,"RenderEngine","makeImage",4
+6872875649,6693,685,"RenderEngine","Texture release(72650)",5
+6872924226,5308,685,"RenderEngine","endCapture",2
+6872934649,1141039,685,"RenderEngine","flush surface",2
+6872996918,29154,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873003649,17231,685,"RenderEngine","FillRectOp",4
+6873031380,16192,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873036611,6000,685,"RenderEngine","FillRectOp",4
+6873052649,15962,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873057957,5731,685,"RenderEngine","FillRectOp",4
+6873073688,15807,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873078918,5654,685,"RenderEngine","FillRectOp",4
+6873094572,17077,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873100765,6038,685,"RenderEngine","FillRectOp",4
+6873116688,47500,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6873121803,5539,685,"RenderEngine","FillRectOp",4
+6873132611,5307,685,"RenderEngine","FillRectOp",4
+6873143188,5500,685,"RenderEngine","FillRectOp",4
+6873153726,5654,685,"RenderEngine","FillRectOp",4
+6873219495,264616,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873281072,193808,685,"RenderEngine","FillRectOp",4
+6873490688,168923,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873506342,145461,685,"RenderEngine","FillRectOp",4
+6873665842,54769,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873677303,36654,685,"RenderEngine","FillRectOp",4
+6873726303,48077,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873734880,33077,685,"RenderEngine","FillRectOp",4
+6873780418,40308,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873788803,25731,685,"RenderEngine","FillRectOp",4
+6873826495,186231,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6873836957,45115,685,"RenderEngine","FillRectOp",4
+6873888842,49576,685,"RenderEngine","FillRectOp",4
+6873945380,29038,685,"RenderEngine","FillRectOp",4
+6873980842,25500,685,"RenderEngine","FillRectOp",4
+6874082149,250308,685,"RenderEngine","flush",2
+6874097072,6462,685,"RenderEngine","eglCreateSyncKHR",3
+6874112957,149923,685,"RenderEngine","st_context_flush",3
+6874119803,136654,685,"RenderEngine","st_flush",4
+6874271842,5653,685,"RenderEngine","st_flush",3
+6874286534,5154,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6874312265,5307,685,"RenderEngine","eglDestroySyncKHR",3
+6874338457,9231,685,"RenderEngine","Submit(sync=false)",2
+6874498880,1048846,661,"surfaceflinger","queueBuffer",4
+6874518226,5616,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6874906726,6923,748,"TimerDispatch","TimerIteration #1398",0
+6874939111,17346,748,"TimerDispatch","cancel timer",0
+6875025995,5154,748,"TimerDispatch","app alarm in 16500us; VSYNC in 48848us",0
+6875112457,15769,749,"app","cancel timer",0
+6875503995,36000,661,"surfaceflinger","Trace GPU completion fence 1472",5
+6875571534,5908000,27726,"GPU completion","waiting for GPU completion 1472",0
+6875579342,74307,661,"surfaceflinger","postFramebuffer",3
+6875582572,5887500,27726,"GPU completion","waitForever",1
+6875593226,5346,661,"surfaceflinger","merge",4
+6875610188,5154,661,"surfaceflinger","merge",4
+6875627995,5500,661,"surfaceflinger","merge",4
+6875640726,5385,661,"surfaceflinger","merge",4
+6875685572,641500,661,"surfaceflinger","postComposition",1
+6875710149,177000,661,"surfaceflinger","setSfPresent",2
+6876068765,21961,661,"surfaceflinger","wait",2
+6876097149,7423,661,"surfaceflinger","wait",2
+6876109995,7154,661,"surfaceflinger","wait",2
+6876122534,4846,661,"surfaceflinger","wait",2
+6876134995,51731,661,"surfaceflinger","merge",2
+6876277611,18615,661,"surfaceflinger","setVsyncEnabled",2
+6876356534,11000,661,"surfaceflinger","setDuration",1
+6876408072,322462,661,"surfaceflinger","setVsyncEnabled",0
+6877229649,125346,1841,"binder:661_5","setTransactionState",0
+6877297765,50346,1841,"binder:661_5","scheduleFrame",1
+6877321265,5423,1841,"binder:661_5","sf alarm in 14227us; VSYNC in 29901us",2
+6879640765,181269,1486,"binder:661_4","requestNextVsync",0
+6891279726,121077,741,"HwBinder:661_1","onComposerHalVsync(16673882)",0
+6891373226,19077,741,"HwBinder:661_1","VSR: adding sample",1
+6891679380,11962,748,"TimerDispatch","TimerIteration #1399",0
+6891757342,30846,748,"TimerDispatch","cancel timer",0
+6891799918,121962,748,"TimerDispatch","vsyncCallback",0
+6891825880,33923,748,"TimerDispatch","generateTokenForPredictions",1
+6892039226,6308,748,"TimerDispatch","app alarm in 16192us; VSYNC in 48539us",0
+6892061649,1609962,661,"surfaceflinger","commit 155826 vsyncIn 15.19ms",0
+6892072918,33654,661,"surfaceflinger","previousFramePending",1
+6892183111,14231,749,"app","generateTokenForPredictions",0
+6892202803,21731,749,"app","generateTokenForPredictions",0
+6892230111,7692,749,"app","generateTokenForPredictions",0
+6892243457,8461,661,"surfaceflinger","setSfWakeUp",1
+6892246995,8000,749,"app","generateTokenForPredictions",0
+6892260188,8730,749,"app","generateTokenForPredictions",0
+6892265572,109270,661,"surfaceflinger","transactionIsReadyToBeApplied vsyncId: 155820",1
+6892277611,7615,749,"app","generateTokenForPredictions",0
+6892291418,6924,749,"app","generateTokenForPredictions",0
+6892321842,46076,661,"surfaceflinger","com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245 allowLatchUnsignaled=false",2
+6892332265,28807,661,"surfaceflinger","wait",3
+6892501418,257193,661,"surfaceflinger","setBuffer",1
+6892728303,15308,661,"surfaceflinger","createSurfaceFrameForToken",2
+6892891034,47500,661,"surfaceflinger","commitTransactions",1
+6892912072,344731,684,"surfaceflinger","addEntry",0
+6892916418,13808,661,"surfaceflinger","doCommitTransactions",2
+6892944342,382538,661,"surfaceflinger","latchBuffers",1
+6893104265,11961,661,"surfaceflinger","doTransaction",2
+6893234995,81962,661,"surfaceflinger","latchBuffer",2
+6893261418,6154,661,"surfaceflinger","addSurfaceFrame",3
+6893370995,41077,661,"surfaceflinger","updateLayerGeometry",1
+6893420611,203577,661,"surfaceflinger","chooseRefreshRateForContent",1
+6893631111,7038,661,"surfaceflinger","setActiveModeInHwcIfNeeded",1
+6893656495,5847,661,"surfaceflinger","updateInputFlinger",1
+6893680418,15482462,661,"surfaceflinger","composite 155826",0
+6893889611,14733961,661,"surfaceflinger","present",1
+6893896418,12577,661,"surfaceflinger","preComposition",2
+6893914842,16346,661,"surfaceflinger","prepare",2
+6893920957,5308,661,"surfaceflinger","rebuildLayerStacks",3
+6893936111,14961,661,"surfaceflinger","prepare",2
+6893941149,4962,661,"surfaceflinger","rebuildLayerStacks",3
+6893956111,15231,661,"surfaceflinger","prepare",2
+6893961226,5269,661,"surfaceflinger","rebuildLayerStacks",3
+6893976226,14962,661,"surfaceflinger","prepare",2
+6893981265,5115,661,"surfaceflinger","rebuildLayerStacks",3
+6894138957,8113154,661,"surfaceflinger","present",2
+6894151111,10384,661,"surfaceflinger","updateCompositionState",3
+6894167842,53461,661,"surfaceflinger","writeCompositionState",3
+6894247957,3931038,661,"surfaceflinger","prepareFrameAsync",3
+6894297611,121269,661,"surfaceflinger","dequeueBuffer",4
+6894308149,99193,661,"surfaceflinger","dequeueBuffer",5
+6894315957,40038,661,"surfaceflinger","dequeueBuffer",6
+6894331457,12231,661,"surfaceflinger","FramebufferSurface: 3",7
+6894337034,787538,746,"HwcAsyncWorker","chooseCompositionStrategy",0
+6894349072,769231,746,"HwcAsyncWorker","getDeviceCompositionChanges",1
+6894359111,730154,746,"HwcAsyncWorker","HwcValidateDisplay",2
+6894383995,5385,661,"surfaceflinger","HWC release fence 1474 has signaled",6
+6894425303,3726500,661,"surfaceflinger","composeSurfaces",4
+6894595688,54577,661,"surfaceflinger","prepareClientComposition",5
+6894666303,21962,661,"surfaceflinger","prepareClientComposition",5
+6894701226,21731,661,"surfaceflinger","prepareClientComposition",5
+6894740072,19346,661,"surfaceflinger","prepareClientComposition",5
+6894814649,17923,661,"surfaceflinger","ClientCompositionCacheMiss",5
+6895031534,32923,661,"surfaceflinger","drawLayers",5
+6895099765,3000153,685,"RenderEngine","REThreaded::drawLayers",0
+6895110803,2958577,685,"RenderEngine","SkiaGL::drawLayers",1
+6895153149,6962,685,"RenderEngine","eglCreateSyncKHR",2
+6895239265,6384,685,"RenderEngine","eglWaitSyncKHR",2
+6895269611,5231,685,"RenderEngine","eglDestroySyncKHR",2
+6895291457,5731,685,"RenderEngine","getOrCreateSurface",2
+6895303342,15461,685,"RenderEngine","tryCapture",2
+6895407265,294923,685,"RenderEngine","DrawLayer: SurfaceView[com.yadea.launcher/com.yadea.launcher.function.main.view.MainActivity](BLAST)#119",2
+6895418726,226231,685,"RenderEngine","DrawImage",3
+6895435380,5577,685,"RenderEngine","eglCreateSyncKHR",4
+6895455265,5730,685,"RenderEngine","eglWaitSyncKHR",4
+6895504726,5539,685,"RenderEngine","eglDestroySyncKHR",4
+6895524457,108461,685,"RenderEngine","makeImage",4
+6895617188,7769,685,"RenderEngine","Texture release(72651)",5
+6895709072,429308,685,"RenderEngine","DrawLayer: com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity#245",2
+6895744534,92308,685,"RenderEngine","BlurRegion",3
+6895845226,32192,685,"RenderEngine","drawBlurRegion",3
+6895885418,223154,685,"RenderEngine","DrawImage",3
+6895902572,5462,685,"RenderEngine","eglCreateSyncKHR",4
+6895923880,5346,685,"RenderEngine","eglWaitSyncKHR",4
+6895985111,5769,685,"RenderEngine","eglDestroySyncKHR",4
+6896004226,91000,685,"RenderEngine","makeImage",4
+6896073611,9231,685,"RenderEngine","Texture release(72621)",5
+6896144880,199769,685,"RenderEngine","DrawLayer: StatusBar#103",2
+6896152111,172615,685,"RenderEngine","DrawImage",3
+6896166611,5307,685,"RenderEngine","eglCreateSyncKHR",4
+6896184880,5385,685,"RenderEngine","eglWaitSyncKHR",4
+6896249957,6346,685,"RenderEngine","eglDestroySyncKHR",4
+6896273111,44461,685,"RenderEngine","makeImage",4
+6896303572,7077,685,"RenderEngine","Texture release(72658)",5
+6896351803,172962,685,"RenderEngine","DrawLayer: NavigationBar#102",2
+6896361611,139269,685,"RenderEngine","DrawImage",3
+6896375457,5269,685,"RenderEngine","eglCreateSyncKHR",4
+6896393995,5347,685,"RenderEngine","eglWaitSyncKHR",4
+6896439918,5808,685,"RenderEngine","eglDestroySyncKHR",4
+6896458111,36077,685,"RenderEngine","makeImage",4
+6896481342,6423,685,"RenderEngine","Texture release(72659)",5
+6896531342,5153,685,"RenderEngine","endCapture",2
+6896541842,1168346,685,"RenderEngine","flush surface",2
+6896611188,29577,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896618111,17461,685,"RenderEngine","FillRectOp",4
+6896646265,16730,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896651765,6230,685,"RenderEngine","FillRectOp",4
+6896668265,16153,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896673457,6077,685,"RenderEngine","FillRectOp",4
+6896689803,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896694995,5616,685,"RenderEngine","FillRectOp",4
+6896710688,15692,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896715842,5615,685,"RenderEngine","FillRectOp",4
+6896731572,47654,685,"RenderEngine","virtual void skgpu::v1::OpsTask::onPrepare(GrOpFlushState *)",3
+6896736765,5577,685,"RenderEngine","FillRectOp",4
+6896747457,5500,685,"RenderEngine","FillRectOp",4
+6896758111,5384,685,"RenderEngine","FillRectOp",4
+6896768534,5692,685,"RenderEngine","FillRectOp",4
+6896849611,239461,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6896915649,164808,685,"RenderEngine","FillRectOp",4
+6897095957,116038,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6897113342,91769,685,"RenderEngine","FillRectOp",4
+6897218611,59346,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6897233457,37461,685,"RenderEngine","FillRectOp",4
+6897283957,48846,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6897292611,33500,685,"RenderEngine","FillRectOp",4
+6897338611,42846,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6897347380,27538,685,"RenderEngine","FillRectOp",4
+6897387765,247884,685,"RenderEngine","virtual bool skgpu::v1::OpsTask::onExecute(GrOpFlushState *)",3
+6897397765,51807,685,"RenderEngine","FillRectOp",4
+6897456611,55077,685,"RenderEngine","FillRectOp",4
+6897518457,28461,685,"RenderEngine","FillRectOp",4
+6897553418,75193,685,"RenderEngine","FillRectOp",4
+6897717572,300731,685,"RenderEngine","flush",2
+6897747880,6615,685,"RenderEngine","eglCreateSyncKHR",3
+6897772149,172500,685,"RenderEngine","st_context_flush",3
+6897779918,158462,685,"RenderEngine","st_flush",4
+6897954072,5385,685,"RenderEngine","st_flush",3
+6897970572,5270,685,"RenderEngine","eglDupNativeFenceFDANDROID",3
+6897997688,5269,685,"RenderEngine"Query executed in 5 ms
+,"eglDestroySyncKHR",3
+6898024111,9000,685,"RenderEngine","Submit(sync=false)",2
+6898166380,5423,661,"surfaceflinger","CompositionStrategyPredictionHit",4
+6898187380,329462,661,"surfaceflinger","finishFrame",3
+6898209188,229807,661,"surfaceflinger","queueBuffer",4
+6898230149,5385,661,"surfaceflinger","applyGrallocMetadataLocked",5
+6898242495,116077,661,"surfaceflinger","queueBuffer",5
+6898251380,5000,661,"surfaceflinger","FramebufferSurface: 3",6
+6898287495,7808,661,"surfaceflinger","addAndGetFrameTimestamps",6
+6898304842,17923,661,"surfaceflinger","waitForever",6
+6898399111,34154,661,"surfaceflinger","Trace GPU completion fence 1473",5
+6898447995,37539,661,"surfaceflinger","acquireBuffer",4
+6898458957,10500,661,"surfaceflinger","FramebufferSurface: 3",5
+6898464188,2940346,27726,"GPU completion","waiting for GPU completion 1473",0
+6898473149,2923116,27726,"GPU completion","waitForever",1
+6898523342,3721884,661,"surfaceflinger","postFramebuffer",3
+6898533880,3371615,661,"surfaceflinger","presentAndGetReleaseFences",4
+6898541880,6346,661,"surfaceflinger","wait for earliest present time",5
+6898554303,3324923,661,"surfaceflinger","HwcPresentDisplay",5
+6899006842,105653,1841,"binder:661_5","setTransactionState",0
+6899075957,30038,1841,"binder:661_5","scheduleFrame",1

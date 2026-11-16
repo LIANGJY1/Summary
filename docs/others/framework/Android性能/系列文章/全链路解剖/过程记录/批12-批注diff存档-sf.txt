@@ -1,0 +1,206 @@
+diff --git a/frameworks/native/services/surfaceflinger/BufferLayer.cpp b/frameworks/native/services/surfaceflinger/BufferLayer.cpp
+index d075903c3..721512841 100644
+--- a/frameworks/native/services/surfaceflinger/BufferLayer.cpp
++++ b/frameworks/native/services/surfaceflinger/BufferLayer.cpp
+@@ -436,6 +436,11 @@ void BufferLayer::gatherBufferInfo() {
+     mBufferInfo.mFrameLatencyNeeded = true;
+ }
+ 
++//【核心流程】"这层的新帧能不能本轮就上"的三段裁决（latchBuffers 收集阶段逐层问）：
++//   1.isVsyncValidForUid：uid 级帧率节流（FrameRateOverride 体系）本轮不匹配则不当帧上；
++//   2.sideband/autoRefresh 流例外直通；3.无新帧返回 false，余下交派生类 isBufferDue
++//   （BufferQueueLayer 按时间戳、BufferStateLayer 恒真——状态层没有"到点"概念，
++//   事务就绪即上）。不过关的层 useEmptyDamage 置空脏区，等下次 commit 再收。
+ bool BufferLayer::shouldPresentNow(nsecs_t expectedPresentTime) const {
+     // If this is not a valid vsync for the layer's uid, return and try again later
+     const bool isVsyncValidForUid =
+diff --git a/frameworks/native/services/surfaceflinger/BufferStateLayer.cpp b/frameworks/native/services/surfaceflinger/BufferStateLayer.cpp
+index ddeedc2cb..4b68c9e2b 100644
+--- a/frameworks/native/services/surfaceflinger/BufferStateLayer.cpp
++++ b/frameworks/native/services/surfaceflinger/BufferStateLayer.cpp
+@@ -656,7 +656,10 @@ bool BufferStateLayer::hasFrameUpdate() const {
+ 
+ //【核心流程】latch 阶段的"过账"：把 drawing 态缓冲正式搬到合成侧，本方法做三件记录——
+ // 1. 给本帧的回调句柄盖 latchTime；transaction complete 回调的数据源即此，
+-//    FrameMetrics 的 SYNC_DURATION 消费的就是它；
++//    客户端消费链：BLASTBufferQueue::transactionCallback 收 stat.latchTime
++//    进 mFrameEventHistory.addLatch（BLASTBufferQueue.cpp:110），即
++//    Surface.getFrameTimestamps 的 latchTime 时刻来源；FrameMetrics 是 HWUI
++//    FrameInfo 体系（android.view.FrameMetrics），不消费本值；
+ // 2. TimeStats 与 FrameTracer 双路打点（ACQUIRE_FENCE/LATCH 事件，perfetto 看帧耗时的源头）；
+ // 3. 未上屏的 SurfaceFrame 标记 presented 时间。
+ // 真正换活跃缓冲在 updateActiveBuffer：旧 mBufferInfo 的 frameNumber 记入 mPreviousReleaseCallbackId，
+@@ -893,6 +896,13 @@ void BufferStateLayer::decrementPendingBufferCount() {
+     tracePendingBufferCount(pendingBuffers);
+ }
+ 
++//【状态管理】SF 侧在途缓冲计数轨："BufferTX - <层名>"（mBlastTransactionName）。
++//   递增点在 setTransactionState 的 traverseStatesWithBuffers（mBufferCountTracker.increment
++//   对 binder 计）与本层 setBuffer 落账；递减点两处——updateActiveBuffer 换上真缓冲、
++//   setBuffer 丢帧当场归还。应用侧对端记账是 BLASTBufferQueue 的
++//   "QueuedBuffer - <名>BLAST#<id>"（mQueuedBufferTrace，BLASTBufferQueue.cpp:157/:460）：
++//   应用侧记"已入队未回执"，本轨记"SF 已收未 latch"；注意 "aq:pending:<名>"
++//   （ViewRootImpl.java:1419）是输入事件队列计数，与缓冲无关。
+ void BufferStateLayer::tracePendingBufferCount(int32_t pendingBuffers) {
+     ATRACE_INT(mBlastTransactionName.c_str(), pendingBuffers);
+ }
+diff --git a/frameworks/native/services/surfaceflinger/CompositionEngine/src/Output.cpp b/frameworks/native/services/surfaceflinger/CompositionEngine/src/Output.cpp
+index 4e4ec908c..08c541fd4 100644
+--- a/frameworks/native/services/surfaceflinger/CompositionEngine/src/Output.cpp
++++ b/frameworks/native/services/surfaceflinger/CompositionEngine/src/Output.cpp
+@@ -1239,6 +1239,13 @@ bool Output::dequeueRenderBuffer(base::unique_fd* bufferFence,
+     return true;
+ }
+ 
++//【核心流程】client 合成执行体：本输出 usesClientComposition 为假时直接空手而归
++//   （slice 上 21μs 级的 composeSurfaces 即此早退，本窗口两个小输出各一条）；
++//   为真时组装 DisplaySettings/LayerSettings 送 RenderEngine——REThreaded::drawLayers
++//   跨线程投给 RenderEngine 线程执行（本样本 tid 685，SkiaGL::drawLayers 3.0~3.2ms 级）。
++//   ClientCompositionRequestCache 命中打 "ClientCompositionCacheHit"，
++//   未命中重画打 "ClientCompositionCacheMiss"（本样本合成 155810 内实测命中一条）。
++//   返回 fence = GPU 完成时刻；finishFrame 用它作 framebuffer 的 readyFence 入队。
+ std::optional<base::unique_fd> Output::composeSurfaces(
+         const Region& debugRegion, const compositionengine::CompositionRefreshArgs& refreshArgs,
+         std::shared_ptr<renderengine::ExternalTexture> tex, base::unique_fd& fd) {
+@@ -1588,6 +1595,12 @@ bool Output::getSkipColorTransform() const {
+     return true;
+ }
+ 
++//【核心流程】本输出的 fence 收集口（postFramebuffer 内调用，Display 子类再叠加 HWC 侧）：
++//   client 合成时带回 framebuffer target 的 acquire fence（glCompositionDoneFence 的来源）；
++//   HWC 的 present fence 与逐层 release fence 由 Display::presentAndGetFrameFences
++//   经 HWComposer::getPresentFence/getLayerReleaseFences 补齐——
++//   本样本合成 155818 的 "presentAndGetReleaseFences"(4,400,539 ns) 内含
++//   "HwcPresentDisplay"(4,355,885 ns)，两 slice 即"等最早上屏时刻 + present + 收 fence"的实测构成。
+ compositionengine::Output::FrameFences Output::presentAndGetFrameFences() {
+     compositionengine::Output::FrameFences result;
+     if (getState().usesClientComposition) {
+diff --git a/frameworks/native/services/surfaceflinger/Scheduler/DispSyncSource.cpp b/frameworks/native/services/surfaceflinger/Scheduler/DispSyncSource.cpp
+index 01f9f68c8..f16315aed 100644
+--- a/frameworks/native/services/surfaceflinger/Scheduler/DispSyncSource.cpp
++++ b/frameworks/native/services/surfaceflinger/Scheduler/DispSyncSource.cpp
+@@ -183,6 +183,12 @@ void DispSyncSource::setDuration(std::chrono::nanoseconds workDuration,
+ 
+ // 定时器回调转发：锁内取回调指针（锁外调用，防重入死锁），
+ // 交给 EventThread.onVSyncEvent 入待发队列（见该处注释）。
++// 计数轨：mValue 名为 "VSYNC-app"/"VSYNC-appSf"（构造 :123 "VSYNC-%s"），
++// mTraceVsync 时每回翻转 0/1——本样本 VSYNC-app 轨脉冲即此处；
++// 对端 "VsyncWorkDuration-app/appSf/sf" 计数实测 16,673,882/16,673,882/15,673,882 ns，
++// 反推本机 app/sf 相位偏移各为 1ms（VsyncConfiguration 换算见该文件注释）。
++// app 连接无人请求 vsync 的时段 EventThread 停源（setVSyncEnabled(false)→CallbackRepeater::stop），
++// 本样本 rel 6.792~6.841 s 间 VSYNC-app 无脉冲即该机制的表现。
+ void DispSyncSource::onVsyncCallback(nsecs_t vsyncTime, nsecs_t targetWakeupTime,
+                                      nsecs_t readyTime) {
+     VSyncSource::Callback* callback;
+diff --git a/frameworks/native/services/surfaceflinger/Scheduler/EventThread.cpp b/frameworks/native/services/surfaceflinger/Scheduler/EventThread.cpp
+index 5a24e8061..0b6a98334 100644
+--- a/frameworks/native/services/surfaceflinger/Scheduler/EventThread.cpp
++++ b/frameworks/native/services/surfaceflinger/Scheduler/EventThread.cpp
+@@ -201,6 +201,11 @@ binder::Status EventThreadConnection::setVsyncRate(int rate) {
+     return binder::Status::ok();
+ }
+ 
++//【核心流程】应用请求下一帧 vsync 的 Binder 入口（本样本 SF 进程 binder 线程可见
++//   "requestNextVsync" slice，如 rel 6,844,505,072 binder:661_4）：
++//   只翻连接的 vsyncRequest 标志并唤醒分发线程，真正的定时在 VSyncDispatch 侧；
++//   先经 resyncCallback 触发一次模型重同步（750ms 去抖，Scheduler::onResyncNeeded），
++//   保证 long-idle 后的请求拿到校准过的相位。
+ binder::Status EventThreadConnection::requestNextVsync() {
+     ATRACE_CALL();
+     mEventThread->requestNextVsync(this);
+diff --git a/frameworks/native/services/surfaceflinger/Scheduler/MessageQueue.cpp b/frameworks/native/services/surfaceflinger/Scheduler/MessageQueue.cpp
+index 5327ed098..8a88633e8 100644
+--- a/frameworks/native/services/surfaceflinger/Scheduler/MessageQueue.cpp
++++ b/frameworks/native/services/surfaceflinger/Scheduler/MessageQueue.cpp
+@@ -51,6 +51,10 @@ bool MessageQueue::Handler::isFramePending() const {
+ }
+ 
+ // 主线程消费帧：commit 返回 false（无脏层等）即跳过本帧的合成阶段。
++// 本样本实测配对（tid 661）："commit 155818 vsyncIn 15.41ms"（rel 6,858,454,957）
++// → "composite 155818"（rel 6,859,462,380）为 commit 返回 true 的串联；
++// "commit 155794"（rel 6,760,921,419）之后无 composite slice，为 false 分支实例。
++// vsyncIn = mExpectedPresentTime − now：SF 在期望上屏 vsync 前约一个 sfWorkDuration 醒来。
+ void MessageQueue::Handler::handleMessage(const Message&) {
+     mFramePending.store(false);
+ 
+@@ -106,6 +110,16 @@ void MessageQueue::setInjector(sp<EventThreadConnection> connection) {
+     mInjector.connection = std::move(connection);
+ }
+ 
++//【核心流程】SF 自己的 vsync 送达点（回调体跑在 TimerDispatch 线程，派 Message 给主线程才动工）：
++//   mVsync.value 是 TracedOrdinal<bool>（MessageQueue.h，名"VSYNC-sf"），每回翻转 0/1——
++//   本样本 VSYNC-sf 计数轨脉冲即此处（如 rel 6,858,326,649 翻 0，128μs 后主线程起 commit 155818）。
++//   vsyncId 由 TokenManager 按三元组预测现生成，该 id 即 composite slice 名尾编号
++//   （composite 155818）与 FrameTimeline 的 SF 侧 token；id 由全进程共用计数器
++//   mCurrentToken 自增（FrameTimeline.cpp TokenManager），并非每 vsync 加一的硬件节拍数。
++//   scheduleFrame 把注册武装到下一 sf 相位（workDuration=sfWorkDuration、readyDuration=0），
++//   触发源：事务入队（queueTransaction→setTransactionFlags→scheduleCommit）、背压重排、
++//   HWC 请求（scheduleComposite）。无事务时段 SF 不排 sf 相位——本样本
++//   rel 6.792~6.858 s 间 VSYNC-sf 无脉冲即该表现。
+ void MessageQueue::vsyncCallback(nsecs_t vsyncTime, nsecs_t targetWakeupTime, nsecs_t readyTime) {
+     ATRACE_CALL();
+     // Trace VSYNC-sf
+diff --git a/frameworks/native/services/surfaceflinger/Scheduler/VsyncConfiguration.cpp b/frameworks/native/services/surfaceflinger/Scheduler/VsyncConfiguration.cpp
+index 5f99c89aa..e654d9b1f 100644
+--- a/frameworks/native/services/surfaceflinger/Scheduler/VsyncConfiguration.cpp
++++ b/frameworks/native/services/surfaceflinger/Scheduler/VsyncConfiguration.cpp
+@@ -147,6 +147,13 @@ PhaseOffsets::VsyncConfigSet PhaseOffsets::constructOffsets(nsecs_t vsyncDuratio
+ }
+ 
+ namespace {
++//【数据流】相位偏移→工作时长的换算即 app/sf 双拍点的代数：
++//   sfWorkDuration = 周期 − sfOffset（SF 在"目标 vsync 前 sfWorkDuration"醒来）；
++//   appWorkDuration = 周期 + (sfOffset − appOffset)，不足一周期再补一周期
++//   （app 醒来后到目标 vsync 之间要留出完整绘制预算）。
++//   本机实测计数轨 VsyncWorkDuration-sf=15,673,882 ns、VsyncWorkDuration-app=16,673,882 ns
++//   （周期 16,673,882 反推 appOffset=sfOffset=1,000,000 ns，即 sysprop 缺省 1ms 档）：
++//   app 在硬件 vsync 后约 1ms 被唤醒，SF 在下一个硬件 vsync 后约 1ms 被唤醒。
+ std::chrono::nanoseconds sfOffsetToDuration(nsecs_t sfOffset, nsecs_t vsyncDuration) {
+     return std::chrono::nanoseconds(vsyncDuration - sfOffset);
+ }
+diff --git a/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp b/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
+index 706893c1a..6b361fc79 100644
+--- a/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -1871,6 +1871,12 @@ nsecs_t SurfaceFlinger::getVsyncPeriodFromHWC() const {
+     return 0;
+ }
+ 
++//【核心流程】HWC vsync 的进程入口（composer HAL 经 HwBinder 送进，本样本 tid 741
++//   "HwBinder:661_1" 线程可见 "onComposerHalVsync(16673882)" slice——括号内为 HAL 报的
++//   vsync 周期 16,673,882 ns；主线程副本同名 slice 为 ATRACE_FORMAT 在 661 的二次打点）：
++//   1.display->onVsync 记账；2.HWComposer::onVsync 同戳去重后返回真才继续；
++//   3.只有活动屏的 vsync 送 addResyncSample 进 VSyncPredictor 校准模型，
++//   非活动屏的 vsync 到此丢弃。SF 自身的节拍不直接用该时刻，而是经模型预测出 app/sf 相位。
+ void SurfaceFlinger::onComposerHalVsync(hal::HWDisplayId hwcDisplayId, int64_t timestamp,
+                                         std::optional<hal::VsyncPeriodNanos> vsyncPeriod) {
+     const std::string tracePeriod = [vsyncPeriod]() {
+@@ -1975,6 +1981,11 @@ void SurfaceFlinger::setVsyncEnabled(bool enabled) {
+     }));
+ }
+ 
++//【关键细节】"上一帧 present fence"的双槽选取：距本帧期望上屏不足一个周期时看 [0]
++//   （上上帧已过，上帧 fence 即最新），否则看 [1]——本帧可能已把 [0] 顶给更近的一帧。
++//   previousFramePending 用它 + graceTimeMs（默认 1ms，见 commit :2023-2024）判 framePending；
++//   fence 未信号时 commit 提前退场重排，本样本 commit slice 内 "previousFramePending"
++//   子 slice（rel 6,858,463,688，27,500 ns）即该次 wait(1ms) 的可见耗时。
+ SurfaceFlinger::FenceWithFenceTime SurfaceFlinger::previousFrameFence() {
+     const auto now = systemTime();
+     const auto vsyncPeriod = mScheduler->getDisplayStatInfo(now).vsyncPeriod;
+@@ -4087,6 +4098,16 @@ bool SurfaceFlinger::shouldLatchUnsignaled(const sp<Layer>& layer, const layer_s
+     return true;
+ }
+ 
++//【核心流程】单笔事务的就绪裁决（每帧 flush 时对队首逐笔调用）：
++//   1.desiredPresentTime 未到（限 1 秒内）→ NotReady；2.uid 帧率节流不匹配 → NotReady；
++//   3.frameIsEarly：事务 vsyncId 预测的上屏时刻 ≥ 本周期 mExpectedPresentTime 半个周期
++//   以上 → NotReady（帧比本轮目标早太多，留给后续周期）；
++//   4.setBuffer 带 barrier 且图层帧号未齐 → NotReadyBarrier（退 mPendingTransactionQueues）；
++//   5.acquire fence 未信号且不允许未信号锁存 → NotReady，排队超 4 秒发
++//   onTransactionQueueStalled 告警。
++//   slice 名 "transactionIsReadyToBeApplied vsyncId: <id>" 即本函数 ATRACE_FORMAT，
++//   同层随后一条 "<层名> allowLatchUnsignaled=false" 为第 5 步的分支打点
++//   （本样本 rel 6,858,607,572 与 6,858,642,842 两 slice，vsyncId 155812 即应用帧 token）。
+ auto SurfaceFlinger::transactionIsReadyToBeApplied(TransactionState& transaction,
+         const FrameTimelineInfo& info, bool isAutoTimestamp, int64_t desiredPresentTime,
+         uid_t originUid, const Vector<ComposerState>& states,

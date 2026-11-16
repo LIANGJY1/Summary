@@ -1,0 +1,4 @@
+"event","n"
+"sched_switch",424434
+"sched_waking",280053
+"sched_blocked_reason",68074

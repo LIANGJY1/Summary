@@ -1,0 +1,40 @@
+========================================================
+  PDF Quality Assurance Report
+========================================================
+
+ℹ️  Info:
+   File: AppList性能全链路解剖-汇编.pdf
+   Size: 4619.5 KB
+   Page size: 210mm × 297mm (603 pages)
+   Total text colors: 15 (chromatic: 0)
+   Fonts used: BDBMVJ+Noto-Sans-CJK-SC-Oblique, BYMOGM+Noto-Serif-CJK-SC-Bold, DFCEGX+Noto-Sans-CJK-SC-Bold, DZLENL+Noto-Color-Emoji, EQUNYJ+Noto-Sans-CJK-SC-Heavy, FOLJZL+FreeSerif, JBCECK+Noto-Sans-Mono-Oblique, KPBOQL+Noto-Sans-CJK-SC-Bold-Oblique, LWGGBP+Noto-Serif-CJK-SC, OMBSUE+Noto-Serif-CJK-SC-Oblique, PXIPUI+Noto-Sans-Mono, TSPJMR+Noto-Sans-CJK-SC, UCHPBF+Noto-Color-Emoji-Bold, YJWMYI+Noto-Sans-Mono-Bold
+
+✅ Passed (11):
+   Title metadata present ✓
+   Author metadata present ✓
+   Creator metadata present ✓
+   Page size consistent ✓
+   No blank pages ✓
+   All fonts are embedded ✓
+   No content overflow ✓
+   Content fill ratio adequate on all pages ✓
+   Cover page (p1) content extends to page edges (full-bleed) ✓
+   Left/right margins appear symmetric ✓
+   Table centering check complete ✓
+
+⚠️  Warnings (11):
+   [Punctuation rules] Page 10 - Forbidden line-start punctuation '…': ...……批07（分发）
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 13 - Forbidden line-start punctuation '、': ...、
+   [Punctuation rules] Page 15 - Forbidden line-start punctuation '，': ...，
+   [Punctuation rules] Page 16 - Forbidden line-end punctuation '（': （...
+   [Punctuation rules] Page 16 - Forbidden line-start punctuation '）': ...）
+   [Punctuation rules] Page 16 - Forbidden line-start punctuation '，': ...，
+   [Punctuation rules] Page 18 - Forbidden line-start punctuation '，': ...，
+   [Punctuation rules] Page 19 - Forbidden line-start punctuation '，': ...，
+   [Punctuation rules] ...144 more violations
+
+--------------------------------------------------------
+⚠️  WARN — 11 warning(s), optimization recommended
+--------------------------------------------------------

@@ -1,0 +1,203 @@
+Trace loaded: 66.97 MB in 0.77s (87.2 MB/s)
+"rel_ts","counter_name","value"
+6762837765,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6762917265,"PendingRelease",0.000000
+6762938649,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+6762950803,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6762981457,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6772705072,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6772710457,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6778945649,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6779028111,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+6779044803,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6792522572,"PendingRelease",0.000000
+6792525380,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6815478957,"PendingRelease",0.000000
+6815482649,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+6830972303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6830976803,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6843955918,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6843959995,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6844237957,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6844355111,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6844389265,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6854041111,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6854045611,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6855515034,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6855519265,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6857784649,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6857788918,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6876621957,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6876686034,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+6876704880,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6877747418,"PendingRelease",0.000000
+6877750380,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6879231149,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6879235534,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6898354418,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6898491572,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+6898511034,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6899716611,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6899721457,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6902122111,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6902128188,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6909552995,"PendingRelease",0.000000
+6909555803,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6919198303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6919202880,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6927279572,"PendingRelease",0.000000
+6927283034,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+6934338072,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6934343611,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6951419765,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6951424380,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6961955034,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6962015072,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+6962034957,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6971119688,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+6971124918,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+6978444072,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+6978503688,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+6978521265,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+6992469149,"PendingRelease",0.000000
+6992475380,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7010950111,"PendingRelease",0.000000
+7010956111,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7022399188,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7022404841,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7029094841,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7029099764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7033067764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7033072726,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7037257149,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7037261957,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7044414072,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7044473034,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7044491534,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7069685495,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7069690418,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7074591880,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7074598303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7074705341,"PendingRelease",0.000000
+7074716649,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7083537149,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7083622034,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7083648764,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7088637649,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7088642380,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7100707418,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7100764995,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7100783764,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7110500418,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7110505534,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7116421726,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7116428188,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7120811418,"PendingRelease",0.000000
+7120817341,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7127458149,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7127550957,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7127568418,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7130088534,"PendingRelease",0.000000
+7130097611,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7143206995,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7143212918,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7150374341,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7150381111,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7161148034,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7161214726,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7161234072,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7162268995,"PendingRelease",0.000000
+7162274803,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7170224534,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7170229957,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7178323072,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7178384687,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7178402880,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7234011534,"PendingRelease",0.000000
+7234017687,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7234516341,"PendingRelease",0.000000
+7234521841,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7240269880,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7240280187,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7248419995,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7248424687,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7251954572,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7251959572,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7257361841,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7257366880,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7263053034,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7263116110,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7263133380,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7271635187,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7271640726,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7279930880,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7279990303,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7280010610,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7280744187,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7280748803,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7292191149,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7292195572,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7303715957,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7303721764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7322290687,"PendingRelease",0.000000
+7322298457,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7322829341,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7324560418,"PendingRelease",0.000000
+7324566341,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7324704072,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7324741572,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7327758341,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7327820918,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7327839495,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7330276110,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7330280226,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7337314841,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7337319764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7360021649,"PendingRelease",0.000000
+7360027957,"QueuedBuffer - VQuery executed in 0 ms
+RI[AppListActivity]#8BLAST#8",2.000000
+7361272495,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7361333110,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7361351726,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7369988533,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7369993764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7375331457,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7375336495,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7384671841,"PendingRelease",0.000000
+7384678380,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7385230880,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7385299264,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7385319226,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7392499764,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7392504303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7400791418,"PendingRelease",0.000000
+7400798072,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7418281995,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7418339033,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000
+7418356687,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7420552187,"PendingRelease",0.000000
+7420558226,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7444345303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7444353380,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7454229880,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7454241456,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7455741649,"PendingRelease",0.000000
+7455748841,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7463300380,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7463308110,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7472603649,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7472663495,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7472680918,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7475447918,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7475452649,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7482224033,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7482229380,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7492118610,"PendingRelease",0.000000
+7492122033,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",1.000000
+7496188918,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7496257187,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",2.000000
+7496277033,"VRI[AppListActivity]#8(BLAST Consumer)8",0.000000
+7504384841,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",1.000000
+7504389303,"aq:pending:com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity",0.000000
+7512151072,"VRI[AppListActivity]#8(BLAST Consumer)8",1.000000
+7512209495,"QueuedBuffer - VRI[AppListActivity]#8BLAST#8",3.000000

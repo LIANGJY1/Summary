@@ -1,0 +1,154 @@
+diff --git a/frameworks/base/graphics/java/android/graphics/HardwareRenderer.java b/frameworks/base/graphics/java/android/graphics/HardwareRenderer.java
+index 0985a610b..6f2f3cee4 100644
+--- a/frameworks/base/graphics/java/android/graphics/HardwareRenderer.java
++++ b/frameworks/base/graphics/java/android/graphics/HardwareRenderer.java
+@@ -498,7 +498,9 @@ public class HardwareRenderer {
+      */
+     @SyncAndDrawResult
+     //【调用关系】Java → RenderThread 的单点入口：整棵 RenderNode 树的状态与指令变更，
+-    // 经这一次 native 调用增量同步，同步后 RenderThread 自主决定何时出帧（对齐 vsync）。
++    // 经这一次 native 调用交接给 DrawFrameTask。对齐 vsync 的节拍决策在 UI 线程
++    // Choreographer（doFrame 由 vsync 到达驱动才调用本方法）；RenderThread 收到任务即执行
++    // DrawFrameTask::run，先同步（syncFrameState）后绘制，同步段完成即放行 UI 线程。
+     public int syncAndDrawFrame(@NonNull FrameInfo frameInfo) {
+         return nSyncAndDrawFrame(mNativeProxy, frameInfo.frameInfo, frameInfo.frameInfo.length);
+     }
+diff --git a/frameworks/base/libs/hwui/hwui/Bitmap.cpp b/frameworks/base/libs/hwui/hwui/Bitmap.cpp
+index 40e4ec38e..661c88190 100644
+--- a/frameworks/base/libs/hwui/hwui/Bitmap.cpp
++++ b/frameworks/base/libs/hwui/hwui/Bitmap.cpp
+@@ -403,6 +403,11 @@ private:
+ //【关键细节】调色板采样 100 像素网格估计整体色调：透明占比过高判 Unknown、
+ // 低饱和按亮度分深浅——判定粗糙但够 Force Dark 用，
+ // 上游 TODO 自认换 HSV 算极值属过度设计。
++//【数据流】"computePalette" slice 产生点（下一行 ATRACE_CALL，批09 q5 实测 depth 4）：
++//   触发链 Bitmap.palette()（Bitmap.h:142，generationId 变化才重算）→ 录制期调用
++//   （RecordingCanvas.cpp:493 的 VectorDrawable palette 取值等）——落在 UI 线程
++//   Record View#draw() 窗口内；本样本 155795 帧两条（dur 8,962/9,076）、
++//   155820 帧五条（dur 8,461~11,154），与帧内新位图出现对应。
+ BitmapPalette Bitmap::computePalette(const SkImageInfo& info, const void* addr, size_t rowBytes) {
+     ATRACE_CALL();
+ 
+diff --git a/frameworks/base/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp b/frameworks/base/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
+index 895bed84a..4c1493913 100644
+--- a/frameworks/base/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
++++ b/frameworks/base/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
+@@ -133,6 +133,10 @@ IRenderPipeline::DrawResult SkiaOpenGLPipeline::draw(
+     }
+ 
+     {
++        //【数据流】"flush commands" slice 产生点（RenderThread 轨）：flushAndSubmit 把 Skia
++        //   的 Op 流（OpsTask::onPrepare/onExecute，trace 可见子 slice）提交给 GL 驱动；
++        //   CPU 侧到此结束，GPU 完成由后续 fence 承接（批11 的 fence 语义入口）。
++        //   本样本 155812 帧：rel 6,843,017,803 dur 587,308。
+         ATRACE_NAME("flush commands");
+         surface->flushAndSubmit();
+     }
+@@ -146,7 +150,8 @@ IRenderPipeline::DrawResult SkiaOpenGLPipeline::draw(
+     return {true, IRenderPipeline::DrawResult::kUnknownTime};
+ }
+ 
+-// 【关键细节】HWUI 与图形栈的汇合点：mEglManager.swapBuffers 内部走 eglSwapBuffers，
++// 【关键细节】HWUI 与图形栈的汇合点：mEglManager.swapBuffers 内部走
++// eglSwapBuffersWithDamageKHR（EglManager.cpp:600，screenDirty 为空时 rect 数为 0），
+ // 最终落到 ANativeWindow::queueBuffer，即 libgui 的 Surface::queueBuffer——
+ // BLAST 路径下由 BLASTBufferQueue 组装事务提交，自此缓冲离开 HWUI，走向 SurfaceFlinger。
+ // requireSwap 语义：无实绘且无 damage 需求时不 swap，本帧不产出缓冲。
+diff --git a/frameworks/base/libs/hwui/renderthread/CanvasContext.cpp b/frameworks/base/libs/hwui/renderthread/CanvasContext.cpp
+index 6c07044ee..137a151e8 100644
+--- a/frameworks/base/libs/hwui/renderthread/CanvasContext.cpp
++++ b/frameworks/base/libs/hwui/renderthread/CanvasContext.cpp
+@@ -511,7 +511,10 @@ void CanvasContext::notifyFramePending() {
+ }
+ 
+ // 【核心流程】一帧的执行段（RenderThread）：damage 累积完成后，
+-// getFrame 向 Surface 要缓冲（ANativeWindow::dequeueBuffer，接图形栈全链），
++// getFrame 取本帧 Frame：GL 管道是 makeCurrent＋查询宽高与 bufferAge（EglManager::beginFrame），
++// 不直接调 ANativeWindow::dequeueBuffer——GL 的取缓冲由 EGL 内部完成（本样本 trace 上
++// dequeueBuffer slice 位于 eglQuerySurface 与 eglBeginFrame 之间、Drawing slice 之前）；
++// Vulkan 管道（SkiaVulkanPipeline::getFrame）才显式调 dequeueNextBuffer。
+ // mRenderPipeline->draw 用 Skia 按 display list 绘制，waitOnFences 后 swapBuffers 上屏。
+ // 无脏区则跳过绘制，但仍 flush 纹理上传并通知回调，避免回调方无限等待。
+ // swap 错误自愈：TIMED_OUT 请求下一帧重试并记全屏 damage，其他错误 abandon surface 等 WMS 重建，
+@@ -554,6 +557,9 @@ nsecs_t CanvasContext::draw() {
+     Frame frame = mRenderPipeline->getFrame();
+     SkRect windowDirty = computeDirtyRect(frame, &dirty);
+ 
++    //【数据流】"Drawing <dirty矩形>" slice 产生点（下一行打点，RenderThread 轨，depth 2）：
++    //   slice 名携带脏区坐标（本样本 155812 帧为 "Drawing  0.00 158.00 1280.00 640.00"，
++    //   rel 6,842,752,957 dur 2,925,808）；内含 flush commands（Skia 提交）与各 Skia Op 子 slice。
+     ATRACE_FORMAT("Drawing " RECT_STRING, SK_RECT_ARGS(dirty));
+ 
+     IRenderPipeline::DrawResult drawResult;
+@@ -576,6 +582,12 @@ nsecs_t CanvasContext::draw() {
+ 
+     if (mNativeSurface) {
+         // TODO(b/165985262): measure performance impact
++        //【数据流】帧时间线三元组在 queueBuffer 前写入 ANativeWindow：vsyncId（帧档位，
++        //   与 UI 线程 doFrame slice 名尾编号、DrawFrames slice 名尾编号同源）、
++        //   inputEventId（触发本帧的输入事件 id，批08 的 deliverInputEvent 对账键）、
++        //   frameStartTime——SurfaceFlinger 的 FrameTimeline 用它们把应用帧与显示帧配对（批12）。
++        //   本 trace 可见形态：RT 轨上 dispatchSetFrameTimelineInfo slice（155812 帧
++        //   起点相对时间 6,843,827,495 纳秒）。
+         const auto vsyncId = mCurrentFrameInfo->get(FrameInfoIndex::FrameTimelineVsyncId);
+         if (vsyncId != UiFrameInfoBuilder::INVALID_VSYNC_ID) {
+             const auto inputEventId =
+diff --git a/frameworks/base/libs/hwui/renderthread/DrawFrameTask.cpp b/frameworks/base/libs/hwui/renderthread/DrawFrameTask.cpp
+index 41b3652a6..a0696bf8e 100644
+--- a/frameworks/base/libs/hwui/renderthread/DrawFrameTask.cpp
++++ b/frameworks/base/libs/hwui/renderthread/DrawFrameTask.cpp
+@@ -146,6 +146,10 @@ int DrawFrameTask::drawFrame() {
+ }
+ 
+ void DrawFrameTask::postAndWait() {
++    //【数据流】"postAndWait" slice 产生点（ATRACE_CALL，UI 线程轨，批09 q2 实测 depth 3）：
++    //   slice 覆盖"入队＋睡等"整段，止点＝mSignal 被唤醒返回（提前放行的 signal）。
++    //   本样本 vsyncId 155812 帧：postAndWait rel 6,842,268,957 dur 353,769，
++    //   与 RT 侧 DrawFrames（6,842,332,265 起）重叠 290,461 ns——重叠段即 UI 线程睡眠窗口。
+     ATRACE_CALL();
+     AutoMutex _lock(mLock);
+     mRenderThread->queue().post([this]() { run(); });
+@@ -158,6 +162,14 @@ void DrawFrameTask::postAndWait() {
+ // 3. 可放行即提前放行 UI 线程，与本帧 GPU 绘制并行（流水线不空转的关键）。
+ // 4. frameCallback 异步入队，正式绘制或跳绘兜底，再 frameCompleteCallback 与晚放行兜底。
+ // 5. 向 ADPF 会话上报目标/实际工时供调度器调频。
++//【数据流】"DrawFrames <vsyncId>" slice 的唯一产生点（本行打点，RenderThread 线程轨）：
++//   slice 名是复数 DrawFrames＋帧档位编号（#15 token 同源，FrameTimelineVsyncId）。
++//   本样本 trace tid2079 全程 508 条与主线程 doFrame 508 条一一对应；
++//   vsyncId 155812 帧：DrawFrames rel 6,842,332,265 起 dur 3,361,884，
++//   与 UI 线程 doFrame 155812（6,842,074,918 dur 564,193，止 6,842,639,111）重叠 306,846 ns
++//   ——重叠即"提前放行"在 trace 上的形态，两 slice 耗时不可相加（批10）。
++//   旧样本 finger.perfetto：DrawFrames 340845 rel 9,717,448,861 dur 2,280,038，
++//   与 doFrame 340845（rel 9,717,203,823 dur 531,807）重叠 286,769 ns（批10 q5d/q5e 复验）。
+ void DrawFrameTask::run() {
+     const int64_t vsyncId = mFrameInfo[static_cast<int>(FrameInfoIndex::FrameTimelineVsyncId)];
+     ATRACE_FORMAT("DrawFrames %" PRId64, vsyncId);
+diff --git a/frameworks/base/libs/hwui/renderthread/EglManager.cpp b/frameworks/base/libs/hwui/renderthread/EglManager.cpp
+index 60a3ef6f2..8dc05ff62 100644
+--- a/frameworks/base/libs/hwui/renderthread/EglManager.cpp
++++ b/frameworks/base/libs/hwui/renderthread/EglManager.cpp
+@@ -578,6 +578,11 @@ EGLint EglManager::queryBufferAge(EGLSurface surface) {
+     return 0;
+ }
+ 
++//【数据流】帧几何装配：Frame 只携带宽/高/bufferAge/EGLSurface 句柄（renderthread/Frame.h），
++// 不含缓冲指针——GL 管道的缓冲在 eglSwapBuffersWithDamageKHR 内部由 EGL 取还
++// （dequeue/queue 不在本函数窗口显式出现，本样本 trace 的 dequeueBuffer slice
++// 落在 queryBufferAge 之后、eglBeginFrame 之前，是 vendor EGL 在查询路径内部取缓冲）；
++// 宽高查询即 trace 上的 eglQuerySurface slice，155812 帧三次共约 12 μs。
+ Frame EglManager::beginFrame(EGLSurface surface) {
+     LOG_ALWAYS_FATAL_IF(surface == EGL_NO_SURFACE, "Tried to beginFrame on EGL_NO_SURFACE!");
+     makeCurrent(surface);
+@@ -610,6 +615,12 @@ bool EglManager::damageRequiresSwap() {
+ //【状态管理】swap 错误三档分诊：BAD_SURFACE/BAD_NATIVE_WINDOW 判表面已被底层拆走，
+ // 返回 false 交上层 abandon 表面走重建（可恢复）；其余错误 FATAL 快速暴露驱动问题；
+ // eglSwapBuffersWithDamageKHR 带 damage 矩形，与 BufferAge 行为的 setDamageRegion 配套。
++//【数据流】fence 产生点：eglSwapBuffersWithDamageKHR 入队本帧 GL 命令时，驱动为该缓冲
++//   生成 release fence（供 queueBuffer 随缓冲交给消费者）；常态下 RT 不等 GPU 画完——
++//   仅 Properties::waitForGpuCompletion 调试开关打开才先 fence() 同步等 GPU（:621），
++//   即"eglSwapBuffers 返回≠GPU 已画完"的代码依据（release fence 信号才是画完，批11 承接）。
++//   本样本 155812 帧：eglSwapBuffersWithDamageKHR rel 6,843,850,265 dur 1,449,961，
++//   其内可见 st_context_flush/st_flush（GL 命令提交）子 slice。
+ bool EglManager::swapBuffers(const Frame& frame, const SkRect& screenDirty) {
+     if (CC_UNLIKELY(Properties::waitForGpuCompletion)) {
+         ATRACE_NAME("Finishing GPU work");

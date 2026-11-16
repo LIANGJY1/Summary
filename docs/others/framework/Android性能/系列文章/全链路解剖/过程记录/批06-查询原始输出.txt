@@ -1,0 +1,328 @@
+# 批06 trace 查询原始输出（2026-11-14，trace_processor_shell-2434129a3af4dc9e）
+# 样本：captures/20261113-151358-vertical-1912967/trace.perfetto（start_ts=6,073,694,444,196）
+# 旧样本：finger.perfetto（start_ts=1,968,722,243,568，BOOTTIME 口径需换算）
+
+== Q1 批06-q1-dispatcher_slices.sql ==
+"rel_ts","dur","name","depth"
+6779729726,5808,"startDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server))",0
+6830475418,725270,"dispatchMotionLocked",0
+6830483688,39538,"findTouchedWindowTargetsLocked",1
+6830543842,649230,"dispatchEventLocked",1
+6830576688,5846,"prepareDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3b3b7f02)",2
+6830592265,5769,"enqueueDispatchEntriesLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), id=0x3b3b7f02)",2
+6830607418,5539,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_HOVER_EXIT)",2
+6830620957,5269,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_OUTSIDE)",2
+6830634880,5231,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_HOVER_ENTER)",2
+6830647534,5308,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_IS)",2
+6830680957,5461,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_SLIPPERY_EXIT)",2
+6830693918,5347,"enqueueDispatchEntry(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server), dispatchMode=DISPATCH_AS_SLIPPERY_ENTER)",2
+6830707457,5269,"startDispatchCycleLocked(inputChannel=1b4998d com.yadea.launcher/com.yadea.launcher.function.applist.AppListActivity (server))",2
+6830822342,5615,"prepareDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3b3b7f02)",2
+6830835226,5616,"enqueueDispatchEntriesLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server), id=0x3b3b7f02)",2
+6830848265,5384,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_HOVER_EXIT)",2
+6830860726,5346,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_OUTSIDE)",2
+6830873149,5193,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_HOVER_ENTER)",2
+6830885149,5193,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_IS)",2
+6830910380,5385,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_SLIPPERY_EXIT)",2
+6830924534,5808,"enqueueDispatchEntry(inputChannel=[Gesture Monitor] CustomGesture-touch (server), dispatchMode=DISPATCH_AS_SLIPPERY_ENTER)",2
+6830937342,5538,"startDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server))",2
+6831012842,5461,"prepareDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3b3b7f02)",2
+6831025495,5423,"enqueueDispatchEntriesLocked(inputChannel=PointerEventDispatcher2 (server), id=0x3b3b7f02)",2
+6831038457,5423,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_HOVER_EXIT)",2
+6831050918,5500,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_OUTSIDE)",2
+6831063572,6116,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_HOVER_ENTER)",2
+6831076611,5269,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_IS)",2
+6831102188,5692,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_SLIPPERY_EXIT)",2
+6831115265,5500,"enqueueDispatchEntry(inputChannel=PointerEventDispatcher2 (server), dispatchMode=DISPATCH_AS_SLIPPERY_ENTER)",2
+6831128611,5500,"startDispatchCycleLocked(inputChannel=PointerEventDispatcher2 (server))",2
+6831220072,8308,"pokeUserActivity",0
+6831234226,5654,"pokeUserActivity",0
+6831322226,5731,"startDispatchCycleLocked(inputChannel=[Gesture Monitor] CustomGesture-touch (server))",0
+
+== Q2 批06-q2-reader_slices.sql ==
+"rel_ts","dur","name"
+6795438072,10539,"EventHub, epoll_wait start"
+6795461919,66538,"EventHub, read input_event start"
+6795491842,31000,"EventHub, start read"
+6795510880,5577,"EventHub, end read, now is 6080489.898576, code is 53"
+6795838649,6577,"notifyMotion(id=0x3b3b7f02)"
+6796067688,6577,"notifyMotion(id=0x2ff164c)"
+6796093957,5692,"notifyMotion(id=0x3b3b7f02)"
+6796110226,5231,"notifyMotion(id=0x3b3b7f02)"
+6796128072,5962,"interceptMotionBeforeQueueing"
+6796151188,109961,"filterInputEvent"
+6796274572,5731,"notifyMotion(id=0x2ff164c)"
+6796287726,5346,"notifyMotion(id=0x2ff164c)"
+6796299688,5346,"interceptMotionBeforeQueueing"
+6796312419,16230,"filterInputEvent"
+6801141611,12192,"EventHub, epoll_wait start"
+6801166649,561423,"EventHub, read input_event start"
+6801187034,31231,"EventHub, start read"
+6801206495,5616,"EventHub, end read, now is 6080495.603999, code is 53"
+6807827342,8423,"notifyMotion(id=0x2f3ae6d0)"
+6807898803,6385,"notifyMotion(id=0x2f3ae6d0)"
+6807918995,5500,"notifyMotion(id=0x2f3ae6d0)"
+6807952572,6539,"interceptMotionBeforeQueueing"
+6807987226,127616,"filterInputEvent"
+6818381649,11346,"EventHub, epoll_wait start"
+6818407226,228154,"EventHub, read input_event start"
+6818591380,38577,"EventHub, start read"
+6818616688,5807,"EventHub, end read, now is 6080512.844038, code is 53"
+6822937688,9500,"notifyMotion(id=0x1a730a6a)"
+6823021534,7000,"notifyMotion(id=0x1a730a6a)"
+6823042495,5193,"notifyMotion(id=0x1a730a6a)"
+6823070111,5961,"interceptMotionBeforeQueueing"
+6823107072,684231,"filterInputEvent"
+6833289688,8461,"EventHub, epoll_wait start"
+6833308765,52961,"EventHub, read input_event start"
+6833332072,23923,"EventHub, start read"
+6833344226,5577,"EventHub, end read, now is 6080527.746307, code is 53"
+6833634649,7116,"notifyMotion(id=0x221627f3)"
+6833665842,5961,"notifyMotion(id=0x221627f3)"
+6833681380,5346,"notifyMotion(id=0x221627f3)"
+6833697572,5500,"interceptMotionBeforeQueueing"
+6833715534,70269,"filterInputEvent"
+
+"marker"
+"---all-filter---"
+
+"rel_ts","dur","name","tid","tname"
+6714757188,101692,"filterInputEvent",1489,"InputReader"
+6719276957,72038,"filterInputEvent",1489,"InputReader"
+6737731957,78115,"filterInputEvent",1489,"InputReader"
+6765386919,1830923,"filterInputEvent",1489,"InputReader"
+6796151188,109961,"filterInputEvent",1489,"InputReader"
+6796312419,16230,"filterInputEvent",1489,"InputReader"
+6807987226,127616,"filterInputEvent",1489,"InputReader"
+6823107072,684231,"filterInputEvent",1489,"InputReader"
+6833715534,70269,"filterInputEvent",1489,"InputReader"
+6854363880,93038,"filterInputEvent",1489,"InputReader"
+6877213534,39154,"filterInputEvent",1489,"InputReader"
+6893814534,56115,"filterInputEvent",1489,"InputReader"
+6899453726,941116,"filterInputEvent",1489,"InputReader"
+6916115918,153193,"filterInputEvent",1489,"InputReader"
+6932522726,104192,"filterInputEvent",1489,"InputReader"
+6949955457,101231,"filterInputEvent",1489,"InputReader"
+6968474688,146038,"filterInputEvent",1489,"InputReader"
+
+"marker"
+"---inject---"
+
+"rel_ts","dur","name","tid","tname"
+
+== Q3 批06-q3-ss_window.sql ==
+"tid","name","run_total","n"
+824,"binder:756_2",7458461,24
+1489,"InputReader",2394192,10
+756,"system_server",1298194,8
+1463,"SensorService",665962,4
+1379,"PowerManagerSer",338999,3
+1156,"batterystats-ha",301154,3
+
+"marker"
+"---disp-waker---"
+
+"rel_ts","dur","state","waker_utid","waker_thread","waker_proc"
+6830330803,35308,"R",52,"system_server","system_server"
+6830366111,1009154,"Running","[NULL]","[NULL]","[NULL]"
+
+"marker"
+"---iq-counter---"
+
+"name"
+"iq"
+
+"marker"
+"---ss-threads-name---"
+
+"tid","name"
+
+== Q4 批06-q4-iq_counter.sql ==
+"name","rel_ts","iq"
+"iq",6771783765,0
+"iq",6830307188,1
+"iq",6830457303,0
+"iq",6831978418,1
+"iq",6832281418,2
+"iq",6832668957,3
+"iq",6834162765,4
+
+"marker"
+"---utid52---"
+
+"tid","name","pname"
+756,"system_server","system_server"
+
+"marker"
+"---iq-all-nonzero---"
+
+"rel_ts","iq"
+119115885,1
+121363693,1
+136575731,1
+161741462,1
+170534385,1
+176911462,1
+192650462,1
+213969346,1
+228022116,1
+269339846,1
+269703000,2
+270478000,1
+283181654,1
+291118846,1
+312408808,1
+330922692,1
+343172962,1
+372405808,1
+388781808,1
+416932038,1
+420215962,1
+442586654,1
+451266808,1
+460466231,1
+478866346,1
+490451885,1
+520522654,1
+601044692,1
+606860269,1
+615004115,1
+623946269,1
+624081577,2
+624186192,3
+624386461,2
+626995538,1
+640207269,1
+651554038,1
+659401538,1
+673133577,1
+690228461,1
+706758692,1
+730072000,1
+740420231,1
+757220884,1
+787749154,1
+796934730,1
+804366269,1
+820625884,1
+837498307,1
+857687654,1
+874354346,1
+892626615,1
+909045692,1
+922400692,1
+939893000,1
+972655423,1
+974341269,1
+989114346,1
+1001134807,1
+1025922615,1
+
+== Q5 批06-q5-main_binder.sql ==
+"rel_ts","dur","name","tid"
+
+"marker"
+"---binder-756_2-all-window---"
+
+"rel_ts","dur","name"
+
+== Q6 批06-q6-main_states.sql ==
+"rel_ts","dur","state","waker_utid","waker_thread","waker_tid"
+6796227034,9313231,"R",346,"InputReader",1489
+6805540265,79346,"Running","[NULL]","[NULL]","[NULL]"
+6805619611,31692,"R+","[NULL]","[NULL]","[NULL]"
+6805651303,58077,"Running","[NULL]","[NULL]","[NULL]"
+6805709380,189346,"R","[NULL]","[NULL]","[NULL]"
+6805898726,201769,"Running","[NULL]","[NULL]","[NULL]"
+6806100495,1149039,"S","[NULL]","[NULL]","[NULL]"
+6807249534,2707692,"R",346,"InputReader",1489
+6809957226,403308,"Running","[NULL]","[NULL]","[NULL]"
+6810360534,1893923,"R+","[NULL]","[NULL]","[NULL]"
+6812254457,88577,"Running","[NULL]","[NULL]","[NULL]"
+6812343034,118115,"R+","[NULL]","[NULL]","[NULL]"
+6812461149,108116,"Running","[NULL]","[NULL]","[NULL]"
+6812569265,148538,"R+","[NULL]","[NULL]","[NULL]"
+6812717803,72308,"Running","[NULL]","[NULL]","[NULL]"
+6812790111,17289307,"R","[NULL]","[NULL]","[NULL]"
+6830079418,286693,"Running","[NULL]","[NULL]","[NULL]"
+6830366111,1009154,"R+","[NULL]","[NULL]","[NULL]"
+6831375265,1480730,"Running","[NULL]","[NULL]","[NULL]"
+
+"marker"
+"---binder824---"
+
+"rel_ts","dur","state","waker_utid","waker_thread","waker_tid"
+6797029072,106116,"S","[NULL]","[NULL]","[NULL]"
+6797135188,2234961,"R",458,"vendor.sprd.har",572
+6799370149,157500,"Running","[NULL]","[NULL]","[NULL]"
+6799527649,5778077,"S","[NULL]","[NULL]","[NULL]"
+6805305726,174962,"R",458,"vendor.sprd.har",572
+6805480688,20923,"Running","[NULL]","[NULL]","[NULL]"
+6805501611,36961,"R+","[NULL]","[NULL]","[NULL]"
+6805538572,127231,"Running","[NULL]","[NULL]","[NULL]"
+6805665803,1196923,"S","[NULL]","[NULL]","[NULL]"
+6806862726,16231,"R",458,"vendor.sprd.har",572
+6806878957,80846,"Running","[NULL]","[NULL]","[NULL]"
+6806959803,62269,"S","[NULL]","[NULL]","[NULL]"
+6807022072,17077,"R",458,"vendor.sprd.har",572
+6807039149,38077,"Running","[NULL]","[NULL]","[NULL]"
+6807077226,26654,"S","[NULL]","[NULL]","[NULL]"
+6807103880,15077,"R",458,"vendor.sprd.har",572
+6807118957,930038,"Running","[NULL]","[NULL]","[NULL]"
+6808048995,120847,"R","[NULL]","[NULL]","[NULL]"
+6808169842,133346,"Running","[NULL]","[NULL]","[NULL]"
+6808303188,350038,"R+","[NULL]","[NULL]","[NULL]"
+6808653226,554731,"Running","[NULL]","[NULL]","[NULL]"
+6809207957,53269,"R","[NULL]","[NULL]","[NULL]"
+6809261226,730962,"Running","[NULL]","[NULL]","[NULL]"
+6809992188,5606807,"R+","[NULL]","[NULL]","[NULL]"
+6815598995,639731,"Running","[NULL]","[NULL]","[NULL]"
+6816238726,304192,"S","[NULL]","[NULL]","[NULL]"
+6816542918,77154,"R",458,"vendor.sprd.har",572
+6816620072,131770,"Running","[NULL]","[NULL]","[NULL]"
+6816751842,2883115,"R+","[NULL]","[NULL]","[NULL]"
+6819634957,73077,"Running","[NULL]","[NULL]","[NULL]"
+6819708034,711077,"R+","[NULL]","[NULL]","[NULL]"
+6820419111,205807,"Running","[NULL]","[NULL]","[NULL]"
+6820624918,154616,"R+","[NULL]","[NULL]","[NULL]"
+6820779534,82115,"Running","[NULL]","[NULL]","[NULL]"
+6820861649,109000,"R+","[NULL]","[NULL]","[NULL]"
+6820970649,32039,"Running","[NULL]","[NULL]","[NULL]"
+6821002688,92346,"R+","[NULL]","[NULL]","[NULL]"
+6821095034,69461,"Running","[NULL]","[NULL]","[NULL]"
+6821164495,88693,"R+","[NULL]","[NULL]","[NULL]"
+6821253188,393577,"Running","[NULL]","[NULL]","[NULL]"
+
+== Q7 批06-q7-old_sample.sql ==
+"name","rel_ts","iq"
+"iq",9799102246,1
+"iq",9799933476,0
+"iq",9801882399,1
+"iq",9802318476,0
+"iq",9819234284,1
+"iq",9819320015,0
+
+== Q8 批06-q8-iq_drain.sql ==
+"rel_ts","iq"
+6830307188,1
+6830457303,0
+6831978418,1
+6832281418,2
+6832668957,3
+6834162765,4
+6843415303,3
+6853459303,2
+6854512880,1
+6855207957,2
+6855767726,1
+6856607149,0
+6878621957,1
+6878695534,0
+6894602918,1
+6894676688,0
+6901150034,1
+6901232957,0
+6918284726,1
+6918528226,0
+6933886957,1
+6933952803,0

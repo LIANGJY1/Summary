@@ -29,7 +29,7 @@
 ## 2. 教材盘点（全在本仓）
 
 - **核心**（均与本文件同目录）：Android13窗口透明与合成全链路解剖.md（机制主教材，§1~§9）；技术报告与交接文档逐句源码审计.md（方法论教材，学"如何审计"）。
-- **配套精读**（已有存量文档，按阶段指定）：docs/md/archive/一帧的生命周期.md、docs/md/archive/一次触摸的旅程.md、docs/md/WMS窗口管理.md、docs/md/archive/Surface与BufferQueue.md、docs/md/Android动画.md、docs/md/Activity启动.md、docs/md/分屏多窗口SplitScreen.md、docs/md/SystemUI.md、docs/md/lmkd与进程组.md、docs/md/启动全流程/（00~09）、docs/md/Binder*（4 篇）、docs/md/Handler.md。（注：一帧的生命周期、一次触摸的旅程、Surface与BufferQueue 三篇已于 2026-11-14 归档至 AAOS13_study/docs/md/archive/，内容并入《AppList 性能全链路解剖》系列，权威参考：Summary/docs/others/framework/Android性能/AppList性能分析/全链路解剖/，对应篇：一次触摸的旅程→00、06~08；一帧的生命周期→09~12；Surface与BufferQueue→11）
+- **配套精读**（已有存量文档，按阶段指定）：docs/md/archive/一帧的生命周期.md、docs/md/archive/一次触摸的旅程.md、docs/md/WMS窗口管理.md、docs/md/archive/Surface与BufferQueue.md、docs/md/Android动画.md、docs/md/Activity启动.md、docs/md/分屏多窗口SplitScreen.md、docs/md/SystemUI.md、docs/md/lmkd与进程组.md、docs/md/启动全流程/（00~09）、docs/md/Binder*（4 篇）、docs/md/Handler.md。（注：一帧的生命周期、一次触摸的旅程、Surface与BufferQueue 三篇已于 2026-11-14 归档至 AAOS13_study/docs/md/archive/，内容并入《AppList 性能全链路解剖》系列，权威参考：Summary/docs/others/framework/Android性能/系列文章/全链路解剖/，对应篇：一次触摸的旅程→00、06~08；一帧的生命周期→09~12；Surface与BufferQueue→11）
 - **源码树**：本仓即 A13 全源码带中文批注。批注是导览，**结论以原始代码为准**（批注战役本身经过两轮审计修正，这个事实本身就值得体会）。
 - **工具**：scripts/check_doc_paths.py（你写文档时的路径校验脚本）；adb 命令手册见文章一 §8。
 

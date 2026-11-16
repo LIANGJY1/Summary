@@ -1,0 +1,121 @@
+========================================================
+  PDF Quality Assurance Report
+========================================================
+
+ℹ️  Info:
+   File: AppList性能全链路解剖-汇编.pdf
+   Size: 4536.8 KB
+   Page size: 210mm × 297mm (565 pages)
+   Total text colors: 15 (chromatic: 0)
+   Fonts used: BDBMVJ+Noto-Sans-CJK-SC-Oblique, BYMOGM+Noto-Serif-CJK-SC-Bold, DFCEGX+Noto-Sans-CJK-SC-Bold, DZLENL+Noto-Color-Emoji, EQUNYJ+Noto-Sans-CJK-SC-Heavy, FOLJZL+FreeSerif, JBCECK+Noto-Sans-Mono-Oblique, KPBOQL+Noto-Sans-CJK-SC-Bold-Oblique, LWGGBP+Noto-Serif-CJK-SC, OMBSUE+Noto-Serif-CJK-SC-Oblique, PXIPUI+Noto-Sans-Mono, TSPJMR+Noto-Sans-CJK-SC, UCHPBF+Noto-Color-Emoji-Bold, YJWMYI+Noto-Sans-Mono-Bold
+
+✅ Passed (7):
+   Title metadata present ✓
+   Author metadata present ✓
+   Page size consistent ✓
+   No blank pages ✓
+   All fonts are embedded ✓
+   Content fill ratio adequate on all pages ✓
+   Table centering check complete ✓
+
+⚠️  Warnings (96):
+   [Metadata] Missing creator metadata
+   [Punctuation rules] Page 10 - Forbidden line-start punctuation '…': ...……批07（分发）
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 12 - Forbidden line-start punctuation '—': ...—
+   [Punctuation rules] Page 27 - Forbidden line-start punctuation '—': ...——分布有 21.2% 的 <10 ms 间隔和 17.5%
+   [Punctuation rules] Page 30 - Forbidden line-start punctuation '，': ...，即 guest 写入、host 读取，guest→host
+   [Punctuation rules] Page 68 - Forbidden line-start punctuation '—': ...——"暂存到真正触摸数据到来时再冲刷"。这个暂存是 #4 术
+   [Punctuation rules] Page 88 - Forbidden line-start punctuation '—': ...——全部由此表挂到字符设备上；该表在 evdev_conne
+   [Punctuation rules] Page 96 - Forbidden line-start punctuation '—': ...——tail 回退到 head-2 （:229 ），该槽位改
+   [Punctuation rules] Page 111 - Forbidden line-start punctuation '—': ...——批04 的 getEvents 返回节奏、批05 的 b
+   [Punctuation rules] Page 123 - Forbidden line-start punctuation '—': ...——批02 已证内核 autorepeat 定时器对无 EV
+   [Punctuation rules] ...102 more violations
+   [Content overflow] Pages [13, 14, 19, 20, 21, 22, 204, 274, 275, 276, 308, 309, 310, 456, 466, 467, 502, 503, 505, 508, 509] may have content exceeding page boundaries
+   [Cover page (p1) not full-bleed] Cover page (p1) has visible margins: left 11%, top 9%, right 11%, bottom 9%. Background/graphics should extend to page edges.
+   [Margin symmetry] Page 13 left/right margins differ by 57pt (L 51pt, R -6pt)
+   [Margin symmetry] Page 14 left/right margins differ by 56pt (L 51pt, R -5pt)
+   [Margin symmetry] Page 19 left/right margins differ by 53pt (L 51pt, R -2pt)
+   [Margin symmetry] Page 20 left/right margins differ by 59pt (L 51pt, R -8pt)
+   [Margin symmetry] Page 21 left/right margins differ by 60pt (L 51pt, R -9pt)
+   [Margin symmetry] Page 22 left/right margins differ by 59pt (L 51pt, R -8pt)
+   [Margin symmetry] Page 203 left/right margins differ by 52pt (L 51pt, R -1pt)
+   [Margin symmetry] Page 204 left/right margins differ by 53pt (L 51pt, R -2pt)
+   [Margin symmetry] Page 205 left/right margins differ by 52pt (L 51pt, R -1pt)
+   [Margin symmetry] Page 207 left/right margins differ by 47pt (L 51pt, R 5pt)
+   [Margin symmetry] Page 208 left/right margins differ by 48pt (L 51pt, R 3pt)
+   [Margin symmetry] Page 237 left/right margins differ by 43pt (L 51pt, R 8pt)
+   [Margin symmetry] Page 274 left/right margins differ by 55pt (L 51pt, R -4pt)
+   [Margin symmetry] Page 275 left/right margins differ by 55pt (L 51pt, R -4pt)
+   [Margin symmetry] Page 276 left/right margins differ by 59pt (L 51pt, R -8pt)
+   [Margin symmetry] Page 291 left/right margins differ by 52pt (L 51pt, R -0pt)
+   [Margin symmetry] Page 304 left/right margins differ by 51pt (L 51pt, R 0pt)
+   [Margin symmetry] Page 308 left/right margins differ by 56pt (L 51pt, R -5pt)
+   [Margin symmetry] Page 309 left/right margins differ by 54pt (L 51pt, R -3pt)
+   [Margin symmetry] Page 310 left/right margins differ by 56pt (L 51pt, R -5pt)
+   [Margin symmetry] Page 342 left/right margins differ by 49pt (L 51pt, R 2pt)
+   [Margin symmetry] Page 456 left/right margins differ by 57pt (L 51pt, R -6pt)
+   [Margin symmetry] Page 465 left/right margins differ by 53pt (L 51pt, R -2pt)
+   [Margin symmetry] Page 466 left/right margins differ by 55pt (L 51pt, R -4pt)
+   [Margin symmetry] Page 467 left/right margins differ by 55pt (L 51pt, R -4pt)
+   [Margin symmetry] Page 468 left/right margins differ by 43pt (L 51pt, R 8pt)
+   [Margin symmetry] Page 472 left/right margins differ by 53pt (L 51pt, R -1pt)
+   [Margin symmetry] Page 473 left/right margins differ by 50pt (L 51pt, R 1pt)
+   [Margin symmetry] Page 474 left/right margins differ by 51pt (L 51pt, R 0pt)
+   [Margin symmetry] Page 502 left/right margins differ by 56pt (L 51pt, R -5pt)
+   [Margin symmetry] Page 503 left/right margins differ by 58pt (L 51pt, R -7pt)
+   [Margin symmetry] Page 505 left/right margins differ by 56pt (L 51pt, R -5pt)
+   [Margin symmetry] Page 506 left/right margins differ by 50pt (L 51pt, R 1pt)
+   [Margin symmetry] Page 507 left/right margins differ by 46pt (L 51pt, R 5pt)
+   [Margin symmetry] Page 508 left/right margins differ by 54pt (L 51pt, R -3pt)
+   [Margin symmetry] Page 509 left/right margins differ by 54pt (L 51pt, R -3pt)
+   [Table centering] Page 12: Table not centered (L 51pt, R -187pt)
+   [Table centering] Page 13: Table not centered (L 51pt, R -187pt)
+   [Table centering] Page 14: Table not centered (L 51pt, R -187pt)
+   [Table centering] Page 19: Table not centered (L 51pt, R -20pt)
+   [Table centering] Page 20: Table not centered (L 51pt, R -20pt)
+   [Table centering] Page 21: Table not centered (L 51pt, R -20pt)
+   [Table centering] Page 22: Table not centered (L 51pt, R -20pt)
+   [Table centering] Page 203: Table not centered (L 51pt, R -9pt)
+   [Table centering] Page 204: Table not centered (L 51pt, R -9pt)
+   [Table centering] Page 205: Table not centered (L 51pt, R -9pt)
+   [Table centering] Page 207: Table not centered (L 51pt, R -38pt)
+   [Table centering] Page 208: Table not centered (L 51pt, R -38pt)
+   [Table centering] Page 237: Table not centered (L 51pt, R 2pt)
+   [Table centering] Page 274: Table not centered (L 51pt, R -48pt)
+   [Table centering] Page 275: Table not centered (L 51pt, R -48pt)
+   [Table centering] Page 276: Table not centered (L 51pt, R -48pt)
+   [Table centering] Page 291: Table not centered (L 51pt, R -6pt)
+   [Table centering] Page 308: Table not centered (L 51pt, R -40pt)
+   [Table centering] Page 309: Table not centered (L 51pt, R -40pt)
+   [Table centering] Page 310: Table not centered (L 51pt, R -40pt)
+   [Table centering] Page 342: Table not centered (L 51pt, R -51pt)
+   [Table centering] Page 456: Table not centered (L 51pt, R -47pt)
+   [Table centering] Page 465: Table not centered (L 51pt, R -277pt)
+   [Table centering] Page 466: Table not centered (L 51pt, R -277pt)
+   [Table centering] Page 467: Table not centered (L 51pt, R -107pt)
+   [Table centering] Page 468: Table not centered (L 51pt, R -107pt)
+   [Table centering] Page 472: Table not centered (L 51pt, R -348pt)
+   [Table centering] Page 473: Table not centered (L 51pt, R -44pt)
+   [Table centering] Page 474: Table not centered (L 51pt, R -44pt)
+   [Table centering] Page 502: Table not centered (L 51pt, R -85pt)
+   [Table centering] Page 503: Table not centered (L 51pt, R -85pt)
+   [Table centering] Page 505: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 506: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 507: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 508: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 509: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 510: Table not centered (L 51pt, R -76pt)
+   [Table centering] Page 520: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 521: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 522: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 523: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 524: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 525: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 526: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 527: Table not centered (L 51pt, R 16pt)
+   [Table centering] Page 528: Table not centered (L 51pt, R 16pt)
+
+--------------------------------------------------------
+⚠️  WARN — 96 warning(s), optimization recommended
+--------------------------------------------------------

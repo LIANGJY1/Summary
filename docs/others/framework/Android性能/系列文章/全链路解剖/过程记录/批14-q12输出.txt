@@ -1,0 +1,11 @@
+"rel_ts","dur","state","cpu"
+6779622072,17847,"R","[NULL]"
+6779639919,27153,"Running",4
+6779667072,67385,"R","[NULL]"
+6779734457,102385,"Running",4
+6779836842,50928000,"S","[NULL]"
+6830764842,33923,"R","[NULL]"
+6830798765,1984307,"Running",4
+
+"marker"
+"---cpu usage of that cpu during S window---"

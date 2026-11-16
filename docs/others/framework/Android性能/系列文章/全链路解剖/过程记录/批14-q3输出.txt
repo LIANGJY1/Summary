@@ -1,0 +1,21 @@
+"cpu","tid","name","clipped"
+1,0,"swapper",40307
+0,0,"swapper",29000
+4,0,"swapper",24385
+
+"marker"
+"---cpu2 detail---"
+
+"tid","name","clipped","slices"
+661,"surfaceflinger",650115,6
+26884,"UsbFfs-worker",396462,6
+5008,"AudioIn_46",352346,5
+1790,"gnss@1.1-servic",265616,1
+554,"spi@1.0-service",191307,2
+1819,"ech.lyra.daemon",165269,7
+5010,"reader",110192,7
+269,"logd.writer",83039,11
+29516,"screenrecord",76039,1
+10,"rcu_preempt",57885,1
+10607,"kworker/u16:0",45692,1
+248,"spi2",30461,1

@@ -1,0 +1,150 @@
+--- /home/liang/Project/AAOS13/frameworks/native/libs/input/InputTransport.cpp	2026-03-19 10:55:54.020699331 +0800
++++ /home/liang/Project/MyProject/AAOS13_study/frameworks/native/libs/input/InputTransport.cpp	2026-11-14 01:54:07.873007327 +0800
+@@ -44,6 +44,10 @@
+ // we really need.  So we make it smaller.  It just needs to be big enough to hold
+ // a few dozen large multi-finger motion events in the case where an application gets
+ // behind processing touches.
++// 通道背压的物理边界：两端 SO_SNDBUF/SO_RCVBUF 各设 32KB（openInputChannelPair 里 setsockopt）。
++//   一条 InputMessage（MOTION 满指针时约 1KB 量级）占一个数据报；应用不读、回执不发时，
++//   发送侧写满 32KB 即 EAGAIN → WOULD_BLOCK → Dispatcher 把条目留在 outboundQueue
++//   （发布停止），这就是"应用卡住时事件不丢但停发"的容量依据。
+ static const size_t SOCKET_BUFFER_SIZE = 32 * 1024;
+ 
+ // Nanoseconds per milliseconds.
+@@ -95,6 +99,26 @@
+ 
+ // --- InputMessage ---
+ 
++// 【安全考虑】收侧的第一道关卡：校验一条刚读到的消息是否可信。
++//
++// 【安全考虑】这是**跨进程边界的入口校验**，不可省。
++//   消息体是定长结构、由对端填好，而通道的两端可能分属不同信任级别，
++//   所以每一个从字节里读出来的数值都要在这里先过一遍。
++//   校验分两类：
++// 1. **尺寸必须与按类型算出的应有尺寸完全相等**，而不是"不小于"。
++//    这一条同时挡住了"声明的类型算出小结构、却塞了更多字节"这类越界读。
++// 2. **按类型查该类型的取值域**：
++//    指针个数必须落在 1 到上限之间，零个指针的移动事件没有意义，
++//    超过上限会让下游按越界处理；
++//    时间线消息要求呈现时刻晚于 GPU 完成时刻，
++//    否则说明发送方的时间基准乱了，下游据此算延迟会得到负值。
++//
++// 【关键细节】没有走"默认一律拒绝"的写法，而是**先把已知类型列全、末尾再兜底报错**。
++//   好处是将来新增消息类型时，编译器会在这个 switch 上报错提醒补齐，
++//   而不会静默走进兜底分支、让新类型的第一条消息就被拒。
++//
++// 【安全考虑】时间戳比较用"呈现时刻大于 GPU 完成时刻"这个方向，而不是判差值范围：
++//   因为负延迟一定是错的，而正延迟多大都合法。
+ bool InputMessage::isValid(size_t actualSize) const {
+     if (size() != actualSize) {
+         ALOGE("Received message of incorrect size %zu (expected %zu)", actualSize, size());
+@@ -331,6 +355,10 @@
+     }
+ }
+ 
++// 【核心流程】创建输入通道双端（全链路总论处 5→6 的物理载体）：
++//   AF_UNIX + SOCK_SEQPACKET 的 socketpair——数据报语义保证一条 InputMessage 原子收发、
++//   不粘包不半读；两端缓冲各设 32KB，是 Dispatcher→应用背压（WOULD_BLOCK）的物理边界。
++//   server 端留在系统侧注册进 Dispatcher，client 端经 Binder 送达应用进程。
+ status_t InputChannel::openInputChannelPair(const std::string& name,
+                                             std::unique_ptr<InputChannel>& outServerChannel,
+                                             std::unique_ptr<InputChannel>& outClientChannel) {
+@@ -362,6 +390,36 @@
+     return OK;
+ }
+ 
++// 单条 InputMessage 原子写出（MSG_DONTWAIT 非阻塞 + MSG_NOSIGNAL 防对端死亡触发 SIGPIPE）。
++//   错误码约定：EAGAIN/EWOULDBLOCK → WOULD_BLOCK（对端缓冲满，Dispatcher 视为背压暂停）；
++//   EPIPE/ECONNRESET 等 → DEAD_OBJECT（应用已死，Dispatcher 拆连接）。
++//   写前先做 getSanitizedCopy 清理 padding 字节，避免把未初始化内存写进 socket。
++// 发消息：先净化副本，再写进通道。
++//
++// 【安全考虑】**写出去的不是调用方给的那份，而是它的一份净化副本**。
++//   getSanitizedCopy 的实际动作（:165 起）：把副本整体 memset 0，再按消息类型逐字段拷贝
++//   有效值（原注释 :161-163 明言动机）——清零结构体里字段之间的 padding 与未用空间，
++//   避免把未初始化内存写进 socket、泄露同进程其他数据。
++//   净化在**每次发送时都做一遍**，因为 send 收到的是副本，调用方对象保持不变。
++//
++// 【关键细节】写入用**非阻塞、不产生信号**的选项：
++//   非阻塞是为了让"通道对端暂时读不及"这件事以返回值形式报告给调用方，
++//   而不是卡住发送线程——事件方向的发送方是 InputDispatcher 分发线程，
++//   回执方向的发送方是应用主线程（finish 信号，见批08）。
++//   不产生信号是为了让对端进程异常退出时，
++//   写入方收到的是"已连接对象的错误"而不是被信号打死。
++//
++// 【关键细节】被信号打断就**重试**，这是唯一允许重试的错误；
++//   而返回"通道已死"的那几类错误都不重试，
++//   因为重试对已断开的目标没有意义，只会浪费一次系统调用。
++//
++//   通道是 SOCK_SEQPACKET 数据报套接字（openInputChannelPair :338 创建），
++//   一次 send 要么整包送达要么失败（返回 EAGAIN/EMSGSIZE），不存在部分写；
++//   nWrite != msgLength 的分支（:389-395 返回 DEAD_OBJECT）是防御性检查——
++//   数据报语义下正常路径到不了这里，一旦到达说明内核侧异常，按通道已死处置。
++//
++// 【关键细节】"暂时阻塞"与"通道已死"被区分成两种返回值，因为上层处置不同：
++//   前者是背压（稍后重试即可），后者必须重开通道。
+ status_t InputChannel::sendMessage(const InputMessage* msg) {
+     const size_t msgLength = msg->size();
+     InputMessage cleanMsg;
+@@ -519,6 +577,8 @@
+         return BAD_VALUE;
+     }
+ 
++    // 事件 → 定长 InputMessage（KEY/MOTION 等 union）序列化，一次 sendMessage 原子送达。
++    //   seq 是 Dispatcher 侧的流水号，应用回 ack 时原样带回用于配对。
+     InputMessage msg;
+     msg.header.type = InputMessage::Type::KEY;
+     msg.header.seq = seq;
+@@ -688,6 +748,10 @@
+     return mChannel->sendMessage(&msg);
+ }
+ 
++// 回执链的读取侧（Dispatcher 侧）：从 socket 读一条应用回执消息并按类型解析——
++//   FINISHED（seq/handled/consumeTime）→ handleReceiveCallback 走 finishDispatchCycleLocked
++//   出队 waitQueue；TIMELINE（inputEventId + graphicsTimeline）→ trackGraphicsLatency
++//   进端到端时延统计。socket 无数据时 receiveMessage 返回 WOULD_BLOCK 结束循环。
+ android::base::Result<InputPublisher::ConsumerResponse> InputPublisher::receiveConsumerResponse() {
+     if (DEBUG_TRANSPORT_ACTIONS) {
+         ALOGD("channel '%s' publisher ~ %s", mChannel->getName().c_str(), __func__);
+@@ -1079,6 +1143,41 @@
+     }
+ }
+ 
++// 【设计思想】重采样：把坐标替换成"上一帧在显示时刻应有的位置"。
++//
++// 【设计思想】显示有延迟（缓冲、合成、GPU 完成），
++//   手指在屏幕上划到某点时，那一帧其实还没被扫描出来。
++//   若直接用事件坐标，手指划到边缘时显示还停在半格之前，感觉"跟手性"变差。
++//   解法是**用前后两帧的坐标做线性插值**，外推出"显示时刻"那一刻的位置，
++//   从而把手感提前一帧。
++//
++// 【核心流程】先判四道门槛，任一不满足就原样放行：
++// 1. 没开重采样开关；
++// 2. 事件源不是指针类，键盘与按钮不重采样，它们不产生连续轨迹；
++// 3. 动作不是移动，按下抬起重采样会破坏"按下位置即命中位置"的语义；
++// 4. 找不到该设备与事件源对应的触摸状态，或该状态还没有历史帧。
++// 再判一道：**这一帧必须含有全部待上报的指针**，缺一个就整帧放弃。
++//   因为插值结果要整体交给显示，中间少一根手指会让这一帧的坐标集合与事件不一致。
++//
++// 【关键细节】外推依据的"另一帧"分三种情形：
++//   拿到了下一帧 → 用前后两帧**夹逼**插值；
++//   没有下一帧但**历史够两帧** → 退化成用当前帧与前一帧**外推**；
++//   历史不足两帧 → 数据不够，直接放弃。
++//   保留外推这一支，是为了避免最后一批事件因为缺后继帧而完全不重采样，
++//   而"抬手前的那一段"恰恰是用户最在意跟手性的地方。
++//
++// 【关键细节】两条分支都有**时间间隔与预测量的双重夹逼**：
++//   间隔太小则抖动被放大成巨大速度，太大则说明丢帧，都直接放弃；
++//   外推时还把预测时刻**回拉到"半个间隔"与预测上限中较小的那个**。
++//   也就是说宁可少预测一点也不让预测跑太远：
++//   预测得越远误差越大，而重采样的收益并不随预测距离线性增长。
++//   夹逼不是静默生效的，代码里会打日志说明预测被拉回来了，便于现场判断。
++//
++// 【关键细节】**不是每根手指都重采样**，只有工具类型通过判定的那几根才插值。
++//   笔与手指的运动学不同（笔有悬停、落笔位置与接触位置不同），
++//   拿手指的插值方式去外推笔的坐标会得到错误位置。
++//   另外**坐标没有变化的指针沿用上一次的重采样结果**而不是重新插值，
++//   避免静止的手指被反复插值出微小抖动。
+ void InputConsumer::resampleTouchState(nsecs_t sampleTime, MotionEvent* event,
+     const InputMessage* next) {
+     if (!mResampleTouch

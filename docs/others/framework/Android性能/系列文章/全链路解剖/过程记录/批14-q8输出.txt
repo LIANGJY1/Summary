@@ -1,0 +1,9 @@
+"rel_ts","cpu","prev_state","next_comm","next_pid"
+6805619611,2,256,"rcu_preempt",10
+6805709380,2,0,"tbox_ap",1136
+6806100495,2,1,"ackgroundThread",2679
+6810360534,2,256,"PowerManagerSer",1379
+6812343034,2,256,"PowerManagerSer",1379
+6812569265,2,256,"PowerManagerSer",1379
+6812790111,2,0,"UsbFfs-worker",26884
+6830366111,2,256,"InputDispatcher",1488

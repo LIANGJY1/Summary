@@ -1,0 +1,47 @@
+798a799,802
+>     // 【数据流】全局 monitor 通道的 Java 起点：经 NativeInputManager.createInputMonitor 直达
+>     //   InputDispatcher::createInputMonitor，server 端登记进 mGlobalMonitorsByDisplay[displayId]。
+>     //   本显示的每帧指针事件在 addGlobalMonitoringTargetsLocked 处复制一份（dispatchMotionLocked
+>     //   在窗口目标之后追加）。WMS.DisplayContent 用它建 "PointerEventDispatcher<displayId>" 通道。
+810c814,815
+<     // createSpyWindowGestureMonitor：建窥屏手势监视器验权限与隐私。
+---
+>     // createSpyWindowGestureMonitor：建窥屏手势监视器（权限校验在调用方 monitorGestureInput，
+>     //   本方法只做 SurfaceControl 申请、通道创建、死亡回收登记与 spy 窗上屏）。
+858a864,867
+>     // 【数据流】手势监视通道的 Java 起点：通道名强制加前缀 "[Gesture Monitor] "（与 trace 中
+>     //   "[Gesture Monitor] CustomGesture-touch (server)" 对应，"(server)" 由
+>     //   openInputChannelPair 追加）。随后走 createSpyWindowGestureMonitor 把 spy 窗挂上
+>     //   SurfaceFlinger——分发侧按窗口列表落点命中 spy（InputConfig::SPY），而非全局 monitor 表。
+921a931,934
+>     // 【状态管理】mInputFilter（Java 侧转交对象）与 mNative.setInputFilterEnabled（native 侧
+>     //   shouldSendKey/MotionToInputFilterLocked 的判据）在这里同步置位/复位；安装时另建
+>     //   InputFilterHost 并调 filter.install。唯一安装方是 AccessibilityManagerService
+>     //   （经 WMS.setInputFilter 转发）。
+1955c1968
+<     // createInputMonitor：建监视器通道挂宿主。
+---
+>     // transferTouchFocus：按通道对转移触摸焦点。
+1975c1988
+<     // getMonitorHost：按令牌取监视器宿主。
+---
+>     // transferTouchFocus：按令牌对转移触摸焦点（token 版）。
+3175c3188
+<     // notifySwitch：核心按盖与锁屏旗分派回调。
+---
+>     // setSensorPrivacy：按硬件拨钮状态同步传感器隐私。
+3307a3321,3328
+>     // 【核心流程】Native notifyKey/notifyMotion 在 mInputFilterEnabled 时经 JNI 调到此处。
+>     //   mInputFilter 非空：事件对象交给 filter（InputFilter.filterInputEvent 只是把事件
+>     //   post 到其 Handler 线程，不等处理结果），本方法恒返回 false——native 侧据此直接 return，
+>     //   事件不入 mInboundQueue；过滤器处理完经 InputFilterHost.sendInputEvent 注回（见该处批注）。
+>     //   mInputFilter 为空：回收事件并返回 true，native 侧照常入队。
+>     //   trace 判据：本方法无独立打点，可见的是 JNI filterInputEvent slice（NativeInputManager::filterInputEvent
+>     //   的 ATRACE_CALL）；本样本每条运动事件配一条该 slice（0.016–0.94ms），且 "iq" 计数在此后
+>     //   34ms 内不变动，证明走的是消费-回注路径（批06）。
+3876a3898,3902
+>         // 【数据流】过滤器消费-回注链的回程：InputFilter.sendInputEvent（其 Handler 线程，
+>         //   AccessibilityInputFilter 用主线程 looper）→ 本方法 → mNative.injectInputEvent
+>         //   （MODE_ASYNC，policyFlags 加 FLAG_FILTERED）→ InputDispatcher::injectInputEvent——
+>         //   事件 id 原样保留，经 enqueueInboundEventLocked 入 mInboundQueue 并 needWake 唤醒
+>         //   分发线程。filterInputEvent 侧被消费的事件由此处重新走完入队-分发全程（批06）。

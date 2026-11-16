@@ -1,0 +1,211 @@
+# 批08 批注改动 diff 存档（git diff vs HEAD，仅批08 触及的五文件；只读命令）
+# 生成时间：2026-11-14 01:21:51；仓库：/home/liang/Project/MyProject/AAOS13_study（只写不提交）
+
+diff --git a/frameworks/base/core/java/android/view/InputEventReceiver.java b/frameworks/base/core/java/android/view/InputEventReceiver.java
+index 2e684ea9f..2cd65197f 100644
+--- a/frameworks/base/core/java/android/view/InputEventReceiver.java
++++ b/frameworks/base/core/java/android/view/InputEventReceiver.java
+@@ -52,8 +52,10 @@ import java.lang.ref.WeakReference;
+  * @hide
+  */
+ // InputEventReceiver 是 InputDispatcher 到应用侧输入事件的 native 接收端：
+-//   持有 native InputChannel 的接收端 fd，onInputEvent 抽象方法由子类实现，
+-//   finishInputEvent 回执消费完毕（ViewRootImpl 的 WindowInputEventReceiver 为实现方）。
++//   持有 native InputChannel 的接收端 fd；onInputEvent 非抽象、有默认实现
++//   （直接 finishInputEvent(event, false) 回执未处理），子类按需覆写
++//   （ViewRootImpl 的 WindowInputEventReceiver 即覆写方），
++//   finishInputEvent 回执消费完毕。
+ // 豁免口径：native 方法声明、dispose 与 finalize 不逐块批注。
+ public abstract class InputEventReceiver {
+     private static final String TAG = "InputEventReceiver";
+@@ -68,8 +70,17 @@ public abstract class InputEventReceiver {
+     private MessageQueue mMessageQueue;
+ 
+     // Map from InputEvent sequence numbers to dispatcher sequence numbers.
++    // 【数据流】seq 配对账本：dispatchInputEvent（native 回调）先记 Java 侧
++    //   getSequenceNumber() → 系统侧 seq 的映射，finishInputEvent 时反查——
++    //   同一 seq 两种编号体系（事件对象与 socket 消息头）的对账表。
+     private final SparseIntArray mSeqMap = new SparseIntArray();
+ 
++    // 【调用关系】四个 native 入口与消费链的对应：nativeInit 在 native 侧
++    //   建 NativeInputEventReceiver 并把 InputChannel 的 fd 以 ALOOPER_EVENT_INPUT
++    //   注册进构造参数 Looper（native addFd）——socket 可读即唤醒本线程
++    //   调 NativeInputEventReceiver::handleEvent→consumeEvents；事件循环的
++    //   另半边 nativeFinishInputEvent/nativeConsumeBatchedInputEvents 见
++    //   android_view_InputEventReceiver.cpp 批注。
+     private static native long nativeInit(WeakReference<InputEventReceiver> receiver,
+             InputChannel inputChannel, MessageQueue messageQueue);
+     private static native void nativeDispose(long receiverPtr);
+diff --git a/frameworks/base/core/java/android/view/VelocityTracker.java b/frameworks/base/core/java/android/view/VelocityTracker.java
+index 5c8a2ff50..172969951 100644
+--- a/frameworks/base/core/java/android/view/VelocityTracker.java
++++ b/frameworks/base/core/java/android/view/VelocityTracker.java
+@@ -181,7 +181,9 @@ public final class VelocityTracker {
+     private long mPtr;
+ 
+     //【关键细节】VelocityTracker 是 fling 测速器（数据真源在 native，Java 侧薄壳）：
+-    //   算法策略可经系统属性切换（impulse/lsq 系/int 系/legacy，默认 impulse），
++    //   算法策略可经系统属性切换（impulse/lsq 系/int 系/legacy），策略编号越界或
++    //   DEFAULT(-1) 由 JNI getStrategyFromInt 回落 Strategy::DEFAULT，
++    //   native 侧 DEFAULT_STRATEGY = Strategy::LSQ2（VelocityTracker.h）；
+     //   计算在 native 完成后由 getXVelocity/getYVelocity 按 pointerId 取回；
+     //   computeCurrentVelocity 开销较大，只应在取值前调用一次。
+     //   使用契约：obtain 后必须对 DOWN/MOVE/UP 全量 addMovement，用毕 recycle。
+@@ -362,6 +364,11 @@ public final class VelocityTracker {
+     // 【核心流程】把按下、移动、抬起等事件原样喂给 native 层积累时间序列样本，
+     // 是测速唯一数据入口，
+     // 空事件抛参数异常。
++    //【关键细节】"原样喂给"只在 Java 层成立：native 侧按动作过滤——
++    //   DOWN/POINTER_DOWN/MOVE（含 HOVER 变体）记为样本，UP/POINTER_UP/CANCEL
++    //   在 VelocityTracker::addMovement(MotionEvent) 的 switch 里直接 return
++    //   不入样本序列（抬起事件只带末位置、无新运动信息）；合批事件的
++    //   历史采样（getHistorySize）被逐时刻展平入样。
+     public void addMovement(MotionEvent event) {
+         if (event == null) {
+             throw new IllegalArgumentException("event must not be null");
+@@ -396,8 +403,8 @@ public final class VelocityTracker {
+      */
+     // 【性能考虑】真正触发 native 拟合运算的入口，
+     // 开销大只应在取值前调一次；
+-    // units 定速度单位，
+-    // 上限参数钳制输出。
++    // units 定速度单位（RecyclerView 的 fling 路径传 1000＝像素/秒），
++    // 上限参数钳制输出（RecyclerView 传 mMaxFlingVelocity）。
+     public void computeCurrentVelocity(int units, float maxVelocity) {
+         nativeComputeCurrentVelocity(mPtr, units, maxVelocity);
+     }
+diff --git a/frameworks/base/core/java/android/view/ViewRootImpl.java b/frameworks/base/core/java/android/view/ViewRootImpl.java
+index b0de68e01..365b889a2 100644
+--- a/frameworks/base/core/java/android/view/ViewRootImpl.java
++++ b/frameworks/base/core/java/android/view/ViewRootImpl.java
+@@ -9982,6 +9982,9 @@ public final class ViewRootImpl implements ViewParent,
+             Trace.traceCounter(Trace.TRACE_TAG_INPUT, mPendingInputEventQueueLengthCounterName,
+                     mPendingInputEventCount);
+ 
++            // 【数据流】进流水线前先回填线程级 FrameInfo 的输入事件字段
++            //   （InputEventAssigner 记下本事件时刻），供当帧及后续帧的
++            //   端到端延迟统计与 Choreographer 回调读数。
+             mViewFrameInfo.setInputEvent(mInputEventAssigner.processEvent(q.mEvent));
+ 
+             deliverInputEvent(q);
+@@ -9996,7 +9999,8 @@ public final class ViewRootImpl implements ViewParent,
+     }
+ 
+     // 【核心流程】选流水线起点后开闸：待合成事件（FLAG_UNHANDLED，见 shouldSendToSynthesizer）直接送末段；
+-    //   skipIme（如窗口不支持输入法交互）从 mFirstPostImeInputStage 进，否则从链头进。
++    //   skipIme（带 FLAG_DELIVER_POST_IME、指针源或旋钮源的事件，见
++    //   QueuedInputEvent.shouldSkipIme）从 mFirstPostImeInputStage 进，否则从链头进。
+     //   按键先过 UnhandledKeyManager 预检（模拟按键/快捷键兜底）再进流水线。
+     private void deliverInputEvent(QueuedInputEvent q) {
+         Trace.asyncTraceBegin(Trace.TRACE_TAG_VIEW, "deliverInputEvent",
+@@ -10035,6 +10039,9 @@ public final class ViewRootImpl implements ViewParent,
+             }
+ 
+             if (stage != null) {
++                // 【执行时机】进流水线前先消化挂起的窗口焦点变化：焦点态变更
++                //   若未落地，各段（尤其丢弃裁决的 mHasWindowFocus 判定）会按
++                //   旧焦点态误丢事件。
+                 handleWindowFocusChanged();
+                 stage.deliver(q);
+             } else {
+diff --git a/frameworks/base/core/java/com/android/internal/widget/RecyclerView.java b/frameworks/base/core/java/com/android/internal/widget/RecyclerView.java
+index b5d8c28ee..7fcd50031 100644
+--- a/frameworks/base/core/java/com/android/internal/widget/RecyclerView.java
++++ b/frameworks/base/core/java/com/android/internal/widget/RecyclerView.java
+@@ -1827,6 +1827,12 @@ public class RecyclerView extends ViewGroup implements ScrollingView, NestedScro
+         if (mAdapter != null) {
+             eatRequestLayout();
+             onEnterLayoutOrScroll();
++            // 【性能考虑】"RV Scroll" slice 打点（TRACE_SCROLL_TAG）：本段内执行
++            //   mLayout.scrollHorizontallyBy/scrollVerticallyBy（布局管理器消费位移、
++            //   填充新条目、回收越界子视图）；trace 中拖动帧该 slice 落在
++            //   ViewPostImeInputStage 窗口内即此处产生。消费量为零或装饰非空时的
++            //   invalidate() 在段外触发——经 ViewRootImpl.scheduleTraversals
++            //   排进下一帧（帧内动作见批09）。
+             Trace.beginSection(TRACE_SCROLL_TAG);
+             if (x != 0) {
+                 consumedX = mLayout.scrollHorizontallyBy(x, mRecycler, mState);
+@@ -2908,6 +2914,12 @@ public class RecyclerView extends ViewGroup implements ScrollingView, NestedScro
+         final boolean canScrollHorizontally = mLayout.canScrollHorizontally();
+         final boolean canScrollVertically = mLayout.canScrollVertically();
+ 
++        // 【核心流程】测速入口之一（拦截路径）：无追踪器先 obtain，
++        //   随后对每条进入本方法的 MotionEvent 无条件 addMovement——
++        //   AppList 触屏手势的速度样本由此进入 VelocityTracker
++        //   （native 侧只把 DOWN/POINTER_DOWN/MOVE 记为样本）。
++        //   onInterceptTouchEvent 只在 ACTION_DOWN 或已有 touch target 时被
++        //   父容器调用，进入拖拽态后样本改由 onTouchEvent 末尾兜底续喂。
+         if (mVelocityTracker == null) {
+             mVelocityTracker = VelocityTracker.obtain();
+         }
+@@ -3163,6 +3175,14 @@ public class RecyclerView extends ViewGroup implements ScrollingView, NestedScro
+             } break;
+ 
+             case MotionEvent.ACTION_UP: {
++                // 【核心流程】fling 速度计算：UP 事件本身不入 native 样本
++                //   （VelocityTracker 过滤抬起动作），computeCurrentVelocity 用的是
++                //   此前积累的 DOWN/MOVE 样本（含合批历史展平）；1000＝像素/秒，
++                //   上限 mMaxFlingVelocity 钳制。取负号做方向换算：getX/YVelocity
++                //   返回的是手指速度（屏幕系，y 向下为正），本类 MOVE 分支的
++                //   dy = mLastTouchY - y 以"手指上滑为正"驱动滚动，故手指上滑
++                //   （getYVelocity 为负）取负后为正、沿正向续滚。速度过阈值交给
++                //   fling() 起 ViewFlinger 惯性，否则归静止。
+                 mVelocityTracker.addMovement(vtev);
+                 eventAddedToVelocityTracker = true;
+                 mVelocityTracker.computeCurrentVelocity(1000, mMaxFlingVelocity);
+@@ -3181,6 +3201,9 @@ public class RecyclerView extends ViewGroup implements ScrollingView, NestedScro
+             } break;
+         }
+ 
++        // 【数据流】测速入口之二（触摸主路径兜底）：DOWN/MOVE 等未在分支里
++        //   登记的事件在此统一 addMovement——UP 分支已登记时跳过；
++        //   拖拽态下父容器不再调 onInterceptTouchEvent，MOVE 样本全靠此行续喂。
+         if (!eventAddedToVelocityTracker) {
+             mVelocityTracker.addMovement(vtev);
+         }
+diff --git a/frameworks/base/core/jni/android_view_InputEventReceiver.cpp b/frameworks/base/core/jni/android_view_InputEventReceiver.cpp
+index 8ec72455c..a74be85f0 100644
+--- a/frameworks/base/core/jni/android_view_InputEventReceiver.cpp
++++ b/frameworks/base/core/jni/android_view_InputEventReceiver.cpp
+@@ -111,6 +111,11 @@ private:
+     jobject mReceiverWeakGlobal;
+     InputConsumer mInputConsumer;
+     sp<MessageQueue> mMessageQueue;
++    // 【关键细节】预分配事件工厂：consumeEvents 循环里每次
++    //   mInputConsumer.consume(&mInputEventFactory,…) 产出 KeyEvent/MotionEvent
++    //   都复用这份预分配对象（PreallocatedInputEventFactory），再由
++    //   android_view_MotionEvent_obtainAsCopy 拷成 Java 对象——避免高频
++    //   MOVE 事件反复堆分配 native 侧容器。
+     PreallocatedInputEventFactory mInputEventFactory;
+     bool mBatchedInputEventPending;
+     int mFdEvents;
+@@ -194,6 +199,10 @@ status_t NativeInputEventReceiver::reportTimeline(int32_t inputEventId, nsecs_t
+ }
+ 
+ //【线程模型】监听事件集切换：可暂停派发。
++//【核心流程】fd 监听登记/注销：把 InputChannel 的 fd 以回调对象 this
++//   （LooperCallback）注册进主线程 Looper——socket 可读即在本线程触发
++//   handleEvent；注册发生在 initialize()（nativeInit 链内），
++//   事件到达→Looper epoll→handleEvent 的唤醒路径由此建立。
+ void NativeInputEventReceiver::setFdEvents(int events) {
+     if (mFdEvents != events) {
+         mFdEvents = events;
+@@ -223,7 +232,10 @@ void NativeInputEventReceiver::setFdEvents(int events) {
+  * InputPublisher. If no events are remaining, let the looper know so that it doesn't wake up
+  * unnecessarily.
+  */
+-//【核心流程】出站事件处理：批合并、派发 Java、等待 finish 确认。
++//【核心流程】出站队列冲刷：把 mOutboundQueue 里的 Finish/Timeline 逐条经
++//   InputConsumer::sendFinishedSignal/sendTimeline 写回 socket；对端忙
++//   （WOULD_BLOCK）则改挂 OUTPUT 监听稍后再发——本函数不做事件消费与
++//   Java 回调，入队动作分别在 finishInputEvent/reportTimeline。
+ status_t NativeInputEventReceiver::processOutboundEvents() {
+     while (!mOutboundQueue.empty()) {
+         OutboundEvent& outbound = *mOutboundQueue.begin();
+
+# 自检输出（剥离中文行/注释行/空行后与精树逐字节比较）
+OK(零代码漂移) frameworks/base/core/java/android/view/InputEventReceiver.java
+OK(零代码漂移) frameworks/base/core/java/android/view/ViewRootImpl.java
+OK(零代码漂移) frameworks/base/core/java/com/android/internal/widget/RecyclerView.java
+OK(零代码漂移) frameworks/base/core/java/android/view/VelocityTracker.java
+OK(零代码漂移) frameworks/base/core/jni/android_view_InputEventReceiver.cpp

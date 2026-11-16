@@ -1,0 +1,270 @@
+# 批11 批注 diff 存档（study 树，git diff 未提交状态，2026-11-14）
+# 本批触碰 8 文件：修正 5 处批注文本（BLASTBufferQueue.cpp/BLASTBufferQueue.java/Surface.java 总览+copyFrom/Surface.cpp queueBuffer）＋新增 15 块纯插入
+# git diff 中的其他文件改动为批02~批10 未提交遗留，与本批无关（本批只读不提交）
+
+diff --git a/frameworks/base/core/java/android/view/Surface.java b/frameworks/base/core/java/android/view/Surface.java
+index af0d3cee5..4fec3a10c 100644
+--- a/frameworks/base/core/java/android/view/Surface.java
++++ b/frameworks/base/core/java/android/view/Surface.java
+@@ -66,7 +66,9 @@ import java.lang.annotation.RetentionPolicy;
+ //    lockHardwareCanvas 走硬件画布，内部是 RenderNode+HardwareRenderer 组成的微型管线；
+ //    View 系统的整窗路径由 ThreadedRenderer 托管，不走这两个入口；
+ // 2. 提交两式：经典队列走 copyFrom(SurfaceControl) 直挂 BufferQueue，
+-//    BLAST 走 copyFrom(BLASTBufferQueue)，应用侧攒批、由 BLASTSyncEngine 协调原子上屏；
++//    BLAST 走 copyFrom(BLASTBufferQueue)（SurfaceView.java:1143 换绑），应用侧攒批后
++//    Transaction.apply 直投 SurfaceFlinger——【批11 勘误】常规逐帧提交不经 BLASTSyncEngine，
++//    该引擎只在 WMS 同步场景（RELAYOUT_RES_BLAST_SYNC/transition 等）协调合帧；
+ // 3. mNativeObject 是唯一真源，release/transferFrom/copyFrom 都在换它；
+ //    isValid 为 false 后一切绘制入口都会被 checkNotReleasedLocked 拦下。
+ public class Surface implements Parcelable {
+@@ -725,9 +727,13 @@ public class Surface implements Parcelable {
+      * @param queue {@link BLASTBufferQueue} to copy from.
+      * @hide
+      */
+-    // 【数据流】取批处理队列的生产端挂到本面，
+-    // 应用侧攒批提交、由同步引擎协调原子上屏，
+-    // 替代逐帧直投合成器。
++    // 【数据流】取批处理队列的生产端挂到本面。
++    // 【批11 勘误】原稿"由同步引擎协调原子上屏、替代逐帧直投合成器"不成立：换绑本身只是
++    // 更新 native 指针指向 BBQ 的 IGP；提交是每帧 Transaction.apply 直投 SurfaceFlinger
++    // （one-way binder），不经"同步引擎"——BLASTSyncEngine（WMS 侧）只在 relayout 同步/
++    // 转场等场景参与。调用方两处形态不同：SurfaceView.java:1143 用本方法 copyFrom；
++    // ViewRootImpl.updateBlastSurfaceIfNeeded 用 transferFrom（防 generationId 抖动导致
++    // EGL 资源重建，见 ViewRootImpl.java:2196-2199 注释）。
+     public void copyFrom(BLASTBufferQueue queue) {
+         if (queue == null) {
+             throw new IllegalArgumentException("queue must not be null");
+diff --git a/frameworks/base/graphics/java/android/graphics/BLASTBufferQueue.java b/frameworks/base/graphics/java/android/graphics/BLASTBufferQueue.java
+index 61cc5c222..19f9656ce 100644
+--- a/frameworks/base/graphics/java/android/graphics/BLASTBufferQueue.java
++++ b/frameworks/base/graphics/java/android/graphics/BLASTBufferQueue.java
+@@ -24,8 +24,10 @@ import java.util.function.Consumer;
+ /**
+  * @hide
+  */
+-    // BLAST 缓冲队列：应用侧持有缓冲队列、自行合成事务再一次性提交给 WMS，
+-    // 替代逐帧跨进程阻塞的旧通道；支持事务同步与多帧攒批。
++    // BLAST 缓冲队列：应用侧持有缓冲队列、自行合成事务再一次性提交给 SurfaceFlinger，
++    // （Transaction.apply 经 ISurfaceComposer.setTransactionState 进 SF，不经 WMS——
++    //  【批11 勘误】原稿写"提交给 WMS"，实际接收方是 SF，WMS 只在同步场景经
++    //  BLASTSyncEngine 另行攒事务）；替代逐帧跨进程阻塞的旧通道；支持事务同步与多帧攒批。
+ public final class BLASTBufferQueue {
+     // Note: This field is accessed by native code.
+     public long mNativeObject; // BLASTBufferQueue*
+@@ -159,6 +161,10 @@ public final class BLASTBufferQueue {
+      * is available.
+      */
+     // 【状态管理】把下一笔事务并进调用方给的事务。
++    // 【批11 注】native 对端为 BLASTBufferQueue::mergeWithNextTransaction（C++ 同名函数）：
++    // 目标帧号已取过即直接 apply，否则挂 mPendingTransactions 等那一帧的 buffer 提交时
++    // 经 mergePendingTransactions 并入同笔事务——ViewRootImpl.prepareSurfaces 的 bounds
++    // layer 裁剪即走此口（ViewRootImpl.java:2230 mergeWithNextTransaction）。
+     public void mergeWithNextTransaction(SurfaceControl.Transaction t, long frameNumber) {
+         nativeMergeWithNextTransaction(mNativeObject, t.mNativeObject, frameNumber);
+     }
+diff --git a/frameworks/base/services/core/java/com/android/server/wm/BLASTSyncEngine.java b/frameworks/base/services/core/java/com/android/server/wm/BLASTSyncEngine.java
+index 106aac149..9b5406535 100644
+--- a/frameworks/base/services/core/java/com/android/server/wm/BLASTSyncEngine.java
++++ b/frameworks/base/services/core/java/com/android/server/wm/BLASTSyncEngine.java
+@@ -241,6 +241,10 @@ class BLASTSyncEngine {
+             };
+             CommitCallback callback = new CommitCallback();
+             merged.addTransactionCommittedListener((r) -> { r.run(); }, callback::onCommitted);
++            // 【批11 注·机制⑤】合并语义的时限：合并事务交 listener 应用后，若 committed 回执
++            // 不来，BLAST_TIMEOUT_DURATION（WindowState.java:797，值 5000 ms）后强制清算并
++            // 打 "Application ANR likely to follow"——引擎等待的是"应用把缓冲画进这笔事务"
++            // 的回执，超时即把应用侧 ANR 判定推给调用方。
+             mWm.mH.postDelayed(callback, BLAST_TIMEOUT_DURATION);
+ 
+             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "onTransactionReady");
+diff --git a/frameworks/native/libs/gui/BLASTBufferQueue.cpp b/frameworks/native/libs/gui/BLASTBufferQueue.cpp
+index ca40ffd80..769e4cf3d 100644
+--- a/frameworks/native/libs/gui/BLASTBufferQueue.cpp
++++ b/frameworks/native/libs/gui/BLASTBufferQueue.cpp
+@@ -157,7 +157,11 @@ void BLASTBufferItemConsumer::onSidebandStreamChanged() {
+ // BLAST = BLASTBufferQueue：在应用进程内持一套自有 BufferQueue，
+ // 把出队、绘制、入队攒成完整事务，经 SurfaceFlinger 的 Transaction 原子上屏，
+ // 替代经典队列的双缓冲抵一项节奏，跳帧权与提交时机移到应用侧。
+-// 内部一条处理线程串行化回调；BBQSurface 子类把生产端包装成 Surface 供渲染器使用。
++// 【批11 勘误】本类无内部处理线程：onFrameAvailable 由 BufferQueueProducer::queueBuffer
++// 的回调段在调用方线程同步直调（RT 线程，trace 实测该 slice 嵌套在 queueBuffer 内），
++// 串行化靠 mMutex 与生产端回调票据（mNextCallbackTicket）；唯一的常驻线程是
++// AsyncWorker（进程级单例，只服务 ProducerListener 回调）。BBQSurface 子类把生产端包装成
++// Surface 供渲染器使用。
+ BLASTBufferQueue::BLASTBufferQueue(const std::string& name, bool updateDestinationFrame)
+       : mSurfaceControl(nullptr),
+         mSize(1, 1),
+@@ -327,6 +331,11 @@ void BLASTBufferQueue::transactionCommittedCallback(nsecs_t /*latchTime*/,
+                 // case, we don't actually want to flush the frames in between since they will get
+                 // processed and merged with the sync transaction and released earlier than if they
+                 // were sent to SF
++                // 【批11 注】同步链的解锁点：mSyncedFrameNumbers 记"已并入同步事务、等待
++                // committed 回执"的帧号集合，本回调每清一帧，集合清空且无新同步挂起时
++                // flushShadowQueue 把暂存帧逐个 acquire 提交。这是 WMS 同步场景
++                // （RELAYOUT_RES_BLAST_SYNC 等）在客户端侧的半边；引擎本体在
++                // frameworks/base services 侧 BLASTSyncEngine.java（SyncGroup 合并语义）。
+                 mSyncedFrameNumbers.erase(currFrameNumber);
+                 if (mSyncedFrameNumbers.empty() && mSyncTransaction == nullptr) {
+                     flushShadowQueue();
+@@ -491,6 +500,11 @@ void BLASTBufferQueue::releaseBufferCallbackLocked(
+         }
+     }
+ 
++    // 【批11 注·trace 配对】两条 BLAST 计数轨的产生点（本机新样本均可见）：
++    // "PendingRelease"——已收到归还回调尚未还进队列的缓冲数（fakeRelease 也计入）；
++    // mQueuedBufferTrace（名形如 "QueuedBuffer - VRI[AppListActivity]#8BLAST#8"）——
++    // 在途缓冲读数 = mNumFrameAvailable + mNumAcquired − mPendingRelease.size()，
++    // onFrameAvailable 侧（约 :749）与这里各打一次。
+     ATRACE_INT("PendingRelease", mPendingRelease.size());
+     ATRACE_INT(mQueuedBufferTrace.c_str(),
+                mNumFrameAvailable + mNumAcquired - mPendingRelease.size());
+@@ -716,6 +730,12 @@ void BLASTBufferQueue::flushAndWaitForFreeBuffer(std::unique_lock<std::mutex>& l
+ // 只递增 mNumFrameAvailable 并在合适时机转入 acquireNextBufferLocked；
+ // 处于事务同步期（syncNextTransaction 设了 mTransactionReadyCallback）时，
+ // 帧先并入 mSyncTransaction 暂存而非立刻提交，保证与宿主事务同帧生效。
++// 【批11 注·机制②】"同进程直调"有本机 trace 直证：onFrameAvailable slice
++// （BBQ_TRACE 产物，名形如 "onFrameAvailable - VRI[AppListActivity]#8(f:0,a:N)"，
++// f=mNumFrameAvailable、a=mNumAcquired 为进入时快照）嵌套在 RenderThread 的
++// queueBuffer slice 内——应用 queueBuffer 到组装完 Transaction 全程一线程（RT），
++// 到 SF 的跨进程只有末尾 Transaction.apply 的 one-way binder 一站。
++// trace 另证 (f:0,a:N) 的 N 在 1/2/3 间摆动：在途缓冲数即背压闸门的实时读数。
+ void BLASTBufferQueue::onFrameAvailable(const BufferItem& item) {
+     std::function<void(SurfaceComposerClient::Transaction*)> prevCallback = nullptr;
+     SurfaceComposerClient::Transaction* prevTransaction = nullptr;
+@@ -876,6 +896,12 @@ bool BLASTBufferQueue::rejectBuffer(const BufferItem& item) {
+ // Consumer can acquire an additional buffer if that buffer is not droppable. Set
+ // includeExtraAcquire is true to include this buffer to the count. Since this depends on the state
+ // of the buffer, the next acquire may return with NO_BUFFER_AVAILABLE.
++// 【批11 注·机制③】BLAST 的 acquire 闸门：上限 = mMaxAcquiredBuffers（构造时向 SF 查询，
++// 公式 SurfaceFlinger::calculateMaxAcquiredBufferCount = max(1, ceil((app+sf 工作时长)/vsync 周期)−1)）
++// 加一；includeExtraAcquire（无外挂事务的常态调用）再加一，给"先取新再还旧"留一帧窗口。
++// 与 setMaxDequeuedBufferCount(2) 合起来，在途深度为 3~4 帧；触顶后 acquireNextBufferLocked
++// 直接返回，等 releaseBufferCallback 归还缓冲后重入——卡顿形态上表现为 buffer 在途满
++// 而非 dequeue 报错。
+ bool BLASTBufferQueue::maxBuffersAcquired(bool includeExtraAcquire) const {
+     int maxAcquiredBuffers = mMaxAcquiredBuffers + (includeExtraAcquire ? 2 : 1);
+     return mNumAcquired >= maxAcquiredBuffers;
+@@ -988,6 +1014,11 @@ void BLASTBufferQueue::applyPendingTransactions(uint64_t frameNumber) {
+     t.setApplyToken(mApplyToken).apply(false, true);
+ }
+ 
++// 【批11 注·机制⑤承接】mPendingTransactions 是按帧号挂账的"待并事务"（mergeWithNextTransaction
++// 放入，典型来源 ViewRootImpl.prepareSurfaces 把 bounds layer 裁剪并入下一帧）：目标帧号
++// ≤ 当前提交帧号才并入本笔 t，否则留在账上等后续帧。A13 精树无 native 侧 BLASTSyncEngine
++// （全树 grep 仅 winscope 文档与构建产物命中），WMS 侧引擎为 services 的
++// BLASTSyncEngine.java；本函数是客户端侧的帧号对账合并。
+ void BLASTBufferQueue::mergePendingTransactions(SurfaceComposerClient::Transaction* t,
+                                                 uint64_t frameNumber) {
+     auto mergeTransaction =
+diff --git a/frameworks/native/libs/gui/BufferQueueConsumer.cpp b/frameworks/native/libs/gui/BufferQueueConsumer.cpp
+index e9bb8562d..60c4e17dc 100644
+--- a/frameworks/native/libs/gui/BufferQueueConsumer.cpp
++++ b/frameworks/native/libs/gui/BufferQueueConsumer.cpp
+@@ -317,8 +317,12 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
+         // We might have freed a slot while dropping old buffers, or the producer
+         // may be blocked waiting for the number of buffers in the queue to
+         // decrease.
++        // 【批11 注】这里就是 dequeue 等待者的唤醒点之一：erase 即队列深度下降，
++        // notify_all 放行 waitForFreeSlotThenRelock 里的 mDequeueCondition.wait。
+         mCore->mDequeueCondition.notify_all();
+ 
++        // 【批11 注·trace 配对】队列深度计数的出队侧产生点：BLAST acquire 使计数回 0
++        // （本机新样本帧 396 实测 rel 6,844,389,265 由 1 翻 0）。
+         ATRACE_INT(mCore->mConsumerName.string(),
+                 static_cast<int32_t>(mCore->mQueue.size()));
+ #ifndef NO_BINDER
+diff --git a/frameworks/native/libs/gui/BufferQueueProducer.cpp b/frameworks/native/libs/gui/BufferQueueProducer.cpp
+index 51c14ddea..8bfbf90cc 100644
+--- a/frameworks/native/libs/gui/BufferQueueProducer.cpp
++++ b/frameworks/native/libs/gui/BufferQueueProducer.cpp
+@@ -307,6 +307,11 @@ status_t BufferQueueProducer::waitForFreeSlotThenRelock(FreeSlotCaller caller,
+         // Producers are not allowed to dequeue more than
+         // mMaxDequeuedBufferCount buffers.
+         // This check is only done if a buffer has already been queued
++        // 【批11 注·机制①】dequeue 的背压第一道闸是报错不是等待：在手（未 queue）缓冲数
++        // 达 mMaxDequeuedBufferCount 后再取返回 INVALID_OPERATION，调用线程不入眠。
++        // BLAST 构造把该上限设为 2（BLASTBufferQueue.cpp setMaxDequeuedBufferCount(2)），
++        // 故本进程 RenderThread 同一时刻至多攥 2 个 DEQUEUED 槽，第三帧必先 queue 或 cancel。
++        // 真正的"睡等"只发生在下面无槽/队列积压分支（mDequeueCondition）。
+         if (mCore->mBufferHasBeenQueued &&
+                 dequeuedCount >= mCore->mMaxDequeuedBufferCount) {
+             // Supress error logs when timeout is non-negative.
+@@ -389,6 +394,12 @@ status_t BufferQueueProducer::waitForFreeSlotThenRelock(FreeSlotCaller caller,
+                     return TIMED_OUT;
+                 }
+             } else {
++                // 【批11 注·机制①】dequeue 阻塞问答：谁在等——queueBuffer 的调用线程
++                // （BLAST 路径即 RenderThread）；等什么——消费端归还槽位或队列深度下降。
++                // 唤醒点两处：BufferQueueConsumer::releaseBuffer 归还槽回 mFreeBuffers 后
++                // notify_all（ACQUIRED→FREE，槽号循环的闭环点），以及 queueBuffer
++                // notify_all（可丢帧覆盖使 mQueue 不再超限）。BLAST 构造设
++                // setDequeueTimeout(INT64_MAX) 走 wait_for 分支，语义为"队满就睡、绝不失败"。
+                 mCore->mDequeueCondition.wait(lock);
+             }
+         }
+@@ -1052,6 +1063,10 @@ status_t BufferQueueProducer::queueBuffer(int slot,
+         output->numPendingBuffers = static_cast<uint32_t>(mCore->mQueue.size());
+         output->nextFrameNumber = mCore->mFrameCounter + 1;
+ 
++        // 【批11 注·trace 配对】队列深度计数的入队侧产生点：计数轨名即消费者名
++        // （BLAST 队列形如 "VRI[AppListActivity]#8(BLAST Consumer)8"）。本机新样本实测：
++        // 该轨在 queueBuffer 锁内由 0 翻 1（帧 396 于 rel 6,844,237,957），
++        // BLAST acquire 后由 BufferQueueConsumer::acquireBuffer 同名打点翻回 0。
+         ATRACE_INT(mCore->mConsumerName.string(),
+                 static_cast<int32_t>(mCore->mQueue.size()));
+ #ifndef NO_BINDER
+diff --git a/frameworks/native/libs/gui/Surface.cpp b/frameworks/native/libs/gui/Surface.cpp
+index ec32843ec..d7d367bb3 100644
+--- a/frameworks/native/libs/gui/Surface.cpp
++++ b/frameworks/native/libs/gui/Surface.cpp
+@@ -662,6 +662,9 @@ void Surface::getDequeueBufferInputLocked(
+ //     否则复用本地缓存——槽号不变、指针不换，是缓冲复用省分配的客户端侧体现；
+ //   3.fence 转 fenceFd 交给调用方（EGL 框架等它信号）；槽号记入 mDequeuedSlots。
+ // 出参 buffer 是裸指针（android_native_buffer_t*），生命周期由 mSlots 镜像表的 sp 托管。
++// 【批11 注·trace 配对】本函数 ATRACE_CALL 与 BufferQueueProducer::dequeueBuffer 的
++// ATRACE_CALL 同名，trace 里每帧成对出现（外层 Surface、内层 Producer）——本机新样本
++// RenderThread 上 1016 条 dequeueBuffer = 508 帧 × 两层；queueBuffer 同理（1014 = 507×2）。
+ int Surface::dequeueBuffer(android_native_buffer_t** buffer, int* fenceFd) {
+     ATRACE_CALL();
+     ALOGV("Surface::dequeueBuffer");
+@@ -722,6 +725,11 @@ int Surface::dequeueBuffer(android_native_buffer_t** buffer, int* fenceFd) {
+     ALOGE_IF(fence == nullptr, "Surface::dequeueBuffer: received null Fence! buf=%d", buf);
+ 
+     if (CC_UNLIKELY(atrace_is_tag_enabled(ATRACE_TAG_GRAPHICS))) {
++        // 【批11 注·fence 链】dequeue 拿到的 release fence 是"SF/显示读完上一任"的承诺，
++        // 交给专职监视线程（FenceMonitor，线程名 "HWC release"）排队等信号；fence 已信号时
++        // 直接打 "HWC release fence <序号> has signaled" slice（本机新样本 507 条，例：
++        // 帧 396 的 dequeue 取回 fence 于 rel 6,842,683,726 打点已信号——未阻塞 RT）。
++        // queueBuffer 侧对称有 "GPU completion" 监视线程登记 acquire fence。
+         static FenceMonitor hwcReleaseThread("HWC release");
+         hwcReleaseThread.queueFence(fence);
+     }
+@@ -1194,8 +1202,11 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
+ 
+ // 【核心流程】交卷入口：由 ANativeWindow 钩子转发进来。本地锁内把 fence fd 经 dupe 打包，
+ // 装进 QueueBufferInput 跨进程传递，调 IGBP::queueBuffer 完成状态翻转与入队；
+-// onBufferQueuedLocked 里登记释放回调、记录耗时指标。与 dequeueBuffer 不同，这里不释放本地锁，
+-// 因为 queueBuffer 不长阻塞（消费者通知是异步回调），保持锁可让槽表操作天然互斥。
++// onBufferQueuedLocked 里登记释放回调、记录耗时指标。与 dequeueBuffer 不同，这里不释放本地锁：
++// dequeue 可能撞上 gralloc 分配级长阻塞故先释锁，queueBuffer 的入队段无分配；
++// 【批11 勘误】BLAST 路径下消费端通知不是异步：onFrameAvailable→acquire→apply
++// 在调用方线程同步执行（本进程直调，本机 trace 实测该段嵌套于 queueBuffer slice 内约 0.5ms），
++// 长阻塞的最坏情形是回调票据等待与 BLAST 同步链，而非"异步回调"。
+ int Surface::queueBuffer(android_native_buffer_t* buffer, int fenceFd) {
+     ATRACE_CALL();
+     ALOGV("Surface::queueBuffer");
+diff --git a/frameworks/native/libs/gui/SurfaceComposerClient.cpp b/frameworks/native/libs/gui/SurfaceComposerClient.cpp
+index 546e17c7c..2dde29dbd 100644
+--- a/frameworks/native/libs/gui/SurfaceComposerClient.cpp
++++ b/frameworks/native/libs/gui/SurfaceComposerClient.cpp
+@@ -1091,6 +1091,10 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
+ 
+     displayStates = std::move(mDisplayStates);
+ 
++    // 【批11 注·机制③】BLAST 的常规帧提交走 apply(false, true)（同步参 false、单向参 true）：
++    // eOneWay 入旗后 setTransactionState 是 one-way binder，调用线程不等 SF 处理即返回；
++    // eSynchronous 与 eOneWay 同设时按安全语义强制同步（见下方告警）。BLAST 独占的
++    // mApplyToken 让 SF 能按 token 区分帧提交方；此处之后的 SF 侧入队与放行见批12。
+     if (mForceSynchronous) {
+         flags |= ISurfaceComposer::eSynchronous;
+     }
