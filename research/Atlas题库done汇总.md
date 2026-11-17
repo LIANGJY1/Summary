@@ -133,7 +133,7 @@ SELinux（Security-Enhanced Linux，安全增强型 Linux）是 Android 基于 L
 
 每个字段的拼装者分三层：libselinux 的 `avc_audit` 拼模板与上下文段，servicemanager 注册的审计回调拼业务字段，logcat 行首的 tag 与 pid 来自写入进程自身。
 
-### 01-android/07-内存与存储/05-分区与挂载.md（12 题）
+### 01-android/08-内存与存储/05-分区与挂载.md（12 题）
 
 **Q1：Android 分区是什么，如何理解？**
 
@@ -183,7 +183,7 @@ Android 中讨论分区校验时，verity 通常指 **dm-verity**。其中 dm �
 
 需要建立跨时间的设备和文件证据链，不能只比较 /mnt/scratch 路径或 dm 编号。记录每次启动的 boot ID、slot、mountinfo、设备映射和动态分区信息，再比较 upper 文件清单与哈希；任一后端重建、路径变化或采集权限不足都可能改变判断。
 
-### 01-android/05-graphics/01-渲染管线与VSync.md（2 题）
+### 01-android/06-graphics/01-渲染管线与VSync.md（2 题）
 
 **Q1：屏幕显示一帧的全流程？**
 
@@ -193,7 +193,7 @@ Android 中讨论分区校验时，verity 通常指 **dm-verity**。其中 dm �
 
 以 Android 13 普通 View 窗口为例，**硬件渲染由 CPU 上的线程组织绘制，再交 GPU 参与生成像素；软件渲染由 CPU 直接计算像素**。两者都会生成窗口 buffer，交给 SurfaceFlinger 合成。
 
-### 01-android/05-graphics/02-GPU合成与显示.md（2 题）
+### 01-android/06-graphics/02-GPU合成与显示.md（2 题）
 
 **Q1：设置窗口顶部透明时，为什么看到桌面不代表设置窗口的 buffer 包含桌面像素？**
 
@@ -203,7 +203,7 @@ Android 中讨论分区校验时，verity 通常指 **dm-verity**。其中 dm �
 
 WMS 判断 Activity 的目标可见性，SurfaceFlinger 判断当前输出中各图层实际可贡献的区域。前者可在转场动画前决定隐藏下层，后者仍会按每帧图层状态处理。
 
-### 01-android/13-performance/01-应用/06-图片加载/01-格式与体积.md（7 题）
+### 01-android/14-performance/01-应用/06-图片加载/01-格式与体积.md（7 题）
 
 **Q1：位图是什么？**
 
@@ -233,7 +233,7 @@ JPEG、PNG、GIF 按像素表示画面。SVG 用路径和形状描述画面，�
 
 降低 JPEG 质量通常会减小文件并损失细节，但不会改变解码输出尺寸。相同宽高和像素配置下，Bitmap 像素内存基本相同：
 
-### 01-android/13-performance/01-应用/06-图片加载/02-解码与内存.md（6 题）
+### 01-android/14-performance/01-应用/06-图片加载/02-解码与内存.md（6 题）
 
 **Q1：压缩文件很小，为什么解码后仍可能占大量内存？**
 
@@ -259,13 +259,13 @@ Android 11 的 BitmapFactory.decodeStream 默认使用约 16 KiB 临时缓冲。
 
 Android 8.0（API 26）起，普通软件 Bitmap 的 Java 包装对象在 Java 堆，像素缓冲在 Native Heap。这样可避免大块像素数据占用 Java 堆，但只是改变内存归属，进程总内存仍会增加。
 
-### 01-android/11-构建系统/02-Soong模块.md（1 题）
+### 01-android/12-构建系统/02-Soong模块.md（1 题）
 
 **Q1：[tags:Soong] AAOS 构建中的 Soong 和 Soong 模块分别是什么？**
 
 **Soong 是 Android 的构建系统之一。Soong 模块是它构建图中的基本单元。** `Android.bp` 声明模块，Soong 读取声明并解析依赖与构建变体，生成 Ninja 构建规则。Ninja 再执行具体的编译、链接等命令。
 
-### 01-android/11-构建系统/03-可执行文件.md（5 题）
+### 01-android/12-构建系统/03-可执行文件.md（5 题）
 
 **Q1：静态链接与动态链接有什么区别？**
 
@@ -287,13 +287,13 @@ ELF（Executable and Linkable Format，可执行与可链接格式）是 Linux �
 
 这里的“本机可执行文件”指可由 Linux 内核按 `exec` 机制启动的本机程序，Android 平台二进制常见为 ELF。普通进程通常通过 `execve` 或 `execveat` 请求内核装载。启动时内核也可用内部的 `kernel_execve` 启动 `/init`。APK 是应用包，不是本机可执行映像。系统创建或复用应用进程后，由 ART 加载并执行其中的 DEX。共享库虽常为 ELF，仍需动态链接器加载，不能独立启动。…
 
-### 01-android/10-原生层/01-内核与GKI.md（1 题）
+### 01-android/11-原生层/01-内核与GKI.md（1 题）
 
 **Q2：ramdisk、initramfs 和 rootfs 都是什么？内核启动为什么需要它？**
 
 ramdisk 是启动时提供给内核的一份最小文件归档。内核将它展开为初始根文件系统（rootfs），再从中启动 `/init`。它解决了系统分区尚未挂载、但挂载所需程序和配置又必须先运行的依赖问题。
 
-### 01-android/10-原生层/02-驱动运行时.md（1 题）
+### 01-android/11-原生层/02-驱动运行时.md（1 题）
 
 **Q1：应用开发中，常说的串口是什么，与 USB 传输有什么区别，通常用在什么场景？**
 

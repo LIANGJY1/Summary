@@ -1,6 +1,6 @@
 # Java 并发与 Stream
 
-> Java 并发与流式处理知识。并发结论以 Java Memory Model 和 `java.util.concurrent` 契约为边界。JDK 8+ 为基线，虚拟线程自 JDK 21 成为正式特性。Android 主线程模型与 Handler 归 `01-android/02-应用框架/02-Handler消息机制.md`。
+> Java 并发与流式处理知识。并发结论以 Java Memory Model 和 `java.util.concurrent` 契约为边界。JDK 8+ 为基线，虚拟线程自 JDK 21 成为正式特性。Android 主线程模型与 Handler 归 `01-android/03-应用框架/02-Handler消息机制.md`。
 
 **Q1: [learning] volatile 能保证线程看到最新值吗？它能让 i++ 变成原子操作吗？**
 

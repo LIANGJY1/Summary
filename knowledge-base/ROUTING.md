@@ -4,9 +4,9 @@
 
 ## 路由表
 
-1. **Android 与 AAOS：**Android 应用、Framework、系统服务、Native、HAL、构建、性能及车载集成进入 [01-android/](01-android)。进入后按该目录 README 的章节边界选择主题册。
+1. **Android 与 AAOS：**Android 应用、Framework、系统服务、Native、HAL、构建、性能及车载集成进入 [01-android/](01-android)。Android 系统启动链、启动配置与诊断进入 [02-系统启动/](01-android/02-系统启动/README.md)；应用启动、通用 Linux 启动分别按各自主题归档。进入后按该目录 README 的章节边界选择主题册。
 2. **操作系统：**平台无关的文件系统、内存、进程、虚拟化、Linux 启动与内核构建进入 [02-os/](02-os)。Android 的具体实现仍进入 `01-android/`。
-3. **网络协议：**平台无关的分层、DNS、TLS、TCP/IP、NAT 等进入 [03-network/](03-network)。Android 网络栈与车载网络实现进入 `01-android/08-network/`。
+3. **网络协议：**平台无关的分层、DNS、TLS、TCP/IP、NAT 等进入 [03-network/](03-network)。Android 网络栈与车载网络实现进入 `01-android/09-network/`。
 4. **编程语言：**语言语法、类型系统、集合、并发、反射与标准库进入 [04-language/](04-language)，再按该目录 README 分发到具体语言。
 5. **设计：**语言和平台无关的设计模式与设计原则进入 [05-design/](05-design)。平台专属设计进入对应平台主题册。
 6. **测试：**跨平台测试概念、策略与方法进入 [06-testing/](06-testing)。Android 专属测试机制进入 `01-android/` 的对应主题册。

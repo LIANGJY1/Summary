@@ -151,7 +151,7 @@ Android 支持该调试机制的设备可以在只读系统分区之上叠加可
 
     1. 为容器/chroot 补齐 /proc、/dev 等入口。
     2. 把只读位置以只读标志重新暴露。
-    3. Android 开发期的 adb remount 也用 bind/overlay 组合在只读分区上提供可写视图（平台细节归 `../../01-android/11-构建系统/01-产品配置.md` 相邻主题）。
+    3. Android 开发期的 adb remount 也用 bind/overlay 组合在只读分区上提供可写视图（平台细节归 `../../01-android/12-构建系统/01-产品配置.md` 相邻主题）。
 3. **边界**：bind mount 的复制是挂载动作而非数据拷贝。移动（rename）挂载点下的内容与普通文件操作相同。
 
 **Q8: [learning] mount namespace 是什么？它如何让不同进程看到不同的挂载布局？**
