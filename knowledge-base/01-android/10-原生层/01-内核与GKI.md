@@ -2,15 +2,20 @@
 
 > 学习资料（文章模式沉淀）。边界：本文回答 Android 公共内核（ACK）、GKI 与 KMI、内核版本兼容、厂商模块、vendor hooks 和 Android 内核运行时特征；通用 Linux 进程与启动、initramfs/QEMU 控制台及归档操作归 `02-os/`；Binder 驱动和共享内存分别见 `03-Binder驱动.md`、`04-共享内存.md`，内核构建归 `11-构建系统/`。逐题标注证据核对状态。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] Android 公共内核是什么？量产设备都会使用吗？厂商会修改什么、为什么？**
+**Q1: [done] Android 内核、ACK 和 GKI 是什么，厂商如何适配设备？**
 
-公共内核指 Android Common Kernel（ACK）——Google 基于上游 Linux 内核（通常选 LTS 分支）维护、包含 Android 所需驱动与特性（Binder 驱动、PSI 等）的公共内核分支。GKI（Generic Kernel Image，通用内核镜像）项目进一步把它变成“Google 统一构建的核心内核镜像 + 厂商可加载模块”的形态。量产设备不是原样照搬：核心镜像来自 ACK/GKI，厂商在之上叠加自己的部分。
+Android 公共内核（ACK，Android Common Kernel）是包含通用功能和部分驱动的内核源码。为了让不同硬件设备复用内核，Google 基于 ACK 构建 GKI 通用内核（Generic Kernel Image，通用内核镜像），将设备专属的硬件支持主要放到厂商模块中，并通过内核模块接口（KMI）连接两者。这样，兼容的设备可以使用同一个 GKI 内核，厂商通常不必为每台设备修改通用内核，但仍需开发或适配驱动、设备树和配置，并完成设备验证。
 
-1. **谁在用**：Android 12 起新发布的设备按 GKI 2.0 形态出货（核心内核 5.10 起）。存量升级设备可能仍运行厂商旧内核，所以“量产设备都会使用”只对新发布设备成立。
-2. **厂商改什么**：SoC/板级硬件驱动以厂商模块形式加载（装在 vendor_boot/vendor_dlkm 等分区）、设备树与产品配置、电源/温控/调度策略调优（经 ACK 预留的 vendor hooks 挂回调）。核心内核镜像本身不打厂商补丁。
-3. **为什么**：内核碎片化曾让同一版本 Android 背着几十种内核 fork，安全补丁与上游更新无法统一下发。GKI 把硬件代码移出核心镜像、用稳定的内核模块接口（KMI）解耦，使核心内核可以独立更新而厂商模块不动。
+以使用不同芯片的设备 A 和 B 为例：
 
-排查边界：公共内核源码标签（如 ACK `android17-6.18-2026-06_r6`）只能核对平台通用机制。具体设备的驱动、配置与调度策略要看设备自己的内核提交版本与 fragment，不能拿公共内核源码当设备内核源码用。
+1. **ACK 提供源码**：Google 基于 Linux 长期支持分支加入 Android 特性，维护公共内核源码。它不一定包含 A、B 各自所需的全部硬件支持。
+2. **GKI 提供通用内核**：Google 从 ACK 构建内核。A 和 B 满足架构、内核分支等兼容条件时，可以使用同一通用内核，再分别搭配各自的厂商模块。
+3. **厂商模块适配硬件**：厂商提供驱动模块、设备树和产品配置，并完成集成与验证。模块可放在 `vendor_boot`、`vendor_dlkm` 等分区，也可通过已有的 vendor hooks（厂商钩子）扩展调度、电源等策略。
+4. **KMI 连接内核与模块**：内核模块接口（KMI，Kernel Module Interface）规定厂商模块使用的内核接口。稳定性限于相应 Android 和 Linux 内核分支及受保护的接口范围，不能假定跨分支兼容。
+
+在 GKI 之前，厂商通常各自修改 ACK、编译设备内核，安全修复需要分别合入和测试。GKI 分离通用内核与厂商模块，使兼容范围内的内核更新不必每次都修改厂商模块。GKI 是内核方案，不是完整的 Android 系统。
+
+**适用与排查边界：**从 Android 12 起，以 Linux 5.10 或更高版本内核出厂的设备须使用 GKI 内核，其他情况按具体版本要求判断。ACK 源码标签（如 `android17-6.18-2026-06_r6`）只对应公共分支，排查设备时还需核对实际内核提交、配置和厂商模块。
 
 **Q2: [done] ramdisk、initramfs 和 rootfs 都是什么？内核启动为什么需要它？**
 
@@ -51,7 +56,7 @@ adb shell uname -r
 vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用 ftrace 的可用事件列表验证：`su 0 cat /sys/kernel/tracing/available_events | grep android_vh`，再向 `events/vendor_hooks/<名>/enable` 写 1 即可观测。
 
 1. **版本纪律**：钩子集合随 KMI 版本变化（不同内核分支的 include/trace/hooks/ 内容不同，如 binder 相关钩子只在部分分支存在）——查钩子必须按设备 KMI 对应的内核分支，不能用主线树想当然。
-2. **用途**：OEM 的调度/电源策略经这些钩子挂回调。应用与框架工程师可用它们在 ftrace/perfetto 里观测内核侧事件（厂商调优的可见部分，呼应 Q1 的“厂商改什么”）。
+2. **用途**：OEM 的调度/电源策略经这些钩子挂回调。应用与框架工程师可用它们在 ftrace/perfetto 里观测内核侧事件，了解厂商调优的可见部分。
 
 **Q7: [learning] PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
 
