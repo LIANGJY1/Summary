@@ -5,15 +5,17 @@
 
 **Q1: [done] Android 启动中的 ramdisk、initramfs 和 rootfs 是什么？**
 
-Android 启动时，bootloader 将内核和所需 ramdisk 内容载入内存。内核把 initramfs 归档解包到初始 rootfs，再从中启动 `/init`，为挂载系统分区提供早期用户态环境。
-
 三个名称分别指向：
 
 1. **ramdisk**：Android 启动语境中用于交付早期文件的归档，包含首阶段 init 等内容。它与早期 Linux 的内存块设备 ramdisk 同名，但不是同一个概念。
 2. **initramfs**：内核接收和解包的早期文件归档，通常使用 cpio 格式，也可以压缩。归档本身不是已挂载的根目录。
 3. **rootfs**：内核建立的初始根文件系统。归档解包后文件出现在其中，内核可执行 `/init`。具体根文件系统和后续切换方式取决于内核与设备布局。
 
-早期 init 需要先能运行，才能加载必要模块、读取可访问的 fstab 并挂载后续分区。ramdisk 预先提供启动所需文件，避免依赖尚未挂载的分区。具体镜像布局随设备首发版本变化：Android 12 的通用 ramdisk 位于 `boot`，Android 13 首发设备移到 `init_boot`，设备专属资源可位于 `vendor_boot`；升级设备可能保留旧布局。
+使用首阶段 ramdisk 时，启动链路为：
+
+bootloader 加载内核和 ramdisk → 内核解包到 rootfs → 执行 `/init` → init 加载模块并挂载系统分区。
+
+ramdisk 提前提供启动文件，使 init 不必依赖尚未挂载的分区。
 
 
 **Q2: [done] [tags:init] init 进程的入口是什么，是如何拉起的？**
