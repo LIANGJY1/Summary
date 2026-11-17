@@ -17,73 +17,104 @@ Android 公共内核（ACK，Android Common Kernel）是包含通用功能和部
 
 **适用与排查边界：**从 Android 12 起，以 Linux 5.10 或更高版本内核出厂的设备须使用 GKI 内核，其他情况按具体版本要求判断。ACK 源码标签（如 `android17-6.18-2026-06_r6`）只对应公共分支，排查设备时还需核对实际内核提交、配置和厂商模块。
 
-**Q2: [done] ramdisk、initramfs 和 rootfs 都是什么？内核启动为什么需要它？**
+**Q2: [learning] Android 17 一定使用 6.18 内核吗，KMI 稳定意味着什么？**
 
-ramdisk 是启动时提供给内核的一份最小文件归档。内核将它展开为初始根文件系统（rootfs），再从中启动 `/init`。它解决了系统分区尚未挂载、但挂载所需程序和配置又必须先运行的依赖问题。
+不一定。Android 版本与内核版本不是一一对应的：Android 17 有 `android17-6.18` 公共内核分支，也支持兼容矩阵中列出的部分较早 GKI 分支。
 
-1. **ramdisk**：Android 对启动归档的常用称呼，通常是压缩的 `cpio` 文件，保存 `/init`、`fstab` 和少量早期启动配置。它不是独立的 RAM 磁盘设备，也不是完整系统。
-2. **initramfs**：Linux 对启动归档及其解包机制的称呼。内核把归档中的目录树展开到初始根文件系统。
-3. **rootfs**：内核启动时使用的初始 `/`，通常由内存型 `ramfs` 或 `tmpfs` 支撑。内核从这里找到 `/init`。它不是 ramdisk 归档本身。
-4. **为什么需要**：init 必须先运行才能读取 `fstab`、加载早期存储驱动并挂载 `system`、`vendor` 等分区。但这些分区尚未挂载时，相关程序和配置无法从中读取。启动归档先提供这些必需文件，打破循环依赖。
-5. **启动时怎么用**：Bootloader 将内核和归档载入内存。内核展开归档、启动其中的 `/init`（PID 1）。init 再挂载系统分区并继续启动流程。断电后初始根文件系统消失，下次开机再由启动归档重建。
+确认具体设备时按以下顺序判断：
 
-**Q3: [learning] Android 17 的内核一定是 6.18 吗？KMI 稳定到底稳定了什么？**
+1. **看实际版本**：执行 `adb shell uname -r` 获取运行内核的版本字符串。例如 `5.15.78-android13-8-g…` 中，`5.15.78` 是内核版本，`android13-8` 是 KMI 版本标识的一部分。该命令不能单独证明构建来源或兼容认证。
+2. **对照支持范围**：查目标 Android 版本的官方 ACK 兼容矩阵。例如 Android 17 的列表包含 `android16-6.12`、`android15-6.6` 等较早分支。`android12-5.10` 和 `android13-5.10` 从 Android 17 QPR1 起不再受支持，具体设备的首发版本及更新要求也需要核对。
+3. **确认构建与模块**：结合设备实际内核构建标识、GKI 发布信息、厂商模块和安全补丁级别判断。源码分支存在某项特性，并不能证明设备已启用。
 
-不一定。Android 17 对应的官方 GKI 发布分支是 android17-6.18（已与 source.android.com 的 GKI release builds 列表核对），但 GKI 的设计目标就是内核与平台 release 解绑，设备可以运行较早 KMI 分支的认证内核。
+KMI（Kernel Module Interface，内核模块接口）稳定性适用于对应 Android 与 Linux 内核版本的 KMI 分支及受监控符号，在满足构建和兼容条件时，允许内核更新而无需重新构建兼容的厂商模块。跨分支不保证兼容，也不保证所有内部接口稳定。
 
-机制上，`android17-6.18` 中的 android17 是 KMI 代、6.18 是 LTS 内核版本。KMI 稳定保证分支内 vendor 模块与内核的符号与布局兼容，LTS 小版本升级不破坏模块加载。结果：分析内核行为前先用 `uname -r` 与 KMI 字符串确认实际分支，不能写死"Android 17 = 6.18"。另外解耦不止内核一层：Android 16 起推动 GBL（通用 bootloader），bootloader 也在标准化。
+**Q3: [learning] 怎样确认 GKI 设备的内核版本和功能是否启用？**
 
-**Q4: [learning] “系统是 Android 17”能推出内核一定是 6.18 吗？内核版本边界怎么确认？**
+先确认设备实际运行的内核，再依次检查构建配置与运行时状态。版本号或配置项单独成立，都不能证明功能已经运行。
 
-不能。Android 17 的新 ACK 是 `android17-6.18`，但兼容表同时列出多条可用于 Android 17 的较早 GKI 内核：`android16-6.12`、`android15-6.6`、`android14-6.1`、`android14-5.15`、`android13-5.15` 等（`android12-5.10`、`android13-5.10` 自 Android 17 QPR1 起不再支持）。反方向同样要谨慎：在 `android17-6.18-2026-06_r6` 中确认存在的 Arena 或 `sched_ext`，不能写成所有 Android 17 设备都有。
+1. **内核版本**：`adb shell uname -r` 查看运行版本，`adb shell cat /proc/version` 查看构建信息。GKI 版本字符串通常带有 KMI 标识，但仍需结合构建记录确认具体产物。
+2. **构建配置**：设备启用 `CONFIG_IKCONFIG_PROC` 时，可用 `adb shell su 0 zcat /proc/config.gz` 查看运行内核配置，其中 `su 0` 以 root 身份运行，`zcat` 解压并输出文件。节点不可用时，应根据准确构建或源码标识查对应配置，不能随意用同版本的公开配置代替设备配置。
+3. **运行状态**：检查功能对应的运行节点、模块加载和实际行为。例如存在配置项不代表模块已加载，节点缺失也可能受权限或设备配置影响。
 
-排查第一步是记录运行内核：
+**Q4: [learning] 怎样确认 GKI 内核提供了某个 vendor hook？**
 
-```bash
-adb shell uname -r
-```
+Vendor hook 是 ACK 基于 tracepoint 提供给厂商模块的扩展点。确认某个 hook 时，应查看设备对应的源码分支、构建配置和模块接口，不能只查 tracefs 事件列表。
 
-这只给出版本字符串。确认它对应哪个受支持的 GKI 构建还要结合 KMI generation、安全补丁级别和厂商模块。另一个常见错误是把 Linux 6.10 当成 Android 17 的内核分支——它只是上游演进的一个版本阶段，Android 17 的 6.18 ACK 已包含 Arena、`sched_ext`、BPF iterators、BPF LSM 和 `struct_ops`。判断某项特性是否可用应直接检查目标 ACK，不凭上游版本推测回移。
+核查步骤如下：
 
-**Q5: [learning] 怎么确认一台设备的内核版本、KMI 和功能开关？**
+1. **找声明和调用**：在目标 ACK 分支的 `include/trace/hooks/` 查找 hook 声明，再检查内核中是否有相应调用。普通 hook 通常以 `android_vh_` 开头，受限 hook 以 `android_rvh_` 开头。
+2. **查设备构建**：核对实际源码提交、配置、符号导出和 KMI 列表，确认厂商模块是否能使用该 hook。源码存在不等于设备已包含或模块已注册回调。
+3. **确认运行行为**：结合目标设备允许使用的跟踪工具及厂商模块实现验证。Vendor hooks 基于 tracepoint，但不是一般 trace event，可能不导出到 tracefs，`available_events` 中找不到不能证明 hook 不存在。
 
-1. **版本与 KMI**：`uname -r` 与 `cat /proc/version`——GKI 设备的 KMI 直接体现在版本串里（形如 `5.15.78-android13-8-g…`，即“内核版本-android 平台发布”）。
-2. **功能开关**：启用 CONFIG_IKCONFIG_PROC 的内核把完整 config 挂在 `/proc/config.gz`——`su 0 zcat /proc/config.gz | grep CONFIG_PSI=` 即可验证某功能是否编入。无该节点时到对应 GKI release 页下载 config 比对。
-3. **排查顺序**：确认“某机制是否存在”先看 config、再看运行时节点（如 `/dev/binderfs`、`/proc/pressure`）、最后看厂商修改。
+**Q5: [learning] Linux PSI 的 some、full 和平均值如何解读？**
 
-**Q6: [learning] 怎么确认 GKI 内核里的 vendor hooks（厂商钩子）存在？**
+压力停顿信息（PSI，Pressure Stall Information）统计任务因 CPU、内存或 I/O 资源不足而停顿的时间，帮助判断资源争用对工作负载的影响。
 
-vendor hooks 以 android_vh_/android_rvh 前缀的 tracepoint 形式存在，用 ftrace 的可用事件列表验证：`su 0 cat /sys/kernel/tracing/available_events | grep android_vh`，再向 `events/vendor_hooks/<名>/enable` 写 1 即可观测。
+`/proc/pressure/cpu`、`/proc/pressure/memory` 和 `/proc/pressure/io` 分别报告对应资源的压力。各字段含义如下：
 
-1. **版本纪律**：钩子集合随 KMI 版本变化（不同内核分支的 include/trace/hooks/ 内容不同，如 binder 相关钩子只在部分分支存在）——查钩子必须按设备 KMI 对应的内核分支，不能用主线树想当然。
-2. **用途**：OEM 的调度/电源策略经这些钩子挂回调。应用与框架工程师可用它们在 ftrace/perfetto 里观测内核侧事件，了解厂商调优的可见部分。
+1. **some**：至少部分任务因该资源停顿的时间比例。
+2. **full**：所有非空闲任务同时因该资源停顿的时间比例。系统级 CPU full 无定义，Linux 5.13 起为兼容性报告为 0。
+3. **平均值与累计值**：`avg10`、`avg60`、`avg300` 表示近期不同时长的平均压力百分比，`total` 是累计停顿微秒数。
 
-**Q7: [learning] PSI 的 /proc/pressure 怎么读？dmesg 过滤有哪些实用姿势？**
+内存 full 非零表示统计期间出现过全体非空闲任务同时受阻，不能仅凭非零判断压力严重。应结合数值大小、持续时间、业务延迟与其他指标分析。Android 中 lmkd 可利用 PSI 识别内存压力。
 
-每个 `/proc/pressure/{cpu,memory,io}` 文件两行：`some` 与 `full`，各带 avg10/avg60/avg300（窗口内停顿时间占比）与 total（累计微秒）。`some` = 至少部分任务处于停顿的时间占比。`full` = 所有非空闲任务同时停顿的占比（CPU 的 full 在系统级无意义）。
+排查相关日志时，`dmesg -w | grep -iE 'binder|oom|lowmemorykiller|psi'` 持续查看并筛选这些关键词：`-w` 表示持续输出，`-i` 忽略大小写，`-E` 启用扩展正则表达式。读取内核日志的权限取决于设备配置，`logcat -b kernel` 是否可用也取决于设备的 logd 配置。
 
-1. **判读**：memory 的 full avg60 持续大于 0 = 全系统级内存停顿明显（内存压力实锤）。some 高而 full 为 0 是局部任务受阻。
-2. **dmesg 过滤**：`su 0 dmesg -w | grep -iE 'binder|oom|lowmemorykiller|psi'`。user 版默认限制读 dmesg（dmesg_restrict），要用 userdebug/root。`logcat -b kernel` 依赖 logd 配置、并非所有设备可用。
-3. **衔接**：lmkd 消费 PSI 的机制见 [../07-内存与存储/01-内存管理.md](../07-内存与存储/01-内存管理.md)。调度压力与温控见 [../13-performance/03-底层/01-内核调度与频率.md](../13-performance/03-底层/01-内核调度与频率.md)。
+**Q6: [learning] GKI 内核和厂商模块如何独立更新？**
 
-**Q8: [learning] Kernel 的 GKI 边界到底划在哪，“内核可升级”具体指什么？**
+GKI 将通用内核与设备相关的厂商模块分开交付，并在指定分支维护 KMI，使符合条件的模块可与兼容更新后的内核继续配合。
 
-GKI 把内核代码分成“稳定 ABI 的通用内核”与“随产品编译的供应商内核”两层：设备可替换的只有供应商模块与内核镜像，而稳定的通用内核片段通过 KMI（Kernel Module Interface）冻结，保证不同厂商的模块能在同一个通用内核上互操作。Android 12 引入的 GKI 2.0 进一步支持把模块按 `vendor_boot` 启动、通用内核与供应商内核解耦部署。
+1. **通用部分**：GKI 内核及其适用的 GKI 模块提供公共功能。
+2. **厂商部分**：厂商模块提供芯片和设备专属功能，通过受支持的 KMI 使用通用内核接口。
+3. **更新条件**：稳定性只覆盖对应分支的 KMI 和规定的构建条件。跨分支、非 KMI 依赖或其他兼容问题可能要求重新构建或修改模块，也需要设备验证。
 
-对本仓库的实际影响是**可写范围与崩溃归因**：GKI 之外的内核代码（vendor 模块）改动不会随系统升级自动重新编译，接口不匹配会在运行期而非编译期暴露。因此“升级系统后某厂商模块行为异常”是一类需要单独归因的故障。判断规则：看到与升级相关的内核行为变化，先确认变更落在通用内核还是 vendor 模块——落在通用内核则所有设备同步生效，落在 vendor 模块则只有该产品线受影响。
+升级后出现异常时，应分别确认设备实际安装了哪个内核和哪些厂商模块，再结合接口、配置和运行日志定位。一次通用内核更新不会自动覆盖所有设备，模块兼容问题也可能在构建、加载或运行时暴露。
 
-**Q9: [learning] 内核里某个机制“存在”就能说明设备启用了吗？评估 Android 17 GKI 6.18 的调度与内存改动要满足哪三个条件？**
+**Q7: [learning] 内核源码中存在某项功能，能否证明设备已经启用？**
 
-不能。Kconfig 的 default y 只说明依赖满足且无其他配置覆盖时取 y。设备结论要同时满足三个条件：构建条件（最终 .config 含所需选项、编译器支持相应插桩）、硬件与固件条件（CPU 实现架构特性或固件提供所需调用）、运行时条件（启动参数未关闭，用户态机制还需进程显式启用）。源码 tag 中存在某个功能，无法单独证明设备已经启用它。
+不能。源码存在只说明代码可供构建，设备是否真正使用还取决于最终配置、硬件或固件能力以及运行时状态。
 
-放到 Android 17 GKI（材料按 android17-6.18-2026-06_r6 核对，内核不在本地 AAOS13 树）逐项看：EEVDF 从 Linux 6.6 起进入公平调度，不能把 6.12 写成分界点，且它的 lag/virtual deadline 模型不识别“UI 线程”语义，不保证 UI 任务总能抢先。CONFIG_SCHED_CLASS_EXT=y 只说明编入了 sched_ext，BPF 调度器加载并运行后才会接管任务，/sys/kernel/sched_ext/state 为 enabled 且 root/ops 有名字才是运行证据。F2FS 的 checkpoint_merge 要看设备挂载参数与文件系统状态。io_uring 的内核实现不等于 Android 应用契约，NDK 稳定 API 未列出 io_uring，普通应用还受 seccomp 与 SELinux 约束。dm-verity multi-buffer hashing 补丁并未合入 r6，其约 35% 的 cold-cache 吞吐数据不能记为 Android 17 收益。
+按依赖顺序核查：
 
-工程做法是建核查表：机制、启用条件、原始测试口径三列对齐。设备测试记录至少包含 platform build、kernel release、GKI tag、挂载参数、CPU 拓扑与样本统计。性能对照保持内核配置与缓解状态一致，只改一个变量，“没有检出差异”和“证明零开销”要分开表述。
+1. **构建条件**：确认设备最终内核配置启用所需选项、依赖和工具链支持。不能以 Kconfig 默认值代替设备最终配置。
+2. **硬件和固件**：确认目标处理器及固件实现该特性，设备树等配置也满足要求。
+3. **运行状态**：检查启动参数、模块和用户态开关，以及对应运行节点。例如 `CONFIG_SCHED_CLASS_EXT` 已启用只说明构建支持 sched_ext，还要有 BPF 调度器加载并运行才能接管适用任务。
 
-**Q10: [learning] ARM64 的 KASLR、KPTI 与 Spectre 缓解各自保护什么？为什么 KPTI 是否生效不能靠 CPU 型号推断？**
+评估 Android 17 的调度或内存改动时，应针对设备实际 ACK 提交核查 EEVDF、sched_ext、F2FS 挂载选项和 io_uring 等功能，不能仅按上游版本或源码标签推断启用状态。EEVDF 不以 Android UI 线程身份作为调度语义，不保证其总是优先运行。Android NDK 接口、seccomp 和 SELinux 也可能限制应用使用。Arena 或 dm-verity multi-buffer hashing 等改动及其性能数据同样要核对具体提交和测试条件。
 
-三者保护对象不同。KASLR 在启动阶段随机化内核与模块基地址，依赖 CONFIG_RANDOMIZE_BASE、bootloader 经设备树 /chosen/kaslr-seed 提供的熵，且未传 nokaslr。它不会给每次间接调用附加固定成本。KPTI 隔离 EL0 与内核页表，热点在系统调用、缺页与中断等用户态/内核态往返路径，纯用户态计算的结果代表不了 Binder 或存储负载。Spectre v1 用 array_index_nospec() 加架构屏障做局部边界修复。Spectre v2/BHB 由内核按 CPU capability、MIDR 匹配、架构特性与勘误信息，在固件调用、CPU 专用回调或内核指令序列（如分支序列覆盖分支历史）中选择缓解，实现不固定为“入口插一条 SB”。
+比较性能时应记录内核版本、配置、启动参数、CPU 拓扑和测试口径，并控制变量。未经目标版本和测试条件核实的百分比不能作为设备结论。
 
-KPTI 不能按 CPU 产品名或上市年份编“必定启用/跳过”表：6.18 对 kpti= 的定义是默认只在需要缓解的核心上启用，kpti=0/1 才是强制开关，同一 SoC 还可能包含多种核心。同一条逻辑贯穿整个控制流防线：PAC（返回地址/指针认证）、BTI（限制间接分支落点，与 Spectre v2 缓解不互替）、SCS（内核影子调用栈）、KCFI（间接调用类型检查）、MTE、GCS 在 arch/arm64/Kconfig 多为 default y，是否生效仍受构建、硬件固件与运行时三条件约束——例如 GCS 配置只让内核在硬件存在时提供用户态 ABI，进程还要经 prctl(PR_SET_SHADOW_STACK_STATUS) 启用，exec() 会清除该状态。
+**Q8: [learning] ARM64 的 KASLR 保护什么，如何判断是否生效？**
 
-性能归因上，关闭缓解的对照只适用于隔离实验室的可丢弃工程镜像，测试设备不得承载账号密钥。量产结论以 /sys/devices/system/cpu/vulnerabilities/* 状态节点、/proc/cmdline 与最终 .config 建立证据链，量产设备常用 kptr_restrict 把 kallsyms 地址显示为全零，不能据此判断 KASLR 失效。
+内核地址空间布局随机化（KASLR，Kernel Address Space Layout Randomization）在启动时随机化内核等地址，增加攻击者预测内核代码位置的难度。它降低利用地址的可靠性，但不能修复漏洞或阻止所有信息泄露。
+
+判断时结合内核配置 `CONFIG_RANDOMIZE_BASE`、启动链是否提供所需熵以及 `nokaslr` 等启动参数。设备树的 `kaslr-seed` 是提供熵的途径之一，具体方式取决于启动链。量产设备可能通过 `kptr_restrict` 隐藏内核符号地址，因此不能只凭地址显示为 0 判断 KASLR 关闭。
+
+**Q9: [learning] ARM64 的 KPTI 做什么，为什么不能只凭 CPU 型号判断是否启用？**
+
+内核页表隔离（KPTI，Kernel Page Table Isolation）通过隔离用户态和内核态的页表映射，缓解适用处理器上的相关信息泄露风险。它会影响系统调用、异常和中断等进出内核的路径。
+
+ARM64 Linux 6.18 默认针对需要缓解的核心启用，`kpti=0` 或 `kpti=1` 分别强制关闭或开启。实际状态还取决于 CPU 特性、固件、内核配置及启动参数，同一 SoC 也可能包含不同核心，因此不能只凭产品型号判断。
+
+分析开销时应测量 Binder、文件 I/O 等实际内核往返负载，纯用户态计算不能代表这些路径。关闭缓解的对照实验只适用于隔离的测试设备，不应把实验配置当作量产状态。
+
+**Q10: [learning] ARM64 的 Spectre 缓解针对什么，如何确认设备状态？**
+
+Spectre 是利用推测执行和侧信道泄露信息的一类攻击。内核对不同变体采用不同缓解措施，具体路径取决于处理器、固件和内核实现。
+
+1. **Spectre v1**：针对边界检查等可能被错误推测的位置，使用访问约束或屏障等局部缓解，不能假定一个措施覆盖所有攻击路径。
+2. **Spectre v2 与 BHB**：针对间接分支预测和分支历史相关风险，ARM64 内核可能依据 CPU 特性选择固件调用、处理器专用回调或内核指令序列，不能假定所有设备都使用同一种方式。
+
+检查 `/sys/devices/system/cpu/vulnerabilities/` 下对应状态，并结合设备实际内核配置和启动参数。PAC、BTI 等控制流保护与 Spectre 缓解各有作用，不能互相替代。
+
+**Q11: [learning] ARM64 的 PAC、BTI、SCS、KCFI、MTE 和 GCS 分别保护什么？**
+
+这些机制分别保护指针、控制流或内存访问，能否生效取决于硬件、内核配置、编译方式和运行时条件。
+
+1. **PAC（Pointer Authentication Code）**：为指针提供认证，帮助检测特定的指针篡改。
+2. **BTI（Branch Target Identification）**：限制间接分支可落到的位置。
+3. **SCS（Shadow Call Stack）**：在影子调用栈中保护函数返回地址。
+4. **KCFI（Kernel Control Flow Integrity）**：检查内核间接调用的目标类型，阻止不匹配的调用。
+5. **MTE（Memory Tagging Extension）**：通过指针和内存标签检查，帮助发现部分非法内存访问。
+6. **GCS（Guarded Control Stack）**：使用受保护的控制栈保护返回流程。Linux 的用户态 GCS 通过 `prctl` 对调用线程设置，新线程继承创建线程的配置，exec 后关闭。内核支持不等于每个线程都已启用。

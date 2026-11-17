@@ -1,11 +1,11 @@
 # Android 系统架构
 
-> Android 平台机制地基：分层与进程边界、完整启动链、Binder/ART/沙箱/权限/SELinux 与包管理。本目录收录 11 篇资料、257 道题。文档结构和编号统一遵守 [../WRITING-GUIDE.md](../../WRITING-GUIDE.md)Q 序列即结构，供 atlas 同源直读。
+> Android 平台机制地基：分层与进程边界、完整启动链、Binder/ART/沙箱/权限/SELinux 与包管理。本目录收录 11 篇资料、258 道题。文档结构和编号统一遵守 [../WRITING-GUIDE.md](../../WRITING-GUIDE.md)Q 序列即结构，供 atlas 同源直读。
 
 ## 册
 
 - [01-系统架构.md](01-系统架构.md)（18 题）— 五层架构与请求路径、ABI/API、Treble/GSI、16KB 页与 Mainline、进程回收角色、线程角色。
-- [02-系统启动.md](02-系统启动.md)（98 题）— 上电到桌面的完整启动链：init/rc/Zygote/system_server、镜像与 AVB、A/B slot、init 机制、启动度量与车机 ACC/Car API 时序。
+- [02-系统启动.md](02-系统启动.md)（99 题）— 上电到桌面的完整启动链：init/rc/Zygote/system_server、镜像与 AVB、A/B slot、init 机制、启动度量与车机 ACC/Car API 时序。
 - [03-Binder.md](03-Binder.md)（23 题）— Binder 架构与一次拷贝、事务缓冲区限制、AIDL/HIDL 契约、oneway 排队、frozen 行为、工具链与故障形态。
 - [04-SystemServer.md](04-SystemServer.md)（11 题）— system_server 进程构成、四波装配与 BootPhase、Watchdog 与恢复、AMS 双锁、WMS/SF 分工。
 - [05-HAL.md](05-HAL.md)（5 题）— HAL 运行形态、VINTF 兼容、服务启动注册链路、Stable AIDL 版本冻结。

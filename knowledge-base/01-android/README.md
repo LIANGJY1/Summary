@@ -4,9 +4,9 @@
 
 ## 01-architecture/
 
-- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 257 题）：
+- **平台层：分层架构、启动链、SystemServer、Binder/HAL、ART/JNI、包管理、沙箱、权限与 SELinux**（11 册 258 题）：
   - [01-系统架构.md](01-architecture/01-系统架构.md)（18 题）
-  - [02-系统启动.md](01-architecture/02-系统启动.md)（98 题）
+  - [02-系统启动.md](01-architecture/02-系统启动.md)（99 题）
   - [03-Binder.md](01-architecture/03-Binder.md)（23 题）
   - [04-SystemServer.md](01-architecture/04-SystemServer.md)（11 题）
   - [05-HAL.md](01-architecture/05-HAL.md)（5 题）
@@ -132,8 +132,8 @@
 
 ## 10-原生层/
 
-- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder 驱动、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 104 题）：
-  - [01-内核与GKI.md](10-原生层/01-内核与GKI.md)（10 题）
+- **平台原生层（部分册为二手证据，逐册标注）：内核与 GKI、驱动、Binder 驱动、共享内存、Bionic、logd、BPF、Rust 与应用 Native 稳定性**（9 册 105 题）：
+  - [01-内核与GKI.md](10-原生层/01-内核与GKI.md)（11 题）
   - [02-驱动运行时.md](10-原生层/02-驱动运行时.md)（12 题）
   - [03-Binder驱动.md](10-原生层/03-Binder驱动.md)（11 题）
   - [04-共享内存.md](10-原生层/04-共享内存.md)（10 题）
