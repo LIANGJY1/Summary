@@ -1,6 +1,6 @@
 # BPF 可观测与可编程边界
 
-> 学习资料（文章模式沉淀）。边界：本文回答设备上的 BPF 功能如何判定可用、Android 平台程序如何加载并附着、BPF Arena 的内存与 map 限制，以及 sched_ext 的运行状态和接管范围。网络 eBPF 统计由 `09-network/07` 负责。资料按 Android 17 与 ACK 6.18 语境核对，设备内核和产品策略仍须现场确认。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀）。边界：本文回答设备上的 BPF 功能如何判定可用、Android 平台程序如何加载并附着、BPF Arena 的内存与 map 限制，Perfetto 与 BPF 聚合结果的关系，以及 sched_ext 的运行状态和接管范围。网络 eBPF 统计由 `09-network/07` 负责。资料按 Android 17 与 ACK 6.18 语境核对，设备内核和产品策略仍须现场确认。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] 为什么“内核支持 BPF”不能证明设备应用能使用？判定 BPF 可用要检查哪四项条件？**
 
@@ -10,6 +10,8 @@
 2. **内核配置和 JIT：**确认设备内核启用了目标功能所需配置。若功能依赖特定架构的 JIT 支持，还要确认当前 CPU 架构具备该实现。
 3. **装载和附着：**确认 BPF 对象进入系统镜像或模块，再确认 loader 接受了对象、程序加载成功并附着到预期事件。只有文件存在并不表示程序正在采集或执行。
 4. **权限与安全策略：**检查文件权限、Linux capability、SELinux 规则、bpffs 节点 owner/group/mode 和 map/program pin 位置。普通应用仍受 Android UID、capability 和 SELinux 边界约束。内核编译了 BPF LSM 不表示 Android 已用它替换 SELinux，是否启用以及参与决策的顺序还取决于 LSM 配置、启动参数和产品策略。
+
+普通应用没有通用的 BPF 程序加载接口。BPF_PROG_LOAD 受权限与 SELinux 约束，需要内核侧观测时可使用 Perfetto、Simpleperf、ProfilingManager 等已暴露的入口。自研平台组件引入 BPF 对象时，要配套构建、loader 与 map 权限。向设备复制目标文件不能替代装载链。
 
 **Q2: [learning] Android 镜像中存在 BPF 对象，为什么不代表设备正在采集？怎样沿 bpfloader 链路逐段确认？**
 
@@ -23,7 +25,19 @@ Android 平台 BPF 对象由 loader 按描述信息与设备条件筛选、加�
 6. **平台启动时序：**init 挂载 bpffs，按平台启动服务顺序运行 `load-bpf-programs`。Android 17 在 Zygote 启动前加载相应平台对象，并设置 bpffs 节点的 owner、group、mode 和 SELinux 标签。启动完成日志之外仍需检查 attach 与实际 map 更新。
 7. **网络统计例外：**网络流量统计与 Tethering 的 BPF 由 `netbpfload` 等网络组件另行管理，不属于上述平台观测对象的同一加载链路。网络数据为空时应检查相应网络 loader，而不是只查平台 `bpfloader`。
 
-**Q3: [learning] BPF Arena 与普通键值 map 有什么不同？BPF_MAP_TYPE_ARENA 的地址和映射限制是什么？**
+在设备上按运行证据逐层确认：
+
+1. **加载**：检查 getprop bpf.progs_loaded 的启动完成标记、bpfloader 系列日志的 verifier 拒绝与文件缺失记录，以及 /sys/fs/bpf 下是否存在目标对象。Android 13 的 AAOS 源码可核对到 init 挂载 bpffs、post-fs-data 之后触发 load_bpf_programs、供 GpuMem 和 GpuWork 等待的属性，以及对应 SELinux 类型。该源码树未包含 system/bpf，C++ loader 形态依据 AOSP 13 上游。Android 17 材料中的平台 loader 改用 Rust，Connectivity APEX 另有 netbpfload。
+2. **附着**：核对目标事件和消费方是否完成 attach。AAOS 13 的 GpuMem 会针对迟注册的驱动 tracepoint 重试约 30 秒，仍失败会使相应 GpuMemTracer 数据源缺失。调试构建可用 bpftool 查看程序与 map，量产构建通常没有该工具。
+3. **数据**：检查 /sys/kernel/tracing/events 下的目标 tracepoint 和事件触发情况。map 为空也可能是当前无活跃数据或读取权限不足。需要评估探针影响时，对照同一负载的开启与关闭结果，并记录 ring buffer 丢失计数。
+
+**Q3: [learning] BPF 程序挂在与 ftrace 相同的 tracepoint 上，Perfetto 会显示 BPF 的聚合结果吗？Android 17 新增的几组 BPF 程序在 Android 13 上能用吗？**
+
+不会。Perfetto 采到的是 ftrace 原始事件流。BPF 程序对事件做的聚合或额外输出需要用户态消费者读取 map 或 ring buffer 后自行写入 trace。平台已有的做法可作参照：GpuMemTracer 读 GpuMem 的 BPF map 在采集开始时写初始快照（后续变化仍靠 ftrace 事件），这是模块自己实现的桥接，不代表任意 BPF 程序都有同样集成。Android 17 的 `external/perfetto` 配置协议里也没有内置的 `ebpf` 数据源（材料口径）。自研程序要进 trace，需自建用户态消费者：读 map/ring buffer、保留内核时间戳与线程标识、经自定义 data source 或 TrackEvent SDK 写 packet，并统计读取失败与 buffer 满造成的丢失。
+
+Android 17 的新程序不能外推到 Android 13：材料口径下 `cyclePerUid`（x86_64 的 per-UID cycle 归因，依赖 RAPL 节点）、`dmabufIter`（DMA-BUF 四字段全局快照 iterator）、`kernelWakelockDuration`（全局 active 时间并集）、`bpfLockContention`（白名单内核锁等待聚合）均为 Android 17 tag 内容，受 aconfig flag、架构与内核版本（部分要求 6.1+）限制。UprobeStats（statsd 控制的受控 uprobe 插桩）按材料版本表属 Android 15+ 的 Mainline 模块。AAOS13 树中这些对象均不存在（本地核对），已有的等价物是：GPU 内存走 `gpu_mem.c`、GPU work period 走 `gpu_work.c` 的 `power/gpu_work_period` tracepoint（AAOS13 核对 `DEFINE_BPF_PROG("tracepoint/power/gpu_work_period", ...)`）、DMA-BUF 快照走 `dmabuf_dump` 工具。同理，内核源码里有 sched_ext（BPF 调度器框架）只证明编译能力，设备是否在用还要看 Kconfig、加载的 scheduler 与运行状态——源码、Kconfig、产品启用与活动状态是四项不同证据。
+
+**Q4: [learning] BPF Arena 与普通键值 map 有什么不同？BPF_MAP_TYPE_ARENA 的地址和映射限制是什么？**
 
 BPF Arena 是 BPF 程序与用户进程共享的稀疏内存区域，不是按 key 查询和更新 value 的普通 map。它适合在两侧共享含指针的数据结构，但创建 Arena 需要当前架构的 BPF JIT 支持，并遵守映射 flag、虚拟范围大小和地址边界限制。
 
@@ -34,7 +48,7 @@ BPF Arena 是 BPF 程序与用户进程共享的稀疏内存区域，不是按 k
 5. **架构支持：**当前 BPF JIT 必须支持 Arena。即使内核源码包含 Arena 实现，架构 JIT 不支持时 map 创建仍会返回不支持错误。
 6. **运行时取舍：**Arena 让 BPF 与用户态可使用共享指针组织数据，但页面按访问或 BPF 分配路径建立，需由程序管理并发、对象生命周期和空间回收。它不会自动让应用的其他分配变少，也不会自动附着到任何事件。
 
-**Q4: [learning] 怎样确认 Android 设备上的 sched_ext 调度器当前正在运行？full 与 partial 模式分别接管哪些任务，错误时怎样回退？**
+**Q5: [learning] 怎样确认 Android 设备上的 sched_ext 调度器当前正在运行？full 与 partial 模式分别接管哪些任务，错误时怎样回退？**
 
 `CONFIG_SCHED_CLASS_EXT=y` 只表示内核编译了 sched_ext 框架，不能证明某个 BPF 调度器已加载或正在调度任务。确认运行状态要查看当前状态、活动 ops 名称和启用历史，再结合调度器的 full/partial 配置判断目标线程是否由它接管。
 
@@ -50,7 +64,8 @@ adb shell 'cat /sys/kernel/sched_ext/enable_seq 2>/dev/null'
 4. **full 模式：**未设置 `SCX_OPS_SWITCH_PARTIAL` 时，sched_ext 接管 `SCHED_NORMAL`、`SCHED_BATCH`、`SCHED_IDLE` 和 `SCHED_EXT` 任务。因此普通应用线程的 policy 字段仍可能显示 `SCHED_NORMAL`，不能只在 `/proc/<pid>/sched` 中搜索 `SCHED_EXT` 来判断是否由 sched_ext 调度。
 5. **partial 模式：**设置 `SCX_OPS_SWITCH_PARTIAL` 后，只有显式设为 `SCHED_EXT` 的任务进入 sched_ext。`SCHED_NORMAL`、`SCHED_BATCH` 和 `SCHED_IDLE` 仍由优先级更高的 fair-class 调度器处理。
 6. **回退路径：**调度器主动退出、BPF 内部错误、runnable task 长时间停滞或触发 SysRq-S 时，内核会停用 BPF 调度器并将受管任务交回 fair-class。若调度器退出、接口报错或 watchdog 告警，应同时检查 sched_ext sysfs 状态和内核日志。
-**Q5: [learning] sched_ext 的 select_cpu()、enqueue() 和 dispatch() 怎样分工？任务最终从哪个 DSQ 被 CPU 执行？**
+
+**Q6: [learning] sched_ext 的 select_cpu()、enqueue() 和 dispatch() 怎样分工？任务最终从哪个 DSQ 被 CPU 执行？**
 
 sched_ext 的调度回调把 CPU 选择、入队和分发拆成不同阶段。`select_cpu()` 提供唤醒时的 CPU 选择提示，`enqueue()` 决定任务排入哪条队列，`dispatch()` 在本地和全局队列都没有可运行任务时补充任务。
 
@@ -59,7 +74,7 @@ sched_ext 的调度回调把 CPU 选择、入队和分发拆成不同阶段。`s
 3. `dispatch()`：当当前 CPU 的 local DSQ 和 global DSQ 都没有可运行任务时调用，用于从 BPF 自定义队列取任务并移入可执行队列。只使用内建 DSQ 的调度器通常不需要实现它。
 4. **DSQ 执行：**每个 CPU 只从自己的 local DSQ 选择当前任务。调度器可以建立自定义 DSQ，并按 FIFO 或虚拟时间顺序管理其中的任务，再把它们分发到 local DSQ。
 
-**Q6: [learning] sched_ext 怎样通过 CPU performance target 协同 schedutil？这个目标值能否直接证明关键任务性能提升？**
+**Q7: [learning] sched_ext 怎样通过 CPU performance target 协同 schedutil？这个目标值能否直接证明关键任务性能提升？**
 
 sched_ext 可为 CPU 设置相对性能目标，Android 17 的 schedutil 路径可据此选择目标频率。目标值只是调频输入，不等于硬件已达到对应频率，也不能单独证明端到端时延改善。实际效果取决于调度策略、cpufreq driver、硬件和负载。
 

@@ -191,3 +191,5 @@ aconfig_values {
 在 Android 17 的特定源码路径中，服务名可见 `aconfigd-system`，Java 访问实现可见 `AconfigPackageInternal` 或 `PlatformAconfigPackageInternal`。不要据此断言所有 Android 分支都使用相同进程、实现类或设备路径。
 
 值文件缺失或未纳入模块时，flag 可能保留 `DISABLED` 默认值，通常不会造成编译错误。访问器库未生成或未链接时，常会在构建期暴露符号或依赖错误。排查时应按可观察边界逐层核对：目标 release config、生成访问器、链接依赖、设备实际 flag 状态和运行时存储初始化。`aflags list` 只能显示设备工具当前可见的信息，不能单独证明构建输入、代码生成和业务 getter 全部正确。
+
+设备侧加载、取值与 aflags 的诊断边界见 [aconfig 运行时](../10-平台服务/05-aconfig运行时.md)。

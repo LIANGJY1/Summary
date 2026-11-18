@@ -14,3 +14,16 @@
 4. **Benchmark/CI**：Macrobenchmark、Microbenchmark 等，输出可比较的耗时、帧与吞吐。代价是环境控制（编译模式、设备、温度）。
 
 典型协作链路是：线上指标发现“哪个版本、页面、设备群在变差”并筛出样本，线下工具把一个样本展开到线程、调用栈与系统时间线定位原因，Benchmark 用同一实验验证修复，最后回到线上指标确认真实用户分布改善。两个常被忽略的边界：Android vitals 只覆盖 Play 认证设备上从 Play 安装且同意共享数据的用户。设备上的 Android 平台版本与应用内 APM SDK 版本要分别记录，升级 SDK 不会改变 framework 与内核实现，反之亦然。
+
+**Q2: [learning] Matrix、KOOM、Booster、LeakCanary 这类三方库应该按什么维度选型？“README 写支持某 API 级别”能证明什么？**
+
+选型维度是采集位置：它在哪个层面拿到信号，决定了能看到什么、风险在哪里。“支持 API 37”这类声明只证明框架维护者覆盖了其公开测试范围，不能推导出上层工具的某个具体能力在目标 ROM 上可用。
+
+按采集位置分四类：
+
+- **进程内探针**：Matrix、KOOM、LeakCanary、btrace 在 App 进程内拿方法、Looper、堆、线程、I/O 线索，看不到系统全局因果。
+- **构建期改写**：Booster 与 Matrix 的 Gradle 插件在编译期检查或改写字节码，回答“代码里存在什么调用”，回答不了“线上执行了多少次、多慢”。
+- **研发侧工具箱**：DoKit、BlockCanary 一类适合开发测试现场，不做生产采样与聚合。
+- **可观测性平台**：Firebase Performance、Measure 负责上传、聚合与会话关联，不替代本地源码级定位。
+
+版本声明要拆开读。Matrix 的 Gradle 插件 README 仍声明支持 AGP 3.5/4.0/4.1，而旧 Transform API 自 AGP 8.0 起已移除（材料口径），用 AGP 8/9 的项目要选已迁移的 fork 或自行迁移到 Instrumentation/Scoped Artifacts API。KOOM 的 Java 模块声明 API 21+，Native/Thread 模块限 API 24+ 与 arm64-v8a，其 fork dump（暂停 VM、fork 子进程 dump 后恢复父进程）把冻结缩到 20 ms 量级是项目测量结果而非设备保证。KOOM Native 用“分配元数据 + 保守扫描”找不可达分配块，漏报由形似指针的值造成，它不能替代检测越界和 use-after-free 的 ASan/HWASan。组合使用还要防四件事：开销叠加（探针、Hook、unwind、dump 各自耗资源）、Hook 链冲突（两个库改写同一符号时链顺序与递归保护互相破坏）、数据缺共同主键（session 与时间源不统一就无法关联）、监控不可关闭。接入前把远程开关、采样率和失败降级写进清单，用目标低端机实测开销，不引用上游百分比。

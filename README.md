@@ -7,6 +7,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | `knowledge-base/` | 统一知识入口：Android、测试、语言、项目经验、操作系统、设计模式和通用网络。各主题见目录内 README 和 `ROUTING.md` |
+| `research/` | 技术调研与专题对照资料，包括 [Android Agent Harness](research/android-agent-harness/AOHP原型评估.md) 原型评估 |
 | `ai/` | AI 工具与工作流：OpenCode 使用手册、Agent/Harness、skills 管理器、车载 K 歌 SRS 工作流总结 |
 | `project/` | 项目资料：`hc/`（车机 CloudOS/SDK 分析、问题解析流程框架）、`yadi/`（桌宠需求与设计）、`WMS Viewer/`（窗口树可视化工具）、`honda27m-appstore-tools/`（Honda 27M AppStore UI 走查工具链） |
 | `tools/` | 自用工具：`launcher_tool/`（ADB 脚本启动器 + 飞书签到）、`uicheck/`（UI 检查服务） |

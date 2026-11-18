@@ -39,10 +39,10 @@ Android 13 参考实现根据当前用户可启动的组件和车载策略构造
 
 **Q4: [learning] TaskView 地图返回后空白、启动失败或触摸异常时，怎样区分故障环节？**
 
-先确认嵌入任务是否存在，再分辨任务生命周期、用户状态、输入路由和宿主窗口问题。白屏并不能单独证明地图渲染失败。排查以目标分支的 CarLauncher 和 WindowManager Shell 实现为准。
+在 AAOS 参考实现中，CarLauncher 用 TaskView 嵌入地图 Activity，并通过 HomeCardModule 装配上下卡片。地图仍在自己的任务和进程中运行，焦点、崩溃与恢复由 TaskView、任务组织器和宿主策略共同决定。排查时先确认嵌入任务是否存在，再分辨任务生命周期、用户状态、输入路由和宿主窗口问题。白屏并不能单独证明地图渲染失败。排查以目标分支的 CarLauncher 和 WindowManager Shell 实现为准。
 
-1. **任务不存在：**检查受控 TaskView 的初始化、启动结果和重试边界，再用目标版本支持的 `dumpsys activity` 核对 task。任务启动失败不能靠界面重绘修复。
+1. **任务不存在：**检查受控 TaskView 的初始化、启动结果和重试边界，再用目标版本支持的 `dumpsys activity` 核对 task。任务启动失败时先查宿主入口和依赖包。autoRestartOnCrash 为 false 时，该选项不会触发立即重启。宿主仍可根据可见性、解锁、显示和依赖包状态安排恢复。
 2. **任务曾存在后消失：**对齐 Home 返回、Recents 修剪和 TaskView 释放事件。`MOVE_TASK_WITH_HOME` 控制 Home 与任务的排列，不保证嵌入任务一直存活。
-3. **用户尚未解锁：**多用户设备需确认目标用户、任务信息和解锁状态。task info 暂不可用时等待回调，不能直接解引用。
+3. **用户尚未解锁：**多用户设备需确认目标用户、任务信息和解锁状态。task info 暂不可用时等待回调。headless system user 的限制应与前台驾驶员用户分开确认。
 4. **任务存在但无法触摸：**用 `dumpsys input` 检查输入窗口、捕获区域与宿主焦点。局部遮罩变化后，还要检查窗口是否收到更新通知。
 5. **界面销毁后异常：**核对 TaskView 初始化期间注册的 transition、监听器与其他资源是否在对应释放路径注销。

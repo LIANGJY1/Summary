@@ -2,16 +2,15 @@
 
 > 学习资料（文章模式沉淀）。主线：Binder 架构与数据传输、AIDL 接口契约、事务调度与缓冲区，以及排查工具和常见原生故障。Q 序列即结构，供 Atlas 同源直读。
 
-**Q1: [learning] Binder 的整体架构由哪几部分组成？“一次拷贝”到底省在哪里？**
+**Q1: [learning] Binder 架构由哪几层组成？用户态如何通过它调用服务？**
 
-Binder 由用户态 libbinder、内核 Binder 驱动和 servicemanager 名称注册表三部分完成传输，AIDL 在其上提供接口契约。“一次拷贝”指驱动把事务数据从发送方用户空间直接复制到接收方 mmap 映射的缓冲区，省去了传统 IPC“用户空间→内核→用户空间”的两次拷贝。
+Binder 调用依次涉及 AIDL 接口、libbinder 用户态运行库和内核驱动。客户端可先用 servicemanager 取得服务句柄，再用它发起事务。
 
-1. **libbinder**（`ProcessState`/`IPCThreadState`）：管理接收事务的映射区和 Binder 线程池，封装事务。Java 层 Binder 经 JNI 落到这里。
-2. **内核驱动**：`/dev/binder`（框架）、`/dev/hwbinder`（旧 HAL）等独立设备节点维护各自上下文。Binder 驱动是 Linux 内核软件，不是硬件。它负责路由事务、管理缓冲区映射、请求用户态增减线程和唤醒目标线程。
-3. **servicemanager**：Binder 的 context manager，服务进程按名字注册，调用方按名字查询到目标句柄后再发起事务。
-4. **AIDL**：接口描述语言，编译期生成代理与 Stub，属于接口契约层，不是传输机制本身。
-
-一次同步调用的端到端延迟还包含线程排队、上下文切换、权限与 SELinux 检查、目标服务执行和下游依赖。因此“一次拷贝”不能推出调用一定快。
+1. **AIDL 接口：**编译期生成 Proxy 和 Stub，约定事务码与 Parcel 参数格式。
+2. **libbinder：**Java Binder 经 JNI 进入这里。ProcessState 管理 Binder 线程池与接收映射，IPCThreadState 把 Parcel 提交给驱动并处理回复。
+3. **servicemanager：**服务端按名字注册，客户端查询后得到目标句柄。查到句柄后的业务事务由驱动直接路由。
+4. **内核驱动：**在对应 Binder 上下文中路由事务、安排唤醒与接收。一笔事务的普通数据在驱动传输阶段直接落到接收端可读的缓冲区。完整路径见 [Binder 驱动](../11-原生层/03-Binder驱动.md) Q1。
+5. **延迟边界：**同步调用还要支付 Parcel 编组、线程排队、上下文切换、访问检查、服务执行及下游依赖的成本。拷贝次数只解释传输阶段。
 
 **Q2: [learning] 为什么“Binder 单次调用可以安全传接近 1MB”是错误结论？**
 

@@ -11,6 +11,7 @@
 | `knowledge-base/01-android/` | Android 与车载平台机制、实现和实践 | Android 实现归此；通用操作系统和网络协议分别归 `knowledge-base/02-os/`、`knowledge-base/03-network/` |
 | `knowledge-base/01-android/04-应用库/` | Android 应用侧常用库与组件，如 Glide、RecyclerView | 库与组件机制按主题分别记录；性能分析和优化内容归 `14-performance/`；遵守 `knowledge-base/WRITING-GUIDE.md` |
 | `knowledge-base/02-os/`、`03-network/`、`04-language/` | 通用操作系统、网络协议、编程语言知识 | 按各目录 README 与 `WRITING-GUIDE.md` 维护；平台专属实现归 `knowledge-base/01-android/` |
+| `knowledge-base/02-os/06-Linux内核与驱动/` | Linux 通用驱动、内核数据结构、串口与中断 | Android 设备接入归 `knowledge-base/01-android/11-原生层/` |
 | `knowledge-base/06-testing/`、`07-devtools/` | 测试基础、策略、用例、自动化，以及 Git 等通用开发工具 | 按目录 README 组织；Android 测试机制归 `knowledge-base/01-android/`，项目治理经验归 `knowledge-base/08-项目经验/` |
 | `knowledge-base/08-项目经验/` | 跨项目非技术经验：阶段定位、质量投入、度量、流程和协作，Q 序列供 atlas 直读 | 技术根因归 `knowledge-base/01-android/` 等主题目录。项目事实归 `project/project-architecture/` 或对应项目目录。单次事件归 `issue/`。项目名按“某车机项目”惯例脱敏 |
 | `knowledge-base/atlas/` | Atlas 配置协作目录，内容不入索引 | `config/settings.properties` 可手动修改并重启生效；本机配置和 PIN 位于 `~/.local/share/atlas/`；不得写入凭据 |

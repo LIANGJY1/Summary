@@ -11,4 +11,6 @@ Perfetto、埋点和 tracing 提供者，用于记录时间线与构造可分析
 5. [Xtrace](05-Xtrace动态跟踪.md)（1 题）。
 6. [ftrace 原生动态追踪](06-ftrace动态追踪.md)（4 题）。
 
-共 6 个工具条目、74 题。
+7. [Android Performance Analyzer](07-APA系统追踪.md)（2 题）。设备追踪、采集配置与扰动判断。
+
+共 7 个工具条目、76 题。

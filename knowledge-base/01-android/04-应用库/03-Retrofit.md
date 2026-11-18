@@ -1,6 +1,6 @@
 # Retrofit
 
-> Retrofit（3.0 系源码锚点，AndroidLibs/retrofit 工作区 HEAD f38a5e5）机制学习资料。主线：动态代理主链与解析期/运行期分离、注解到 Request 的构造、suspend 复用 CallAdapter 体系、回调线程装配、OkHttpCall 状态机与工厂链注册顺序。依赖它发请求的 OkHttp 细节与网络策略归 [../08-network/](../09-network)。Q 序列即结构，供 atlas 同源直读。
+> Retrofit（3.0 系源码锚点，AndroidLibs/retrofit 工作区 HEAD f38a5e5）机制学习资料。主线：动态代理主链与解析期/运行期分离、注解到 Request 的构造、suspend 复用 CallAdapter 体系、回调线程装配、OkHttpCall 状态机与工厂链注册顺序。依赖它发请求的 OkHttp 细节与网络策略归 [Android 网络与车载网络](../09-network/README.md)。Q 序列即结构，供 atlas 同源直读。
 
 **Q1: [learning] retrofit.create() 返回的对象是怎么把接口方法调用翻译成 HTTP 请求的？为什么设计成“一次解析、终身复用”？**
 
@@ -10,9 +10,9 @@ create() 用 JDK 动态代理生成接口实现：代理拦截方法调用后，
 
 1. **代理入口**：create() 先校验目标必须是接口且不带泛型参数，再 Proxy.newProxyInstance 生成代理。代理 invoke 三分流：Object 方法原样转发、接口 default 方法走平台反射调用、其余方法查缓存后执行 ServiceMethod。
 2. **解析期**：ServiceMethod.parseAnnotations 先建 RequestFactory（解决“请求怎么拼”），再由 HttpServiceMethod.parseAnnotations 选 CallAdapter、按其 responseType() 反推响应体类型并选 Converter。解析产物字段全部 final，不可变装配天然线程安全。
-3. **运行期**：invoke() 创建惰性的 OkHttpCall（execute/enqueue 才真正发网络）并交给 callAdapter.adapt()，得到 Call/Observable/suspend 等调用形态。
+3. **运行期**：invoke() 创建惰性的 OkHttpCall（execute/enqueue 才真正发网络）并交给 callAdapter.adapt()，得到 Call/Observable/suspend 等调用形态。接口描述服务器契约，真正的调用由配置的 okhttp3.Call.Factory（通常是 OkHttpClient）执行。同步 execute() 需放到工作线程，Android 的默认异步回调执行器通常投递到主线程，具体由适配器及执行器配置决定。
 
-分离的原因是成本结构：反射解析与全量交叉校验昂贵，按“方法”粒度做一次即可；而运行期热路径只剩参数校验与拼装，解析结果不可变化又让缓存读无需加锁。由此推出使用纪律：接口方法数不影响单次请求开销，但运行期反射失败是确定性错误（创建失败会被缓存并重复抛出），重试调用只会再失败一次。
+分离的原因是成本结构：反射解析与全量交叉校验昂贵，按“方法”粒度做一次即可；而运行期热路径只剩参数校验与拼装，解析结果不可变化又让缓存读无需加锁。缓存按方法复用，接口方法数不影响已经解析的方法的单次请求开销。源码中解析失败会移除临时缓存锁，下一次调用可重新解析。接口声明有误时，应修正声明或配置，网络重试无法修复该错误。
 
 依据：AndroidLibs/retrofit（3.0 系，HEAD f38a5e5）的 Retrofit.create、ServiceMethod、HttpServiceMethod 与沉淀文档 §1。
 
@@ -22,14 +22,16 @@ create() 用 JDK 动态代理生成接口实现：代理拦截方法调用后，
 
 解析期三个阶段：
 
-1. **方法级注解**：确定 HTTP 方法与相对 URL、静态 @Headers。@Multipart 与 @FormUrlEncoded 互斥。
-2. **逐参数解析**：每种注解产出对应 handler，支持单值、Iterable、数组三形态（后两者是单值 handler 的包装）。一个参数只允许一个 Retrofit 注解。
+1. **方法级注解**：以 @GET、@POST 等方法注解确定 HTTP 方法和相对 URL，并处理静态 @Headers。@Multipart 与 @FormUrlEncoded 互斥。相对 URL 用 Retrofit 的 base URL 解析。
+2. **逐参数解析**：每种注解产出对应 handler，支持单值、Iterable、数组三形态（后两者是单值 handler 的包装）。一个参数只允许一个 Retrofit 注解。@Path 替换路径值，@Query 添加一个查询参数，@QueryMap 添加多个查询参数，@FormUrlEncoded 配合 @Field 编码表单字段，@Body 通过请求体转换器编码对象。
 3. **交叉校验**：有 @Url 或方法注解带 URL、无 body 的方法禁 @Body、表单必须有 @Field、multipart 必须有 @Part。
 
 运行期与两条配套语义：
 
 1. **URL 两态**：RequestBuilder 起始为字符串态（支持 @Path 替换），第一个查询参数出现时一次性切到 builder 态并永久失效字符串替换——解析期强制 @Path/@Url 排在 @Query 之前，正是这条状态机在解析期的投影。
 2. **null 两档**：单值参数为 null 静默跳过（可选参数语义）；Map 系、@Path、@Url、@Body 为 null 直接抛错——无法决定“跳过还是保留空”时宁可显式失败。
+
+在接口里声明路径和参数位置，可由库统一编码，也能单独测试请求构造。认证、错误响应、取消、超时及重试仍由应用和客户端策略处理。
 
 安全上，@Path 值先按白名单百分号编码，替换后再用正则拒绝 "." 与 ".."（含 %2e）路径穿越：编码解决合法性，正则解决语义性，即便 encoded=true 也不放行穿越。运行期还会把 Invocation 挂到请求 tag 上，拦截器可反查“哪个方法、什么参数”。
 

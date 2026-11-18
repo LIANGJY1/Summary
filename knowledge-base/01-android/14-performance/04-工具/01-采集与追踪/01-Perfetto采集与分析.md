@@ -4,6 +4,8 @@
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q1 -->
 
+## 第一章 采集链路与配置
+
 **Q1: [learning] Perfetto 由哪些部分组成，为什么跨线程、跨进程的时间关系问题要优先用它而不是日志和单次堆栈？**
 
 Perfetto 是 Google 开源的 tracing 基础设施，包含采集端（data source 与守护进程）、分析引擎 Trace Processor 和可视化 UI 三个模块。它把所选数据源的事件放进同一时间域，日志和单次堆栈只能记录局部状态，很难回答“主线程等待时对端在做什么”这类跨线程、跨进程的时间关系。
@@ -151,6 +153,8 @@ ORDER BY severity, name, idx;
 有丢失后能否继续分析取决于损失所在的 CPU、buffer、时段是否在结论路径上。重采成本低时先修配置重采。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q11 -->
+
+## 第二章 查询、指标与符号
 
 **Q11: [learning] 大 trace 怎样可靠解析并保持查询结果可复现？**
 
@@ -452,6 +456,8 @@ cat raw-trace.perfetto-trace symbols.pb deobfuscation.pb > enriched-trace.perfet
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q10 -->
 
+## 第三章 CPU 频率与应用埋点
+
 **Q27: [learning] Perfetto 里 CPU 频率数据从哪三条采集路径来？频率轨道开头留白说明什么？**
 
 三条路径互补（配置项按材料核对的 Android 17 Perfetto 文档口径）：
@@ -572,6 +578,8 @@ trigger 解决“条件满足时给已配置 session 发信号”：`ActivateTri
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q27 -->
 
+## 第四章 帧流水线与卡顿
+
 **Q36: [learning] FrameTracer 的 trace 里缺少某个帧事件（如 AcquireFenceSignaled 或 RELEASE_FENCE），能说明什么、不能说明什么？**
 
 缺事件有三种彼此独立的原因，都不能直接推断“该动作没有发生”：
@@ -634,18 +642,13 @@ CPU 编号更没有跨设备语义：CPU 7 可能是最高 capacity 的核心，
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q28 -->
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q29 -->
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q30 -->
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q31 -->
 
-
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q32 -->
-
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q35 -->
 
@@ -693,6 +696,8 @@ CPU 编号更没有跨设备语义：CPU 7 可能是最高 capacity 的核心，
 时间重叠只说明相关。要归因 Binder 或 GC，还须证明它位于责任线程或依赖路径，且时长足以解释 finish/present 偏差。直接依赖证据可定责，组合证据可写高可信假设，背景负载与温度变化只应列为待验证项。
 
 <!-- 来源：02-tracing/01-perfetto-fundamentals.md · Q14 -->
+
+## 第五章 线程状态与归因
 
 **Q43: [learning] Perfetto 的线程状态（Running/R/R+/S/D 等）从哪里来？各状态能确认什么？**
 
@@ -874,6 +879,8 @@ v53 起 TrackEvent 的 slice 或 instant event 可以附带调用栈：点选单
 缺关键数据源、trace 截断或时间戳来源无法对齐时，输出补采方案，不继续生成看似完整的根因。
 
 <!-- 来源：02-tracing/02-perfetto-advanced.md · Q13 -->
+
+## 第六章 调频与图形缓冲案例
 
 **Q55: [learning] 冷启动时关键线程长时间低频 Running，能直接得出“governor 调频响应慢”吗？**
 

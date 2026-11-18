@@ -59,3 +59,13 @@ user build 只能分析 manifest 声明为 profileable 或 debuggable 的应用�
 4. 两个工具采样时刻不同。
 
 判断碎片时，先确认 live allocation（未释放分配）确实已下降，再看 allocator 统计与 smaps 匿名驻留页是否同步回落。RSS 滞后回落本身不能单独命名为泄漏或碎片。
+
+**Q5: [learning] 正式包无法采集 Native 堆调用栈时，怎样定位内存归属？**
+
+先判断能否获得调用栈。正式包无法用 malloc debug 或 heapprofd 采样时，可以用同一场景前后的进程内存和匿名映射差分缩小范围。
+
+1. **malloc debug。** 能否用于目标进程取决于构建与系统调试配置。先在可控台架验证分配跟踪确实对目标生效，再采集结果。
+2. **heapprofd。** Android user 构建要求目标应用标记为 profileable 或 debuggable。检查轨迹中是否有有效堆采样，空轨迹不足以证明没有分配。userdebug 的适用范围更广，仍取决于目标和构建约束。
+3. **场景差分。** 在同一进程、同一入口对照 dumpsys meminfo 与有权限读取的 smaps 映射。原 Android 13 车机样本播放视频后 Native Heap 由约 12 MiB 增至 59 MiB，并出现新的媒体动态库映射。这些证据支持进一步调查媒体工作集，无法单独定位具体分配调用栈。
+
+依据为 Perfetto 的 Callstack-based Allocation Profiling 文档和 Android 13 车机采样记录。

@@ -1,5 +1,9 @@
 # RecyclerView 列表组件
 
+> 本册覆盖 Adapter、ViewHolder 和 LayoutManager 的协作，以及回收、查找、预取、数据更新、动画与嵌套容器。实现以题内 AndroidX RecyclerView 1.4 版本材料为依据。滚动慢帧的 trace 归因见 [界面渲染与交互响应](../14-performance/01-应用/02-渲染与响应.md)。
+
+## 第一章 列表装配与 ViewHolder 复用
+
 **Q1: [learning] RecyclerView 如何把数据、ViewHolder 与可见 item 连接起来，为什么创建和绑定不是一一对应？**
 
 RecyclerView 只为当前布局需要的 item 请求 View，并在复用时把已有 ViewHolder 绑定到新数据；Adapter、ViewHolder 和 LayoutManager 分别提供数据绑定、item 视图和摆放策略。列表有很多数据项时，屏幕外的每一项不会因此都变成一棵常驻 View 子树。
@@ -9,7 +13,7 @@ RecyclerView 只为当前布局需要的 item 请求 View，并在复用时把�
 3. **LayoutManager：**决定 item 如何测量、摆放、滚动及何时需要可见项。LinearLayoutManager 组织一维列表，GridLayoutManager 组织网格；自定义布局策略也由它承担。
 4. **RecyclerView 与回收：**RecyclerView 协调布局、Adapter 和回收器。离开屏幕的 ViewHolder 可能暂时保留、进入共享池，或被丢弃；之后是否能直接复用取决于 viewType 等条件，复用后通常仍要重新绑定数据。
 
-因此，RecyclerView 复用的是 item View 结构，不是业务数据；一次创建的 ViewHolder 可以多次绑定，绑定代码必须完整设置当前 item 的 UI 状态。依据为 Android Developers《Create dynamic lists with RecyclerView》和 RecyclerView API reference。列表滚动、复用和更新的性能优化见 [View 与 Compose 渲染实战](../06-graphics/12-View与Compose实践.md)。
+因此，RecyclerView 复用的是 item View 结构，不是业务数据；一次创建的 ViewHolder 可以多次绑定，绑定代码必须完整设置当前 item 的 UI 状态。依据为 Android Developers《Create dynamic lists with RecyclerView》和 RecyclerView API reference。
 
 **Q2: [learning] ViewHolder 离开屏幕或在布局中被临时移除后进入哪一级缓存？容量与淘汰规则是什么？**
 
@@ -23,11 +27,20 @@ RecyclerView 只为当前布局需要的 item 请求 View，并在复用时把�
 4. **调参入口：**setItemViewCacheSize(n) 调一级缓存容量。RecycledViewPool.setMaxRecycledViews(viewType, max) 调池容量。多个列表可通过 setRecycledViewPool 共享同一个池。
 5. **非法回收：**对仍在 scrap 中或仍挂在父容器上的 holder 调用回收，会抛 IllegalArgumentException，提示 Scrapped or attached views may not be recycled。
 
-获取视图时按位置、按稳定 ID、按 viewType 逐级放宽查找的顺序，以及哪些来源仍会触发绑定，见 [View 与 Compose 渲染实战](../06-graphics/12-View与Compose实践.md)。
-
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 Recycler.recycleViewHolderInternal、Recycler.DEFAULT_CACHE_SIZE 与 RecycledViewPool.DEFAULT_MAX_SCRAP。
 
-**Q3: [learning] onBindViewHolder 中为什么不能缓存 position 参数？getBindingAdapterPosition、getAbsoluteAdapterPosition 与 getLayoutPosition 有什么区别？**
+**Q3: [learning] RecyclerView 稳定滑动中偶尔出现 onBindViewHolder 是否说明复用失效，ViewHolder 到底按什么顺序获取、哪些来源仍会 bind？**
+
+滑动中出现 `onBindViewHolder()` 不代表复用失效。它只说明本次 holder 需要重新绑定。RecyclerView 1.4.0 的 holder 获取路径大体按下列顺序查找：
+
+1. **Changed scrap**：预布局时按 position 或 stable ID 查找变化前的 holder。
+2. **已附着来源**：检查 attached scrap、hidden child 和 `mCachedViews`。缓存先按 position 查找，再校验 viewType 与 ID。
+3. **稳定 ID 查找**：配置 stable ID 时可按 ID 再找 holder。
+4. **扩展与池**：再查 `ViewCacheExtension` 和 `RecycledViewPool`。两者都没有可用 holder 时才新建。
+5. **绑定与容量**：scrap 取回时可能重绑，Pool 命中后仍要 bind。干净且已绑定的 `mCachedViews` 条目可以免 bind。预取观察到的 item 数量可提高一级缓存实际容量。
+6. **稳定 ID 边界**：稳定 ID 仍需通过类型校验，不能修复不兼容的 viewType。
+
+**Q4: [learning] onBindViewHolder 中为什么不能缓存 position 参数？getBindingAdapterPosition、getAbsoluteAdapterPosition 与 getLayoutPosition 有什么区别？**
 
 同一个 ViewHolder 会被先后绑定到不同位置，而且数据更新后布局位置要等到下一次布局才与 Adapter 位置同步，所以绑定回调里缓存的 position 在点击时可能已经过期，事件发生时应现取。三个 API 分别回答“在绑定它的 Adapter 里排第几”“在 RecyclerView 顶层 Adapter 里排第几”“上一次布局时排第几”。
 
@@ -56,7 +69,43 @@ override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ItemHolder {
 
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 ViewHolder.getBindingAdapterPosition、getAbsoluteAdapterPosition 与 getLayoutPosition。
 
-**Q4: [learning] ItemDecoration 的 getItemOffsets、onDraw 与 onDrawOver 分别在什么阶段生效？多个装饰如何叠加？**
+**Q5: [learning] hasStableIds 为 true 时复用与动画行为有什么变化？ID 不唯一会怎样？**
+
+开启稳定 ID 后，RecyclerView 在按位置查找失败时还能按 getItemId 在 scrap 与一级缓存中找回同一条目的 ViewHolder，notifyDataSetChanged 不再清空一级缓存，变更动画也能用 ID 配对新旧 holder。代价是 ID 必须真实稳定且唯一：两个 holder 共享同一个 ID 会在变更动画处理中抛 IllegalStateException。
+
+稳定 ID 改变三处行为：
+
+1. **查找：**tryGetViewHolderForPositionByDeadline 在位置查找失败后、ViewCacheExtension 与回收池之前，按 ID 查 scrap 与 mCachedViews。
+2. **全量刷新：**markKnownViewsInvalid 把一级缓存全部标记为 UPDATE 与 INVALID，只有在 Adapter 没有稳定 ID 时才整体清空。有稳定 ID 的 holder 被找回后重新绑定即可复用。
+3. **动画配对：**变更动画用 ID 作为 change key 配对预布局与真布局的 holder。ID 重复时 handleMissingPreInfoForChangeError 抛出 Two different ViewHolders have the same stable ID。
+
+何时开启取决于条目是否有稳定主键：有主键且会频繁整表刷新时收益最大。拿不准唯一性就改用 DiffUtil 按内容比较，ListAdapter 与 AsyncListDiffer 都不要求稳定 ID。
+
+依据：本地 androidx recyclerview 源码快照（1.4 主线）的 Recycler.markKnownViewsInvalid、Recycler.tryGetViewHolderForPositionByDeadline 与 RecyclerView.handleMissingPreInfoForChangeError。
+
+## 第二章 更新、装饰与动画
+
+**Q6: [learning] DiffUtil 如何计算最小变更集并识别移动？areItemsTheSame 与 areContentsTheSame 的判据怎样分工？**
+
+DiffUtil 用 Myers 差分算法求出把旧列表变成新列表所需的最少增删操作，占 O(N) 空间、期望 O(N + D²) 时间，D 为编辑脚本长度。Myers 算法不识别移动，detectMoves 为 true 时再做一遍 O(M × N) 的配对，把“删除加新增”的同一条目合并为移动，M 与 N 分别是新增总数和删除总数。两个回调的分工是：areItemsTheSame 按身份（主键）判断是否同一条目，areContentsTheSame 按内容判断是否需要重新绑定。
+
+按计算到分发的顺序，机制有五点：
+
+1. **算法：**calculateDiff 分治求出全部匹配对角线，得到增删操作。detectMoves 默认为 true。
+2. **移动检测：**列表天然按同一约束排序（如时间戳）时可关闭移动检测，省掉额外开销。
+3. **判据分工：**areItemsTheSame 返回 false 视为不同条目，产生删除加新增或移动。返回 true 时再比较 areContentsTheSame，为 false 则产生变更，并调用 getChangePayload 生成局部刷新载荷。两者写反会把移动算成变更，动画全乱。
+4. **分发：**DiffResult.dispatchUpdatesTo(adapter) 按顺序调用 notifyItemRangeInserted、Removed、Moved 与 Changed。调用前 Adapter 的数据源必须已替换为新列表，否则位置对不上。
+5. **线程：**计算是纯函数、不碰 View，可在后台线程执行。大列表在主线程计算会卡帧，ListAdapter 与 AsyncListDiffer 正是把计算放到后台、在主线程分发的封装。提交给 submitList 的 List 不得再原地修改，每次传新实例。
+
+三种接入方式按控制力递增分别是 ListAdapter、AsyncListDiffer 和直接调用 DiffUtil.calculateDiff。高频局部更新还受以下边界影响：
+
+1. **全量刷新**：notifyDataSetChanged() 不提供变化范围，通常会重绑可见条目。稳定 ID 可帮助动画匹配，但不能省去完整重绑。
+2. **payload 局部刷新**：载荷只传 UI 变化的字段。目标 holder 未 attach 时 payload 可能丢弃，完整 bind 必须能从当前 item 恢复全部 UI，并清理旧图片、选择状态和监听器。
+3. **异步提交**：AsyncListDiffer 对同一 List 实例直接返回，被后续提交取代的旧差分也不会应用。提交列表及比较字段应视为不可变。内容比较聚焦于 UI，避免用无关的时间戳或调试字段触发更新。
+
+依据：本地 androidx recyclerview 源码快照（1.4 主线）的 DiffUtil 类注释、DiffUtil.calculateDiff 与 DiffUtil.DiffResult。
+
+**Q7: [learning] ItemDecoration 的 getItemOffsets、onDraw 与 onDrawOver 分别在什么阶段生效？多个装饰如何叠加？**
 
 ItemDecoration 通过三个回调介入布局与绘制：getItemOffsets 在测量子视图时把装饰占位累加进子视图的 insets，从而影响条目的位置与尺寸。onDraw 在 RecyclerView.onDraw 中、子视图绘制之前执行，画在条目之下。onDrawOver 在 RecyclerView.draw 中、子视图绘制之后执行，画在条目之上。多个装饰按添加顺序依次执行，各自的 offsets 累加。
 
@@ -74,37 +123,7 @@ ItemDecoration 通过三个回调介入布局与绘制：getItemOffsets 在测�
 
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 RecyclerView.draw、RecyclerView.onDraw、getItemDecorInsetsForChild 与 LayoutManager.layoutDecoratedWithMargins。
 
-**Q5: [learning] hasStableIds 为 true 时复用与动画行为有什么变化？ID 不唯一会怎样？**
-
-开启稳定 ID 后，RecyclerView 在按位置查找失败时还能按 getItemId 在 scrap 与一级缓存中找回同一条目的 ViewHolder，notifyDataSetChanged 不再清空一级缓存，变更动画也能用 ID 配对新旧 holder。代价是 ID 必须真实稳定且唯一：两个 holder 共享同一个 ID 会在变更动画处理中抛 IllegalStateException。
-
-稳定 ID 改变三处行为：
-
-1. **查找：**tryGetViewHolderForPositionByDeadline 在位置查找失败后、ViewCacheExtension 与回收池之前，按 ID 查 scrap 与 mCachedViews。
-2. **全量刷新：**markKnownViewsInvalid 把一级缓存全部标记为 UPDATE 与 INVALID，只有在 Adapter 没有稳定 ID 时才整体清空。有稳定 ID 的 holder 被找回后重新绑定即可复用。
-3. **动画配对：**变更动画用 ID 作为 change key 配对预布局与真布局的 holder。ID 重复时 handleMissingPreInfoForChangeError 抛出 Two different ViewHolders have the same stable ID。
-
-何时开启取决于条目是否有稳定主键：有主键且会频繁整表刷新时收益最大。拿不准唯一性就改用 DiffUtil 按内容比较，ListAdapter 与 AsyncListDiffer 都不要求稳定 ID。
-
-依据：本地 androidx recyclerview 源码快照（1.4 主线）的 Recycler.markKnownViewsInvalid、Recycler.tryGetViewHolderForPositionByDeadline 与 RecyclerView.handleMissingPreInfoForChangeError。
-
-**Q6: [learning] DiffUtil 如何计算最小变更集并识别移动？areItemsTheSame 与 areContentsTheSame 的判据怎样分工？**
-
-DiffUtil 用 Myers 差分算法求出把旧列表变成新列表所需的最少增删操作，占 O(N) 空间、期望 O(N + D²) 时间，D 为编辑脚本长度。Myers 算法不识别移动，detectMoves 为 true 时再做一遍 O(M × N) 的配对，把“删除加新增”的同一条目合并为移动，M 与 N 分别是新增总数和删除总数。两个回调的分工是：areItemsTheSame 按身份（主键）判断是否同一条目，areContentsTheSame 按内容判断是否需要重新绑定。
-
-按计算到分发的顺序，机制有五点：
-
-1. **算法：**calculateDiff 分治求出全部匹配对角线，得到增删操作。detectMoves 默认为 true。
-2. **移动检测：**列表天然按同一约束排序（如时间戳）时可关闭移动检测，省掉额外开销。
-3. **判据分工：**areItemsTheSame 返回 false 视为不同条目，产生删除加新增或移动。返回 true 时再比较 areContentsTheSame，为 false 则产生变更，并调用 getChangePayload 生成局部刷新载荷。两者写反会把移动算成变更，动画全乱。
-4. **分发：**DiffResult.dispatchUpdatesTo(adapter) 按顺序调用 notifyItemRangeInserted、Removed、Moved 与 Changed。调用前 Adapter 的数据源必须已替换为新列表，否则位置对不上。
-5. **线程：**计算是纯函数、不碰 View，可在后台线程执行。大列表在主线程计算会卡帧，ListAdapter 与 AsyncListDiffer 正是把计算放到后台、在主线程分发的封装。提交给 submitList 的 List 不得再原地修改，每次传新实例。
-
-三种接入方式按控制力递增分别是 ListAdapter、AsyncListDiffer 和直接调用 DiffUtil.calculateDiff。更新策略的性能取舍见 [View 与 Compose 渲染实战](../06-graphics/12-View与Compose实践.md)。
-
-依据：本地 androidx recyclerview 源码快照（1.4 主线）的 DiffUtil 类注释、DiffUtil.calculateDiff 与 DiffUtil.DiffResult。
-
-**Q7: [learning] ItemAnimator 的四类动画分别在何时触发？为什么 notifyItemChanged 默认会出现闪烁？**
+**Q8: [learning] ItemAnimator 的四类动画分别在何时触发？为什么 notifyItemChanged 默认会出现闪烁？**
 
 布局第三步对比预布局与真布局两轮记录的视图信息，把差异分成四类交给 ItemAnimator：消失（animateDisappearance）、出现（animateAppearance）、持续（animatePersistence）和变更（animateChange）。notifyItemChanged 触发变更动画时，默认的 DefaultItemAnimator 为变更条目创建新 ViewHolder，旧 holder 淡出、新 holder 淡入，视觉上就是一次闪烁。
 
@@ -124,7 +143,9 @@ DiffUtil 用 Myers 差分算法求出把旧列表变成新列表所需的最少�
 
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 RecyclerView.dispatchLayoutStep3、ItemAnimator 与 SimpleItemAnimator 的 canReuseUpdatedViewHolder、DefaultItemAnimator.animateChange。
 
-**Q8: [learning] 自定义 LayoutManager 的最小契约是什么？onLayoutChildren 为什么必须幂等？**
+## 第三章 布局、共享池与预取
+
+**Q9: [learning] 自定义 LayoutManager 的最小契约是什么？onLayoutChildren 为什么必须幂等？**
 
 LayoutManager 唯一的抽象方法是 generateDefaultLayoutParams。最小闭环还要实现 onLayoutChildren（从 Recycler 取视图并摆放），以及 canScrollVertically 或 canScrollHorizontally 与对应的 scrollVerticallyBy 或 scrollHorizontallyBy（返回实际消耗的像素）。onLayoutChildren 在预布局、真布局和自适应测量时会被多次调用，所以必须每次从锚点重算，不能在方法内累积状态。
 
@@ -141,7 +162,7 @@ LayoutManager 唯一的抽象方法是 generateDefaultLayoutParams。最小闭�
 
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 LayoutManager.generateDefaultLayoutParams、LayoutManager.isAutoMeasureEnabled、LinearLayoutManager.isAutoMeasureEnabled 与 RecyclerView.dispatchLayoutStep1、dispatchLayoutStep2。
 
-**Q9: [learning] ConcatAdapter 如何让多个 Adapter 的 viewType 与稳定 ID 互不冲突？什么时候应关闭隔离？**
+**Q10: [learning] ConcatAdapter 如何让多个 Adapter 的 viewType 与稳定 ID 互不冲突？什么时候应关闭隔离？**
 
 ConcatAdapter 的默认配置 Config.DEFAULT 是 isolateViewTypes 为 true、stableIdMode 为 NO_STABLE_IDS：每个子 Adapter 的本地 viewType 被映射到全局唯一值，位置换算与通知转发由 ConcatAdapterController 完成，子 Adapter 各自独立调用 notify 方法。只有各子 Adapter 的相同 viewType 确实代表相同布局并希望共享回收池时，才把 isolateViewTypes 设为 false。
 
@@ -155,3 +176,32 @@ ConcatAdapter 的默认配置 Config.DEFAULT 是 isolateViewTypes 为 true、sta
 典型用法是头部 Adapter、内容 Adapter 与底部加载态 Adapter 各自独立，用 addAdapter 依次拼接后再 setAdapter。
 
 依据：本地 androidx recyclerview 源码快照（1.4 主线）的 ConcatAdapter.Config、ConcatAdapterController 与 ViewTypeStorage。
+
+**Q11: [learning] 多个嵌套横向列表共享同一个 RecycledViewPool 时，viewType 应按什么原则划分，共享池会引入什么新风险？**
+
+共享 `RecycledViewPool` 按整数 viewType 复用 holder，不知道 holder 所属 Adapter。因此只有 ViewHolder 结构和绑定规则能够交叉复用时，多个横向列表才应共享池。
+
+1. **类型划分**：只差文案、图片或按钮状态的条目可共用一个 viewType。结构不同或绑定契约不同的条目必须区分。
+2. **绑定与容量**：Pool 命中后通常仍需 bind 以清理和设置 holder 状态。`setMaxRecycledViews()` 只增加上限，不预先创建 holder。按同屏子列表数与每个子列表的可见卡片数估算容量，再用 trace 和内存验证。
+3. **分离回收**：结构一致的 Adapter 可共用 `setRecycledViewPool(sharedPool)`。`LinearLayoutManager.setRecycleChildrenOnDetach(true)` 会在 detach 时回收 child，也会改变图片或播放器资源清理时机，需结合页面生命周期验证。
+4. **共享副作用**：多个 Adapter 会共用按 viewType 统计的 create/bind 历史耗时。这些值影响预取预算。Adapter 创建成本相差很大时会相互影响。按颜色或角标等业务状态拆成许多类型会使回收池分散、增加重新创建。
+
+**Q12: [learning] RecyclerView 的 GapWorker 预取运行在哪个线程，willCreateInTime/willBindInTime 怎么决定做不做，为什么预取正常下一帧仍可能长？**
+
+GapWorker 不是后台线程。它把预取任务投进主线程队列，并根据近期绘制时间和刷新周期估算下一帧 deadline。它可预取 holder 创建与绑定，但不能替下一帧执行 item 的 measure/layout。
+
+1. **任务产生**：滚动时 RecyclerView 用方向和距离调用 `postFromTraversal()`，随后将任务放入主线程消息队列。
+2. **时间预算**：普通任务用同 viewType 的 Pool 历史耗时估计 create/bind 是否能赶上 deadline。预计下一帧立即需要的任务标记为 forced，可跳过耗时估算，但实际工作仍占主线程。
+3. **定位剩余卡顿**：预取切片正常但 `RV OnLayout` 或 framework measure/layout 仍长时，检查 item 尺寸、布局结构和图片是否触发 `requestLayout()`。
+4. **嵌套列表预取**：`setInitialPrefetchItemCount()` 只影响嵌套 RecyclerView 首次进入视口前的初始预取，数量应接近初始可见 item 数。设大只会增加 bind 和对象，不会直接提高流畅度。
+5. **缓存容量**：增大 `setItemViewCacheSize()` 可减少短距离回滑的 bind，但会持有更多对象引用。先看 create/bind、内存与 GC 数据再决定。
+6. **版本限制**：RecyclerView 1.4.0 要求 `compileSdk >= 35`，在 API 35+ 上滚动时会调用 `View.setFrameContentVelocity()` 参与平台刷新率策略，AAOS 13 无该平台 API。Android 17 的 DeliQueue 只改变消息入队锁竞争，不改变 GapWorker 使用主线程的事实。
+
+**Q13: [learning] 纵向 Feed 里嵌横向卡片列表时应怎样配置容器，setHasFixedSize(true) 的确切语义是什么？**
+
+纵向 Feed 嵌套横向列表时，先约束 RecyclerView 自身尺寸，再按结构兼容性决定共享池和预取数量。只有数据变化不会改变容器测量宽高时才开启 setHasFixedSize(true)。
+
+1. **测量边界**：纵向 NestedScrollView 若让内部 RecyclerView 测量完整内容高度，可能一次准备大量条目，削弱回收收益。同方向嵌套还增加触摸分发和 NestedScrolling 协商成本。能用一个列表表达页面时，可用 ConcatAdapter 组合不同内容。
+2. **固定尺寸**：setHasFixedSize(true) 表达容器的宽高独立于 Adapter 内容。条目仍可不等高，也可以重新测量。容器使用 wrap_content 且增删条目会改变自身尺寸时，应保留默认行为。
+3. **复用和预取**：条目结构与绑定约定兼容时共享 RecycledViewPool。初始预取数量按首次进入视口时的可见卡片数设置。
+4. **变更动画**：payload 缩小绑定工作后，可对高频更新页面单独对照关闭 supportsChangeAnimations。用 RV OnLayout、绑定耗时与视觉结果判断页面是否获益。

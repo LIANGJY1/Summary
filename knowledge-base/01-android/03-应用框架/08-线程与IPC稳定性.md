@@ -1,6 +1,6 @@
 # 稳定性治理：线程、协程与 IPC
 
-> 学习资料（文章模式沉淀）。主线包括按 owner 和生命周期证据判断线程与协程泄漏，按传输、服务端和业务结果定位 Binder 故障，以及把 Android 17 Keystore alias 配额当作需要 owner、状态和回滚期的持久资源治理。源文档：android-internals-wiki §20.8《线程与协程泄漏治理》、§20.9《Binder IPC 故障判断与性能诊断》、§20.10《Android 17 Keystore 密钥配额与登录恢复》。本地可核对的机制按 AAOS 13 源码标注版本。工程实践按材料口径转写，不确定处已弱化。Android 17 的 Keystore 配额数值与错误码边界已与官方文档核对。Binder 线程池规模、事务缓冲区与冻结进程的机制层见 `../01-architecture/02-Binder.md`。Q 序列即结构，供 Atlas 同源直读。
+> 学习资料（文章模式沉淀）。本文解释如何按 owner 和生命周期证据判断线程与协程泄漏，以及如何按传输、服务端和业务结果定位 Binder 故障。依据 android-internals-wiki §20.8 与 §20.9，涉及 AAOS 13 的实现逐题标注。Binder 线程池规模、事务缓冲区与冻结进程的机制见 [Binder](../01-architecture/02-Binder.md)。密钥配额与 alias 治理见 [Keystore](../10-平台服务/08-Keystore操作.md)。Q 序列供 Atlas 直读。
 
 **Q1: [learning] 线程快照里出现大量 WAITING 状态的 Thread-N 线程，能据此判定线程泄漏并强杀这些线程吗？**
 
@@ -235,114 +235,7 @@ joinable pthread 的入口函数返回或调用 `pthread_exit()` 后，Linux tas
 
 修复方向取决于根因。服务端 `onTransact()` 应快速校验并复制参数，再把耗时工作交给有容量上限的业务 executor，以便尽快释放 Binder 线程。不要持有应用锁发起外部同步 Binder 调用。确实无法避免时，应约定统一的跨进程加锁顺序并设计超时。
 
-**Q15: [learning] Android 17 的 Keystore 密钥配额规则是什么？Android 13 设备上有这条配额吗？达到上限后旧密钥还能用吗？**
-
-Android 17 起按应用 UID 限制 Keystore 密钥条目数。达到限制后新的密钥生成和导入会失败，但已存在的密钥仍可使用，系统也不会主动删除旧密钥。配额只在密钥创建路径检查。
-
-配额与版本边界如下（Android 17 keystore2 源码 `KeystoreSecurityLevel.check_key_counts()` 与官方文档已核对）：
-
-1. **target API 37 及以上的非系统应用：**上限为 50,000 个条目。
-2. **其他应用和系统应用：**上限为 200,000 个条目。
-3. **target API 37 及以上达到上限：**返回 API 37 新增的 `ERROR_TOO_MANY_KEYS`，常量值为 18。
-4. **较低 target API 达到上限：**返回 `ERROR_INCORRECT_USAGE`，异常消息包含密钥数量限制信息。
-5. **检查位置：**`generate_key()`、`import_key()`、`import_wrapped_key()` 在进入 KeyMint 前检查条目数。现有密钥的 `Cipher.init()` 和 `Signature.initSign()` 不经过该配额检查。
-6. **旧密钥使用：**升级 target SDK 不会仅因配额使旧密钥失效。不过，同名 alias 的 rebind 也要先创建新密钥，满额时会在替换前被拒绝。
-7. **UID 范围：**配额属于 UID，不属于进程或业务模块。同一安装包在不同 Android 用户或工作资料下的 UID 分别计数，TEE 和 StrongBox 密钥计入同一 UID 总数。
-8. **Android 13：**Android 16 及更早版本不执行这条配额，因此 Android 13 设备没有此限制。AAOS 13 本地树未包含 `system/security`（keystore2）目录，机制细节按 Android 17 材料及官方文档核对。
-
-**Q16: [learning] 哪些设计会让 Keystore alias 数量持续增长？passkey 是否计入本应用的配额？**
-
-alias 持续增长通常是因为把一次性或不断变化的标识写进 alias，却没有定义回收周期。治理时应让每类用途占用固定槽位和少量版本，并区分应用自己创建的密钥与凭据提供方管理的 passkey。
-
-常见增长来源及控制方法如下：
-
-1. **设备绑定：**在 alias 中加入时间戳，或每次绑定生成新随机 ID。改为按稳定业务域、用途和版本组织固定槽位，例如 `auth.<account-slot>.device-sign.v3`。`account-slot` 使用首次绑定时生成的随机标识，不含敏感信息。
-2. **账号和设备生命周期：**账号退出、注销或设备解绑后不回收密钥。完成业务授权后，按生命周期回收不再使用的版本。
-3. **一次性数据：**每笔订单或每次挑战都创建密钥。一次性挑战状态不应写入 Keystore。
-4. **数据加密：**每个文件或数据库表都创建 Keystore 密钥。可改用少量 Keystore 密钥包装 DEK（数据加密密钥）。
-5. **算法轮换与测试：**轮换只新增不删除，或 QA 测试前缀长期累积。确认新版本可用后回收旧版本，并清理测试 alias。
-6. **敏感信息：**alias 不应包含账号 ID、手机号、订单号、token 或可猜哈希。除了占用配额，这些内容还会带来数据关联与猜测风险。
-
-passkey 是否计入本应用配额，取决于私钥由谁管理：
-
-1. **普通依赖方应用：**通过 Credential Manager 请求 passkey 时，私钥由用户选择的凭据提供方（例如密码管理器）保存，不计入本应用 Keystore alias。
-2. **应用自建凭据提供方：**应用自己调用 Keystore 生成密钥，或作为凭据提供方管理私钥时，这些条目才计入该 UID 的盘点。
-3. **核对方法：**查看本应用 `AndroidKeyStore` 可见 alias 和密钥创建调用栈，不按用户的 passkey 数量推算配额。
-
-**Q17: [learning] Keystore 故障只看异常消息为什么分类不准？应按什么组合分类？**
-
-异常消息不足以分类 Keystore 故障，因为异常可能多层包装，同一错误码也可能对应多种原因。应同时查看外层异常、cause 链、公开错误码和失败阶段（生成、导入、使用或删除）。
-
-判断时要注意这些 API 和错误类别：
-
-1. **结构化错误信息：**Android 13（API 33）起，`android.security.KeyStoreException` 提供 `getNumericErrorCode()`、`isTransientFailure()`、`getRetryPolicy()`、`isSystemError()` 和 `requiresUserAuthentication()`。
-2. **包装异常：**JCA 可能将底层 `KeyStoreException` 包在 `ProviderException` 或 `InvalidKeyException` 的 cause 链中。
-3. **独立公开异常：**`UserNotAuthenticatedException`、`KeyPermanentlyInvalidatedException` 和 `StrongBoxUnavailableException` 都需要分别识别。
-4. **认证失败与永久失效：**前者应请求设备凭据或生物认证，不应删除密钥。后者应先完成业务身份验证，再替换并回收旧条目。把两者弄反可能导致不必要的删密钥和重新登录。
-5. **配额错误：**Android 17 且 target API 37 及以上时，`ERROR_TOO_MANY_KEYS` 可确认配额耗尽。Android 17 上较低 target 的 `ERROR_INCORRECT_USAGE`，只有消息明确提到密钥数量限制时才记为疑似配额，因为该错误码也可能表示算法或参数组合错误。
-6. **Keystore 未初始化：**对 `ERROR_KEYSTORE_UNINITIALIZED`，要区分尚未调用 `KeyStore.load()` 与设备未设置锁屏凭据（LSKF）。
-7. **瞬态失败：**只有 `isTransientFailure()` 为真时，才按 `getRetryPolicy()` 指定的时机重试，并设置全局次数上限。
-8. **权限或参数失败：**`ERROR_PERMISSION_DENIED`，以及没有配额证据的 `ERROR_INCORRECT_USAGE`，应检查调用身份、权限和参数，不能靠重试恢复。
-
-诊断记录保留外层异常类、cause 链中的 `KeyStoreException`、错误码和清理状态。消息文本只能作为辅助证据。
-
-**Q18: [learning] 配额耗尽导致登录失败时，为什么“清空 Keystore 后重试”最危险？正确的恢复顺序是什么？**
-
-清空全部 Keystore 可能同时破坏登录、端到端加密、支付、数据库解锁和第三方 SDK 状态，把配额故障扩大成账号和数据安全故障。恢复必须先停止新建，再验证当前密钥，之后按责任边界小批量回收可确认无用的条目。
-
-建议按以下顺序恢复：
-
-1. 写入持久化的“暂停创建”标记，并让同一应用其他进程读取它，阻止故障期间继续生成密钥。
-2. 若当前选中的 alias 仍存在且可用，优先用它完成解密、签名或登录恢复。
-3. 按生命周期登记表找候选回收项，包括已退出使用的版本、孤立条目、测试前缀和已注销账号的密钥。
-4. 若账号注销或设备解绑需要服务端参与，先完成业务授权。
-5. 由对应责任模块分批删除，记录每批成功数、失败数和剩余数量。
-6. 重新盘点并确认有余量后，再恢复创建。
-7. 大规模盘点放在有执行时限的后台任务。启动路径只读取暂停标记和当前 alias，避免主线程长时间阻塞并触发 ANR。
-
-同名 alias 的 rebind 不能靠原样重试解决，因为配额检查发生在创建替换密钥之前。满额时必须先删除可回收 alias 释放额度。不能临时退回明文 token、共享外部存储或缺少认证约束的软件密钥。是否从 StrongBox 改用 TEE 必须由预先审查的安全策略决定。卸载应用通常会清理对应 UID 的 Keystore 数据，但重装同时会清除业务数据和认证状态，也不会修复 alias 持续增长的代码，不能作为线上恢复方案。
-
-**Q19: [learning] 为什么不能在 containsAlias() 返回 false 后直接 generateKey()？多进程应用如何保证 alias 状态一致？**
-
-不能把 `containsAlias()` 的检查与 `generateKey()` 当成一个原子操作。两个进程可能同时读到不存在，再各自创建密钥，造成重复密钥和配额浪费。创建、轮换和删除应由单一 owner 在持久状态机中串行管理。
-
-alias 生命周期可用以下状态迁移表示：
-
-1. `ABSENT → CREATING`：在生成前先持久化 `CREATING`。
-2. `CREATING → ACTIVE`：生成成功后读取 characteristics，确认算法、安全级别和认证授权属性符合策略，再登记为 `ACTIVE`。
-3. `ACTIVE → RETIRED`：新版本确认可用后，将旧版本退役。同一用途只保留一个 `ACTIVE` 版本，轮换期最多额外保留一个最近确认可用的版本。
-4. `RETIRED → DELETING → DELETED`：先登记 `DELETING`，调用 `KeyStore.deleteEntry()`，复查条目已删除后再登记 `DELETED`。
-5. **中断恢复：**进程在生成或删除中被杀后，重启时同时查询登记表和 Keystore，再决定继续提交还是回收。
-
-生命周期登记表是应用自维护的数据，不是 Android API。它不保存密钥材料，也不能把数据库有记录当成密钥存在的证明。每次重要操作都要处理两类不一致：登记表有记录但 Keystore 没有条目，以及 Keystore 有条目但登记表没有归属。
-
-多进程与 SDK 的责任边界如下：
-
-1. 每个 alias 前缀只有一个责任组件能创建、轮换和删除。
-2. 业务进程只请求“取得或创建某用途密钥”，不自行拼接随机 alias。
-3. 删除前确认相关进程使用的密钥版本。配额失败后写入共享暂停标记。
-4. 登记表结构需保留应用版本回滚时的兼容迁移逻辑。
-5. 第三方 SDK 自行创建密钥时，宿主应要求其声明 alias 前缀、创建频率和删除 API，否则无法安全回收。
-
-**Q20: [learning] 应用侧如何盘点自己的 alias 数量？target SDK 从 36 升到 37 前要做什么准备？**
-
-应用可用 `KeyStore.getInstance("AndroidKeyStore")` 和 `aliases()` 枚举自己可见的 alias，再按受控前缀盘点。该数量只是应用视角的估算，`KeyStore.aliases()` 和 `size()` 都不是 keystore2 配额查询 API。
-
-盘点和遥测应遵守以下边界：
-
-1. 遥测只保留 alias 总数、已知前缀计数和未匹配数量，不上传完整 alias。
-2. `unknownCount` 只表示有 alias 未匹配已知前缀，不能据此批量删除。
-3. 接近上限的数万条目全量枚举会产生 Binder 调用、数据库查询和字符串分配开销。
-4. 不要在主线程、`Application.onCreate()` 首帧前或每次登录时执行全量枚举。日常用低频后台任务采集趋势，进入预警区间或出现创建失败后再详细盘点，并记录耗时、枚举异常和触发原因。
-
-从 target API 36 升到 37 前要考虑存量设备，而不只是新安装：
-
-1. 系统不会自动清理历史密钥。已积累大量条目的非系统应用 UID 升级到 target 37 后，下一次生成或导入就可能失败。
-2. 发布前按历史设备 alias 数量区间评估，不要只测新装设备。
-3. 50,000 和 200,000 是拒绝新密钥的硬上限，不适合作为业务预警阈值。预警线应根据每日增长速度、清理能力和一次轮换的最大增量设得更低。
-4. 容量测试使用独立设备或可重置测试用户，固定测试前缀并限制生成数量。任务正常结束或中断恢复时都要清理测试密钥。
-
-**Q21: [learning] 线程停在 futex_wait 就应该去找 Java 持锁者吗？Java 锁等待在 Android 17 上有几条不同路径？**
+**Q15: [learning] 线程停在 futex_wait 就应该去找 Java 持锁者吗？Java 锁等待在 Android 17 上有几条不同路径？**
 
 不应该。Java 锁等待至少有三条路径——ART Monitor（`synchronized`）、原生同步原语（`pthread_mutex`、条件变量、`LockSupport.park()`）与同步 Binder 回复等待。futex 只是让用户态原子状态与内核等待队列协作的底层机制，从 `blocked_function` 里的 `futex_*` 无法还原锁对象与持锁者，必须结合调用栈与轨迹证据。
 
@@ -351,7 +244,7 @@ alias 生命周期可用以下状态迁移表示：
 3. **Binder：**同步调用的调用端等待服务端回复，不是在等某把“Binder Java 锁”。Binder 有自己独立的事务优先级传播（`binder_transaction_priority()`），与 pthread PI 是两套机制。服务端变慢的常见根因是内部锁、I/O 或嵌套 IPC。
 4. **诊断入口：**Perfetto 标准库 `android.monitor_contention` 给出等待者和持锁者线程、双方方法、锁名与时长。它只覆盖 ART Java Monitor，不覆盖 `ReentrantLock` 和原生锁。futex 候选应从 `thread_state.blocked_function` 回到原生调用栈确认。
 
-**Q22: [learning] 怎样为一个应用开启多进程？以冒号开头的 android:process 值与完整包名命名的进程有什么区别？**
+**Q16: [learning] 怎样为一个应用开启多进程？以冒号开头的 android:process 值与完整包名命名的进程有什么区别？**
 
 默认情况下应用的所有组件都运行在以包名命名的主进程里。开启多进程的常规途径是在 AndroidManifest 中给四大组件声明 `android:process` 属性，组件每次启动就落在声明的进程里。在 native 层通过 fork 创建进程属于非常规途径，绕开了框架的组件调度，需要自行处理与运行环境的衔接。
 
@@ -362,7 +255,7 @@ alias 生命周期可用以下状态迁移表示：
 
 实践中大多数多进程需求（推送、WebView 独立进程、媒体播放等）用冒号私有进程即可：隔离内存占用与故障域，同时不引入跨应用共享的复杂度。
 
-**Q23: [learning] 同一应用运行在多个进程后，哪些“单进程假设”会失效？为什么会失效？**
+**Q17: [learning] 同一应用运行在多个进程后，哪些“单进程假设”会失效？为什么会失效？**
 
 多进程不是“同一份应用逻辑跑多份”，而是多个独立的运行时实例：每个进程有自己的类加载副本、静态字段和堆，Application 也会在每个进程各创建一次。所有依赖“全应用唯一”的机制随之失效：
 

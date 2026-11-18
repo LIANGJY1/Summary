@@ -1,43 +1,19 @@
 # Binder 驱动（内核层）
 
-> 学习资料（文章模式沉淀，证据等级：二手）。边界：本文回答"Binder 驱动的内核实现：mmap/一次拷贝、四组核心对象、binder_write_read、buffer 分配归还、引用计数与进程退出回收、servicemanager"；Framework 侧 Binder 契约归 [../01-architecture/02-Binder.md](../01-architecture/02-Binder.md)。源码引用以官方文档与社区分析为准，未逐条核对本地 AOSP。Q 序列即结构，供 atlas 同源直读。
+> 学习资料（文章模式沉淀，证据等级：二手）。边界：本文回答"Binder 驱动的内核实现：mmap/一次拷贝、四组核心对象、binder_write_read、buffer 分配归还、引用计数与进程退出回收、servicemanager"；Framework 侧 Binder 契约归 [../01-architecture/02-Binder.md](../01-architecture/02-Binder.md)。Q1 与 Q3 已按 Android Common Kernel 源码核对。其他题的证据按各题范围说明。Q 序列即结构，供 atlas 同源直读。
 
-**Q1: [learning] Framework 侧说的 Binder“一次拷贝”，在内核里是靠哪两个动作共同成立的？**
+**Q1: [learning] Binder 驱动怎样用接收映射实现一次拷贝？**
 
-靠 `mmap` 预映射与“内核在接收者进程的映射区内分配缓冲区”两件事共同成立。发送方只做一次 `copy_from_user`，数据落点既是内核缓冲、又是接收者已映射的地址，因此接收方无需再拷贝即可直接读。
+普通内核 Binder 事务的数据由驱动从发送进程的用户地址写入接收进程映射的页面。接收方通过该映射读取数据，省掉内核缓冲区到接收方用户缓冲区的第二次复制。
 
-`binder_mmap()` 在 Server 进程打开 `/dev/binder` 后被调用，它在目标进程的虚拟地址空间里映射一批内核分配的物理页：
+以 Android Common Kernel 的 android14-6.1 分支为例：
 
-```c
-// drivers/android/binder.c
-static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-    struct binder_proc *proc = filp->private_data;
-    if ((vma->vm_end - vma->vm_start) > SZ_4M)
-        vma->vm_end = vma->vm_start + SZ_4M;
-    alloc->buffer = (void *)vma->vm_start;
-    alloc->buffer_size = vma->vm_end - vma->vm_start;
-    for (i = 0; i < alloc->buffer_size / PAGE_SIZE; i++) {
-        page = alloc_page(GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO);
-        vm_insert_page(vma, (unsigned long)alloc->buffer + i * PAGE_SIZE, page);
-    }
-    return 0;
-}
-```
+1. **建立接收窗口：**进程打开 Binder 设备后调用 mmap。驱动为该进程建立 Binder 接收虚拟地址区，底层页面在分配事务缓冲区时按需安装。建立映射本身不预填整个窗口的物理页。
+2. **从目标窗口分配：**binder_transaction 通过 binder_alloc_new_buf 在目标进程的 binder_alloc 中选取一段空闲地址。A 调 B 的请求占用 B 的窗口，B 回复 A 时反向分配。
+3. **写入并交接：**驱动通过 binder_alloc_copy_user_to_buffer 把发送方用户地址上的数据分段写入目标缓冲区，并分别处理对象偏移、Binder 引用和文件描述符。接收线程得到 BR_TRANSACTION 时，数据指针指向本进程映射中的地址。
+4. **适用范围：**“一次”描述普通载荷的复制路径。编组、反编组、对象转换以及事务描述符交接仍有开销，驱动也可能多次调用分段复制函数。目标窗口无法分配时，本次事务失败，分配与失败条件见 Q2 和 Q3。
 
-发送时的 `binder_transaction()` 调 `binder_alloc_buf(&target_proc->alloc, ...)`——注意传入的是**目标进程**的 `alloc`，返回的 `t->buffer->data` 天然位于接收者的 mmap 区，再 `copy_from_user` 一次把数据填进去：
-
-```c
-// drivers/android/binder.c，binder_transaction() 内的数据拷贝段
-t->buffer = binder_alloc_buf(&target_proc->alloc, tr->data_size,
-        tr->offsets_size, extra_buffers_size,
-        !reply && (t->flags & TF_ONE_WAY));
-copy_from_user(t->buffer->data,
-        (const void __user *)(uintptr_t)tr->data.ptr.buffer,
-        tr->data_size);
-```
-
-对比传统管道（socketpair）的“发送方→内核缓冲→接收方”两段拷贝，Binder 省掉的正是第二段。判断规则：任何“一次拷贝”的说法都有前提，脱离“接收者预先 mmap 了内核页”这一前提去解释就会失真。反过来，接收方没有 mmap 或映射区耗尽时，缓冲区只能从内核通用池分配，此时接收侧仍需一次 `copy_to_user`，退回两段拷贝。
+依据：Android Common Kernel android14-6.1，drivers/android/binder.c 的 binder_mmap、binder_transaction、binder_thread_read，以及 binder_alloc.c 的缓冲区分配与复制实现。
 
 **Q2: [learning] 一笔事务的 Binder buffer 如何分配与归还？空间不足时的行为是什么？**
 
@@ -48,30 +24,15 @@ copy_from_user(t->buffer->data,
 - 发送方 Parcel 的内存与接收方 Binder 空间是两个指标。`TransactionTooLargeException` 是 Java 层按失败上下文推测的异常，不是驱动返回的精确字节上限。
 - 排查 `-ENOSPC`/`ENOSPC` 扩展错误时，先看接收进程的并发事务、大事务与异步占用，而不是假设“这一笔超过了 1MiB”。
 
-**Q3: [learning] drivers/android/binder.c 里 binder_alloc_buf 为什么要在接收者的 alloc 里找缓冲区，找不到会怎样？**
+**Q3: [learning] Binder 接收窗口分配失败时，怎样判断是地址区、异步预算还是物理内存问题？**
 
-因为缓冲区必须落在接收者已 mmap 的区域里，才能省掉接收侧拷贝。`binder_alloc_buf` 在 `alloc->free_buffers` 红黑树里找足够大的空闲块，失败时尝试扩展 mmap 区域。异步事务还额外遵守 `free_async_space` 上限（映射区的一半），避免异步请求把同步事务的可用空间吃光。
+先区分地址区分配和物理页准备。地址区不足或超出异步预算时返回 ENOSPC，只有已找到所需地址范围后，驱动才会为仍未装入的页面准备物理内存。
 
-```c
-// drivers/android/binder_alloc.c
-struct binder_buffer *binder_alloc_buf(struct binder_alloc *alloc,
-        binder_size_t data_size, binder_size_t offsets_size,
-        binder_size_t extra_buffers_size, int is_async)
-{
-    /* 遍历 alloc->free_buffers 红黑树找合适大小的空闲缓冲区，
-       或扩展 mmap 区域；返回的 buffer->data 指向目标进程 mmap 区内地址 */
-}
-```
+1. **地址区不可用：**接收者没有可用映射时，分配无法完成，例如映射已关闭时可返回 ESRCH。设置映射时内核限制单个窗口的大小，libbinder 通常请求更小的映射，见 [Binder 架构](../01-architecture/02-Binder.md) Q2。
+2. **空间或预算用尽：**没有足够的连续空闲块，或者本次 oneway 的大小超过剩余异步预算时返回 ENOSPC。查目标进程的在途事务与异步流量，分辨单笔大事务、并发占用或碎片。
+3. **物理页准备失败：**地址范围已经选定，分配页面或安装映射仍可能失败。ENOMEM 等错误应结合内存和映射日志判断。这类失败与地址窗口自身的容量上限分别诊断。
 
-```c
-// drivers/android/binder_alloc.c，binder_alloc_mmap_handler() 建立的不变式
-alloc->free_async_space = alloc->buffer_size / 2;
-barrier();
-alloc->vma = vma;
-atomic_inc(&alloc->vma_vm_mm->mm_count);
-```
-
-`binder_mmap` 还有两个硬约束：单次映射上限 `SZ_4M`，且只有进程主线程能调用（`proc->tsk != current->group_leader` 直接返回 `-EINVAL`），同时置 `VM_DONTCOPY` 并清 `VM_MAYWRITE` 让映射区不可写不可被 fork 复制。判断规则：`TransactionTooLargeException`、缓冲区耗尽、`ENOMEM` 这几类失败要区分——映射区扩展失败是内存压力，异步空间不足说明同步事务在抢占资源，前者看整机内存，后者看调用模式（是否大量并发 oneway 调用）。
+依据：Android Common Kernel android14-6.1，drivers/android/binder_alloc.c 的 binder_alloc_mmap_handler 与 binder_alloc_new_buf。
 
 **Q4: [learning] Binder 驱动的 binder_proc、binder_thread、binder_node、binder_ref 分别代表什么，谁引用谁？**
 
